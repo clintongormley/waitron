@@ -102,16 +102,11 @@ export function useCatalogueDb(): { readonly db: Database } {
     // DELETE avoids TRUNCATE CASCADE following catalogue references into locations and immutable
     // sales tables. These tests write mutable authoring rows; venue identity rows can stay.
     await fx.db.transaction(async (tx) => {
-      await tx.execute(sql`delete from menu_item_options`);
-      await tx.execute(sql`delete from menu_item_option_groups`);
       await tx.execute(sql`delete from menu_item_variants`);
       await tx.execute(sql`delete from menu_items`);
       await tx.execute(sql`delete from product_variants`);
       await tx.execute(sql`delete from menu_sections`);
-      await tx.execute(sql`delete from product_option_groups`);
       await tx.execute(sql`delete from product_units`);
-      await tx.execute(sql`delete from option_group_items`);
-      await tx.execute(sql`delete from option_groups`);
       await tx.execute(sql`delete from products`);
       await tx.execute(sql`delete from categories`);
       await tx.execute(sql`delete from location_catalogues`);

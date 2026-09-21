@@ -17,7 +17,6 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "c1",
     categoryId: "cat-1",
     categoryIds: ["cat-1"],
@@ -43,7 +42,6 @@ const products: Product[] = [
   {
     id: "p2",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "c1",
     categoryId: null,
     categoryIds: [],
@@ -69,7 +67,6 @@ const products: Product[] = [
   {
     id: "p3",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "c1",
     categoryId: "cat-2",
     categoryIds: ["cat-2"],

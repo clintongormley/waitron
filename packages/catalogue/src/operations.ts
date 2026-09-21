@@ -1,10 +1,6 @@
-import { readMenuModifiers, readLegacyProductModifiers } from "./modifier-projection.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import type { Modifier } from "@waitron/shared";
-import { lockModifierDefinitions } from "./modifier-lock.js";
-import { isModifierPrice } from "./modifier-limits.js";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   AppError,
   centsToDecimal,
@@ -13,23 +9,14 @@ import {
   resolveContentText,
   FALLBACK_LOCALE,
 } from "@waitron/shared";
-import {
-  catalogues,
-  categories,
-  locationCatalogues,
-  locations,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
-  products,
-} from "@waitron/db";
+import { catalogues, categories, locationCatalogues, locations, products } from "@waitron/db";
 import { productCategories } from "./schema/categories.js";
 import { readContentLanguages } from "./content-languages.js";
 import { replaceProductCategories, readProductCategories, lockCategories } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
-import "./errors.js"; // load the code registry for `options.group_invalid`/`options.item_invalid` thrown below
+import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import {
@@ -41,13 +28,7 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
-import {
-  contentLanguages,
-  menuItemOptionGroups,
-  menuItemOptions,
-  menuItems,
-  menuSections,
-} from "./schema/menu.js";
+import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariants, productVariants } from "./schema/variants.js";
 import type { ProductVariant } from "./variants.js";
@@ -61,27 +42,16 @@ import {
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
 import type { Product } from "./product-types.js";
-import type {
-  AccessibleCatalogue,
-  AvailableProduct,
-  MenuItem,
-  MenuOffer,
-  MenuOfferOptionGroup,
-  ResolvedOptionGroup,
-} from "./menu-types.js";
+import type { AccessibleCatalogue, AvailableProduct, MenuItem, MenuOffer } from "./menu-types.js";
 export type {
   AccessibleCatalogue,
   AvailableProduct,
   MenuItem,
   MenuOffer,
-  MenuOfferOption,
-  MenuOfferOptionGroup,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,
   OfferedOptionsList,
-  ResolvedOptionGroup,
-  ResolvedOptionItem,
 } from "./menu-types.js";
 export type { Product } from "./product-types.js";
 
@@ -261,7 +231,6 @@ function toProduct(
     categoryIds,
     primaryCategoryId: row.categoryId,
     modifiers: [],
-    modifierIds: [],
     unit,
     unitId: unit.id,
     pricingUnit: row.pricingUnit as PricingUnit,
@@ -367,7 +336,6 @@ export async function createMenuItem(
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
-  await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
@@ -384,10 +352,6 @@ export async function createMenuItem(
       sectionId: input.sectionId,
     });
   }
-  const [existing] = await tx
-    .select({ id: menuItems.id })
-    .from(menuItems)
-    .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   const grossPrice = decimalToCents(decimal(input.grossPrice));
   const [written] = await tx
     .insert(menuItems)
@@ -410,48 +374,7 @@ export async function createMenuItem(
       displayOrder: menuItems.displayOrder,
       active: menuItems.active,
     });
-  const row = { ...written!, grossPrice: centsToDecimal(written!.grossPrice) };
-  if (existing === undefined) {
-    const defaults = await tx
-      .select({
-        groupId: productOptionGroups.groupId,
-        optionId: optionGroupItems.id,
-        priceDelta: optionGroupItems.priceDelta,
-      })
-      .from(productOptionGroups)
-      .innerJoin(
-        optionGroups,
-        and(eq(optionGroups.id, productOptionGroups.groupId), eq(optionGroups.active, true)),
-      )
-      .leftJoin(
-        optionGroupItems,
-        and(
-          eq(optionGroupItems.groupId, productOptionGroups.groupId),
-          eq(optionGroupItems.active, true),
-        ),
-      )
-      .where(eq(productOptionGroups.productId, input.productId))
-      .orderBy(productOptionGroups.sort, optionGroupItems.sort, optionGroupItems.id);
-    const byGroup = new Map<
-      string,
-      { groupId: string; options: { optionId: string; priceDelta: string }[] }
-    >();
-    for (const option of defaults) {
-      const group = byGroup.get(option.groupId) ?? { groupId: option.groupId, options: [] };
-      if (option.optionId !== null)
-        group.options.push({
-          optionId: option.optionId,
-          // `setMenuItemOptionGroups` takes the decimal strings a request body carries, and
-          // validates them, so the stored count is converted back before it is handed over.
-          priceDelta: centsToDecimal(option.priceDelta!),
-        });
-      byGroup.set(option.groupId, group);
-    }
-    if (byGroup.size > 0) {
-      await setMenuItemOptionGroups(tx, row.id, [...byGroup.values()]);
-    }
-  }
-  return row;
+  return { ...written!, grossPrice: centsToDecimal(written!.grossPrice) };
 }
 
 export async function updateMenuItem(
@@ -487,121 +410,6 @@ export async function deactivateMenuItem(
     )
     .returning({ id: menuItems.id });
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
-}
-
-/** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
-export async function setMenuItemOptionGroups(
-  tx: Transaction,
-  menuItemId: string,
-  groups: {
-    groupId: string;
-    options: { optionId: string; priceDelta: string }[];
-  }[],
-): Promise<void> {
-  await lockModifierDefinitions(tx);
-  const [menuItem] = await tx
-    .select({ productId: menuItems.productId })
-    .from(menuItems)
-    .where(eq(menuItems.id, menuItemId));
-  if (menuItem === undefined) throw new AppError("menu_item.not_found", { menuItemId });
-
-  const groupIds = groups.map((group) => group.groupId);
-  if (new Set(groupIds).size !== groupIds.length) {
-    throw new AppError("options.group_invalid", { reason: "duplicate" });
-  }
-  const requiredGroups = await tx
-    .select({ id: productOptionGroups.groupId })
-    .from(productOptionGroups)
-    .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
-    .where(
-      and(
-        eq(productOptionGroups.productId, menuItem.productId),
-        eq(optionGroups.required, true),
-        eq(optionGroups.active, true),
-      ),
-    );
-  if (requiredGroups.some((group) => !groupIds.includes(group.id))) {
-    throw new AppError("options.group_invalid", { reason: "required_group_missing" });
-  }
-  if (groupIds.length > 0) {
-    const attached = await tx
-      .select({ groupId: productOptionGroups.groupId })
-      .from(productOptionGroups)
-      .where(
-        and(
-          eq(productOptionGroups.productId, menuItem.productId),
-          inArray(productOptionGroups.groupId, groupIds),
-        ),
-      );
-    if (attached.length !== groupIds.length) {
-      throw new AppError("options.group_invalid", { reason: "not_attached" });
-    }
-
-    const definitions = await tx
-      .select({ id: optionGroups.id, minSelect: optionGroups.minSelect, type: optionGroups.type })
-      .from(optionGroups)
-      .where(inArray(optionGroups.id, groupIds));
-    const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
-    for (const group of groups) {
-      const definition = definitionById.get(group.groupId);
-      if (definition === undefined) {
-        throw new AppError("options.group_invalid", { reason: "not_attached" });
-      }
-      for (const option of group.options) {
-        if (
-          typeof option.priceDelta !== "string" ||
-          !isModifierPrice(option.priceDelta) ||
-          (definition.type !== "extras" && Number(option.priceDelta) !== 0)
-        ) {
-          throw new AppError("modifier.invalid", { field: "priceDelta" });
-        }
-      }
-      const optionIds = group.options.map((option) => option.optionId);
-      if (new Set(optionIds).size !== optionIds.length) {
-        throw new AppError("options.item_invalid", { reason: "duplicate" });
-      }
-      if (
-        (definition.type === "extras" || definition.type === "options") &&
-        optionIds.length < definition.minSelect
-      ) {
-        throw new AppError("options.group_invalid", { reason: "insufficient_options" });
-      }
-      if (optionIds.length > 0) {
-        const matchingOptions = await tx
-          .select({ id: optionGroupItems.id })
-          .from(optionGroupItems)
-          .where(
-            and(
-              eq(optionGroupItems.groupId, group.groupId),
-              eq(optionGroupItems.active, true),
-              inArray(optionGroupItems.id, optionIds),
-            ),
-          );
-        if (matchingOptions.length !== optionIds.length) {
-          throw new AppError("options.item_invalid", { reason: "wrong_group_or_inactive" });
-        }
-      }
-    }
-  }
-
-  await tx.delete(menuItemOptionGroups).where(eq(menuItemOptionGroups.menuItemId, menuItemId));
-  if (groups.length === 0) return;
-  await tx.insert(menuItemOptionGroups).values(
-    groups.map((group, displayOrder) => ({
-      menuItemId,
-      groupId: group.groupId,
-      displayOrder,
-    })),
-  );
-  const options = groups.flatMap((group) =>
-    group.options.map((option) => ({
-      menuItemId,
-      groupId: group.groupId,
-      optionId: option.optionId,
-      priceDelta: decimalToCents(decimal(option.priceDelta)),
-    })),
-  );
-  if (options.length > 0) await tx.insert(menuItemOptions).values(options);
 }
 
 export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promise<MenuOffer[]> {
@@ -653,88 +461,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     )
     .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);
   if (rows.length === 0) return [];
-  const optionRows = await tx
-    .select({
-      menuItemId: menuItemOptionGroups.menuItemId,
-      groupId: optionGroups.id,
-      groupName: optionGroups.name,
-      minSelect: optionGroups.minSelect,
-      maxSelect: optionGroups.maxSelect,
-      required: optionGroups.required,
-      optionId: optionGroupItems.id,
-      optionName: optionGroupItems.name,
-      priceDelta: menuItemOptions.priceDelta,
-      maxQuantity: optionGroupItems.maxQuantity,
-      vatClass: optionGroupItems.vatClass,
-      addAllergens: optionGroupItems.addAllergens,
-      suitableFor: optionGroupItems.dietarySuitability,
-    })
-    .from(menuItemOptionGroups)
-    .innerJoin(optionGroups, eq(optionGroups.id, menuItemOptionGroups.groupId))
-    .innerJoin(
-      menuItemOptions,
-      and(
-        eq(menuItemOptions.menuItemId, menuItemOptionGroups.menuItemId),
-        eq(menuItemOptions.groupId, menuItemOptionGroups.groupId),
-      ),
-    )
-    .innerJoin(
-      optionGroupItems,
-      and(
-        eq(optionGroupItems.id, menuItemOptions.optionId),
-        eq(optionGroupItems.groupId, menuItemOptions.groupId),
-      ),
-    )
-    .where(
-      and(
-        inArray(
-          menuItemOptionGroups.menuItemId,
-          rows.map((row) => row.id),
-        ),
-        eq(optionGroups.active, true),
-        eq(optionGroupItems.active, true),
-      ),
-    )
-    .orderBy(
-      menuItemOptionGroups.displayOrder,
-      optionGroups.id,
-      optionGroupItems.sort,
-      optionGroupItems.id,
-    );
-  const groupsByItem = new Map<string, MenuOfferOptionGroup[]>();
-  for (const option of optionRows) {
-    let groups = groupsByItem.get(option.menuItemId);
-    if (groups === undefined) {
-      groups = [];
-      groupsByItem.set(option.menuItemId, groups);
-    }
-    let group = groups.find((candidate) => candidate.id === option.groupId);
-    if (group === undefined) {
-      group = {
-        id: option.groupId,
-        name: option.groupName,
-        minSelect: option.minSelect,
-        maxSelect: option.maxSelect,
-        required: option.required,
-        options: [],
-      };
-      groups.push(group);
-    }
-    group.options.push({
-      id: option.optionId,
-      name: option.optionName,
-      priceDelta: centsToDecimal(option.priceDelta),
-      maxQuantity: option.maxQuantity,
-      vatClass: option.vatClass as VatClass | null,
-      addAllergens: option.addAllergens as ProductAllergens | null,
-      suitableFor: option.suitableFor as string[] | null,
-    });
-  }
   const content = await readContentLanguages(tx, FALLBACK_LOCALE);
-  const modifiersByItem = await readMenuModifiers(
-    tx,
-    rows.map((row) => row.id),
-  );
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
   // this offer publishes (spec §3.2), while the order stays the product's own.
   const offeredByItem = await readOfferedModifiers(
@@ -800,8 +527,6 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
-    optionGroups: groupsByItem.get(row.id) ?? [],
-    modifiers: modifiersByItem.get(row.id) ?? [],
     offeredModifiers: offeredByItem.get(row.id) ?? [],
     variants: variantRows
       .filter((variant) => variant.menuItemId === row.id)
@@ -1053,16 +778,6 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
-  const attachments = await tx
-    .select({ productId: productOptionGroups.productId, groupId: productOptionGroups.groupId })
-    .from(productOptionGroups)
-    .where(
-      inArray(
-        productOptionGroups.productId,
-        rows.map((row) => row.id),
-      ),
-    )
-    .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
   const variantRows = await tx
     .select({
       productId: productVariants.productId,
@@ -1087,9 +802,9 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     tx,
     rows.map((row) => row.id),
   );
-  // Both of these are grouped by product ONCE, the way `readProductModifiers` groups its own
-  // rows. A `.filter()` inside the `map` below would rescan every variant row and every attachment
-  // row for each product, which is the whole list read twice per product.
+  // Grouped by product ONCE, the way `readProductModifiers` groups its own rows. A `.filter()`
+  // inside the `map` below would rescan every variant row for each product, which is the whole
+  // list read once per product.
   const variantsByProduct = new Map<string, ProductVariant[]>();
   for (const variant of variantRows) {
     const held = variantsByProduct.get(variant.productId) ?? [];
@@ -1097,16 +812,9 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     held.push({ ...rest, unitPrice: centsToDecimal(unitPrice) });
     variantsByProduct.set(productId, held);
   }
-  const groupIdsByProduct = new Map<string, string[]>();
-  for (const attachment of attachments) {
-    const held = groupIdsByProduct.get(attachment.productId) ?? [];
-    held.push(attachment.groupId);
-    groupIdsByProduct.set(attachment.productId, held);
-  }
   return rows.map((row) => ({
     ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
-    modifierIds: groupIdsByProduct.get(row.id) ?? [],
   }));
 }
 
@@ -1432,91 +1140,6 @@ export async function listAvailableProducts(
     )
     .orderBy(catalogues.name, products.createdAt, products.id);
 
-  // Attached option groups + items in ONE extra round trip (a grouped read, mirroring how the base
-  // product read batches rather than issuing a query per product). Join
-  // product_option_groups → option_groups → option_group_items across ALL the products just read,
-  // keeping only ACTIVE groups (WHERE) and ACTIVE items (in the LEFT JOIN's ON, so an active group
-  // with no active items still surfaces with `items: []` rather than being dropped). Groups are
-  // ordered by the PER-ATTACHMENT `product_option_groups.sort` — the same reusable group can sit in a
-  // different position on different products (schema comment, catalogue.ts), which the group's own
-  // `option_groups.sort` cannot express — then item `sort`, with the ids as stable tiebreakers, so
-  // first-seen order below IS sort order. Assembly groups the flat rows in JS: a product may attach
-  // several groups, each several items, so the join fans out and is re-nested by (productId → groupId).
-  const productIds = rows.map((row) => row.id);
-  const groupsByProduct = new Map<string, ResolvedOptionGroup[]>();
-  if (productIds.length > 0) {
-    const optionRows = await tx
-      .select({
-        productId: productOptionGroups.productId,
-        groupId: optionGroups.id,
-        groupName: optionGroups.name,
-        minSelect: optionGroups.minSelect,
-        maxSelect: optionGroups.maxSelect,
-        required: optionGroups.required,
-        itemId: optionGroupItems.id,
-        itemName: optionGroupItems.name,
-        priceDelta: optionGroupItems.priceDelta,
-        vatClass: optionGroupItems.vatClass,
-        maxQuantity: optionGroupItems.maxQuantity,
-        addAllergens: optionGroupItems.addAllergens,
-        suitableFor: optionGroupItems.dietarySuitability,
-      })
-      .from(productOptionGroups)
-      .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
-      .leftJoin(
-        optionGroupItems,
-        and(eq(optionGroupItems.groupId, optionGroups.id), eq(optionGroupItems.active, true)),
-      )
-      .where(and(inArray(productOptionGroups.productId, productIds), eq(optionGroups.active, true)))
-      .orderBy(
-        productOptionGroups.sort,
-        optionGroups.sort,
-        optionGroups.id,
-        optionGroupItems.sort,
-        optionGroupItems.id,
-      );
-    // Per product, keep a groupId→group index (insertion order = sort order) so repeated item rows
-    // for one group append to the same `items` array.
-    const seen = new Map<string, Map<string, ResolvedOptionGroup>>();
-    for (const r of optionRows) {
-      let byGroup = seen.get(r.productId);
-      if (byGroup === undefined) {
-        byGroup = new Map();
-        seen.set(r.productId, byGroup);
-        groupsByProduct.set(r.productId, []);
-      }
-      let group = byGroup.get(r.groupId);
-      if (group === undefined) {
-        group = {
-          id: r.groupId,
-          name: r.groupName,
-          minSelect: r.minSelect,
-          maxSelect: r.maxSelect,
-          required: r.required,
-          items: [],
-        };
-        byGroup.set(r.groupId, group);
-        groupsByProduct.get(r.productId)!.push(group);
-      }
-      // Null on the LEFT JOIN's item side = an active group with no active items: keep the empty group.
-      if (r.itemId !== null) {
-        group.items.push({
-          id: r.itemId,
-          name: r.itemName!,
-          priceDelta: centsToDecimal(r.priceDelta!),
-          vatClass: r.vatClass as VatClass | null,
-          maxQuantity: r.maxQuantity!,
-          addAllergens: r.addAllergens as ProductAllergens | null,
-          suitableFor: r.suitableFor as string[] | null,
-        });
-      }
-    }
-  }
-
-  const modifiersByProduct =
-    rows.length === 0
-      ? new Map<string, Modifier[]>()
-      : await readLegacyProductModifiers(tx, productIds);
   // No menu offer is in this read at all, so each extras list is the one the product itself
   // carries, priced without an offer's overrides (spec §3.3, minus the menu step).
   const offeredByProduct = await readOfferedModifiers(
@@ -1555,360 +1178,7 @@ export async function listAvailableProducts(
     courseId: row.courseId,
     catalogueId: row.catalogueId,
     catalogueName: row.catalogueName,
-    optionGroups: groupsByProduct.get(row.id) ?? [],
-    modifiers: modifiersByProduct.get(row.id) ?? [],
     offeredModifiers: offeredByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };
-}
-
-/** A reusable `option_groups` row for the authoring editor (the whole row — active AND inactive, unlike
- * the sale-time {@link ResolvedOptionGroup}, which is active-only and carries resolved items). */
-export interface OptionGroup {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  sort: number;
-  active: boolean;
-}
-
-/** One `option_group_items` row for the authoring editor. `priceDelta` is a GROSS decimal string
- * (like `unitPrice`); `vatClass` is null when the item INHERITS the parent dish's rate. Unlike the
- * sale-time {@link ResolvedOptionItem}, this carries `sort`/`active` for editing. */
-export interface OptionGroupItem {
-  id: string;
-  groupId: string;
-  name: Record<string, string>;
-  priceDelta: string;
-  vatClass: VatClass | null;
-  sort: number;
-  active: boolean;
-  /** The most of this option a diner may take (`option_group_items.max_quantity`); 1 = no per-option
-   * quantity. Always an integer >= 1, mirrored from the column's `>= 1` CHECK. */
-  maxQuantity: number;
-  /** The option's OWN allergens: codes this option declares, null when it declares none. */
-  addAllergens: ProductAllergens | null;
-}
-
-export interface CreateOptionGroupInput {
-  name: Record<string, string>;
-  /** Omitted defaults mirror the `option_groups` column defaults: min 0, max 1, required false, sort
-   * 0, active true. */
-  minSelect?: number;
-  maxSelect?: number;
-  required?: boolean;
-  sort?: number;
-  active?: boolean;
-}
-
-/** The mutable slice of an option group; absent keys are left unchanged. The select-bound invariant is
- * checked against the MERGE of this patch onto the stored row, so a partial patch that would violate it
- * (e.g. lowering `maxSelect` below the stored `minSelect`) is refused. */
-export interface UpdateOptionGroupInput {
-  name?: Record<string, string>;
-  minSelect?: number;
-  maxSelect?: number;
-  required?: boolean;
-  sort?: number;
-  active?: boolean;
-}
-
-export interface CreateOptionGroupItemInput {
-  name: Record<string, string>;
-  /** Omitted defaults mirror the column defaults: priceDelta "0", vatClass null (inherit), sort 0,
-   * active true, maxQuantity 1. */
-  priceDelta?: string;
-  vatClass?: VatClass | null;
-  sort?: number;
-  active?: boolean;
-  /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
-  maxQuantity?: number;
-  /** The option's OWN allergens. Omitted leaves the column NULL; `null` is the same. Validated before
-   * the write — never trusted from the caller (CLAUDE.md §3). */
-  addAllergens?: ProductAllergens | null;
-}
-
-export interface UpdateOptionGroupItemInput {
-  name?: Record<string, string>;
-  priceDelta?: string;
-  vatClass?: VatClass | null;
-  sort?: number;
-  active?: boolean;
-  /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
-  maxQuantity?: number;
-  /** Patch the option's OWN allergens. Omitted leaves the column unchanged; `null` clears it.
-   * Validated before the write — never trusted from the caller (CLAUDE.md §3). */
-  addAllergens?: ProductAllergens | null;
-}
-
-const OPTION_GROUP_COLUMNS = {
-  id: optionGroups.id,
-  name: optionGroups.name,
-  minSelect: optionGroups.minSelect,
-  maxSelect: optionGroups.maxSelect,
-  required: optionGroups.required,
-  sort: optionGroups.sort,
-  active: optionGroups.active,
-};
-
-const OPTION_GROUP_ITEM_COLUMNS = {
-  id: optionGroupItems.id,
-  groupId: optionGroupItems.groupId,
-  name: optionGroupItems.name,
-  priceDelta: optionGroupItems.priceDelta,
-  vatClass: optionGroupItems.vatClass,
-  sort: optionGroupItems.sort,
-  active: optionGroupItems.active,
-  maxQuantity: optionGroupItems.maxQuantity,
-  addAllergens: optionGroupItems.addAllergens,
-};
-
-// Legacy caps also populate max_total_quantity, whose finite values must be positive.
-function validateOptionGroupBounds(minSelect: number, maxSelect: number, required: boolean): void {
-  if (minSelect < 0 || maxSelect < 1 || maxSelect < minSelect) {
-    throw new AppError("options.group_invalid", { reason: "select_bounds" });
-  }
-  if (required && minSelect < 1) {
-    throw new AppError("options.group_invalid", { reason: "required_without_min" });
-  }
-}
-
-/**
- * Enforce the `option_group_items` per-option-quantity invariant BEFORE the write: `max_quantity` must
- * be an integer >= 1 (1 = no per-option quantity), so an invalid value is a clean `options.item_invalid`
- * (400) rather than the opaque 500 the `option_group_items_qty_ck` CHECK (catalogue.ts) would raise as a
- * backstop. Parallel to `validateOptionGroupBounds`; `reason` is the stable field-naming code
- * `"max_quantity"` a translator renders, matching the group-level `options.group_invalid` shape.
- */
-function validateOptionGroupItemMaxQuantity(maxQuantity: number): void {
-  if (!Number.isInteger(maxQuantity) || maxQuantity < 1) {
-    throw new AppError("options.item_invalid", { reason: "max_quantity" });
-  }
-}
-
-/**
- * Validate and normalise the option's own-allergens patch. Returns `undefined` when the caller did not
- * touch `addAllergens` (so the write omits the column and the row default applies), otherwise
- * `{ addAllergens }` — `null` when cleared, the validated map when present. An empty map `{}` collapses
- * to NULL so the column has a single "no allergens" representation. Validated regardless of caller —
- * never trusted (CLAUDE.md §3).
- */
-function normalizeOverlay(input: {
-  addAllergens?: ProductAllergens | null;
-}): { addAllergens: ProductAllergens | null } | undefined {
-  if (input.addAllergens === undefined) return undefined;
-  const add = input.addAllergens == null ? null : validateAllergens(input.addAllergens);
-  return { addAllergens: add && Object.keys(add).length > 0 ? add : null };
-}
-
-export async function createOptionGroup(
-  tx: Transaction,
-  input: CreateOptionGroupInput,
-): Promise<OptionGroup> {
-  await lockModifierDefinitions(tx);
-  // Resolve the column defaults HERE so the invariant is validated against the values that will land
-  // (the DB defaults are min 0, max 1, required false).
-  const minSelect = input.minSelect ?? 0;
-  const maxSelect = input.maxSelect ?? 1;
-  const required = input.required ?? false;
-  validateOptionGroupBounds(minSelect, maxSelect, required);
-  const [row] = await tx
-    .insert(optionGroups)
-    .values({
-      name: input.name,
-      minSelect,
-      maxSelect,
-      maxTotalQuantity: maxSelect,
-      required,
-      ...(input.sort === undefined ? {} : { sort: input.sort }),
-      ...(input.active === undefined ? {} : { active: input.active }),
-    })
-    .returning(OPTION_GROUP_COLUMNS);
-  return row!;
-}
-
-/** Every option group (active AND inactive), for the authoring editor. Ordered by `sort`
- * then `id` so the editor list is stable. */
-export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> {
-  return tx
-    .select(OPTION_GROUP_COLUMNS)
-    .from(optionGroups)
-    .orderBy(asc(optionGroups.sort), asc(optionGroups.id));
-}
-
-export async function updateOptionGroup(
-  tx: Transaction,
-  id: string,
-  patch: UpdateOptionGroupInput,
-): Promise<void> {
-  await lockModifierDefinitions(tx);
-  // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
-  // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
-  // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
-  // not against defaults. A well-formed id that names no row is a silent no-op — the same posture
-  // `updateProduct` takes — so a missing row skips both the validation and the (zero-row) UPDATE.
-  const [current] = await tx
-    .select({
-      minSelect: optionGroups.minSelect,
-      maxSelect: optionGroups.maxSelect,
-      required: optionGroups.required,
-    })
-    .from(optionGroups)
-    .where(eq(optionGroups.id, id));
-  if (current === undefined) return;
-  validateOptionGroupBounds(
-    patch.minSelect ?? current.minSelect,
-    patch.maxSelect ?? current.maxSelect,
-    patch.required ?? current.required,
-  );
-  await tx
-    .update(optionGroups)
-    .set({
-      ...patch,
-      ...(patch.maxSelect === undefined ? {} : { maxTotalQuantity: patch.maxSelect }),
-    })
-    .where(eq(optionGroups.id, id));
-}
-
-export async function createOptionGroupItem(
-  tx: Transaction,
-  groupId: string,
-  input: CreateOptionGroupItemInput,
-): Promise<OptionGroupItem> {
-  await lockModifierDefinitions(tx);
-  // Resolve the default HERE so the invariant is validated against the value that will land (the DB
-  // default is 1), the same posture createOptionGroup takes for its bounds.
-  const maxQuantity = input.maxQuantity ?? 1;
-  validateOptionGroupItemMaxQuantity(maxQuantity);
-  const [row] = await tx
-    .insert(optionGroupItems)
-    .values({
-      groupId,
-      name: input.name,
-      maxQuantity,
-      ...(input.priceDelta === undefined
-        ? {}
-        : { priceDelta: decimalToCents(decimal(input.priceDelta)) }),
-      ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
-      ...(input.sort === undefined ? {} : { sort: input.sort }),
-      ...(input.active === undefined ? {} : { active: input.active }),
-      // The allergen column defaults to NULL when the caller omits it; validated when present.
-      ...(normalizeOverlay(input) ?? {}),
-    })
-    .returning(OPTION_GROUP_ITEM_COLUMNS);
-  return {
-    ...row!,
-    priceDelta: centsToDecimal(row!.priceDelta),
-    vatClass: row!.vatClass as VatClass | null,
-    addAllergens: row!.addAllergens as ProductAllergens | null,
-  };
-}
-
-/** A group's items (active AND inactive), for the authoring editor. Ordered by `sort` then `id`. */
-export async function listOptionGroupItems(
-  tx: Transaction,
-  groupId: string,
-): Promise<OptionGroupItem[]> {
-  const rows = await tx
-    .select(OPTION_GROUP_ITEM_COLUMNS)
-    .from(optionGroupItems)
-    .where(eq(optionGroupItems.groupId, groupId))
-    .orderBy(asc(optionGroupItems.sort), asc(optionGroupItems.id));
-  return rows.map((r) => ({
-    ...r,
-    priceDelta: centsToDecimal(r.priceDelta),
-    vatClass: r.vatClass as VatClass | null,
-    addAllergens: r.addAllergens as ProductAllergens | null,
-  }));
-}
-
-export async function updateOptionGroupItem(
-  tx: Transaction,
-  itemId: string,
-  patch: UpdateOptionGroupItemInput,
-): Promise<void> {
-  await lockModifierDefinitions(tx);
-  // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
-  // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
-  // write, the same clean-error-before-the-CHECK posture create takes.
-  if (patch.maxQuantity !== undefined) validateOptionGroupItemMaxQuantity(patch.maxQuantity);
-  // The allergen column is single-field: `normalizeOverlay` validates a present `addAllergens` and
-  // collapses an empty map to NULL; Drizzle `.set()` writes only the keys present, so an omitted
-  // `addAllergens` leaves the stored value untouched. Validated regardless of caller (CLAUDE.md §3).
-  const { priceDelta, ...rest } = patch;
-  const write = {
-    ...rest,
-    ...(priceDelta === undefined ? {} : { priceDelta: decimalToCents(decimal(priceDelta)) }),
-    ...(normalizeOverlay(patch) ?? {}),
-  };
-  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
-}
-
-/**
- * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
- * then insert each id with `sort` equal to its list index; an empty list detaches everything.
- *
- * NO ROUTE reaches this any more (2026-09-19): the product body carries the ordered `modifiers`
- * list and writes `product_modifiers` through `writeProductModifiers` (product-modifiers.ts). It
- * stays, with the tables it writes, until Task 13 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them; the callers left
- * are tests setting up the old model's reads.
- * The caller's transaction keeps replacement atomic, and the foreign keys reject a product or
- * group reference that names no row.
- */
-export async function setProductOptionGroups(
-  tx: Transaction,
-  productId: string,
-  groupIds: string[],
-): Promise<void> {
-  await lockModifierDefinitions(tx);
-  const [product] = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(eq(products.id, productId));
-  if (!product) throw new AppError("product.not_found", { productId });
-  if (groupIds.length) {
-    const retained = await tx
-      .select({ id: productOptionGroups.groupId })
-      .from(productOptionGroups)
-      .where(eq(productOptionGroups.productId, productId));
-    const available = await tx
-      .select({ id: optionGroups.id, active: optionGroups.active })
-      .from(optionGroups)
-      .where(inArray(optionGroups.id, groupIds));
-    if (
-      available.some(
-        (group) => !group.active && !retained.some((entry) => entry.id === group.id),
-      ) ||
-      available.length !== groupIds.length ||
-      new Set(groupIds).size !== groupIds.length
-    )
-      throw new AppError("modifier.invalid", { field: "modifierIds" });
-  }
-  await tx.delete(productOptionGroups).where(eq(productOptionGroups.productId, productId));
-  if (groupIds.length === 0) return;
-  await tx.insert(productOptionGroups).values(
-    groupIds.map((groupId, index) => ({
-      productId,
-      groupId,
-      sort: index,
-    })),
-  );
-}
-
-/** The option group ids attached to a product, in per-attachment `sort` order. Its one caller is
- * `GET /management-api/products/:id/option-groups`; the product FORM reads the newer `modifiers`
- * list instead, and both this and the route go with the old tables (see `setProductOptionGroups`). */
-export async function listProductOptionGroupIds(
-  tx: Transaction,
-  productId: string,
-): Promise<string[]> {
-  const rows = await tx
-    .select({ groupId: productOptionGroups.groupId })
-    .from(productOptionGroups)
-    .where(eq(productOptionGroups.productId, productId))
-    .orderBy(asc(productOptionGroups.sort), asc(productOptionGroups.groupId));
-  return rows.map((r) => r.groupId);
 }

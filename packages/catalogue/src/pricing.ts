@@ -305,7 +305,7 @@ export interface SelectedOption {
    * which names a different thing. */
   kitchenName?: string | null;
   /** How many of THIS option, per dish (the per-option count, author-capped by
-   * `option_group_items.max_quantity`). ABSENT means 1 — a no-per-option-count option, whose child
+   * `extra_list_items.max_quantity`). ABSENT means 1 — a no-per-option-count option, whose child
    * line is byte-identical to before this field existed. The child is priced at
    * `dishQuantity × quantity`, so a dish ×3 carrying an option ×2 prices the option 6 times. */
   quantity?: number;

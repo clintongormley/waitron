@@ -66,8 +66,7 @@ function bool(value: unknown, field: string, fallback: boolean): boolean {
  * A whole number the `integer` columns behind this contract can hold. `min_picks`, `max_picks` and
  * `max_quantity` are all `integer` (schema/extras.ts), so without the ceiling a larger number passes
  * every check here and surfaces from the driver as `22003 value out of range for type integer`,
- * carrying no field for an editor to put beside an input. Same ceiling, for the same reason, as
- * `integer` in modifier-contract.ts.
+ * carrying no field for an editor to put beside an input.
  */
 function whole(value: unknown, field: string, minimum: number): number {
   if (

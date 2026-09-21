@@ -20,12 +20,9 @@ import {
   createMenuSection,
   createOptionList,
   createProduct,
-  createModifier,
   readContentLanguages,
   updateOptionList,
   setMenuItemExtraLists,
-  setProductOptionGroups,
-  setMenuItemOptionGroups,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
@@ -38,7 +35,6 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import type { Modifier } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -1548,12 +1544,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           courseId: null,
           catalogueId: aguaProduct.catalogueId,
           catalogueName: "Carta",
-          // Ordering modifiers (Task 3): the `AvailableProduct` shape carries attached option groups;
-          // these seeded products have none, so an empty array. `offeredModifiers` is the extras and
-          // options walk the till draws from (`readOfferedModifiers`), empty here for the same
-          // reason — these products attach nothing.
-          optionGroups: [],
-          modifiers: [],
+          // `offeredModifiers` is the extras-and-options walk the till draws from
+          // (`readOfferedModifiers`), empty here because these seeded products attach nothing.
           offeredModifiers: [],
         },
         {
@@ -1574,8 +1566,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           courseId: null,
           catalogueId: cervezaProduct.catalogueId,
           catalogueName: "Happy Hour",
-          optionGroups: [],
-          modifiers: [],
           offeredModifiers: [],
         },
       ],
@@ -3036,9 +3026,6 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
 // HTTP serialization and deterministic pricing need no concurrency or privilege assertion here.
 // Each fixture owns a fresh product and offer so other catalogue expectations remain independent.
 async function modifierOfferFixture() {
-  const choiceId = randomUUID(),
-    otherChoiceId = randomUUID(),
-    extraId = randomUUID();
   const data = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
@@ -3053,47 +3040,6 @@ async function modifierOfferFixture() {
     await tx.execute(
       sql`insert into preparation_routes (location_id,product_id,station_id) select location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
-    const note = await createModifier(
-      tx,
-      { type: "text", name: { es: "Nota" }, available: true },
-      "es",
-    );
-    const option = await createModifier(
-      tx,
-      {
-        type: "options",
-        name: { es: "Preparación" },
-        available: true,
-        defaultChoiceId: otherChoiceId,
-        choices: [
-          { id: choiceId, name: { es: "Frío" }, available: true },
-          { id: otherChoiceId, name: { es: "Caliente" }, available: true },
-        ],
-      },
-      "es",
-    );
-    const extra = await createModifier(
-      tx,
-      {
-        type: "extras",
-        name: { es: "Extras" },
-        available: true,
-        required: false,
-        maxTotalQuantity: 2,
-        choices: [
-          {
-            id: extraId,
-            name: { es: "Queso" },
-            available: true,
-            priceDelta: "9.00",
-            maxQuantity: 2,
-            preselected: false,
-          },
-        ],
-      },
-      "es",
-    );
-    await setProductOptionGroups(tx, product.id, [note.id, option.id, extra.id]);
     const section = await createMenuSection(tx, {
       menuId: aguaProduct.catalogueId,
       name: { es: "Pruebas" },
@@ -3104,11 +3050,6 @@ async function modifierOfferFixture() {
       productId: product.id,
       grossPrice: "1.75",
     });
-    await setMenuItemOptionGroups(tx, offer.id, [
-      { groupId: note.id, options: [] },
-      { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
-      { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
-    ]);
 
     // What the ORDER path answers: an extras list the offer republishes at its own price, and an
     // options list the product carries. The cheese's three names carry DIFFERENT text, so a line
@@ -3188,9 +3129,6 @@ async function modifierOfferFixture() {
     return {
       product,
       offer,
-      note,
-      option,
-      extra,
       cheese,
       extrasList,
       unpublishedList,
@@ -3234,9 +3172,6 @@ async function modifierOfferFixture() {
   const headers = { "content-type": "application/json", cookie };
   return {
     ...data,
-    choiceId,
-    otherChoiceId,
-    extraId,
     frio,
     caliente,
     answers,
@@ -3258,35 +3193,21 @@ type HeldLine = {
 describe("canonical modifier HTTP serialization", () => {
   it("publishes every mode, parks explicit answers and prices published extras exactly", async () => {
     const f = await modifierOfferFixture();
-    const products = await f.app.request("/api/products", { headers: f.headers });
-    expect(products.status).toBe(200);
-    const productBody = (await products.json()) as {
-      products: { id: string; modifiers: Modifier[] }[];
-    };
-    expect(
-      productBody.products
-        .find((product) => product.id === f.product.id)!
-        .modifiers.map((modifier) => modifier.type),
-    ).toEqual(["text", "options", "extras"]);
+    // What the offer PUBLISHES: the extras list at the offer's own 0.35, the options list the
+    // product carries, and not the list the product carries unpublished.
     const offers = await f.app.request("/api/default-service-zone/offers", { headers: f.headers });
     expect(offers.status).toBe(200);
-    const offerBody = (await offers.json()) as { offers: { id: string; modifiers: Modifier[] }[] };
+    const offerBody = (await offers.json()) as {
+      offers: { id: string; offeredModifiers: { kind: string; id: string }[] }[];
+    };
     const published = offerBody.offers.find((offer) => offer.id === f.offer.id)!;
-    expect(published.modifiers).toContainEqual(
-      expect.objectContaining({
-        id: f.option.id,
-        type: "options",
-        defaultChoiceId: null,
-        choices: [expect.objectContaining({ id: f.choiceId })],
-      }),
-    );
-    expect(published.modifiers).toContainEqual(
-      expect.objectContaining({
-        id: f.extra.id,
-        type: "extras",
-        choices: [expect.objectContaining({ id: f.extraId, priceDelta: "0.35" })],
-      }),
-    );
+    expect(published.offeredModifiers.map((entry) => [entry.kind, entry.id])).toEqual([
+      ["extras", f.extrasList.id],
+      ["options", f.prepList.id],
+    ]);
+    expect(published.offeredModifiers[0]).toMatchObject({
+      items: [expect.objectContaining({ productId: f.cheese.id, price: "0.35" })],
+    });
     const id = randomUUID();
     const parked = await f.app.request("/api/working-orders", {
       method: "POST",

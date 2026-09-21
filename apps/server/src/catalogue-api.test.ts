@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, setProductOptionGroups } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -26,9 +26,8 @@ import "./errors.js";
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) and the option-group attach's by-id FK are
-// the real-Postgres suite (`catalogue-api.pg.test.ts`); PGlite connects as a superuser holding every
-// grant (CLAUDE.md §4).
+// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.pg.test.ts`);
+// PGlite connects as a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
 let locationId: string;
@@ -157,7 +156,7 @@ describe("content-language configuration", () => {
     ).toBe(403);
   });
 
-  it("requires the configured default for new products and modifier names", async () => {
+  it("requires the configured default for a new product's customer-facing name", async () => {
     const app = mountApp("en-GB");
     const catalogueId = await createCatalogueVia(app, "Lunch");
     const product = {
@@ -180,17 +179,6 @@ describe("content-language configuration", () => {
           body: { ...product, customerName: { en: "Bread" } },
         })
       ).status,
-    ).toBe(201);
-    expect(
-      (
-        await send(app, "POST", "/management-api/option-groups", {
-          body: { name: { fr: "Taille" } },
-        })
-      ).status,
-    ).toBe(400);
-    expect(
-      (await send(app, "POST", "/management-api/option-groups", { body: { name: { en: "Size" } } }))
-        .status,
     ).toBe(201);
   });
 
@@ -1013,40 +1001,6 @@ describe("mountCatalogueApi — products", () => {
     expect(await after.json()).toEqual(beforeValue);
   });
 
-  it("round-trips direct modifier dietary effects and rejects origin authoring", async () => {
-    const app = mountApp("es-ES");
-    const choiceId = crypto.randomUUID();
-    const body = {
-      type: "extras",
-      name: { es: "Extras" },
-      available: true,
-      required: false,
-      maxTotalQuantity: 2,
-      choices: [
-        {
-          id: choiceId,
-          name: { es: "Bacon" },
-          available: true,
-          priceDelta: "1.00",
-          maxQuantity: 2,
-          preselected: false,
-          suitableFor: ["vegan", "halal"],
-        },
-      ],
-    };
-    const created = await send(app, "POST", "/management-api/modifiers", { body });
-    expect(created.status).toBe(201);
-    expect(await created.json()).toMatchObject({ modifier: body });
-    const legacy = await send(app, "POST", "/management-api/modifiers", {
-      body: {
-        ...body,
-        choices: [{ ...body.choices[0], addOrigins: ["meat"] }],
-      },
-    });
-    expect(legacy.status).toBe(400);
-    expect(await legacy.json()).toMatchObject({ error: { code: "modifier.invalid" } });
-  });
-
   it("POST /management-api/products with active:false → 201 and the created product is inactive", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Create-inactive catalogue");
@@ -1423,6 +1377,23 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
+    // Pins the route's existing refusal, which is the pre-read's alone: `updateProduct`
+    // (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
+    // reports nothing when no row matches, so without the pre-read this body would answer 204
+    // having written nothing.
+    const res = await send(
+      mountApp(),
+      "PATCH",
+      `/management-api/products/11111111-1111-4111-8111-111111111111`,
+      { body: { unitPrice: "1.00" } },
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+  });
+
   it("PATCH /management-api/products/:id with a bad allergen map → allergen.* 400", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Patch-allergen catalogue");
@@ -1657,22 +1628,6 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
   });
 });
 
-interface OptionGroupShape {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  sort: number;
-  active: boolean;
-}
-
-async function createGroupVia(app: Hono, body: Record<string, unknown>): Promise<OptionGroupShape> {
-  const res = await send(app, "POST", "/management-api/option-groups", { body });
-  expect(res.status).toBe(201);
-  return (await res.json()) as OptionGroupShape;
-}
-
 async function createProductVia(app: Hono, catalogueId: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/products", {
     body: {
@@ -1688,437 +1643,10 @@ async function createProductVia(app: Hono, catalogueId: string): Promise<string>
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("mountCatalogueApi — option groups", () => {
-  it("POST /management-api/option-groups creates one (201, defaults applied)", async () => {
-    const group = await createGroupVia(mountApp(), { name: { es: "Tamaño" } });
-    expect(group).toMatchObject({
-      name: { es: "Tamaño" },
-      minSelect: 0,
-      maxSelect: 1,
-      required: false,
-      sort: 0,
-      active: true,
-    });
-    expect(group.id).toMatch(/^[0-9a-f-]{36}$/);
-  });
-
-  it("POST /management-api/option-groups honours explicit bounds/sort/active", async () => {
-    const group = await createGroupVia(mountApp(), {
-      name: { es: "Extras" },
-      minSelect: 1,
-      maxSelect: 3,
-      required: true,
-      sort: 5,
-      active: false,
-    });
-    expect(group).toMatchObject({
-      minSelect: 1,
-      maxSelect: 3,
-      required: true,
-      sort: 5,
-      active: false,
-    });
-  });
-
-  it("POST /management-api/option-groups with a missing/non-object name → management.request_invalid 400", async () => {
-    for (const body of [{}, { name: "nope" }, { name: ["a"] }]) {
-      const res = await send(mountApp(), "POST", "/management-api/option-groups", { body });
-      expect(res.status).toBe(400);
-      expect((await res.json()) as { error: { code: string } }).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "name" } },
-      });
-    }
-  });
-
-  it.each([
-    ["minSelect", { name: { es: "x" }, minSelect: 1.5 }],
-    ["maxSelect", { name: { es: "x" }, maxSelect: "2" }],
-    ["required", { name: { es: "x" }, required: "yes" }],
-    ["sort", { name: { es: "x" }, sort: 1.5 }],
-    ["active", { name: { es: "x" }, active: "no" }],
-  ])(
-    "POST /option-groups rejects a wrong-typed %s → management.request_invalid 400",
-    async (field, body) => {
-      const res = await send(mountApp(), "POST", "/management-api/option-groups", { body });
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
-    },
-  );
-
-  it.each([
-    [
-      "select bounds (max < min)",
-      { name: { es: "x" }, minSelect: 3, maxSelect: 1 },
-      "select_bounds",
-    ],
-    ["negative min", { name: { es: "x" }, minSelect: -1 }, "select_bounds"],
-    [
-      "required without min",
-      { name: { es: "x" }, required: true, minSelect: 0 },
-      "required_without_min",
-    ],
-  ])("POST /option-groups with %s → options.group_invalid 400", async (_label, body, reason) => {
-    const res = await send(mountApp(), "POST", "/management-api/option-groups", { body });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { reason: string } } },
-    ).toMatchObject({ error: { code: "options.group_invalid", params: { reason } } });
-  });
-
-  it("GET /management-api/option-groups lists them (active + inactive)", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Listable" }, active: false });
-    const res = await send(app, "GET", "/management-api/option-groups");
-    expect(res.status).toBe(200);
-    const rows = (await res.json()) as OptionGroupShape[];
-    expect(rows.some((r) => r.id === g.id && r.active === false)).toBe(true);
-  });
-
-  it("PATCH /management-api/option-groups/:id updates fields (204) and they land", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "antes" }, maxSelect: 1 });
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}`, {
-      body: { name: { es: "después" }, maxSelect: 4, sort: 2, active: false },
-    });
-    expect(res.status).toBe(204);
-    const rows = (await (
-      await send(app, "GET", "/management-api/option-groups")
-    ).json()) as OptionGroupShape[];
-    expect(rows.find((r) => r.id === g.id)).toMatchObject({
-      name: { es: "después" },
-      maxSelect: 4,
-      sort: 2,
-      active: false,
-    });
-  });
-
-  it("PATCH /management-api/option-groups/:id merges against the stored row for the bounds check", async () => {
-    const app = mountApp();
-    // Stored minSelect is 2; a patch that only lowers maxSelect to 1 must be caught against the STORED
-    // min (2), not a default, so the merged (min 2, max 1) violates select_bounds.
-    const g = await createGroupVia(app, { name: { es: "x" }, minSelect: 2, maxSelect: 3 });
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}`, {
-      body: { maxSelect: 1 },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "options.group_invalid", params: { reason: "select_bounds" } },
-    });
-    // And required:true against the stored min 2 is fine (2 >= 1).
-    const ok = await send(app, "PATCH", `/management-api/option-groups/${g.id}`, {
-      body: { required: true },
-    });
-    expect(ok.status).toBe(204);
-  });
-
-  it("PATCH /management-api/option-groups/:id with a non-uuid id → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "PATCH", "/management-api/option-groups/not-a-uuid", {
-      body: { sort: 1 },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("PATCH /management-api/option-groups/:id with an empty body is a 204 no-op", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}`, { body: {} });
-    expect(res.status).toBe(204);
-  });
-
-  it.each([
-    ["name", { name: "nope" }],
-    ["minSelect", { minSelect: 1.5 }],
-    ["maxSelect", { maxSelect: "2" }],
-    ["required", { required: "yes" }],
-    ["sort", { sort: 1.5 }],
-    ["active", { active: "no" }],
-  ])(
-    "PATCH /option-groups/:id rejects a wrong-typed %s → management.request_invalid 400",
-    async (field, body) => {
-      const app = mountApp();
-      const g = await createGroupVia(app, { name: { es: "x" } });
-      const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}`, { body });
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
-    },
-  );
-
-  it("POST /management-api/option-groups unauthenticated → 401", async () => {
-    const res = await send(mountApp(), "POST", "/management-api/option-groups", {
-      body: { name: { es: "x" } },
-      cookie: null,
-    });
-    expect(res.status).toBe(401);
-  });
-});
-
-describe("mountCatalogueApi — option group items", () => {
-  it("POST /option-groups/:id/items creates one (201, defaults) and lists it back", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Salsas" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "Alioli" } },
-    });
-    expect(res.status).toBe(201);
-    const item = (await res.json()) as {
-      id: string;
-      groupId: string;
-      name: Record<string, string>;
-      priceDelta: string;
-      vatClass: string | null;
-      sort: number;
-      active: boolean;
-      maxQuantity: number;
-    };
-    expect(item).toMatchObject({
-      groupId: g.id,
-      name: { es: "Alioli" },
-      priceDelta: "0.00", // column default is the integer 0; centsToDecimal always renders 2 places
-      vatClass: null,
-      sort: 0,
-      active: true,
-      maxQuantity: 1, // default: no per-option quantity
-    });
-
-    const list = await send(app, "GET", `/management-api/option-groups/${g.id}/items`);
-    expect(list.status).toBe(200);
-    expect(((await list.json()) as { id: string }[]).some((r) => r.id === item.id)).toBe(true);
-  });
-
-  it("POST /option-groups/:id/items honours priceDelta / vatClass / sort / active", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Tamaño" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: {
-        name: { es: "Grande" },
-        priceDelta: "1.50",
-        vatClass: "reduced",
-        sort: 2,
-        active: false,
-        maxQuantity: 3,
-      },
-    });
-    expect(res.status).toBe(201);
-    expect((await res.json()) as Record<string, unknown>).toMatchObject({
-      priceDelta: "1.50",
-      vatClass: "reduced",
-      sort: 2,
-      active: false,
-      maxQuantity: 3,
-    });
-  });
-
-  it("POST /option-groups/:id/items with maxQuantity < 1 → options.item_invalid 400", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Salsas" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" }, maxQuantity: 0 },
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { reason: string } } },
-    ).toMatchObject({
-      error: { code: "options.item_invalid", params: { reason: "max_quantity" } },
-    });
-  });
-
-  it.each([
-    ["name", { name: "nope" }],
-    ["priceDelta", { name: { es: "x" }, priceDelta: 1.5 }],
-    ["vatClass", { name: { es: "x" }, vatClass: 5 }],
-    ["sort", { name: { es: "x" }, sort: 1.5 }],
-    ["active", { name: { es: "x" }, active: "no" }],
-    ["maxQuantity", { name: { es: "x" }, maxQuantity: 1.5 }],
-  ])(
-    "POST /items rejects a wrong-typed %s → management.request_invalid 400",
-    async (field, body) => {
-      const app = mountApp();
-      const g = await createGroupVia(app, { name: { es: "x" } });
-      const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, { body });
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
-    },
-  );
-
-  it("POST /option-groups/:id/items with a non-uuid group id → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "POST", "/management-api/option-groups/not-a-uuid/items", {
-      body: { name: { es: "x" } },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId updates fields (204) and they land", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "antes" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: {
-        name: { es: "después" },
-        priceDelta: "2.00",
-        vatClass: null,
-        sort: 3,
-        active: false,
-        maxQuantity: 4,
-      },
-    });
-    expect(res.status).toBe(204);
-    const rows = (await (
-      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
-    ).json()) as Record<string, unknown>[];
-    expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
-      name: { es: "después" },
-      priceDelta: "2.00",
-      vatClass: null,
-      sort: 3,
-      active: false,
-      maxQuantity: 4,
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId with maxQuantity < 1 → options.item_invalid 400", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" }, maxQuantity: 3 },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: { maxQuantity: 0 },
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { reason: string } } },
-    ).toMatchObject({
-      error: { code: "options.item_invalid", params: { reason: "max_quantity" } },
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId with a non-uuid item id → shared.invalid_id 400", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/not-a-uuid`, {
-      body: { sort: 1 },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it.each([
-    ["name", { name: "nope" }],
-    ["priceDelta", { priceDelta: 1.5 }],
-    ["vatClass", { vatClass: 5 }],
-    ["sort", { sort: 1.5 }],
-    ["active", { active: "no" }],
-    ["maxQuantity", { maxQuantity: 1.5 }],
-  ])(
-    "PATCH /items/:itemId rejects a wrong-typed %s → management.request_invalid 400",
-    async (field, body) => {
-      const app = mountApp();
-      const g = await createGroupVia(app, { name: { es: "x" } });
-      const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-        body: { name: { es: "x" } },
-      });
-      const itemId = ((await created.json()) as { id: string }).id;
-      const res = await send(
-        app,
-        "PATCH",
-        `/management-api/option-groups/${g.id}/items/${itemId}`,
-        {
-          body,
-        },
-      );
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
-    },
-  );
-
-  it("PATCH /option-groups/:id/items/:itemId with an empty body is a 204 no-op", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: {},
-    });
-    expect(res.status).toBe(204);
-  });
-
-  // ── Allergen declaration: the routes accept the option's own `addAllergens` and defer validation to
-  // the ops, exactly as product `allergens` is threaded. ───────────────────────────────────────────
-  it("POST /option-groups/:id/items accepts the option's allergens and returns them", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Extras" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: {
-        name: { en: "Extra cheese", es: "Queso extra" },
-        addAllergens: { milk: { presence: "contains" } },
-      },
-    });
-    expect(res.status).toBe(201);
-    expect((await res.json()) as Record<string, unknown>).toMatchObject({
-      addAllergens: { milk: { presence: "contains" } },
-    });
-  });
-
-  it("POST /option-groups/:id/items 400s on a non-EU-14 allergen code", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "x", es: "x" }, addAllergens: { wombat: { presence: "contains" } } },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "allergen.invalid_code" },
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId threads the option's allergens (204) and they land", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: { addAllergens: { milk: { presence: "contains" } } },
-    });
-    expect(res.status).toBe(204);
-    const rows = (await (
-      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
-    ).json()) as Record<string, unknown>[];
-    expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
-      addAllergens: { milk: { presence: "contains" } },
-    });
-  });
-});
-
 describe("mountCatalogueApi — attaching extras and options lists to products", () => {
-  // The product body used to carry a flat `optionGroupIds`/`modifierIds` of option-group ids. It now
-  // carries one ordered `modifiers` list, each entry naming a KIND (`extras` or `options`) and a list
-  // id, written to `product_modifiers`. The cases below are the old ones re-aimed at that contract,
-  // plus the two the old field had no equivalent of: a mixed ordered list, and the legacy fields'
-  // refusal.
+  // A product body carries one ordered `modifiers` list, each entry naming a KIND (`extras` or
+  // `options`) and a list id, written to `product_modifiers`. Two of the cases below are about the
+  // two flat fields it replaced: they are refused by name, never ignored.
   async function createOptionsListVia(
     app: Hono,
     body: Record<string, unknown>,
@@ -2228,10 +1756,8 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
   });
 
   it("PATCH /products/:id refuses a repeated attachment rather than colliding in the insert", async () => {
-    // The old `optionGroupIds` screen COLLAPSED a repeat, because two copies would otherwise hit the
-    // `(product_id, group_id)` primary key and surface as an opaque 500. The ordered list refuses it
-    // instead, through the same `product.invalid` the catalogue parser throws — a 400 naming the
-    // entry, which is a better answer than silently saving something the caller did not send.
+    // A repeat is REFUSED, not collapsed: `product.invalid` naming the entry, so the caller is told
+    // rather than quietly saved something it did not send.
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Dupe attach menu");
     const a = await createOptionsListVia(app, { name: "Repetida", labels: [{ name: "a1" }] });
@@ -2365,67 +1891,6 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
       });
     },
   );
-
-  it("GET /management-api/products/:id/option-groups with a non-uuid id → shared.invalid_id 400", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/products/not-a-uuid/option-groups");
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("returns a modifier's dependants for the delete confirmation", async () => {
-    const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Menú con modificador");
-    const group = await createGroupVia(app, { name: { es: "Punto" } });
-    const createRes = await send(app, "POST", "/management-api/products", {
-      body: {
-        catalogueId,
-        categoryId: null,
-        name: "Entrecot",
-        pricingUnit: "each",
-        unitPrice: "18.00",
-        vatClass: "general",
-      },
-    });
-    expect(createRes.status).toBe(201);
-    const productId = ((await createRes.json()) as { id: string }).id;
-    // No request body attaches an option GROUP any more — the product carries `modifiers` and writes
-    // `product_modifiers` — so the row this read is about is written directly. `product_option_groups`
-    // and everything reading it go in Task 13 of
-    // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
-    await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
-      await setProductOptionGroups(tx, productId, [group.id]);
-    });
-
-    const res = await send(app, "GET", `/management-api/modifiers/${group.id}/dependants`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { dependants: unknown };
-    expect(body.dependants).toMatchObject({
-      products: [{ id: productId, name: "Entrecot" }],
-      menus: [],
-      orders: 0,
-    });
-  });
-
-  it("gates the modifier dependants read and refuses a foreign or malformed id", async () => {
-    const app = mountApp();
-    const group = await createGroupVia(app, { name: { es: "Punto" } });
-    const path = `/management-api/modifiers/${group.id}/dependants`;
-    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
-    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
-    expect((await send(app, "GET", "/management-api/modifiers/not-a-uuid/dependants")).status).toBe(
-      400,
-    );
-    const absent = await send(
-      app,
-      "GET",
-      "/management-api/modifiers/11111111-1111-4111-8111-111111111111/dependants",
-    );
-    expect(absent.status).toBe(404);
-    expect(await absent.json()).toMatchObject({ error: { code: "modifier.not_found" } });
-  });
 });
 
 /**
@@ -3014,31 +2479,6 @@ describe("menu-section list", () => {
       (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/sections`)).status,
     ).toBe(404);
     expect((await send(app, "GET", "/management-api/catalogues/bad-id/sections")).status).toBe(400);
-  });
-});
-
-describe("catalogue API tenant authorization", () => {
-  it("refuses editing an item through a group it does not belong to", async () => {
-    const app = mountApp();
-    const ownA = await createGroupVia(app, { name: { es: "A" } });
-    const ownB = await createGroupVia(app, { name: { es: "B" } });
-    const ownItem = await suite.db.execute<{ id: string }>(
-      sql`insert into option_group_items (group_id, name) values (${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
-    );
-    expect(
-      (
-        await send(
-          app,
-          "PATCH",
-          `/management-api/option-groups/${ownB.id}/items/${ownItem.rows[0]!.id}`,
-          { body: { name: { es: "Cambio" } } },
-        )
-      ).status,
-    ).toBe(403);
-    const names = await suite.db.execute(
-      sql`select name from option_group_items where id = ${ownItem.rows[0]!.id}`,
-    );
-    expect(names.rows).toEqual([{ name: { es: "Original" } }]);
   });
 });
 

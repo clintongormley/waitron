@@ -517,7 +517,7 @@ export class ProductEditor extends LitElement {
     }
     this.change("variants", variants);
   }
-  private related(event: Event, kind: "unit" | "category" | "extras" | "options") {
+  private related(event: Event, kind: ProductChildKind) {
     event.stopPropagation();
     if (this.suspended) return;
     this.dispatchEvent(
@@ -528,10 +528,7 @@ export class ProductEditor extends LitElement {
    * A nested create returns through the composing screen, without reseeding the product.
    *
    * The kinds are `ProductChildKind`'s (`apps/dashboard/src/state/product-child-create.ts`), which
-   * is what the composing screen's controller calls this with. "modifier" is among them and has no
-   * branch below: a product carries extras lists and options lists, never the option groups that
-   * kind names. It and the `dashboard-modifier-form` the catalogue screen still renders for it both
-   * go with Task 13 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+   * is what the composing screen's controller calls this with.
    */
   selectRelated(kind: ProductChildKind, id: string): void {
     if (kind === "unit") this.change("unitId", id);
@@ -551,10 +548,7 @@ export class ProductEditor extends LitElement {
    * Put focus back on the control that opened a child form, once that form closes.
    *
    * Both kinds of modifier list are added from the ONE combobox the Modifiers section renders, so
-   * both return focus there. So does "modifier": the editor has no control of its own that opens
-   * that form ({@link selectRelated} says why), and the Modifiers section is what replaced option
-   * groups, so it is the nearest thing to the form that closed — and leaving focus on the body
-   * after a dialog closes is worse than landing it one control away.
+   * both return focus there.
    */
   returnRelatedFocus(kind: ProductChildKind): void {
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;

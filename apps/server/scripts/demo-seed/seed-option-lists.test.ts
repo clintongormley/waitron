@@ -2,14 +2,13 @@
 // generic replacement for the deleted built-in `doneness` field — and attaches it to the steak, so
 // the demo data still carries the question "how do you want it cooked?".
 //
-// What this does NOT establish is that a TILL asks it, and no assertion below names
-// `offeredModifiers` at all. What is asserted is the seed and three reads of what it stored:
-// `listOptionLists` (the list, its three names and its labels), `readProductModifiers` (the
-// attachment row on the steak and none on the coffee), and `listAvailableProducts` — of which only
-// the LEGACY `optionGroups` are checked, to show the new list was added beside them.
-// The field a till actually draws is `offeredModifiers`, which `listAvailableProducts` also carries
-// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`); the screen that draws it
-// is `apps/till/src/widgets/modifier-picker.ts`, which draws one group per entry of that field.
+// What this does NOT establish is that a TILL asks it. What is asserted is the seed and three reads
+// of what it stored: `listOptionLists` (the list, its three names and its labels),
+// `readProductModifiers` (the attachment row on the steak and none on the coffee), and
+// `listAvailableProducts` — whose `offeredModifiers` is the field a till draws from
+// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`). Reaching that field is
+// as far as this file goes. The screen that draws it is
+// `apps/till/src/widgets/modifier-picker.ts`, which draws one group per entry.
 // THREE doors open that screen, and only one of them turns on `offeredModifiers` alone:
 // `apps/till/src/widgets/product-grid.ts` and `apps/till/src/widgets/tender-pay.ts` both gate on
 // `needsModifierPicker` (`apps/till/src/state/order-line.ts`), which answers true on an available
@@ -35,7 +34,6 @@ import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listAvailableProducts, listOptionLists, readProductModifiers } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { seedOptions } from "./seed-options.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -101,13 +99,10 @@ describe("seedOptionLists", () => {
       suite.admin,
       async (tx) => {
         await asAppUser(tx);
-        const { productsByImage, menuItemsByProduct } = await seedCatalogues(tx, {
+        const { productsByImage } = await seedCatalogues(tx, {
           locationId,
           locale: LOCALE,
         });
-        // Both seeds run, in the order the orchestrator runs them: the legacy groups are left in
-        // place and the new list is added beside them.
-        await seedOptions(tx, { productsByImage, menuItemsByProduct, locale: LOCALE });
         await seedOptionLists(tx, { productsByImage, locale: LOCALE });
         const steak = productsByImage.get("solomillo.png")!;
         const coffee = productsByImage.get("cafe-solo.png")!;
@@ -165,9 +160,16 @@ describe("seedOptionLists", () => {
     expect(attachments.get(steakId)).toEqual([{ kind: "options", id: cooked.id }]);
     expect(attachments.get(coffeeId)).toBeUndefined();
 
-    // The legacy option groups are untouched: the new list is added BESIDE them, not in place of
-    // them, and they are deleted with their tables in a later task.
+    // The list reaches the field a till reads. It is the ONLY thing the steak offers — the demo
+    // seeds no extras list and nothing else attaches to this dish.
     const steak = available.find((product) => product.name === "Solomillo")!;
-    expect(steak.optionGroups.map((group) => group.name[LOCALE])).toEqual(["Extras", "Cooking"]);
+    expect(steak.offeredModifiers).toHaveLength(1);
+    expect(steak.offeredModifiers[0]).toMatchObject({
+      kind: "options",
+      id: cooked.id,
+      name: "Punto",
+      defaultLabelId: medium.id,
+    });
+    expect(available.find((product) => product.name === "Café")!.offeredModifiers).toEqual([]);
   });
 });

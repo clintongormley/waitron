@@ -5,7 +5,6 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  Modifier,
   OptionList,
   OptionListInput,
   Product,
@@ -30,7 +29,6 @@ const categories: CategorySummary[] = [
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
 ];
-const modifiers: Modifier[] = [{ id: "m1", type: "text", name: { es: "Nota" }, available: true }];
 // The two kinds of modifier list the product editor attaches. Staff, customer-facing and kitchen
 // names differ in each, so an assertion on the editor's rows can tell which one a surface read.
 const extraLists: ExtraList[] = [
@@ -77,7 +75,6 @@ const products: Product[] = [
   {
     id: "p1",
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-a",
     categoryId: "c1",
     categoryIds: ["c1"],
@@ -131,7 +128,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
     listUnits: vi.fn().mockResolvedValue(units),
-    listModifiers: vi.fn().mockResolvedValue(modifiers),
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
     listOptionLists: vi.fn().mockResolvedValue(optionLists),
     createExtraList: vi.fn().mockResolvedValue({ ...extraLists[0], id: "ex-new", name: "Panes" }),
@@ -160,12 +156,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       image: null,
       parentId: null,
     }),
-    createModifier: vi.fn().mockResolvedValue({
-      id: "m2",
-      type: "text",
-      name: { es: "Mensaje" },
-      available: true,
-    }),
     ...overrides,
   } as unknown as DashboardApi;
   Object.defineProperty(api, "background", { get: () => api });
@@ -193,12 +183,10 @@ describe("catalogue-screen", () => {
     await flush(el);
     expect(api.listUnits).toHaveBeenCalledOnce();
     expect(api.listCategories).toHaveBeenCalledOnce();
-    expect(api.listModifiers).toHaveBeenCalledOnce();
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(list(el).products).toEqual(products);
     expect(el.shadowRoot!.querySelector("dashboard-category-manager")).toBeNull();
-    expect(el.shadowRoot!.querySelector("dashboard-option-group-manager")).toBeNull();
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
@@ -302,54 +290,6 @@ describe("catalogue-screen", () => {
     // the product back rather than leave it saved without its routing.
     expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", routed);
     expect(api.createProductEditor).not.toHaveBeenCalled();
-  });
-
-  it("edits an attached modifier through the nested form and writes it back", async () => {
-    const api = stubApi({
-      updateModifier: vi
-        .fn()
-        .mockResolvedValue({ id: "m1", type: "text", name: { es: "Nota larga" }, available: true }),
-    });
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    emit(editor(el), "wt-edit-related", { kind: "modifier", id: "m1" });
-    await el.updateComplete;
-    const form = el.shadowRoot!.querySelector("dashboard-modifier-form")!;
-    expect(form.open).toBe(true);
-    expect(form.value).toEqual(modifiers[0]);
-    emit(form, "wt-submit", {
-      value: { type: "text", name: { es: "Nota larga" }, available: true },
-    });
-    await flush(el);
-    expect(api.updateModifier).toHaveBeenCalledWith("m1", {
-      type: "text",
-      name: { es: "Nota larga" },
-      available: true,
-    });
-    expect(api.createModifier).not.toHaveBeenCalled();
-    expect(form.open).toBe(false);
-    // The product's own attachments are untouched by editing a modifier through the nested form.
-    expect(editor(el).currentValue.modifiers).toEqual([{ kind: "options", id: "opt-list-1" }]);
-  });
-
-  it("opens the modifier form empty again after an edit was cancelled", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
-    await flush(el);
-    emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    emit(editor(el), "wt-edit-related", { kind: "modifier", id: "m1" });
-    await el.updateComplete;
-    const form = el.shadowRoot!.querySelector("dashboard-modifier-form")!;
-    expect(form.value).toEqual(modifiers[0]);
-    emit(form, "wt-cancel", {});
-    await flush(el);
-    emit(editor(el), "wt-create-related", { kind: "modifier" });
-    await el.updateComplete;
-    // A stale edit target would turn the next CREATE into an update of the modifier just cancelled.
-    expect(form.value).toBeNull();
   });
 
   it("loads both kinds of modifier list and hands them to the product editor", async () => {

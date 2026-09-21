@@ -1,18 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
-import {
-  catalogues,
-  count,
-  flag,
-  id,
-  json,
-  label,
-  money,
-  optionGroupItems,
-  optionGroups,
-  products,
-  table,
-} from "@waitron/db";
+import { check, foreignKey, index, unique } from "drizzle-orm/pg-core";
+import { catalogues, count, flag, id, json, label, money, products, table } from "@waitron/db";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
  * `id` pinned to 1 (the `deployment` / `mirror_config` / `node_membership` singleton shape in
@@ -89,58 +77,5 @@ export const menuItems = table(
     }).onDelete("restrict"),
     check("menu_items_gross_price_ck", sql`${t.grossPrice} >= 0`),
     index("menu_items_menu_order_idx").on(t.menuId, t.displayOrder),
-  ],
-);
-
-/** An option group published for one menu item; product attachment is checked by the authoring op. */
-export const menuItemOptionGroups = table(
-  "menu_item_option_groups",
-  {
-    menuItemId: id("menu_item_id").notNull(),
-    groupId: id("group_id").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({
-      columns: [t.menuItemId, t.groupId],
-      name: "menu_item_option_groups_pk",
-    }),
-    foreignKey({
-      columns: [t.menuItemId],
-      foreignColumns: [menuItems.id],
-      name: "menu_item_option_groups_item_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.groupId],
-      foreignColumns: [optionGroups.id],
-      name: "menu_item_option_groups_group_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-/** A choice made available and priced for one offered group. */
-export const menuItemOptions = table(
-  "menu_item_options",
-  {
-    menuItemId: id("menu_item_id").notNull(),
-    groupId: id("group_id").notNull(),
-    optionId: id("option_id").notNull(),
-    priceDelta: money("price_delta").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({
-      columns: [t.menuItemId, t.optionId],
-      name: "menu_item_options_pk",
-    }),
-    foreignKey({
-      columns: [t.menuItemId, t.groupId],
-      foreignColumns: [menuItemOptionGroups.menuItemId, menuItemOptionGroups.groupId],
-      name: "menu_item_options_group_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.optionId],
-      foreignColumns: [optionGroupItems.id],
-      name: "menu_item_options_option_fk",
-    }).onDelete("cascade"),
   ],
 );

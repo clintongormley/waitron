@@ -59,15 +59,7 @@ export {
 } from "./schema/printers.js";
 export { printJobStatus, printJobs } from "./schema/print-jobs.js";
 export { stationPrinters } from "./schema/station-printers.js";
-export {
-  type AllergenMap,
-  catalogues,
-  categories,
-  optionGroupItems,
-  optionGroups,
-  productOptionGroups,
-  products,
-} from "./schema/catalogue.js";
+export { type AllergenMap, catalogues, categories, products } from "./schema/catalogue.js";
 export { locationCatalogues } from "./schema/location-catalogues.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
 export {

@@ -1,11 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-/**
- * What the product editor can create without leaving itself. "modifier" is the old option group,
- * which no surface of the editor opens any more; it stays while the catalogue screen still renders
- * `dashboard-modifier-form`, which Task 13 of
- * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes.
- */
-export type ProductChildKind = "unit" | "category" | "modifier" | "extras" | "options";
+/** What the product editor can create without leaving itself. */
+export type ProductChildKind = "unit" | "category" | "extras" | "options";
 interface Effects {
   /** The row that was written. Only its `id` is read here — a kind whose row carries a plain `name`
    * (an extras or options list) has no localized name to hand over, and needs none. */

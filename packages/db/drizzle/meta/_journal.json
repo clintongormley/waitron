@@ -344,6 +344,13 @@
       "when": 1789960048043,
       "tag": "0048_scaled_integers_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1789970677454,
+      "tag": "0049_drop_option_groups",
+      "breakpoints": true
     }
   ]
 }

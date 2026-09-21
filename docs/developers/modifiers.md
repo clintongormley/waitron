@@ -1,141 +1,125 @@
-# Integrating modifier authoring and selections
+# Integrating extras and options
 
-Use the reusable definition for configuration and explicit selections for each order. The canonical
-`Modifier`, `ModifierInput`, `ModifierSelection` and `ModifierSnapshot` types are exported from
-`@waitron/shared`. Catalogue validates definitions and selections through `modifier-contract.ts`;
-`modifiers.ts` owns transactional writes. Browser clients keep their local wire types.
+A dish can ask the diner two kinds of question, and the dashboard puts both under one **Modifiers**
+screen:
 
-> **2026-09-20:** `ModifierSnapshot` is still exported, but it is no longer a type to reach for.
-> `packages/shared/src/modifier-snapshots.ts` now records it as dead, and Task 13 of
-> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` deletes it. Checked by grepping
-> the tree: the only thing importing it is that package's own barrel
-> (`packages/shared/src/index.ts`). `apps/till` declared a separate `ModifierSnapshot` of its own in
-> `apps/till/src/api/client.ts` until 2026-09-21, when Task 12 rewrote the till's wire types over
-> extras and options and deleted it; no TypeScript file outside `packages/shared` names the type
-> today. An order or sale line's frozen
-> answers are `OptionSnapshot`s (`packages/shared/src/option-selection.ts`), and an extras pick is
-> its own line.
+- an **options** list — a reusable, named list of labels the diner picks exactly one of ("Cooked":
+  rare, medium, well done). It is a kitchen instruction. It owns no price, no VAT class and no
+  allergens, and it never becomes a line of its own: the answer freezes onto the dish's own line.
+- an **extras** list — a reusable, named list of PRODUCTS the diner may add ("Sides": chips, salad).
+  Each pick becomes its own child line at its own price and its own VAT rate, so an extra is sold,
+  reported and filed as the product it is.
+
+There is no third kind, and nothing chooses between them at run time: which table a list lives in
+is what it is.
+
+A list is authored once and attached to as many dishes as you like. A dish carries ONE ordered
+attachment list, `product_modifiers`, and each row of it names either an extras list or an options
+list — never both (`product_modifiers_one_reference_ck`,
+`packages/catalogue/src/schema/extras.ts`). The three names every list and every label carries —
+staff `name`, translated `customerName`, plain `kitchenName` — follow the product convention, and
+which surface reads which is in [products.md](products.md).
+
+The wire shapes are declared once, in `packages/catalogue/src/modifier-list-types.ts`: `OptionList`,
+`OptionLabel`, `ExtraList`, `ExtraListItem`, their `…Input` twins and the two `…Dependants` shapes.
+That file is types only and imports nothing, so a browser client can import the same copy the server
+answers with. `scripts/dashboard-browser-purity.test.ts` is what keeps it that way, and it reads the
+file as TEXT, so an `import type` line would pass it — that the file imports nothing at all is true
+today and guarded by nothing.
 
 ## Authoring
 
-> **2026-09-20:** this section is about the OLD option-group surface only, and it is no longer the
-> one the dashboard authors against. The dashboard's Modifiers page now writes two other surfaces,
-> `/management-api/modifiers/options` and `/management-api/modifiers/extras`, six routes each
-> (collection GET and POST, item GET, PATCH and DELETE, and `GET …/:id/dependants`), mounted by the
-> shared `mountListSurface` in `apps/server/src/catalogue-api.ts`. Their wire shapes —
-> `OptionList`, `OptionListInput`, `ExtraList`, `ExtraListInput` — are declared in
-> `packages/catalogue/src/modifier-list-types.ts`. Documenting them properly, and deleting what is
-> below, is Task 13 of
-> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+Each kind of list has its own six routes under `/management-api/modifiers`, and the two sets are the
+same six with one path segment different. They are mounted by one helper, `mountListSurface`
+(`apps/server/src/catalogue-api.ts`), which is why they cannot drift apart.
 
-`GET /management-api/modifiers` returns `{ modifiers: Modifier[] }`.
-`POST /management-api/modifiers`, `GET /management-api/modifiers/:id` and
-`PATCH /management-api/modifiers/:id` return `{ modifier: Modifier }`. POST returns 201; PATCH takes
-the complete definition input. DELETE returns `{ ok: true }`. Choices have UUIDs supplied by the
-editor, so an options default can name a newly added choice before its first save.
+| Route | Answers |
+| --- | --- |
+| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionList[] }` / `{ extraLists: ExtraList[] }` |
+| `POST /management-api/modifiers/{options,extras}` | the created list under `optionList` / `extraList`, 201 |
+| `GET /management-api/modifiers/{options,extras}/:id` | the list under `optionList` / `extraList` |
+| `PATCH /management-api/modifiers/{options,extras}/:id` | the updated list, same key. The body is the COMPLETE list, not a patch of changed fields |
+| `DELETE /management-api/modifiers/{options,extras}/:id` | `{ ok: true }` |
+| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` — the products carrying the list and the menus publishing it, for a delete confirmation to show |
 
-A modifier's `type` is one of `text`, `extras` or `options`. There is no `yes-no` type; the contract
-(`parseModifierInput` in `packages/catalogue/src/modifier-contract.ts`) rejects any other value with
-`modifier.invalid`. Every modifier is always offered as a whole — there is no modifier-level
-availability, only a per-choice `available` flag.
+An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says which id was meant
+(`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the
+offending `field`; an unknown list id is `options.not_found` / `extras.not_found`; a name missing in
+an enabled content language is `options.translation_required` / `extras.translation_required`
+naming both the field and the language. Every code is registered in
+`packages/catalogue/src/errors.ts`.
 
-For a venue whose default content language is English:
+A list carries its labels or its items INSIDE it — there is no separate item endpoint. The order you
+send them in is the order they come back in: the write numbers each row's `sort` from its position
+in the body (`writeItems`, `packages/catalogue/src/extras.ts`; the options equivalent in
+`options.ts`). Sending an id on a label or an item keeps that id; leaving it out mints a new one.
+Which order a TILL draws things in is a separate question with three columns in it — the table under
+_Ordering and stored facts_ below.
 
-```http
-POST /management-api/modifiers
-Content-Type: application/json
+An **options list** must be answerable while it is active: an active list with no labels at all, or
+whose every label is withdrawn, is refused. `defaultLabelId` names a label of THIS list and is the
+one preselected when the list is asked; naming an unavailable label normalises it to null rather
+than refusing.
 
-{
-  "type": "options",
-  "name": { "en": "Bread" },
-  "defaultChoiceId": null,
-  "choices": [
-    { "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": { "en": "White" }, "available": true },
-    { "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "name": { "en": "Gluten-free" }, "available": true,
-      "suitableFor": ["vegan", "vegetarian"] }
-  ]
-}
-```
+An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes
+it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
+`maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
+terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
+or photo, which all come from the `products` row (spec §3.1). A product may appear at most once in
+one list (`extra_list_items_list_product_uq`).
 
-The response includes the normalized definition:
+### Attaching a list to a dish
 
-```json
-{
-  "modifier": {
-    "id": "11111111-1111-4111-8111-111111111111",
-    "type": "options",
-    "name": { "en": "Bread" },
-    "available": true,
-    "defaultChoiceId": null,
-    "choices": [
-      { "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": { "en": "White" }, "available": true },
-      { "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "name": { "en": "Gluten-free" }, "available": true,
-        "suitableFor": ["vegan", "vegetarian"] }
-    ]
-  }
-}
-```
+A product POST or PATCH carries one ordered `modifiers` list, each entry
+`{ "kind": "extras" | "options", "id": "<list id>" }`. Product reads and the editor read return the
+same shape in the same order. A body that sends the retired `modifierIds` or `optionGroupIds` is
+refused, naming that field.
 
-Product POST/PATCH no longer carries `modifierIds` or `optionGroupIds` (2026-09-19). A body sending
-either is refused, naming that field. What it carries instead is one ordered `modifiers` list, each
-entry `{ "kind": "extras" | "options", "id": "<list id>" }`, written to `product_modifiers`; product
-lists and the editor read return the same shape, in the same order. Attaching an option GROUP has no
-request body at all any more — the group/item endpoints still exist and still read
-`option_groups`/`option_group_items`, and they go with those tables when the old model is removed.
-The old group cap maps into `maxTotalQuantity`.
+`writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) is what writes it. It takes
+no advisory lock: it takes a `for key share` ROW lock on each list the body names, before it touches
+an attachment row rather than after. That is the same lock the insert's own foreign-key check would
+take anyway, so it adds no conflict — it only moves when the lock is acquired, which is what stops a
+concurrent list delete deadlocking the save. The measurement is in that file.
 
-`dashboard-modifier-form` in `apps/dashboard/src/widgets/modifier-form.ts` accepts `open`, `busy`,
-`locales: string[]`, `value: Modifier | null` and `fieldErrors: Record<string, string>`. It emits
-`wt-submit` with `{ value: ModifierInput }` and `wt-cancel` with `{}`. Since 2026-09-20 the ONE
-screen that composes it is the Products screen (`apps/dashboard/src/screens/catalogue-screen.ts`),
-which renders it as a nested create-or-edit form and owns the API call
-(`#submitModifier`); nothing on the interface opens it any more, and Task 13 of
-`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes it. The Modifiers screen
-composes `dashboard-option-list-form` and `dashboard-extra-list-form` instead. The composing screen
-closes the editor after a successful write. A choice-level validation error — the form's own
-check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
-choices table naming the choice by its current label, so a rejection never lands on a field the
-manager cannot see. Every error is also listed in the form's `wt-form-error-summary`, including a
-server refusal that names no field (such as `modifier.in_use`) or a field the form does not draw
-an input for (such as `defaultChoiceId`, or a name in a language the form does not show), which
-appears only there. The Products screen feeds it from two of its own live watches, `listModifiers`
-(whose dependencies are `option_groups` and `option_group_items`) and `getContentLanguages`
-(`apps/dashboard/src/api/live-queries.ts`).
+### Publishing an extras list on a menu
 
-One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
-modal inside the modifier form. It accepts `open`, `busy`, `locales`, `kind: "extras" | "options"`,
-`value: ChoiceDraft | null`, validates its own fields against the server's price and quantity
-limits (`packages/catalogue/src/modifier-limits.ts`), lists what is wrong in its own error summary,
-and emits `wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
-server until the modifier itself is saved.
+A menu offer can publish a subset of a dish's extras lists and change the terms:
+`menu_item_extra_lists` says which lists this offer publishes and in what order, and
+`menu_item_extra_items` withdraws or re-prices individual products within one (spec §3.2). There is
+no management route for this today — `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`)
+is called from nothing outside `packages/catalogue` and the test suites.
 
-Products can compose the modifier form directly and select the saved definition. A choice carries two
-optional nutrition fields, plus `vatClass` on an extra for tax inheritance:
+An options list has no per-menu version at all. A dish asks the same questions on every menu (spec
+§2.2), so every options list the dish carries is offered on every offer of it, and there is nothing
+to publish. The consequence worth knowing: a menu item created today offers its product's options
+lists and NONE of its extras lists, because an extras list reaches an offer only through
+`setMenuItemExtraLists` and nothing outside `packages/catalogue` and its tests calls that. Pinned by
+"omits an extras list the offer does not publish, and keeps the options list"
+(`packages/catalogue/src/offered-modifiers.test.ts`).
 
-- `addAllergens` — the allergens the choice contains. A map keyed by allergen code whose value records
-  `{ presence: "contains" }`; the modifier choice UI records only `contains` and offers no
-  presence or source field. This is a single "contains" list: there is no "removes" list, and the old
-  `removeAllergens`/`addOrigins`/`removeOrigins` fields are gone.
-- `suitableFor` — a positive dietary list over exactly four labels, `vegan`, `vegetarian`, `halal`,
-  `kosher` (stored in the `dietary_suitability` column, validated by `validateDietarySuitability` in
-  `packages/catalogue/src/dietary-declarations.ts`; anything else is `diet.declaration_invalid`). It
-  replaces the old negative `dietaryEffect = { invalidates: [...] }` model — a choice states what it
-  is suitable for, never what it invalidates.
+### What an extra costs
 
-The choice form renders both through the shared `dashboard-allergen-dietary-picker` widget
-(`apps/dashboard/src/widgets/allergen-dietary-picker.ts`): one allergen multi-select under
-"Nutritional information" and a four-item checklist under "Dietary preferences". Products can adopt
-the same widget during integration.
+Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`, spec §3.3):
+the menu offer's `menu_item_extra_items.price`, then the list item's own `price`, then the product's
+`unit_price`. A null at a rung means "ask the next one". Every price on the wire is a GROSS
+(VAT-inclusive) two-place decimal string; the column underneath holds a count of whole cents and the
+row converts (`decimalToCents` / `centsToDecimal`, `packages/shared/src/cents.ts`).
+
+The VAT class is never resolved that way — an extra always carries the picked PRODUCT's own VAT
+class, because it is sold as that product.
+
+### The dashboard
+
+The Modifiers screen (`apps/dashboard/src/screens/modifiers-screen.ts`) has two tabs and composes one
+widget per kind: `dashboard-option-list-form` (`apps/dashboard/src/widgets/option-list-form.ts`) and
+`dashboard-extra-list-form` (`apps/dashboard/src/widgets/extra-list-form.ts`). The Products screen
+composes the same two, so a list can be created without leaving the dish being edited. Each widget
+emits `wt-submit` with the complete list input and `wt-cancel` with `{}`; the composing screen owns
+the API call and closes the editor after a successful write.
 
 ## Ordering and stored facts
 
-This section describes the order path as it stands after the extras-and-options change
-(2026-09-20). The `modifierSelections` body it used to document is gone: `grep -rn
-modifierSelections apps/server/src` finds nothing, and the old contract that parsed it
-(`validateModifierSelections`, `packages/catalogue/src/modifier-contract.ts`) has no production
-caller left.
-
-A requested line now carries two optional fields, `options` and `extras`. Five routes take them,
+A requested line carries two optional fields, `options` and `extras`. Five routes take them,
 each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
 `POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
 `PUT /api/working-orders/:id`, the tab round `POST /api/working-orders/:id/round`, and the
@@ -184,9 +168,8 @@ the basket resolved, and decides what is stored:
   weighed dish is still allowed.
 - Defaults are client draft seeds; the server fills in no missing answer.
 
-Reading them back, four wire types carry `optionSnapshots` — the field these four called
-`modifierSnapshots` before this change: `TabLine`, `HeldOrder.lines`, `StationQueueItem` and
-`ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
+Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
+`StationQueueItem` and `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
 `extras` array holding what each CHILD line froze. Those are VALUES, not a re-sendable selection:
 the child line holds no list id to name. The till rebuilds one from them against the dish's live
 offer (`deriveExtraSelections` and `deriveOptionSelections`, `apps/till/src/state/`) — see the end
@@ -260,12 +243,10 @@ line when the options list it answered was renamed between the two sends"
 the picked product's id, so renaming the list — or the product — disturbs nothing and the line is
 preserved.
 
-The till is on this wire as of 2026-09-21. It sends one `options` entry per answered list and one
-`extras` entry per list picked from, reads a line's frozen answers back as `optionSnapshots` on all
-five mirrors it keeps (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by
-`parentLineNo` rather than by a null product. The old `modifierSelections`/`modifierSnapshots`
-shapes and the `{ optionGroupItemId }` answer are gone from it, its mirror of the settled ticket
-included. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
+The till sends one `options` entry per answered list and one `extras` entry per list picked from,
+reads a line's frozen answers back as `optionSnapshots` on all five mirrors it keeps
+(`apps/till/src/api/client.ts`), and tells a child extras row from a dish by `parentLineNo` rather
+than by a null product. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
 six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
 answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
 which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
@@ -285,16 +266,11 @@ extras and options lists a dish puts in front of a diner, already resolved. It i
 beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
 `OfferedOptionsList`, `OfferedExtraItem`).
 
-The legacy `optionGroups` and `modifiers` fields on those two payloads are untouched and still
-carry the old `option_groups` model; Task 13 of
-`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. Nothing in `apps/till`
-reads either of them any more — the picker walks `offeredModifiers` alone
-(`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD a line, the product grid
-and tender-pay's weighed quantity, decide whether a dish needs a picker from that field or from an
-available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`). Checked with `git grep -l -i optiongroup HEAD -- apps/till/src`:
-three test files match, each setting `optionGroups: []` only to satisfy catalogue's declared
-`MenuOffer`, and no source file at all — against eight source files for the same command on
-`main`.
+Nothing else on those two payloads describes a modifier. The till's picker walks
+`offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
+a line — the product grid and tender-pay's weighed quantity — decide whether a dish needs a picker
+from that field or from an available variant (`needsModifierPicker`,
+`apps/till/src/state/order-line.ts`).
 
 Five things it is worth knowing about that payload:
 
@@ -380,40 +356,55 @@ CUSTOMER text at the invoice locale and falls back to the staff name, never to t
 `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside the
 kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
-## Storage and integration order
+## Storage
 
-Generated core migration `packages/db/drizzle/0021_product_modifiers.sql` extends the existing
-group/item definitions and adds JSONB snapshots to working and sale lines.
+Seven tables carry the feature, all in the catalogue migration set, plus two columns in the core
+set that hold what an order froze.
 
-> **2026-09-20:** the sentence above is left as it stands because it records what 0021 did, and that
-> does not change. Both JSONB snapshot columns it added are gone now:
-> `working_order_lines.modifier_snapshots` was dropped by core migration
-> `packages/db/drizzle/0040_watery_victor_mancha.sql`, and `sale_lines.modifier_snapshots` by
-> `packages/db/drizzle/0041_magenta_metal_master.sql`, which added `sale_lines.option_snapshots` in
-> the same file. What the two tables carry today is under _On the filed sale_ above.
+| Table or column | Set | What it holds |
+| --- | --- | --- |
+| `option_lists`, `option_labels` | catalogue | an options list and its labels |
+| `extra_lists`, `extra_list_items` | catalogue | an extras list and the products it offers |
+| `product_modifiers` | catalogue | a dish's one ordered attachment list |
+| `menu_item_extra_lists`, `menu_item_extra_items` | catalogue | a menu offer's published extras and its per-product overrides |
+| `working_order_lines.option_snapshots` | core | an open order line's frozen options answers |
+| `sale_lines.option_snapshots` | core | a filed line's frozen options answers |
 
-0021 creates NO table of that name, despite the file name — beware the twin:
-`packages/catalogue/drizzle/0010_product_modifiers.sql` is a different migration in a different set,
-and it is the one that creates the `product_modifiers` table. Everything in THIS SECTION is about
-the OLD `option_groups`/`option_group_items` model and
-its `product_option_groups` attachment table, not that new one; the authoring section above already
-describes the new `modifiers` body field. No new tables or core-to-catalogue
-foreign keys are added here. The catalogue generation script reports no schema change. Existing
-table grants, classification and configuration-transfer ordering apply; the group/item definition,
-`product_option_groups` attachment and `menu_item_option_groups` publication operations share one
-transaction-scoped advisory lock, keyed on the constant `"modifier-definitions"`
-(`packages/catalogue/src/modifier-lock.ts`). The new `product_modifiers` write takes no advisory
-lock at all — `writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) takes a
-`for key share` ROW lock on each list it names instead, which that file explains.
+All seven catalogue tables are classified `state` in `CATALOGUE_CLASSIFICATION`
+(`packages/catalogue/src/classification.ts`); none is append-only, so none carries a
+`reject_mutation()` trigger. The app role reads, writes and removes rows and never owns or truncates
+a table — the grants are in `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql`, and
+`packages/fiscal-verifactu/src/privileges.expected.ts` pins them against the live catalog.
 
-Selections take that lock in shared mode so definition readers can coexist. Canonical and retained
-group/item writers take it exclusively before reading or changing definitions. The retained
-`updateOptionGroup` and `updateOptionGroupItem` operations take `(tx, id, patch)` — the tenant
-argument and the tenant predicate on their by-ID reads and writes went with the column
-(2026-09-14).
+An extras pick's child line is the record on both sides: on an OPEN order it names the product it
+is, and on a FILED sale it carries the frozen names with no `product_id` at all, because `sale_lines`
+has no such column. That difference is deliberate and is what _On the filed sale_ above describes.
 
-Regenerate generated migration collisions against the integration base rather than editing the
-journal or snapshots. No backfill or shared development database reset is included. Products still
-owns removal of the combined editor and final composition with Units and Categories.
-Existing pre-migration rows do not acquire canonical caps from their old `max_select` values;
-recreate disposable pre-production catalogue data under the approved schema/reset convention.
+This feature takes no advisory lock OF ITS OWN and asks no JSON containment question, but it does
+reach an advisory lock through a shared helper, and that lock is what the SQLite storage switch has
+to deal with here. `createOptionList` and `updateOptionList` (`packages/catalogue/src/options.ts`)
+and `createExtraList` and `updateExtraList` (`packages/catalogue/src/extras.ts`) each call their own
+file's `validateNames`, which calls `findContentTranslationGap`
+(`packages/catalogue/src/content-languages.ts`), whose first statement is `lockContentLanguages` —
+`select pg_advisory_xact_lock(hashtextextended('content-languages', 0))`. Both `validateNames`
+return before touching the database when the body carries no customer-facing name map at all (an
+options list has one map of its own plus one per label; an extras list has only its own), so a save
+carrying none of them reaches no lock. The lock is not this feature's to remove:
+`writeContentLanguages` in the same file takes it, and so does every save that goes through that
+file's `validateContentTranslations` — categories, units, variants, product names and image names
+among them.
+
+The serialisation these files DO take of their own is a row lock, and `extras.ts` takes two:
+`lockExtraList` is a `select … for update` on the list row, and `setMenuItemExtraLists` opens with
+a `select … for update` on the menu OFFER's `menu_items` row before it locks any list — the first
+of the three locks whose deliberate order that file's own comment sets out. `lockList`
+(`product-modifiers.ts`) takes a `select … for key share` on each list a product attaches, and
+`options.ts` takes no lock of its own at all.
+
+`scripts/catalogue-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
+carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among them carry no
+`pgEnum(` either. That last check is deliberately scoped to the catalogue files: the order and
+sale-path files declare three enums that predate this feature by two months, and the guard's header
+is the receipt for leaving them alone. It is weaker than that sounds. It reads the files as TEXT, so
+it cannot tell code from a comment; it covers only the files it names; and `content-languages.ts` is
+not one of them, which is how the lock traced above sits outside it.

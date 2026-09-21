@@ -14,8 +14,6 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("menu_item_variants", "state", STATE),
   classify("menu_sections", "state", STATE),
   classify("menu_items", "state", STATE),
-  classify("menu_item_option_groups", "state", STATE),
-  classify("menu_item_options", "state", STATE),
   classify("option_lists", "state", STATE),
   classify("option_labels", "state", STATE),
   classify("extra_lists", "state", STATE),

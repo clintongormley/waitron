@@ -180,6 +180,24 @@ describe("option list authoring contract", () => {
     );
   });
 
+  // A default is taken when a field is ABSENT and never when it is present and null — the rule
+  // `CLAUDE.md` §3 states as "default optional request fields only when absent". `value ?? default`
+  // is the shape that breaks it, and it breaks silently: an explicit null would be defaulted rather
+  // than refused. The suite that used to hold this pair went with the old modifier contract in
+  // Task 13 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`; this is its heir on
+  // the options side. Proven by mutation, not by passing: with `flag`'s `value === undefined`
+  // widened to `value == null`, both expectations below fail and the rest of the file stays green.
+  it("refuses an explicit null where a default is only taken on absence", () => {
+    expect(() => parseOptionListInput({ ...cooked, active: null })).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "active" } }),
+    );
+    expect(() =>
+      parseOptionListInput({ ...cooked, labels: [{ ...mediumRare, available: null }] }),
+    ).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "labels.0.available" } }),
+    );
+  });
+
   it("refuses a customer name whose entries are not all text", () => {
     expect(() => parseOptionListInput({ ...cooked, customerName: { en: 7 } })).toThrowError(
       expect.objectContaining({ code: "options.invalid", params: { field: "customerName" } }),

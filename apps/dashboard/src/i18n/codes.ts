@@ -456,10 +456,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That allergen isn't valid",
     es: "Ese alérgeno no es válido",
   },
-  // Option-group authoring (apps/server/src/catalogue-api.ts, Task 11). The manager's group create/edit
-  // rejects with this when the min/max selection bounds are inconsistent (max below min, a negative
-  // min) or a required group's minimum is below 1 — the same two rules the DB CHECKs enforce, surfaced
-  // as one clean code before the write.
+  // No route answers with this any more — the option groups it described were replaced by the extras
+  // and options lists below. The sentence stays because a shipped code is never removed, only left
+  // unthrown (CLAUDE.md §3).
   "options.group_invalid": {
     en: "Check the group's min/max selection settings",
     es: "Revisa los ajustes de selección mínima/máxima del grupo",

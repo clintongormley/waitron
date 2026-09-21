@@ -1,18 +1,10 @@
-import {
-  nonBlankTranslations,
-  createModifier,
-  updateModifier,
-  deleteModifier,
-  getModifier,
-  listModifiers,
-  modifierDependants,
-} from "@waitron/catalogue";
+import { nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
   catalogueExists,
@@ -32,8 +24,6 @@ import {
   type CategoryInput,
   createMenuItem,
   createMenuSection,
-  createOptionGroup,
-  createOptionGroupItem,
   createProduct,
   deactivateMenuItem,
   listCatalogues,
@@ -41,8 +31,6 @@ import {
   listCategories,
   listMenuOffers,
   listMenuSections,
-  listOptionGroupItems,
-  listOptionGroups,
   listOptionLists,
   getOptionList,
   createOptionList,
@@ -55,13 +43,10 @@ import {
   updateExtraList,
   deleteExtraList,
   extraListDependants,
-  listProductOptionGroupIds,
   listProducts,
   removeCatalogueFromLocation,
   setLocationDefaultCatalogue,
   renameCatalogue,
-  updateOptionGroup,
-  updateOptionGroupItem,
   updateMenuItem,
   updateMenuSection,
   updateProduct,
@@ -74,16 +59,11 @@ import {
   readProductModifiers,
   writeProductModifiers,
   type ProductModifierRef,
-  type CreateOptionGroupInput,
-  type CreateOptionGroupItemInput,
   type DietOverride,
   type ProductAllergens,
-  type UpdateOptionGroupInput,
-  type UpdateOptionGroupItemInput,
   type ProductEditorValue,
   type ProductRouting,
   type UpdateProductInput,
-  type VatClass,
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -192,18 +172,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
-  // An invalid option-group AUTHORING config (Task 11): the select bounds or the required⇒min rule the
-  // DB CHECKs enforce, surfaced by `createOptionGroup`/`updateOptionGroup` as a clean 400 before the
-  // write rather than the opaque 500 the CHECK would raise. The `?? 400` default already covers it; it
-  // is listed explicitly as the house style requires.
+  // The five codes the deleted option-group machinery raised. An error code is never retired once
+  // shipped (CLAUDE.md §3), so they stay registered and stay mapped; nothing on this surface throws
+  // one today. `grep -rn '\"modifier.invalid\"\|\"options.group_invalid\"\|\"options.item_invalid\"' apps
+  // packages --include=\"*.ts\"` on 2026-09-21 finds only the registry
+  // (`packages/catalogue/src/errors.ts`), this map and this comment.
   "modifier.invalid": 400,
   "modifier.not_found": 404,
   "modifier.in_use": 409,
   "options.group_invalid": 400,
-  // An invalid option-ITEM per-option-quantity config (max_quantity < 1 / non-integer), surfaced by
-  // `createOptionGroupItem`/`updateOptionGroupItem` as a clean 400 before the write rather than the
-  // opaque 500 the `option_group_items_qty_ck` CHECK would raise. Listed explicitly as the house style
-  // requires; the `?? 400` default already covers it.
   "options.item_invalid": 400,
   // Option lists (`packages/catalogue/src/options.ts`). `options.invalid` reaches here from more
   // than one place — `parseOptionListInput` on a malformed authoring body, and `writeLabels` on a
@@ -216,11 +193,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "options.translation_required": 400,
   // An id naming no list. The default would make this a 400, so this entry is what makes it a 404.
   "options.not_found": 404,
-  // 409 rather than the default 400 because the body was fine and the stored state refused it — the
-  // shape the sibling `modifier.in_use` above has. NOTHING throws it, and the design may never give
+  // 409 rather than the default 400 because the body was fine and the stored state refused it.
+  // NOTHING throws it, and the design may never give
   // it one: a list delete is DESIGNED to cascade its product attachments rather than refuse — and
   // `product_modifiers_option_list_fk` is what does that cascading
-  // (packages/catalogue/drizzle/0010_product_modifiers.sql:12) — which
+  // (packages/catalogue/drizzle/0000_catalogue_baseline.sql) — which
   // `packages/catalogue/src/errors.ts` states on the code itself, citing spec
   // `2026-09-18-one-product-model-design.md` §2.3. Mapped because Task 3 of the plan names it.
   "options.in_use": 409,
@@ -342,15 +319,14 @@ async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Pro
 }
 
 /**
- * Screen an OPTIONAL integer request field (option-group `minSelect`/`maxSelect`/`sort`), returning it.
- * Absent stays `undefined` (a no-op — the create route defaults it, the patch route leaves it
- * untouched); a PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid`
- * naming the FIELD (never the value). The `typeof` screen is first so a non-number is REJECTED rather
+ * Screen the menu-offer routes' optional `displayOrder` body field, returning it. Absent stays
+ * `undefined` (a no-op: the create route defaults it, the patch route leaves it untouched); a
+ * PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid` naming
+ * `displayOrder` (never the value). The `typeof` screen is first so a non-number is REJECTED rather
  * than coerced, and the int4 bound keeps an out-of-range value off the `integer` column (a `22003`
- * opaque 500). The DOMAIN relationship between min/max (and the required⇒min rule) is NOT checked here —
- * that is `createOptionGroup`/`updateOptionGroup`'s `options.group_invalid`; this is a shape screen only.
+ * opaque 500).
  */
-function parseOptionalInteger(value: unknown, field: string): number | undefined {
+function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   if (
     typeof value !== "number" ||
@@ -358,23 +334,9 @@ function parseOptionalInteger(value: unknown, field: string): number | undefined
     value < -2_147_483_648 ||
     value > 2_147_483_647
   ) {
-    throw new AppError("management.request_invalid", { field });
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
   }
   return value;
-}
-
-/**
- * Screen an OPTIONAL `vatClass` request field for an option item, returning `string | null | undefined`.
- * `null` means "inherit the parent dish's rate" (a legitimate value, the column default); a present
- * string flows to the DB (its membership is the `option_group_items` CHECK's job, the same typeof-only
- * posture the product `vatClass` screen takes); anything else is `management.request_invalid`.
- */
-function parseOptionalVatClass(value: unknown): VatClass | null | undefined {
-  if (value === undefined) return undefined;
-  if (value !== null && typeof value !== "string") {
-    throw new AppError("management.request_invalid", { field: "vatClass" });
-  }
-  return value as VatClass | null;
 }
 
 /**
@@ -406,12 +368,10 @@ function screenDietOverride(value: unknown): void {
  * column as a `22P02` driver error, which this surface's STATUS map has nothing for, so it would
  * surface as an opaque 500.
  *
- * DUPLICATES are NOT collapsed here, unlike the `optionGroupIds` screen this replaces. That screen
- * collapsed them because two copies of one id would otherwise collide on the
- * `(product_id, group_id)` primary key and surface as a 500. `writeProductModifiers`
+ * DUPLICATES are NOT collapsed here: `writeProductModifiers`
  * (packages/catalogue/src/product-modifiers.ts) refuses a repeat itself, as `product.invalid`
- * naming the entry, which the STATUS map already maps to 400 — so the 500 this guarded against
- * cannot happen, and the caller is told rather than quietly saved something it did not send.
+ * naming the entry, which the STATUS map maps to 400 — so the caller is told rather than quietly
+ * saved something it did not send.
  *
  * Whether each id names a real list is `writeProductModifiers`' check, not this shape screen's.
  */
@@ -434,6 +394,12 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
  * naming the field the caller sent so it knows which of its own fields went away. Ignoring it would
  * save a product with NO attachments and answer 201/204, the one outcome a caller on the old
  * contract could not tell from having worked.
+ *
+ * Nothing in this repository sends either field any more — no first-party client can trip this. It
+ * stays as a tripwire for a client that PREDATES the change: a dashboard tab left open across the
+ * deploy still holds the old body shape, and its save must be refused rather than silently stripped.
+ * `parseProductEditorInput` (packages/catalogue/src/product-editor-input.ts) holds the same tripwire
+ * on the editor body, for the same reason.
  */
 function refuseLegacyAttachFields(body: Record<string, unknown>): void {
   for (const legacy of ["modifierIds", "optionGroupIds"])
@@ -471,13 +437,16 @@ interface ListSurface<TList, TDependants> {
  * `/management-api/modifiers` because a dish's one attachment list holds either an option list or
  * an extras list; `surface.segment` is the discriminator in the path.
  *
- * EVERY call MUST come before the `/management-api/modifiers/:id` block is registered. Only the
- * collection read is at risk — it is the one whose path that `:id` can match, and `:id` swallows
- * the literal segment, so it answers 400 `shared.invalid_id` instead of 200 — but the six move as
- * one call. Each call site records its own measurement.
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §11 intends these routes to
- * REPLACE `/management-api/modifiers`, but no task in the plan deletes that block, so nothing
- * schedules this hazard's removal.
+ * Where these calls sit among the other mounts no longer matters. Nothing registers a
+ * `/management-api/modifiers/:id` route any more — the legacy option-group CRUD that did was deleted
+ * with its tables — so no wildcard can swallow `options` or `extras`.
+ *
+ * MEASURED with a control, not read off the router. `pnpm --filter @waitron/server test
+ * src/catalogue-api.test.ts`: with both calls moved to the END of `mountCatalogueApi`, 131/131 pass.
+ * With a `/management-api/modifiers/:id` handler put back ahead of them, FOUR go red — each
+ * segment's collection read with `expected 400 to be 200` and each segment's gate case with
+ * `expected 400 to be 401`, because that handler screens the uuid before it asks for a session. So
+ * the suite does discriminate the ordering; it is the hazard that is gone, not the check.
  */
 function mountListSurface<TList, TDependants>(
   app: Hono,
@@ -616,28 +585,21 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     return readProductEditor(tx, saved.id);
   };
 
-  const assertOwned = async (
-    tx: Transaction,
-    table: "products" | "option_groups" | "option_group_items",
-    id: string,
-    groupId?: string,
-  ): Promise<void> => {
-    const result = await tx.execute(sql`
-      select 1 from ${sql.identifier(table)}
-      where id = ${id}
-      ${groupId === undefined ? sql`` : sql`and group_id = ${groupId}`}
-    `);
-    if (result.rows.length === 0) {
+  /**
+   * Refuse a product patch naming no stored product. This read is what makes an unknown id a
+   * refusal at all and cannot be folded into the write that follows it: `updateProduct`
+   * (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
+   * reports nothing when no row matches. Measured by removing the call and re-running the file —
+   * the unknown-id case answers 204 having written nothing, instead of 403.
+   */
+  const assertOwned = async (tx: Transaction, id: string): Promise<void> => {
+    const [row] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id));
+    if (row === undefined) {
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }
   };
 
-  // The option lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
-  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
-  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
-  // "GET /management-api/modifiers/options lists them" with `expected 400 to be 200`, and the gate
-  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
-  // for a session.
+  // The option lists.
   mountListSurface(app, gated, log, {
     segment: "options",
     idKind: "OptionListId",
@@ -648,17 +610,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     create: (tx, body) => createOptionList(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
     update: (tx, id, body) => updateOptionList(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
     remove: deleteOptionList,
-    // Not "the dashboard's" preview, as the modifier sibling below says of its own: nothing under
-    // `apps/dashboard` or `apps/till` names an option list today.
+    // The delete preview. Nothing under `apps/dashboard` or `apps/till` reads it today.
     dependants: optionListDependants,
   });
 
-  // The extras lists. Registered here, ahead of `/management-api/modifiers/:id` below, for the
-  // reason `mountListSurface` states. Measured by moving this call after that block and re-running
-  // the file (`pnpm --filter @waitron/server test catalogue-api.test`): exactly two tests go red —
-  // "GET /management-api/modifiers/extras lists them" with `expected 400 to be 200`, and the gate
-  // case with `expected 400 to be 401`, because the `:id` handler screens the uuid before it asks
-  // for a session.
+  // The extras lists.
   mountListSurface(app, gated, log, {
     segment: "extras",
     idKind: "ExtraListId",
@@ -673,56 +629,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     // delete rather than blocking it, so this is information, never a refusal.
     dependants: extraListDependants,
   });
-
-  app.get("/management-api/modifiers", (c) =>
-    run(c, log, async () => {
-      const modifiers = await gated(requireManagementSession(c), (tx) => listModifiers(tx));
-      return c.json({ modifiers });
-    }),
-  );
-  app.get("/management-api/modifiers/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      const modifier = await gated(requireManagementSession(c), (tx) => getModifier(tx, id));
-      return c.json({ modifier });
-    }),
-  );
-  app.post("/management-api/modifiers", (c) =>
-    run(c, log, async () => {
-      const body = await readJsonBody(c);
-      const modifier = await gated(requireManagementSession(c), (tx) =>
-        createModifier(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ modifier }, 201);
-    }),
-  );
-  app.patch("/management-api/modifiers/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      const body = await readJsonBody(c);
-      const modifier = await gated(requireManagementSession(c), (tx) =>
-        updateModifier(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
-      return c.json({ modifier });
-    }),
-  );
-  app.delete("/management-api/modifiers/:id", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      await gated(requireManagementSession(c), (tx) => deleteModifier(tx, id));
-      return c.json({ ok: true });
-    }),
-  );
-  // What deleting this modifier would touch — the preview the dashboard's delete confirmation reads.
-  app.get("/management-api/modifiers/:id/dependants", (c) =>
-    run(c, log, async () => {
-      const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      const dependants = await gated(requireManagementSession(c), (tx) =>
-        modifierDependants(tx, id),
-      );
-      return c.json({ dependants });
-    }),
-  );
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
@@ -832,7 +738,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
       }
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(
           tx,
@@ -882,7 +788,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const productId = requireUuidParam(body.productId, "ProductId");
       const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       const created = await gated(sessionId, (tx) =>
         createMenuItem(tx, {
           menuId,
@@ -905,7 +811,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.grossPrice !== undefined && typeof body.grossPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "grossPrice" });
       }
-      const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined ? {} : { grossPrice: body.grossPrice as string }),
@@ -1400,7 +1306,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       refuseLegacyAttachFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       await gated(sessionId, async (tx) => {
-        await assertOwned(tx, "products", productId);
+        await assertOwned(tx, productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
         // receipt shows, so there is nothing to hold to the enabled languages. A PARTIAL one is a
         // translation gap and is refused.
@@ -1414,235 +1320,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         if (modifiers !== undefined) {
           await writeProductModifiers(tx, productId, modifiers);
         }
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // ── Product ↔ option-group attach read-back ──────────────────────────────────────────────────────
-  // The ids of the option groups attached to a product, in per-attachment `sort` order (a caller
-  // cross-references GET /management-api/option-groups for the names). There is no WRITE half any
-  // more (2026-09-19): the product POST/PATCH body carries the ordered `modifiers` list and writes
-  // `product_modifiers`, so nothing a client can send fills `product_option_groups`. This read goes
-  // with those tables in Task 13 of
-  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
-  // `:id` screened as a uuid (→ shared.invalid_id).
-  app.get("/management-api/products/:id/option-groups", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const ids = await gated(sessionId, (tx) => listProductOptionGroupIds(tx, productId));
-      return c.json(ids);
-    }),
-  );
-
-  // ── Option groups (reusable modifier groups) ─────────────────────────────────────────────────────
-  // CRUD the tenant's reusable `option_groups`. Every route is gated exactly like the catalogue/product
-  // routes above — `requireManagementSession` first (401), then `gated` runs the op under withTransaction +
-  // asAppUser + `authorizeManager(person.manage)` (403). Body-shape screens mirror the product routes;
-  // the DOMAIN select-bound invariant is `createOptionGroup`/`updateOptionGroup`'s `options.group_invalid`.
-  app.get("/management-api/option-groups", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listOptionGroups(tx));
-      return c.json(rows);
-    }),
-  );
-
-  app.post("/management-api/option-groups", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{
-        name?: unknown;
-        minSelect?: unknown;
-        maxSelect?: unknown;
-        required?: unknown;
-        sort?: unknown;
-        active?: unknown;
-      }>(c);
-      if (!isPlainObject(body.name)) {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      const minSelect = parseOptionalInteger(body.minSelect, "minSelect");
-      const maxSelect = parseOptionalInteger(body.maxSelect, "maxSelect");
-      const sort = parseOptionalInteger(body.sort, "sort");
-      if (body.required !== undefined && typeof body.required !== "boolean") {
-        throw new AppError("management.request_invalid", { field: "required" });
-      }
-      if (body.active !== undefined && typeof body.active !== "boolean") {
-        throw new AppError("management.request_invalid", { field: "active" });
-      }
-      const input: CreateOptionGroupInput = {
-        name: body.name as Record<string, string>,
-        ...(minSelect === undefined ? {} : { minSelect }),
-        ...(maxSelect === undefined ? {} : { maxSelect }),
-        ...(body.required === undefined ? {} : { required: body.required }),
-        ...(sort === undefined ? {} : { sort }),
-        ...(body.active === undefined ? {} : { active: body.active }),
-      };
-      const created = await gated(sessionId, async (tx) => {
-        await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        return createOptionGroup(tx, input);
-      });
-      return c.json(created, 201);
-    }),
-  );
-
-  app.patch("/management-api/option-groups/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
-      const body = await readJsonBody<{
-        name?: unknown;
-        minSelect?: unknown;
-        maxSelect?: unknown;
-        required?: unknown;
-        sort?: unknown;
-        active?: unknown;
-      }>(c);
-      const patch: UpdateOptionGroupInput = {};
-      if (body.name !== undefined) {
-        if (!isPlainObject(body.name)) {
-          throw new AppError("management.request_invalid", { field: "name" });
-        }
-        patch.name = body.name as Record<string, string>;
-      }
-      const minSelect = parseOptionalInteger(body.minSelect, "minSelect");
-      if (minSelect !== undefined) patch.minSelect = minSelect;
-      const maxSelect = parseOptionalInteger(body.maxSelect, "maxSelect");
-      if (maxSelect !== undefined) patch.maxSelect = maxSelect;
-      const sort = parseOptionalInteger(body.sort, "sort");
-      if (sort !== undefined) patch.sort = sort;
-      if (body.required !== undefined) {
-        if (typeof body.required !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "required" });
-        }
-        patch.required = body.required;
-      }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "active" });
-        }
-        patch.active = body.active;
-      }
-      await gated(sessionId, async (tx) => {
-        await assertOwned(tx, "option_groups", groupId);
-        if (Object.keys(patch).length === 0) return;
-        if (patch.name !== undefined)
-          await validateContentTranslations(tx, patch.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        await updateOptionGroup(tx, groupId, patch);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // ── Option group items (choices within a group) ──────────────────────────────────────────────────
-  app.get("/management-api/option-groups/:id/items", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
-      const rows = await gated(sessionId, (tx) => listOptionGroupItems(tx, groupId));
-      return c.json(rows);
-    }),
-  );
-
-  app.post("/management-api/option-groups/:id/items", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const groupId = requireUuidParam(c.req.param("id"), "OptionGroupId");
-      const body = await readJsonBody<{
-        name?: unknown;
-        priceDelta?: unknown;
-        vatClass?: unknown;
-        sort?: unknown;
-        active?: unknown;
-        maxQuantity?: unknown;
-        addAllergens?: unknown;
-      }>(c);
-      if (!isPlainObject(body.name)) {
-        throw new AppError("management.request_invalid", { field: "name" });
-      }
-      if (body.priceDelta !== undefined && typeof body.priceDelta !== "string") {
-        throw new AppError("management.request_invalid", { field: "priceDelta" });
-      }
-      const vatClass = parseOptionalVatClass(body.vatClass);
-      const sort = parseOptionalInteger(body.sort, "sort");
-      // Shape screen only (integer, int4 range); the DOMAIN `max_quantity >= 1` rule is
-      // `createOptionGroupItem`'s `options.item_invalid`, the same split min/max/sort take.
-      const maxQuantity = parseOptionalInteger(body.maxQuantity, "maxQuantity");
-      if (body.active !== undefined && typeof body.active !== "boolean") {
-        throw new AppError("management.request_invalid", { field: "active" });
-      }
-      const input: CreateOptionGroupItemInput = {
-        name: body.name as Record<string, string>,
-        ...(body.priceDelta === undefined ? {} : { priceDelta: body.priceDelta }),
-        ...(vatClass === undefined ? {} : { vatClass }),
-        ...(sort === undefined ? {} : { sort }),
-        ...(body.active === undefined ? {} : { active: body.active }),
-        ...(maxQuantity === undefined ? {} : { maxQuantity }),
-        ...(body.addAllergens === undefined
-          ? {}
-          : { addAllergens: body.addAllergens as ProductAllergens | null }),
-      };
-      // The group :id is screened for SHAPE only; a well-formed-but-missing group makes the
-      // `group_id` FK raise 23503 → the opaque 500 the STATUS map documents,
-      // the same posture the product routes take on a missing catalogueId.
-      const created = await gated(sessionId, async (tx) => {
-        await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        return createOptionGroupItem(tx, groupId, input);
-      });
-      return c.json(created, 201);
-    }),
-  );
-
-  app.patch("/management-api/option-groups/:groupId/items/:itemId", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const groupId = requireUuidParam(c.req.param("groupId"), "OptionGroupId");
-      const itemId = requireUuidParam(c.req.param("itemId"), "OptionGroupItemId");
-      const body = await readJsonBody<{
-        name?: unknown;
-        priceDelta?: unknown;
-        vatClass?: unknown;
-        sort?: unknown;
-        active?: unknown;
-        maxQuantity?: unknown;
-        addAllergens?: unknown;
-      }>(c);
-      const patch: UpdateOptionGroupItemInput = {};
-      if (body.name !== undefined) {
-        if (!isPlainObject(body.name)) {
-          throw new AppError("management.request_invalid", { field: "name" });
-        }
-        patch.name = body.name as Record<string, string>;
-      }
-      if (body.priceDelta !== undefined) {
-        if (typeof body.priceDelta !== "string") {
-          throw new AppError("management.request_invalid", { field: "priceDelta" });
-        }
-        patch.priceDelta = body.priceDelta;
-      }
-      const vatClass = parseOptionalVatClass(body.vatClass);
-      if (body.vatClass !== undefined) patch.vatClass = vatClass;
-      const sort = parseOptionalInteger(body.sort, "sort");
-      if (sort !== undefined) patch.sort = sort;
-      const maxQuantity = parseOptionalInteger(body.maxQuantity, "maxQuantity");
-      if (maxQuantity !== undefined) patch.maxQuantity = maxQuantity;
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "active" });
-        }
-        patch.active = body.active;
-      }
-      if (body.addAllergens !== undefined) {
-        patch.addAllergens = body.addAllergens as ProductAllergens | null;
-      }
-      await gated(sessionId, async (tx) => {
-        await assertOwned(tx, "option_group_items", itemId, groupId);
-        if (Object.keys(patch).length === 0) return;
-        if (patch.name !== undefined)
-          await validateContentTranslations(tx, patch.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        await updateOptionGroupItem(tx, itemId, patch);
       });
       return c.body(null, 204);
     }),

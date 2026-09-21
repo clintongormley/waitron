@@ -103,7 +103,6 @@ export interface ServiceZoneSummary {
 }
 
 export interface ZoneMenuOffer {
-  readonly modifiers?: readonly import("@waitron/shared").Modifier[];
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;
@@ -146,24 +145,6 @@ export interface ZoneMenuOffer {
     readonly available: boolean;
   }[];
   readonly courseId: string | null;
-  readonly optionGroups: readonly {
-    readonly id: string;
-    readonly name: Readonly<Record<string, string>>;
-    readonly minSelect: number;
-    readonly maxSelect: number;
-    readonly required: boolean;
-    readonly options: readonly {
-      readonly id: string;
-      readonly name: Readonly<Record<string, string>>;
-      readonly priceDelta: string;
-      readonly maxQuantity: number;
-      readonly vatClass: string | null;
-      readonly addAllergens: Readonly<
-        Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
-      > | null;
-      readonly suitableFor?: readonly string[] | null;
-    }[];
-  }[];
 }
 
 export type PreparationRoute =

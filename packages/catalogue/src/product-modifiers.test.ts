@@ -542,9 +542,13 @@ describe("a product's attachment list in the catalogue's configuration transfer"
  * from there — a container adds nothing (CLAUDE.md §4).
  *
  * Seen red rather than assumed, three times, each with `42501 permission denied for table
- * product_modifiers`: with `DELETE` dropped from the grant in
- * drizzle/0011_product_modifiers_grants.sql, with that whole migration removed from the set, and
- * with `UPDATE` alone dropped from it. The first two stopped at the same statement —
+ * product_modifiers`: with `DELETE` dropped from this table's grant, with the grant removed
+ * altogether, and with `UPDATE` alone dropped from it. Those three were run against the standalone
+ * `0011_product_modifiers_grants.sql` that shipped them; the same two statements now sit among the
+ * rest in `drizzle/0001_catalogue_baseline_sql.sql`, where the set was regenerated, so the SECOND
+ * of them today means deleting those two lines rather than a whole file.
+ *
+ * The first two stopped at the same statement —
  * `delete from "product_modifiers" where "product_modifiers"."product_id" = $1` — because a write
  * clears the product's rows first; the third stopped at this file's own
  * `update product_modifiers set sort = 1`. So the DELETE and UPDATE grants each have a control of
@@ -576,7 +580,7 @@ describe("attachment CRUD as the non-superuser application role", () => {
         new Map([[dishes.burger, [{ kind: "options", id: options.dressing }]]]),
       );
 
-      // UPDATE is granted by drizzle/0011_product_modifiers_grants.sql and no write path reaches
+      // UPDATE is granted by drizzle/0001_catalogue_baseline_sql.sql and no write path reaches
       // it: `writeProductModifiers` deletes the product's rows and inserts fresh ones rather than
       // editing one in place. It is walked by statement for that reason, the way
       // extra-projection.test.ts walks `menu_item_extra_lists`' unreached UPDATE — a granted

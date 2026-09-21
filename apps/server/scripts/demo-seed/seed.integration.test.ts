@@ -172,13 +172,18 @@ describe("demo seed end-to-end", () => {
     expect(casaProducts.length).toBeGreaterThan(0);
     expect(diaProducts.length).toBeGreaterThan(0);
 
-    // Pick a product from each menu that carries NO required option group, so parking it WITHOUT
-    // options is valid. Products sort by `(created_at, id)` and the seed inserts them in one burst,
-    // so `created_at` ties and the random-uuid `id` breaks the tie — which product sorts first varies
-    // run to run. The coffee/steak carry required Size/Milk/Cooking groups (a real order could never
-    // park them optionless); any other product proves the same cross-menu union-reprice.
+    // Pick a product from each menu that has nothing a line MUST answer, so parking it with no
+    // selections is valid. Products sort by `(created_at, id)` and the seed inserts them in one
+    // burst, so `created_at` ties and the random-uuid `id` breaks the tie — which product sorts
+    // first varies run to run. An ACTIVE options list must be answered
+    // (`validateOptionSelections`, packages/catalogue/src/option-contract.ts, throws
+    // `options.label_required` for one that is not), and an extras list with `minPicks > 0` must be
+    // too, so a product offering either is skipped; any other proves the same cross-menu
+    // union-reprice.
     const optionFree = (p: (typeof read.products)[number]): boolean =>
-      !(p.optionGroups ?? []).some((g) => g.required && g.items.length > 0);
+      !p.offeredModifiers.some(
+        (entry) => entry.kind === "options" || (entry.kind === "extras" && entry.minPicks > 0),
+      );
     const casaProduct = casaProducts.find(optionFree) ?? casaProducts[0]!;
     const diaProduct = diaProducts.find(optionFree) ?? diaProducts[0]!;
 

@@ -1,4 +1,3 @@
-import type { Modifier } from "@waitron/shared";
 import type { OptionLabel } from "./modifier-list-types.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
@@ -44,73 +43,10 @@ export interface MenuOffer extends MenuItem {
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
-  optionGroups: MenuOfferOptionGroup[];
-  modifiers: Modifier[];
   /** The ordered extras and options lists this OFFER puts in front of a diner — see
-   * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. The legacy
-   * `optionGroups` and `modifiers` above are what it replaces; Task 13 of
-   * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. */
+   * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. */
   offeredModifiers: OfferedModifier[];
   variants: ProductVariant[];
-}
-
-export interface MenuOfferOptionGroup {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  options: MenuOfferOption[];
-}
-
-export interface MenuOfferOption {
-  id: string;
-  name: Record<string, string>;
-  priceDelta: string;
-  maxQuantity: number;
-  vatClass: VatClass | null;
-  addAllergens: ProductAllergens | null;
-  suitableFor?: string[] | null;
-}
-
-/**
- * One selectable choice within a {@link ResolvedOptionGroup} (an active `option_group_items` row).
- * `priceDelta` is a GROSS (VAT-inclusive) decimal string, like `unitPrice` — the column stores the
- * amount as a count of whole cents and the read converts it.
- * `vatClass` is `null` when the item INHERITS the parent dish's rate (`option_group_items.vat_class`
- * NULL); a non-null value overrides it. Later tasks price a selection against these.
- */
-export interface ResolvedOptionItem {
-  id: string;
-  name: Record<string, string>;
-  priceDelta: string;
-  vatClass: VatClass | null;
-  /** The AUTHORED per-option cap (`option_group_items.max_quantity`, NOT NULL default 1): the most of
-   * THIS option a diner may take on one dish (per-option quantity). The sale path validates a selected
-   * option's quantity is an integer in `1..maxQuantity` and prices the child at `dishQty × optionQty`. */
-  maxQuantity: number;
-  /** The option's OWN allergens (`addAllergens`): codes this option contributes ("extra cheese" →
-   * milk), null when it declares none. Shown beside the dish's own allergens — the dish and its extras
-   * are not combined into one figure. */
-  addAllergens: ProductAllergens | null;
-  /** The option's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
-   * beside the dish's own — never folded. */
-  suitableFor?: string[] | null;
-}
-
-/**
- * An active `option_groups` row attached to a product, with its active items resolved and sorted.
- * `minSelect`/`maxSelect` bound how many items a diner may pick and `required` forces at least one;
- * later tasks validate a selection against these. `items` is in `option_group_items.sort` order and
- * excludes inactive items; an active group with no active items resolves to `items: []`.
- */
-export interface ResolvedOptionGroup {
-  id: string;
-  name: Record<string, string>;
-  minSelect: number;
-  maxSelect: number;
-  required: boolean;
-  items: ResolvedOptionItem[];
 }
 
 /**
@@ -155,14 +91,9 @@ export interface AvailableProduct {
   /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
    * not part of the priceable projection. */
   catalogueName: string;
-  /** The product's attached ACTIVE option groups (Task 1 tables), each with its active items in sort
-   * order — `[]` when the product has none. Not part of the priceable projection; later tasks price +
-   * validate a diner's selection against these. */
-  optionGroups: ResolvedOptionGroup[];
-  modifiers: Modifier[];
   /** The ordered extras and options lists this PRODUCT puts in front of a diner — see
    * {@link OfferedModifier}. No menu offer is involved, so each extras entry is the list as the
-   * product itself carries it. Replaces `optionGroups` and `modifiers` above (Task 13). */
+   * product itself carries it. */
   offeredModifiers: OfferedModifier[];
 }
 

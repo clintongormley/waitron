@@ -455,8 +455,8 @@ What it left open:
   either is refused, naming the field. What replaced them is one ordered `modifiers` list of
   `{ kind, id }`, written to `product_modifiers`
   (`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, Task 6 Step 4). The old
-  `product_option_groups` table and the code reading it survive until Task 13 of that plan, but
-  nothing writes them through a route any more.
+  `product_option_groups` table went with the rest of the legacy model in Task 13, so there is only
+  one attachment shape left.
 - **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
   The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
   repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the
@@ -485,7 +485,7 @@ What it left open:
   kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
   from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
-**Modifiers become Extras and Options — IN PROGRESS, thirteen pull requests.** The single "modifier"
+**Modifiers become Extras and Options — the thirteenth and last pull request.** The single "modifier"
 idea is being split into two: Extras (reusable lists of products, each pick becoming its own sale
 line) and Options (reusable lists of labels, saved as a note on the dish line). A product composes
 both through one ordered attachment list. Design:
@@ -534,7 +534,86 @@ for a child line by a NULL product, no longer recognise one. Task 10 has
 since taken doneness out end to end and seeded a cooking options list in its place, and Task 11 has
 built the dashboard's Extras and Options tabs (below). **Both of those dev-till consequences are
 closed by Task 12 (2026-09-21):** the till sends the new `extras`/`options` shapes, and it tells a
-child line by `TabLine.parentLineNo` instead of by a null product. The next task is Task 13.
+child line by `TabLine.parentLineNo` instead of by a null product.
+
+Task 13 is the last, and it deletes what the twelve replaced: the five tables `option_groups`,
+`option_group_items`, `product_option_groups`, `menu_item_option_groups` and `menu_item_options`,
+the operations and HTTP routes over them, the three dashboard widgets that authored them
+(`modifier-form`, `choice-form`, `option-group-manager`), the legacy `optionGroups` and `modifiers`
+fields on the two sell-side payloads, `Product.modifierIds`, the legacy option-group demo seed, and
+the advisory lock the old definition writers shared. The error codes stay registered and go
+unthrown, which is the rule for a code that has shipped.
+
+**THE PART OF IT THE PLAN DID NOT ANTICIPATE, and the shape worth carrying: dropping a CORE table
+that a MODULE baseline references cannot be done by appending a migration to each set.**
+`packages/migrations/src/apply.ts` applies sets in manifest order, core first, so a core migration
+dropping `option_groups` runs BEFORE the catalogue baseline creates
+`menu_item_option_groups` with a foreign key into it. Measured rather than reasoned about: with a
+drop appended to each set, the virgin migrate fails inside the migrator with
+`relation "public.option_groups" does not exist`, SQLSTATE `42P01`. What works is a drop appended to
+the CORE set and the CATALOGUE set REGENERATED, so its baseline never names the core tables at all —
+the same move `#378` made for this same set. Every module set is migrated from a virgin database
+only, so a regeneration is safe there in a way it would not be for core.
+
+Two consequences of that regeneration, both stated so nobody meets them cold. A module set's schema
+version is its journal entry count (`packages/migrations/src/schema-version.ts`), so the catalogue
+set goes from thirteen entries to two — a dev database migrated before this reads as AHEAD of the
+image until `wa-wt reset demo <name>` rebuilds it, and nothing live is affected because Waitron is
+pre-production. And about fifteen comments across `packages/catalogue/src` and its tests cited a
+catalogue migration by number and line; the numbers no longer exist and the pointers were rewritten
+with the change. The alternative — hand-editing the baseline instead — was weighed and is worse: it
+reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails silently.
+
+**What branch 1 deliberately did NOT build, both recorded in the design rather than forgotten:**
+
+- **An options list is always required.** It asks for exactly one pick, with the default
+  preselected, which is what today's behaviour was
+  (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.2). An OPTIONAL options list —
+  one a diner may leave unanswered — is a possible future change, called out in that spec's §11 and
+  not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
+- **A variant offers its parent's lists and cannot override them.** The attachment list is the one
+  thing a variant does not override (§4.4); a per-variant attachment row is a possible later
+  addition, recorded in §14. Everything else about a variant — price, names, photo, VAT, category,
+  unit, routing, allergens, dietary declarations — IS editable per variant.
+
+**Two gaps Task 13 did not create but did leave standing in the open, both worth a decision:**
+
+- **The demo venue no longer demonstrates extras at all.** The old seed's three legacy modifiers
+  went with the legacy tables, and nothing replaced them: `apps/server/scripts/demo-seed/` creates
+  an options list (`seed-option-lists.ts`, the sirloin's `Punto`) and no extras list — checked by
+  grepping the whole seed directory for `createExtraList`, which matches nothing. So a demo box
+  shows the Options half of the feature and not the Extras half, and `docs/products.md` now says so
+  rather than describing extra prices that are not seeded. **Next action:** seed one extras list on
+  a demo dish, with a menu-offer price that differs from the product's own, which is what the
+  removed text used to illustrate.
+- **A menu item created today offers its product's options lists and none of its extras lists, and
+  the function that would publish one has NO non-test caller.** Options need no publication, so they
+  always travel; an extras list reaches an offer only through `setMenuItemExtraLists`
+  (`packages/catalogue/src/extras.ts`), and there is no management route to it. The receipt, run on
+  this branch:
+  `grep -rn setMenuItemExtraLists packages apps --exclude-dir=coverage | grep -v "\.test\.ts"`
+  returns the function's own definition and the comments that name it, and no call at all — every
+  call is in a test suite, in `packages/catalogue` and in `apps/server` alike. The
+  `--exclude-dir=coverage` is not decoration: on a checkout where a coverage run has left its report
+  behind, the same command without it also returns the gitignored HTML under
+  `packages/catalogue/coverage/`, which is neither source nor a caller. `createMenuItem`
+  (`packages/catalogue/src/operations.ts`) used to auto-seed a new offer with the product's active
+  option groups, and Task 13 removed that with the old model; the new model has no twin, and did not
+  have one before either. So the publication half of the extras feature is reachable only from
+  tests, while both its tables carry full CRUD for the application role —
+  `GRANT SELECT, INSERT, UPDATE, DELETE ON "menu_item_extra_lists", "menu_item_extra_items" TO app_user`
+  in `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql` — which is the wider version of
+  the open `UPDATE` question recorded further down this file. Pinned by "omits an extras list the
+  offer does not publish, and keeps the options list"
+  (`packages/catalogue/src/offered-modifiers.test.ts`). **Next action:** decide whether a new menu
+  item should inherit its product's extras lists by default, or whether publication stays explicit
+  and a route is built for it — and settle the grants in the same decision rather than separately.
+
+**Next in this slice: branch 2, variants as products** (`feat/variants-as-products`,
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4). It folds variants into
+`products` behind a `parent_id` and removes `product_variants` and `menu_item_variants`. It is
+sequenced AFTER the SQLite flip, not before, because it touches the variant-locales trigger, which is
+a PL/pgSQL body (that spec's decision 12).
 
 Task 10 has landed as **#471** (main `bc958bd3b`). It deleted the built-in `doneness` field end to
 end — the enum, its column on the open order line and on the fired ticket item, the
@@ -545,7 +624,7 @@ its store field. Core migration 0042 drops both columns and then the type; drizz
 the doneness" now covers the note.
 
 The demo seed grows a cooking options list on the steak, in `seed-option-lists.ts` — a file of its
-own so Task 13 can delete the legacy option-group seed without taking it too. **Its staff name is
+own, which is what let Task 13 delete the legacy option-group seed without taking it too. **Its staff name is
 `Punto`, not the `Cooked` the plan named**: a staff name is one plain string that is never
 translated at read time, and every other staff name in the demo menu is Spanish, so an English one
 would have shown English buttons on the Spanish demo. That was a review finding, not a choice made
@@ -578,21 +657,21 @@ machine the same tree is 46/46. Load, not the branch — and the control is the 
 re-run past to green.
 
 CLOSED as of 2026-09-21 by Task 12. The two sell-side reads carry the `product_modifiers`
-attachments resolved and in the product's own order, in an `offeredModifiers` field beside the
-legacy `optionGroups` (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`), and
-the till's picker now draws that field: the seeded `Punto` list IS put to an operator.
+attachments resolved and in the product's own order, in an `offeredModifiers` field
+(`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`), and the till's picker now
+draws that field: the seeded `Punto` list IS put to an operator. The legacy `optionGroups` field it
+sat beside went in Task 13.
 
 **The double-cooking-question window never opened.** This entry warned that, with Task 12 landing
-before Task 13 deletes the legacy tables, the demo steak would ask how it should be cooked twice —
-once from the legacy "Cooking" option group and once from the new list. It does not, because the
-till's picker draws `offeredModifiers` and nothing else: the legacy `optionGroups` field is still on
-the payload and no till source reads it. Checked, not assumed —
-`git grep -l -i optiongroup HEAD -- apps/till/src` matches three test files, each setting
-`optionGroups: []` only to satisfy catalogue's declared `MenuOffer`, and no source file, where the
-same command against `main` matches eight source files; the till's own `TillProduct` no longer
-declares the field, so a screen naming it would not compile. So nobody has to pull the legacy group
-out of the seed, and Task 13 can delete it with the rest of the legacy machinery. NOT established by
-opening a demo box and tapping the steak, which is what would settle it beyond the code.
+before Task 13 deleted the legacy tables, the demo steak would ask how it should be cooked twice —
+once from the legacy "Cooking" option group and once from the new list. It did not, because the
+till's picker draws `offeredModifiers` and nothing else, and no till source ever read the legacy
+field: measured while both existed, `git grep -l -i optiongroup HEAD -- apps/till/src` matched
+three test files setting `optionGroups: []` only to satisfy catalogue's declared `MenuOffer`, and no
+source file, against eight source files for the same command on `main`. Task 13 has since deleted
+the legacy group, the seed that created it and the field itself, so the window is shut for good.
+What was never established either way: nobody opened a demo box and tapped the steak, which is what
+would settle it beyond the code.
 
 Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
 `** MEDIUM RARE **` framing is still an open question nobody has put to a real cook.
@@ -758,13 +837,13 @@ What Task 11 left open:
 - **A refused nested create is silent on three of the catalogue screen's five child forms.** Task 11
   wired `fieldErrors` from the create controller into the two list forms, after a review seat
   reproduced a refused nested create sitting in an open modal that said nothing. The same gap is
-  still open on the other three: `unit-form.ts`, `category-form.ts` and `modifier-form.ts` each
-  declare a `fieldErrors` property and `apps/dashboard/src/screens/catalogue-screen.ts` passes it to
-  none of them. Verified pre-existing rather than assumed —
+  still open on `unit-form.ts` and `category-form.ts`: each declares a `fieldErrors` property and
+  `apps/dashboard/src/screens/catalogue-screen.ts` passes it to neither. It was three forms until
+  Task 13 deleted the third, `modifier-form.ts`. Verified pre-existing rather than assumed —
   `git diff 2b354d5638ebb81f87e8421a25db83f14556440e -- apps/dashboard/src/screens/catalogue-screen.ts`
-  has no added or removed line mentioning any of the three. **Next action:** wire the same
-  `#childFieldErrors()` into all three, one line each, and check each form's own field mapping
-  rather than assuming the paths match.
+  has no added or removed line mentioning any of them. **Next action:** wire the same
+  `#childFieldErrors()` into both, one line each, and check each form's own field mapping rather
+  than assuming the paths match.
 - **Dismissing a nested form fires TWO cancels, and only two of five forms guard it.** The form
   emits its own `wt-cancel`, then the native `<dialog>`'s `close` arrives a task later,
   `wt-dialog.ts` turns it into `wt-close` and the form cancels again. If a second form has opened in
@@ -796,8 +875,8 @@ What option lists left open, none of it taken in #436 or #445:
   attachment rows on to `menu_items` for the menus. The two queries repeat the same `option_list_id`
   condition rather than sharing one predicate; nothing can drift from it yet, because
   `options.in_use` is still thrown by nothing. **Next action:** whoever writes a refusal that uses
-  the same condition shares it then — the modifier code this replaces already learned that lesson
-  (`openOrderUse` in `packages/catalogue/src/modifiers.ts`).
+  the same condition shares it then — the modifier code this replaced had already learned that
+  lesson in an `openOrderUse` helper, and that file went with the old model in Task 13.
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
   its product attachments rather than be refused, so there may never be a thrower. It stays
   registered because a shipped code is never removed.
@@ -922,9 +1001,9 @@ Two things its review wave is worth carrying past this task, because neither is 
 
 What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 
-- **The legacy `optionGroups` and `modifiers` fields stay on both sell-side payloads, and the legacy
-  demo seed stays.** The till reads neither, so there was nothing to gain by removing them early and
-  the removal belongs with the tables. Task 13 takes all of it.
+- **The legacy `optionGroups` and `modifiers` fields stayed on both sell-side payloads, and the
+  legacy demo seed stayed.** The till read neither, so there was nothing to gain by removing them
+  early and the removal belonged with the tables. Task 13 took all of it.
 - **The per-line kitchen NOTE was not touched**, despite living in a file called
   `line-extras-editor.ts`. It was never part of this feature; the file name is now misleading and
   nobody has renamed it.
@@ -1177,26 +1256,33 @@ What the order path (the plan's Task 7) left behind:
   assertion in `apps/dashboard/src/screens/modifiers-screen.test.ts` — went in the same pull
   request. The structural check that the delete dialog carries no `[data-test="orders-block"]`
   stays, so the behaviour is still pinned without the wording. **No next action.**
-- **A dead projection on the sale path.** `priceOrderLines` (`apps/server/src/working-order.ts`)
-  still maps every offer's `optionGroups` into its `available` projection and carries
-  `offer.modifiers` alongside, and nothing reads either: the projection feeds
-  `priceBasketWithOptions` (`packages/catalogue/src/pricing.ts`), which touches neither field, and
-  the only other mentions of those two fields in the file are `[] as const` placeholders
-  (`modifiers` also appears there as the unrelated `QueueModifier` type, which is live). It stays because both fields
-  are REQUIRED on the shared `AvailableProduct` contract (`packages/catalogue/src/menu-types.ts`),
-  so dropping them from one branch of the ternary alone would either break the type or leave the
-  two branches disagreeing. **Next action:** Task 13, with the rest of the old model.
-- **The new definition reads take no lock while their writers serialise.** `priceOrderLines` still
-  calls `lockModifierDefinitions(tx, "read")`, which covers the OLD `option_groups` tables the
-  offer projection reads — but the four new reads take nothing: `readMenuExtras`,
-  `readProductExtras`, `readProductModifiers` and `readOptionListsByIds`. Their writers serialise
-  deliberately (`lockExtraList`'s `for update` in `packages/catalogue/src/extras.ts`, and
+- **A dead projection on the sale path — DONE, closed by Task 13.** `priceOrderLines`
+  (`apps/server/src/working-order.ts`) used to map every offer's `optionGroups` into its `available`
+  projection and carry `offer.modifiers` alongside, with nothing reading either, and it stayed
+  because both fields were REQUIRED on the shared `AvailableProduct` contract
+  (`packages/catalogue/src/menu-types.ts`). Both are gone with the old model: that interface declares
+  neither, and `grep -c optionGroups apps/server/src/working-order.ts` is 0. The word `modifiers`
+  still appears in that file, on live code only — the unrelated `QueueModifier` type and the
+  basket-wide `resolveBasketModifiers` read. **No next action.**
+- **The definition reads on the sale path take NO lock at all, while their writers serialise.** The
+  entry used to set the four new reads against an OLD lock, `lockModifierDefinitions(tx, "read")`,
+  that `priceOrderLines` still took over the `option_groups` tables. That lock is gone with them —
+  `packages/catalogue/src/modifier-lock.ts` existed on `main` at `47aee357`, does not exist here, and
+  `grep -rn lockModifierDefinitions apps packages` matches nothing — so there is no lock left
+  anywhere on the read side, which makes the shape plainer rather than safer. The four reads take
+  nothing: `readMenuExtras` and `readProductExtras` (`packages/catalogue/src/extra-projection.ts`),
+  `readOptionListsByIds` (`packages/catalogue/src/options.ts`) and `readProductModifiers`
+  (`packages/catalogue/src/product-modifiers.ts`), all four reached from one body,
+  `resolveAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`, which the sale path
+  enters through `resolveBasketModifiers` (`apps/server/src/working-order.ts`). Their writers
+  serialise deliberately (`lockExtraList`'s `for update` in `packages/catalogue/src/extras.ts`, and
   `writeProductModifiers`'s per-list `for key share` in
   `packages/catalogue/src/product-modifiers.ts`), so a list edit committing mid-read could give one
   order a snapshot mixing pre- and post-edit wording. NOT MEASURED — no probe was run, and nothing
-  establishes the window is reachable. **Next action:** decide it deliberately rather than slipping
-  a lock in: adding one late is its own deadlock risk, which Task 6 of this plan already paid for
-  once (`40P01` from lock ordering, recorded below).
+  establishes the window is reachable. **Next action:** unchanged, and simpler now that no lock is
+  involved at all — decide it deliberately rather than slipping a lock in: adding one late is its own
+  deadlock risk, which Task 6 of this plan already paid for once (`40P01` from lock ordering,
+  recorded below).
 
 What the product attachment (#456, the plan's Task 6) left behind:
 
@@ -1229,26 +1315,29 @@ What the product attachment (#456, the plan's Task 6) left behind:
   kinds, added to from a single combobox that also offers **New extras list…** and **New options
   list…**. The question that entry left open is ANSWERED, and the answer was "neither yet": the
   catalogue screen's nested `dashboard-modifier-form` was left in place and not rewired, so nothing
-  on the interface opens it — the product editor's rows carry `kind` `extras` or `options`, and its
-  `selectRelated` has no `modifier` branch. The `"modifier"` member of `ProductChildKind`
-  (`apps/dashboard/src/state/product-child-create.ts`) stays only to keep that plumbing compiling.
-  **Next action:** remove the form, that kind and the plumbing together in Task 13, with the rest of
-  the old model.
+  on the interface opened it — the product editor's rows carry `kind` `extras` or `options`, and its
+  `selectRelated` has no `modifier` branch. **DONE by Task 13**, which removed the form, the kind and
+  the plumbing together: `ProductChildKind` (`apps/dashboard/src/state/product-child-create.ts`) now
+  reads `"unit" | "category" | "extras" | "options"`, and no `modifier-form.ts` or `choice-form.ts`
+  is left under `apps/dashboard/src/widgets/`. **No next action.**
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
 - **`readProductExtras` and the product-attachment check both moved to Task 6, and both have
   landed there.** `readProductExtras` (`packages/catalogue/src/extra-projection.ts`) reads the
   extras lists a PRODUCT itself carries, with no menu offer in the question, and
-  `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) now refuses to publish a list the
-  dish's product does not carry — ONE of the two checks its options sibling
-  `setMenuItemOptionGroups` makes against `product_option_groups`, the one refusing an unattached
-  group. The sibling's other check refuses a body that LEAVES OUT a group the product marks
-  required, and there is no extras equivalent: an extras list carries no `required` flag (the spec
-  makes "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published.
-  Both read `product_modifiers`, which Task 6 added. The dated note on Task 5 in the plan describes
-  the gap as it was, and stays as history. **Next action:** settle whether an offer may publish
-  none of a product's required extras lists, when the menu-offer screen is built.
+  `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) refuses to publish a list the dish's
+  product does not carry — `assertProductCarries` in that file, which reads `product_modifiers`, the
+  table Task 6 added. What it does NOT refuse is a body that LEAVES OUT a list the product carries,
+  and the function's own doc comment says so: "Nothing refuses an offer that publishes none of the
+  product's lists". When this entry was written the second check had a model to copy from, the
+  options half of the old feature, which made it against `product_option_groups`; Task 13 deleted
+  that half, so there is no sibling left to copy and the decision stands on its own. There is also no
+  "required list" to refuse against: an extras list carries no `required` flag (the spec makes
+  "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published. The
+  dated note on Task 5 in the plan describes the gap as it was, and stays as history.
+  **Next action:** settle whether an offer may publish none of a product's required extras lists,
+  when the menu-offer screen is built.
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.
@@ -1269,12 +1358,15 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
   children, and none of them joins `products`, `product_modifiers` or either `menu_item_extra_*`
   table. So `menu_item_extra_lists` and `menu_item_extra_items` stay unnamed in both dependency maps
   — the dashboard's and `packages/venue-service/src/dashboard/live-queries.ts`'s `operations` entry,
-  which still names the two option-group equivalents and no extras twin. **Next action:** revisit
+  which names neither of them. That entry no longer names the two option-group equivalents either:
+  it carried `menu_item_option_groups` and `menu_item_options` on `main` at `47aee357`, and Task 13
+  took both out with their tables, leaving a list that ends at `menu_items`. **Next action:** revisit
   when a screen that actually publishes an extras list on a menu offer is built; nothing in the
   dashboard reads either table today.
 - **Nobody has decided whether the application role should hold `UPDATE` on the two publication
-  tables.** `packages/catalogue/drizzle/0009_menu_extra_publication_grants.sql` grants it, and no
-  production path uses it: `setMenuItemExtraLists` replaces rows rather than editing them. So the
+  tables.** `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql` grants it — it was
+  `0009_menu_extra_publication_grants.sql` until Task 13 regenerated that set — and no production
+  path uses it: `setMenuItemExtraLists` replaces rows rather than editing them. So the
   grants walkthrough in
   `packages/catalogue/src/extra-projection.test.ts` exercises `UPDATE` with direct statements, which
   is the only way to establish the role really holds what the migration granted it. **Next action:**
@@ -1614,8 +1706,10 @@ What it left open:
   choice's was not.
   _Partly done 2026-09-16 (#387):_ the product editor now uses the shared picker. The widget grew a
   `dietaryOptions` property so products keep their full declaration list while modifier choices keep
-  the four-item default. Ingredients (`option-group-manager.ts`) still use the old
-  `dashboard-allergen-picker`, so that widget is not orphaned. **What is still open** is the question
+  the four-item default. The conclusion that the old `dashboard-allergen-picker` is not orphaned
+  still holds, on different evidence: `option-group-manager.ts` went with the rest of the old model
+  in Task 13, and the widget's one remaining non-test consumer is the ingredient form
+  (`apps/dashboard/src/widgets/ingredient-form.ts`). **What is still open** is the question
   the item above says is not mechanical: a product's stored allergens still carry a `presence` field
   that can read `may_contain`, and the compact picker cannot show or set it. An allergen a manager
   adds is written as `contains`; one that already read `may_contain` keeps that value untouched. So
@@ -1655,16 +1749,23 @@ can produce the "1 seleccionados" fault recorded further up this file.
 
 What it left open:
 
-- **Two different summary-first shapes now sit in the same dashboard.**
-  `dashboard-allergen-dietary-picker` has exactly one consumer,
-  `apps/dashboard/src/widgets/choice-form.ts`, and after this branch it summarises each field on its
-  own with an Edit button beside it. The product editor reaches the same goal a different way: a
-  separate widget, `dashboard-allergen-picker`, sits inside a `wt-disclosure` whose heading carries a
-  joined summary of every nutrition value, so the whole section collapses rather than each field.
-  Neither is wrong, but a manager moving between the two editors meets two interaction patterns for
-  what reads as the same task. **Next action:** whoever takes the already-open item above — adopting
-  the shared picker for products, ingredients and the till — picks one of the two shapes for both
-  rather than leaving the choice to whichever widget a screen happens to import.
+- **The two summary-first shapes are now NESTED in one screen.** The item was written when
+  `dashboard-allergen-dietary-picker`'s only consumer was `choice-form.ts`, which summarised each
+  field on its own with an Edit button beside it, and the product editor reached the same goal
+  differently — the older `dashboard-allergen-picker` inside a `wt-disclosure` whose heading carried
+  a joined summary of every nutrition value. Task 13 deleted `choice-form.ts`, and the product editor
+  has since adopted the shared picker, so the two shapes no longer sit in two screens: they sit one
+  inside the other. `renderNutrition` (`apps/dashboard/src/widgets/product-editor.ts`) renders a
+  `wt-disclosure` whose `summary` is the allergen and dietary names joined, and puts
+  `<dashboard-allergen-dietary-picker>` inside it, which summarises those same two fields again, each
+  behind its own Edit button — the same values summarised twice, at two levels, in one section. That
+  sharpens the original complaint rather than answering it. The contrast with another screen survives
+  too: `apps/dashboard/src/widgets/ingredient-form.ts` still renders the older
+  `dashboard-allergen-picker` expanded, with no summary and no disclosure. Each of the two widgets
+  now has exactly one non-test consumer, and it is one of those two screens.
+  **Next action:** as before in substance — whoever takes the already-open item above, adopting the
+  shared picker for ingredients and the till, picks ONE shape; and decide in the same change whether
+  the product editor keeps both its section summary and its field summaries.
 - **The picker collapses on `focusout` alone.** `#finishEditing` returns the field to its summary
   whenever focus leaves the combobox, with no other way to close it and nothing distinguishing focus
   moving inside the component's own popup from focus leaving it altogether. The branch's Chromium
@@ -1728,9 +1829,12 @@ What it left open:
   (`packages/db/src/schema/tenants.singleton.pg.test.ts` refuses a second row on real PostgreSQL).
 
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
-  and only the editor's own parser refuses a blank; `createProduct` writes what it is given.
-  `option_groups.name` and `option_group_items.name` share the pattern. **Next action:** decide
-  whether the columns want a check constraint and the write paths a domain refusal.
+  and only the editor's own parser refuses a blank; `createProduct` writes what it is given. Its
+  siblings share the pattern: `option_lists.name`, `option_labels.name`, `extra_lists.name` and
+  `product_variants.name` are each declared `"name" text NOT NULL` in
+  `packages/catalogue/drizzle/0000_catalogue_baseline.sql`, and none of that file's check
+  constraints touches a name column. **Next action:** decide whether the columns want a check
+  constraint and the write paths a domain refusal.
 
 - **The legacy product-id order path loses the configured kitchen name.** `AvailableProduct` carries
   no kitchen name, so a line added by product id freezes `kitchen_name` as null; `resolveHttpOrderZone`
@@ -2418,15 +2522,15 @@ ongoing overhaul listed at the top of Track A.
   the `product_modifiers` attachments resolved, under `offeredModifiers`
   (`packages/catalogue/src/offered-modifiers.ts`), and the picker draws them.
   **A window nobody had written down, found by the review wave — and it never opened.** The demo
-  steak does carry the cooking question twice in the data: the legacy "Cooking" option group and the
-  new `Punto` list, side by side. The worry was that Task 12 lands before Task 13 deletes the legacy
-  tables, so a picker reading both fields would ask the diner twice. It reads one:
-  `offeredModifiers`, never the legacy `optionGroups` beside it. Checked with
-  `git grep -l -i optiongroup HEAD -- apps/till/src` — three test files, each setting
+  steak carried the cooking question twice in the data for a while: the legacy "Cooking" option group
+  and the new `Punto` list, side by side. The worry was that Task 12 would land before Task 13
+  deleted the legacy tables, so a picker reading both fields would ask the diner twice. It read one:
+  `offeredModifiers`, never the legacy `optionGroups` beside it. Measured while both still existed,
+  with `git grep -l -i optiongroup HEAD -- apps/till/src` — three test files, each setting
   `optionGroups: []` only to satisfy catalogue's declared `MenuOffer`, and no source file, against
   eight source files for the same command on `main`; the till's `TillProduct` no longer declares the
-  field either, so a screen naming it would not compile. Nobody needs to pull the legacy group out
-  of the seed; Task 13 deletes it with the rest. What that does NOT cover is a real demo box opened
+  field either, so a screen naming it would not compile. Nobody needed to pull the legacy group out
+  of the seed; Task 13 deleted it with the rest. What that does NOT cover is a real demo box opened
   and tapped, which is the check that would settle it outside the code.
 - **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
   it reproduces itself** (found by the review wave on the doneness removal, 2026-09-20). What
@@ -2445,12 +2549,13 @@ ongoing overhaul listed at the top of Track A.
   the fiscal backend only `total`, never the tip"); their operative claim about tips is TRUE and the
   legal track is kept separate, so they were not touched here. **Next action:** whoever next works
   the compliance track widens those two sentences.
-- **Nine copies of the demo seed's venue-provisioning fixture** (found reviewing the doneness
-  removal, 2026-09-20, NOT fixed there — it is nine files of churn on a branch about something
-  else). Every test file under `apps/server/scripts/demo-seed/` declares its own `provisionVenue`
-  and `nextNif` — nine of them, which is the seven matching `seed-*.test.ts` plus `seed.test.ts` and
-  `seed.integration.test.ts`; the newest pair is byte-identical to `seed-options.test.ts`'s apart
-  from the NIF base.
+- **Every test file under `apps/server/scripts/demo-seed/` carries its own copy of the demo seed's
+  venue-provisioning fixture** (found reviewing the doneness removal, 2026-09-20, NOT fixed there —
+  it is one file of churn per copy, on a branch about something else). Stated as a property rather
+  than a count, because the count moves whenever a sub-seed is added or removed: every `*.test.ts`
+  in that directory declares its own `provisionVenue` and `nextNif`, and the `nextNif` bodies are
+  identical apart from the eight-digit base each one counts up from. Task 13 took one copy away with
+  `seed-options.test.ts`, and left the property standing.
   The repo has already paid for this extraction once elsewhere and said so
   (`apps/server/src/testing/venue-fixtures.ts`), and it is free here because
   `apps/server/vitest.config.ts` excludes `scripts/**` from coverage. **Next action:** extract
@@ -3778,10 +3883,11 @@ not state is not a value you tested.
 - **Checking one product's translations takes a lock and re-reads the language configuration once
   per value** (`packages/catalogue/src/content-languages.ts:13-27`). `validateContentTranslations`
   takes the `content-languages` advisory lock and reads the one-row configuration on every call, and
-  callers call it inside loops: once per modifier choice
-  (`packages/catalogue/src/modifiers.ts:106-109`), once per variant
-  (`packages/catalogue/src/variants.ts:115`), and twice for a single unit create
-  (`packages/catalogue/src/units.ts:85-86`). That is the shape `CLAUDE.md` §3's "resolve shared
+  callers call it inside loops: once per variant (`packages/catalogue/src/variants.ts`, inside the
+  normalisation loop) and twice for a single unit create (`packages/catalogue/src/units.ts`). There
+  used to be a third, once per modifier choice, and it went with the old model in Task 13 — the
+  extras and options contracts ask `findContentTranslationGap` ONCE with every map, which is the
+  shape this entry is asking for. That is the shape `CLAUDE.md` §3's "resolve shared
   catalogue data once before a basket's line loop" rule exists to prevent. Pre-existing: the same
   lock-then-read is in `main`'s copy of the file, with a tenant argument
   (`git show origin/main:packages/catalogue/src/content-languages.ts`, lines 13-19); this branch only
@@ -6096,7 +6202,7 @@ partial scope; the detail for a live thread is in its track.
 | 15 | Online ordering | — | not started (later phase) |
 | 16 | Workforce | *registro de jornada* (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (convenio-gated); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups survive only as tables Task 13 deletes), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 

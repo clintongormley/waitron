@@ -329,10 +329,13 @@ declare module "@waitron/shared" {
      * never removed; `options.in_use` beside it has the same posture.
      *
      * `optionGroupItemId` and `productId` were caller-supplied uuids the till already holds, not
-     * secrets. `option.*` names the DOMAIN CONCEPT (a menu option), never the throwing package;
-     * SINGULAR because it named ONE option. It is NOT in this surface's `STATUS` map, so it was
-     * answered 400 by `createErrorBoundary`'s default rather than the 404 an earlier version of this
-     * comment claimed.
+     * secrets. Do not go looking for the table the first of them named: `option_group_items` was
+     * dropped by `packages/db/drizzle/0049_drop_option_groups.sql` and no schema file declares it,
+     * so that param name is the shipped SHAPE of a retired code and points at nothing. `option.*`
+     * names the DOMAIN CONCEPT (a menu option), never the throwing package; SINGULAR because it
+     * named ONE option. It is NOT in this surface's `STATUS` map, so it was answered 400 by
+     * `createErrorBoundary`'s default rather than the 404 an earlier version of this comment
+     * claimed.
      */
     "option.not_found": { optionGroupItemId: string; productId: string };
     /** NOTHING RAISES THIS ANY MORE — the legacy option payload it validated is gone. An unanswered

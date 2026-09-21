@@ -549,7 +549,8 @@ describe("reading the named option lists", () => {
 });
 
 /**
- * The walkthrough that answers to drizzle/0003_option_lists_grants_sql.sql. Every test above runs on
+ * The walkthrough that answers to the option_lists grants in drizzle/0001_catalogue_baseline_sql.sql.
+ * Every test above runs on
  * PGlite's superuser connection, which is handed every privilege and so exercises no grant at all;
  * `asAppUser` makes the session assume the application role and PGlite enforces the two tables'
  * grants from there — a container adds nothing (CLAUDE.md §4).

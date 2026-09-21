@@ -42,9 +42,9 @@ async function fixture() {
   return { el, controller, refresh, loadError, accept, focus };
 }
 
-// "modifier" is not among the kinds here: the product editor no longer attaches option groups, so
-// there is no draft field a created modifier would land in. The controller itself does not care
-// which kind it is carrying — unit and category exercise every branch of its lifecycle.
+// The controller does not care which kind it is carrying, so two of them exercise every branch of
+// its lifecycle; the extras and options kinds are covered where the screen wires them up
+// (`catalogue-screen.test.ts`).
 it.each(["unit", "category"] as const)(
   "keeps the dirty product after a durable %s create even if refresh fails",
   async (kind) => {
@@ -93,10 +93,10 @@ it("does not attach a late write to a different product or release its child gat
   const request = deferred<{ id: string; name: Record<string, string> }>();
   const saving = fx.controller.submit(() => request.promise);
   fx.controller.reset();
-  fx.controller.open("modifier");
+  fx.controller.open("unit");
   request.resolve({ id: crypto.randomUUID(), name: { en: "Old category" } });
   await saving;
-  expect(fx.controller.kind).toBe("modifier");
+  expect(fx.controller.kind).toBe("unit");
   expect(fx.accept).not.toHaveBeenCalled();
   expect(fx.refresh).not.toHaveBeenCalled();
   expect(fx.focus).not.toHaveBeenCalled();

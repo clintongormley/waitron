@@ -3,8 +3,6 @@ import type { DashboardApi } from "./client.js";
 
 /** Dependencies describe the read model, independently of which operation changes it. */
 export const QUERY_DEPENDENCIES = {
-  listModifiers: ["option_groups", "option_group_items"],
-  getModifier: ["option_groups", "option_group_items"],
   getContentLanguages: ["content_languages"],
   listPrinters: ["printers", "print_jobs"],
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
@@ -74,13 +72,11 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "recipe_lines",
     "ingredients",
-    "product_option_groups",
-    "option_groups",
-    "option_group_items",
+    // A product's attached extras and options lists, read from `product_modifiers` alone
+    // (`readProductModifiers`, packages/catalogue/src/product-modifiers.ts) — it names no list
+    // table, so neither is named here.
+    "product_modifiers",
   ],
-  listOptionGroupItems: ["option_group_items", "recipe_lines", "ingredients"],
-  listOptionGroups: ["option_groups", "option_group_items"],
-  listProductOptionGroupIds: ["product_option_groups"],
   // The extras and options lists. Each read is two SELECTs and nothing else: the list table, then
   // its children (`listOptionLists`/`readOptionListsByIds` in packages/catalogue/src/options.ts,
   // `listExtraLists`/`readExtraListsByIds` in extras.ts). Neither joins `products`,

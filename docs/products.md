@@ -86,9 +86,13 @@ The allergen and dietary sections show only declarations you selected. Choose **
 **Add dietary declaration** to find another entry. An empty reviewed allergen list means you checked
 the product and declared none; a pending declaration means it has not been reviewed.
 
-Each product and each modifier choice states its own dietary suitability — a positive `suitableFor`
-list over vegan, vegetarian, halal and kosher — and its own allergens. The till and kitchen show each
-item's own list and no longer compute a combined "as-served" figure across the dish and its extras.
+Each product states its own dietary suitability — a positive `suitableFor` list over vegan,
+vegetarian, halal and kosher — and its own allergens. An extra you can add to a dish is itself a
+product, so it brings its own declarations with it. A choice on an options list does not: a label
+such as _rare_ or _well done_ carries no allergens and no dietary suitability of its own, because it
+is a way of asking for the same dish rather than something extra to eat. The till and kitchen show
+each item's own list and no longer compute a combined "as-served" figure across the dish and its
+extras.
 
 Recipes and ingredient origins no longer author product declarations in the supported dashboard
 workflow. Existing purchasing data and recorded order facts remain available, but you maintain live
@@ -106,14 +110,8 @@ prices and modifier answers. Later catalogue edits apply to new selections. The 
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name and direct dietary declarations. Its menu variant and extra
-prices deliberately differ from the product definitions, so you can see which price wins at the
-till. The demo sirloin carries a seeded options list, **Punto**, asking how the steak should be
-cooked.
+two variants, a separate kitchen name and direct dietary declarations. Its menu variant prices
+deliberately differ from the product definitions, so you can see which price wins at the till. The
+demo sirloin carries a seeded options list, **Punto**, asking how the steak should be cooked. The
+demo venue seeds no extras list, so nothing in it shows an extra being added to a dish.
 
-The coffee also still carries three of the older modifiers — one of each of the retired text, extras
-and options types — because the demo seed has not been rewritten
-(`apps/server/scripts/demo-seed/seed-options.ts`). They are in the database, but no dashboard screen
-shows them any more, so they will not appear on the coffee's **Modifiers** section, and since
-2026-09-21 the till does not offer them either: it builds a dish's questions from that dish's extras
-and options lists alone.

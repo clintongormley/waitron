@@ -13,8 +13,6 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  Modifier,
-  ModifierInput,
   OptionList,
   OptionListInput,
   Product,
@@ -37,7 +35,6 @@ import {
 import "../widgets/category-form.js";
 import "../widgets/content-languages.js";
 import "../widgets/extra-list-form.js";
-import "../widgets/modifier-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/product-list.js";
@@ -76,7 +73,6 @@ export class CatalogueScreen extends LitElement {
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private units: Unit[] = [];
-  @state() private modifiers: Modifier[] = [];
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
@@ -90,12 +86,9 @@ export class CatalogueScreen extends LitElement {
   @state() private languageSettingsOpen = false;
   @state() private deletingProduct: Product | null = null;
   @state() private deleteErrorKey: string | null = null;
-  /** The modifier the nested form is EDITING, or null when it is creating one. The product editor
-   * opens the same form for both, and this is what decides which write its Save performs. */
-  @state() private editingModifier: Modifier | null = null;
   /** The modifier list the nested extras or options form is EDITING, or null while it is creating
-   * one. Same two-way form as {@link editingModifier}, one state for both kinds because only one
-   * nested form is ever open. */
+   * one. The same form does both, and this is what decides which write its Save performs; one state
+   * serves both kinds because only one nested form is ever open. */
   @state() private editingList: {
     kind: "extras" | "options";
     value: ExtraList | OptionList;
@@ -125,7 +118,6 @@ export class CatalogueScreen extends LitElement {
   );
   readonly #child = new ProductChildCreate(this, {
     accept: (kind, value) => {
-      if (kind === "modifier") this.editingModifier = null;
       // A nested form that was EDITING an existing list must not attach it: which lists a product
       // carries is the editor's own section's business, and the list being edited may belong to a
       // different product entirely.
@@ -159,9 +151,6 @@ export class CatalogueScreen extends LitElement {
         }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
-        }),
-        this.#queries.watch("listModifiers", [], (value) => {
-          this.modifiers = value;
         }),
         this.#queries.watch("listExtraLists", [], (value) => {
           this.extraLists = value;
@@ -208,7 +197,6 @@ export class CatalogueScreen extends LitElement {
    * inherits any of it. */
   #resetEditorState(): void {
     this.#child.reset();
-    this.editingModifier = null;
     this.editingList = null;
     this.editorFieldErrors = {};
   }
@@ -360,7 +348,6 @@ export class CatalogueScreen extends LitElement {
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
     if (kind === "unit") this.units = await this.api.background.listUnits();
     if (kind === "category") this.categories = await this.api.background.listCategories();
-    if (kind === "modifier") this.modifiers = await this.api.background.listModifiers();
     if (kind === "extras") this.extraLists = await this.api.background.listExtraLists();
     if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
@@ -377,17 +364,6 @@ export class CatalogueScreen extends LitElement {
     event.stopPropagation();
     void this.#child.submit(async () => {
       const value = await this.api.createCategory(event.detail.value);
-      return { id: value.id, name: value.name };
-    });
-  }
-
-  #submitModifier(event: CustomEvent<{ value: ModifierInput }>): void {
-    event.stopPropagation();
-    const editing = this.editingModifier;
-    void this.#child.submit(async () => {
-      const value = editing
-        ? await this.api.updateModifier(editing.id, event.detail.value)
-        : await this.api.createModifier(event.detail.value);
       return { id: value.id, name: value.name };
     });
   }
@@ -412,19 +388,11 @@ export class CatalogueScreen extends LitElement {
     );
   }
 
-  /** The product editor asked to edit one of its attached modifiers or modifier lists. Every one of
-   * them is already loaded, so this opens the same nested form the create path uses, seeded with
-   * the row. */
+  /** The product editor asked to edit one of its attached modifier lists. Every one of them is
+   * already loaded, so this opens the same nested form the create path uses, seeded with the row. */
   #editRelated(event: CustomEvent<{ kind: ProductChildKind; id: string }>): void {
     event.stopPropagation();
     const { kind, id } = event.detail;
-    if (kind === "modifier") {
-      const modifier = this.modifiers.find((entry) => entry.id === id);
-      if (!modifier) return;
-      this.editingModifier = modifier;
-      this.#child.open("modifier");
-      return;
-    }
     if (kind !== "extras" && kind !== "options") return;
     const lists: (ExtraList | OptionList)[] =
       kind === "extras" ? this.extraLists : this.optionLists;
@@ -602,17 +570,6 @@ export class CatalogueScreen extends LitElement {
               ></dashboard-option-list-form>`
           : nothing
       }
-      <dashboard-modifier-form
-        .open=${this.#child.kind === "modifier"}
-        .busy=${this.#child.busy}
-        .locales=${locales}
-        .value=${this.editingModifier}
-        @wt-submit=${this.#submitModifier}
-        @wt-cancel=${() => {
-          this.editingModifier = null;
-          this.#child.cancel();
-        }}
-      ></dashboard-modifier-form>
       ${
         this.contentLanguages
           ? html`<dashboard-content-languages

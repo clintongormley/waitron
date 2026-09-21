@@ -110,7 +110,7 @@ async function resolveHeldLists(
 /**
  * What each menu offer publishes: its extras lists in `display_order`, each narrowed and repriced
  * by that offer's own rows (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md`
- * §3.2), the heir of `readMenuModifiers` (modifier-projection.ts).
+ * §3.2).
  *
  * A list item with NO row in `menu_item_extra_items` is offered here at its own resolved price; a
  * row replaces that price when it carries one and withdraws the item when `available` is false —

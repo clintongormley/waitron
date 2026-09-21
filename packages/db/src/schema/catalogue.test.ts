@@ -4,14 +4,12 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { catalogues, optionGroups } from "./catalogue.js";
+import { catalogues } from "./catalogue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 // Each case gets empty mutable fixture tables while sharing the migrated database.
 afterEach(async () => {
-  await suite.db.execute(sql`delete from option_group_items`);
-  await suite.db.execute(sql`delete from option_groups`);
   await suite.db.execute(sql`delete from products`);
   await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from tenants`);
@@ -104,54 +102,6 @@ describe("catalogue — menu, taxonomy and priced items", () => {
       { column_name: "diet_derivation", data_type: "jsonb", is_nullable: "YES" },
       { column_name: "diet_override", data_type: "jsonb", is_nullable: "YES" },
     ]);
-  });
-
-  it("option_group_items keeps only add_allergens; remove_allergens/add_origins/remove_origins are dropped", async () => {
-    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
-      db,
-      sql`select column_name, data_type, is_nullable from information_schema.columns
-          where table_name = 'option_group_items'
-            and column_name in ('add_allergens','remove_allergens','add_origins','remove_origins')
-          order by column_name`,
-    );
-    // The nutrition redesign collapsed a choice's allergens to a single "contains" list: only
-    // add_allergens survives; the removes list and the two origin lists are gone.
-    expect(cols).toEqual([
-      { column_name: "add_allergens", data_type: "jsonb", is_nullable: "YES" },
-    ]);
-  });
-
-  it("defaults option_group_items.max_quantity to 1 when the insert omits it", async () => {
-    // The AUTHORED per-option cap. Raw SQL that lists no max_quantity column, so a missing column
-    // fails on `column "max_quantity" ... does not exist` — the real cause — rather than on a
-    // drizzle-schema mismatch.
-    const [group] = await db
-      .insert(optionGroups)
-      .values({ name: { en: "Extras" } })
-      .returning({ id: optionGroups.id });
-    const [row] = await rows<{ max_quantity: number }>(
-      db,
-      sql`insert into option_group_items (group_id, name, price_delta) values (${group.id}, '{"en":"Cheese"}'::jsonb, 50)
-          returning max_quantity`,
-    );
-    expect(row?.max_quantity).toBe(1);
-  });
-
-  it("rejects an option_group_items insert of max_quantity = 0 with the check constraint", async () => {
-    // The real SQLSTATE and constraint name live on the driver error's `.cause`, not on
-    // DrizzleQueryError's own `Failed query: <sql>` message — so read them with pgErrorCode/
-    // pgErrorMessage rather than matching the wrapper text (which would pass on any thrown error).
-    const [group] = await db
-      .insert(optionGroups)
-      .values({ name: { en: "Extras" } })
-      .returning({ id: optionGroups.id });
-    const error = await captureError(() =>
-      db.execute(
-        sql`insert into option_group_items (group_id, name, price_delta, max_quantity) values (${group.id}, '{"en":"Bacon"}'::jsonb, 100, 0)`,
-      ),
-    );
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
-    expect(pgErrorMessage(error)).toMatch(/option_group_items_qty_ck/);
   });
 
   it("products carries a nullable image text column", async () => {

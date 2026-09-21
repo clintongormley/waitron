@@ -9,7 +9,6 @@ import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedMedia } from "./seed-media.js";
-import { seedOptions } from "./seed-options.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
@@ -48,13 +47,8 @@ export async function seedDemoRestaurant(
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(tx, {
+    const { productsByImage, menuIds } = await seedCatalogues(tx, {
       locationId,
-      locale,
-    });
-    await seedOptions(tx, {
-      productsByImage,
-      menuItemsByProduct,
       locale,
     });
     await seedOptionLists(tx, { productsByImage, locale });
@@ -66,16 +60,13 @@ export async function seedDemoRestaurant(
 
   // AFTER the tx commits: seedSales opens its own per-sale `withTransaction`, so it must see the committed
   // catalogue. It maps the available products onto the fields the generator needs (id/name/customerName/
-  // gross unitPrice/vatClass/optionGroups); the rest of `AvailableProduct` is unused here.
-  // `optionGroups` carries straight through — `listAvailableProducts` already resolved it from the
-  // rows `seedOptions` just wrote, so a product with none reads back `[]` and the generator skips it.
+  // gross unitPrice/vatClass); the rest of `AvailableProduct` is unused here.
   const salesProducts: SeedSalesProduct[] = products.map((p) => ({
     id: p.id,
     name: p.name,
     customerName: p.customerName,
     unitPrice: p.unitPrice,
     vatClass: p.vatClass,
-    optionGroups: p.optionGroups,
   }));
 
   await seedSales(db, {

@@ -828,8 +828,9 @@ describe("what deleting an extras list would touch", () => {
 });
 
 /**
- * The walkthrough that answers to drizzle/0009_menu_extra_publication_grants.sql, the sibling of
- * extras.test.ts's for drizzle/0005_extra_lists_grants.sql. Every other test in this file runs as
+ * The walkthrough that answers to the menu_item_extra_* grants in
+ * drizzle/0001_catalogue_baseline_sql.sql, the sibling of extras.test.ts's for the extra_lists
+ * grants in the same file. Every other test in this file runs as
  * PGlite's superuser, which holds every privilege and so proves nothing about a grant.
  *
  * Seen red rather than assumed, once per table, because a grant on one of them proves nothing about

@@ -3243,7 +3243,10 @@ it("starts live updates after authentication and stops them on logout and discon
 });
 it("opens the reusable modifiers library from its own management destination", async () => {
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-    api: stubApi({ listModifiers: vi.fn().mockResolvedValue([]) }),
+    api: stubApi({
+      listExtraLists: vi.fn().mockResolvedValue([]),
+      listOptionLists: vi.fn().mockResolvedValue([]),
+    }),
   });
   await flush(el);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-modifiers"]')!.click();

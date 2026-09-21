@@ -17,7 +17,6 @@ function product(id: string, name: string, unitPrice: string): Product {
   return {
     id,
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],

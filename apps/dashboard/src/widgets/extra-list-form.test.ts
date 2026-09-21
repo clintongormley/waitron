@@ -32,7 +32,6 @@ function product(overrides: Partial<Product> = {}): Product {
   return {
     id: BACON,
     modifiers: [],
-    modifierIds: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
     categoryIds: ["category-1"],
@@ -261,19 +260,6 @@ it("hints an inherited price with the product's own and submits it as null", asy
   // A blank stays null rather than the product's price copied in, which is what keeps "inherits"
   // and "set to the same number" distinct in the stored row.
   expect(submitted[0]!.items.map((item) => item.price)).toEqual([null, null]);
-});
-
-/**
- * The number in this column REPLACES the product's own price — `resolveExtraPrice` is
- * `menuPrice ?? item.price ?? product?.unitPrice` (packages/catalogue/src/extras.ts), and the spec
- * says the same (2026-09-18-one-product-model-design.md §3.3). The OTHER modifier model's price is
- * an addition, and `modifiers.price` still labels it that way for the two surfaces that render it
- * (widgets/modifier-form.ts, widgets/choice-form.ts). The two labels must therefore not read alike:
- * under an "addition" label a manager typing 1.50 against a 3.00 product believes they set 4.50.
- */
-it("does not label the overriding price with the adding model's words", () => {
-  for (const locale of ["en", "es"] as const)
-    expect([locale, t("extras.price", locale)]).not.toEqual([locale, t("modifiers.price", locale)]);
 });
 
 it("submits a typed price as a string, even when it is the product's own price", async () => {

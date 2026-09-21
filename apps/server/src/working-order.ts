@@ -1,4 +1,3 @@
-import { lockModifierDefinitions } from "@waitron/catalogue";
 import { buildLineExtras, matchExtraChildren, sameOptionSelections } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
@@ -263,7 +262,6 @@ async function priceOrderLines(
     // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
-  await lockModifierDefinitions(tx, "read");
   const catalogue = await listAvailableProducts(tx, cfg.locationId);
   const usesOffers = zoneId !== undefined;
   const offerBySelectionId = new Map<
@@ -311,24 +309,6 @@ async function priceOrderLines(
         courseId: offer.courseId,
         catalogueId: offer.menuId,
         catalogueName: offer.menuName,
-        modifiers: offer.modifiers ?? [],
-        optionGroups: offer.optionGroups.map((group) => ({
-          id: group.id,
-          name: group.name,
-          minSelect: group.minSelect,
-          maxSelect: group.maxSelect,
-          required: group.required,
-          items: group.options.map((option) => ({
-            id: option.id,
-            name: option.name,
-            priceDelta: option.priceDelta,
-            vatClass:
-              option.vatClass as AvailableProduct["optionGroups"][number]["items"][number]["vatClass"],
-            maxQuantity: option.maxQuantity,
-            addAllergens: option.addAllergens,
-            suitableFor: option.suitableFor,
-          })),
-        })),
       }))
     : catalogue.products;
   const invoiceLocales = catalogue.invoiceLocales;
@@ -2860,7 +2840,6 @@ export interface HeldOrder {
       courseId: string | null;
       catalogueId: string;
       catalogueName: string;
-      optionGroups: readonly [];
       diet: unknown;
       dietDerivation: unknown;
       dietOverride: unknown;
@@ -3035,7 +3014,6 @@ export async function getHeldOrder(
             courseId: line.courseId,
             catalogueId: context.menuId,
             catalogueName: context.menuName,
-            optionGroups: [] as const,
             diet: context.diet,
             dietDerivation: context.dietDerivation,
             dietOverride: context.dietOverride,
