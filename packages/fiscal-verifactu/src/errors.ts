@@ -88,7 +88,7 @@ declare module "@waitron/shared" {
     "sif.not_registered": { nodeId: string };
 
     /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
-     * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
+     * (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
      * (./registro-sif.ts), which both LOCAL write primitives — `registerSif` and `writeReservedSif`
      * — call before writing anything, so no caller of either can put an unusable id into
      * `registro_sif`. The sync apply lane writes the column too and reaches neither: it copies a

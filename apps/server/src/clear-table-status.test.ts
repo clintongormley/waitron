@@ -1,5 +1,5 @@
 // H2 receipt (Step 1): `git diff --stat main -- packages/core/src/record-sale.ts
-// packages/fiscal-verifactu/src/backend.ts packages/verifactu/ apps/server/src/till-sale.ts` → no
+// packages/fiscal-verifactu/src/backend.ts @waitron/verifactu apps/server/src/till-sale.ts` → no
 // changes; `grep -nE 'status_id|statusId|table_service_statuses|tableServiceStatuses'` over those files
 // → empty. The reset is a trigger + an openTab edit; the fiscal pay path is byte-unchanged.
 import { randomUUID } from "node:crypto";

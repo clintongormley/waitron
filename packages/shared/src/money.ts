@@ -179,7 +179,7 @@ export function sumDecimals(values: readonly Decimal[]): Decimal {
 }
 
 /**
- * Re-scales, rounding half away from zero — the same policy `packages/verifactu`'s field
+ * Re-scales, rounding half away from zero — the same policy `@waitron/verifactu`'s field
  * formatting applies to a record literal. Choosing a different mode here would make the sale
  * total and the fiscal record disagree by one cent on exactly the values that sit on a boundary,
  * which is the defect class this module exists to prevent. Changing it is a primary-source

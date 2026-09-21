@@ -12,7 +12,7 @@ import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
 
 /**
- * AEAT caps `IdSistemaInformatico` at two characters (`packages/verifactu`'s `ID_SISTEMA_LENGTH`).
+ * AEAT caps `IdSistemaInformatico` at two characters (`@waitron/verifactu`'s `ID_SISTEMA_LENGTH`).
  *
  * Exported because the rule is defined once for the whole package: `registro_sif` carries no CHECK
  * on the column, so the bound is applied in code. Both LOCAL write primitives apply it —

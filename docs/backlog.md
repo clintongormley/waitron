@@ -3390,13 +3390,13 @@ deliberately did not settle.
   carries `"thresholds": { "high": 95, "low": 90, "break": 90 }`. The 9.6.1 side of the ui
   comparison the bump wanted is still unmeasured and would have to come from an earlier weekly run's
   artifact.
-- **`packages/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
+- **`@waitron/verifactu` and `packages/db` mutate their `src/testing/` tree, against the practice the
   sales-spine plan set.** `docs/superpowers/plans/2026-07-20-sales-spine-data-model.md` records the
   reason under `packages/fiscal`: a surviving mutant in a fake proves only that the fake has
   behaviour nobody asserted, which is a property of fakes, not a defect. That plan writes the
   `"!src/testing/**"` exclusion into the `packages/db` config it specifies, and states the rule again
   for `packages/fiscal-verifactu`; the shipped db config carries no such exclusion. It never
-  addresses `packages/verifactu`'s own config, which predates it, so the case for excluding the fake
+  addresses `@waitron/verifactu`'s own config, which predates it, so the case for excluding the fake
   there is the plan's stated reason rather than an instruction it gave. The
   cost is not small and not new: in verifactu, `src/testing/fake-aeat.ts` holds **43 of the package's
   60 surviving mutants**, and recomputing that same report without the file's mutants gives 98.76%
@@ -3674,7 +3674,7 @@ comparison could see a difference. Three things it leaves open:
   matrix accessor as well. It would make a failure name what changed instead of only that something
   did.
 - **Read it as a self-baselined pin, which is weaker than the pins already here.** Pinned output is
-  not new — `conformance.test.ts` in `packages/verifactu` pins a SHA-256 against a literal, and
+  not new — `conformance.test.ts` in `@waitron/verifactu` pins a SHA-256 against a literal, and
   `xml/serialize.test.ts` pins whole XML documents. But `conformance.test.ts`'s expected values are
   AEAT's own published huella vectors (`@waitron/verifactu`'s huella test vectors, "Huella spec v0.1.2"),
   so that pin compares the code against an authority. This one compares the code against itself on
