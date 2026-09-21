@@ -1221,9 +1221,9 @@ export interface TableState {
 
 /**
  * The rendered shape of a placed table (FP-2). A LOCAL union mirroring `@waitron/db`'s
- * `floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"])` and `@waitron/ui`'s
- * `TableShape` — deliberately NOT imported (the bundle-decoupling rule; a server round-trip
- * re-validates against the real enum).
+ * `floorTableShape = enumType(["round", "square", "rect"])` and `@waitron/ui`'s `TableShape` —
+ * deliberately NOT imported (the bundle-decoupling rule; a server round-trip re-validates against
+ * the real vocabulary).
  */
 export type TableShape = "round" | "square" | "rect";
 

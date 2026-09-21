@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { bigCount, count, json, table, ts } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { bigCount, count, json, now, table, ts } from "./columns.js";
 import type { SignedMembershipDocument } from "@waitron/membership";
 
 /**
@@ -37,7 +37,7 @@ export const nodeMembership = table(
     // approaches 2^53.
     term: bigCount("term").notNull(),
     document: json<SignedMembershipDocument>("document").notNull(),
-    updatedAt: ts("updated_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   /* v8 ignore start */
   (t) => [check("node_membership_singleton_ck", sql`${t.id} = 1`)],

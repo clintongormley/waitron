@@ -1,7 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  dialect: "postgresql",
+  dialect: "sqlite",
   // One config produces exactly one migration folder — this package's first, for `convenio_config`.
   // Same reasoning as packages/workforce/drizzle.config.ts.
   out: "./drizzle",
@@ -10,5 +10,5 @@ export default defineConfig({
   schema: "./src/schema/index.ts",
   // Its own journal table, so this Spain lane stays migration-isolated from the workforce and fiscal
   // sequences — journals never collide, so the lanes run in parallel with no shared bookkeeping.
-  migrations: { table: "__drizzle_migrations_workforce_es", schema: "public" },
+  migrations: { table: "__drizzle_migrations_workforce_es" },
 });

@@ -1,5 +1,5 @@
-import { index } from "drizzle-orm/pg-core";
-import { id, table, tsString } from "@waitron/db";
+import { index } from "drizzle-orm/sqlite-core";
+import { id, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A shift login: a person active at a physical till. Keyed to the TILL (the station where a cashier
@@ -10,14 +10,14 @@ import { id, table, tsString } from "@waitron/db";
 export const sessions = table(
   "sessions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Both name rows in the VENUE's tables and carry no foreign key: `local` -> `state` would cross
     // the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The person comes back
     // from `verifyPersonCredential` and the till from the authenticated device's own registration
     // (`apps/server/src/till-api.ts`, `device.tillId`).
     personId: id("person_id").notNull(),
     tillId: id("till_id").notNull(),
-    openedAt: tsString("opened_at").notNull().defaultNow(),
+    openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
   },
   (t) => [

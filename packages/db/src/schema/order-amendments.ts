@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, flag, id, label, table, tsString } from "./columns.js";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { count, enumCheck, enumType, flag, id, label, newId, table, tsString } from "./columns.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { tills } from "./tenants.js";
@@ -14,10 +14,7 @@ import { tills } from "./tenants.js";
  * producer — a frozen order's lines cannot be rewritten in 7c (require_open_parent), so there is no
  * 7c producer for them (flagged interpretation, design §4).
  */
-export const orderAmendmentKind = pgEnum("order_amendment_kind", [
-  "order_placed",
-  "order_cancelled",
-]);
+export const orderAmendmentKind = enumType(["order_placed", "order_cancelled"]);
 
 /**
  * The append-only, tamper-evident amendment log (art. 29.2.j LGT — the legal term lives only in
@@ -32,7 +29,7 @@ export const orderAmendmentKind = pgEnum("order_amendment_kind", [
 export const orderAmendments = table(
   "order_amendments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     // 1-based position within THIS order's amendment chain; ours and contiguous, hashed.
     sequenceNo: count("sequence_no").notNull(),
@@ -79,11 +76,35 @@ export const orderAmendments = table(
     unique("order_amendments_chain_position_key").on(t.workingOrderId, t.sequenceNo),
     index("order_amendments_order_idx").on(t.workingOrderId),
     check("order_amendments_sequence_no_ck", sql`${t.sequenceNo} > 0`),
-    check("order_amendments_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
+    check("order_amendments_kind_ck", enumCheck(t.kind)),
+    // SQLite has no regex operator, so the PostgreSQL `~ '^[0-9A-F]{64}$'` becomes two terms: the
+    // length explicitly, and GLOB's negated class for the alphabet. GLOB is case-sensitive, unlike
+    // LIKE. Measured on node:sqlite, Node v26.7.0, inserting into a table carrying exactly this
+    // constraint: 64 uppercase hex accepted; 64 lowercase hex, 63 uppercase hex, and 64 characters
+    // one of which is `Z` each refused. What it does NOT carry is the old column type's refusal of
+    // a non-text value: in the same probe a 64-byte blob satisfied both terms, because `length()`
+    // counts a blob's bytes, and a SQLite text column stores a blob (see ./columns.ts's header).
+    check(
+      "order_amendments_entry_hash_ck",
+      sql`length(${t.entryHash}) = 64 and ${t.entryHash} not glob '*[^0-9A-F]*'`,
+    ),
     check("order_amendments_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),
+    // Until 2026-09-21 this read `date_trunc('second', event_at) = event_at`. `date_trunc` does not
+    // exist on node:sqlite (`no such function: date_trunc`, measured), and the column is text now,
+    // so the shape itself is what the check states. Measured on node:sqlite (Node v26.7.0), probe
+    // /tmp/f1-ddl-probe/isots.mjs, inserting into a table carrying exactly this constraint:
+    // `…T10:00:00.000Z` accepted; `…T10:00:00.250Z`, `…T10:00:00Z`, `…T10:00:00.000+02:00`,
+    // a space instead of the `T`, and `not a timestamp` each refused. The writer is
+    // `truncateToWholeSecond` in ../append-order-amendment.ts, whose `toISOString()` always emits
+    // exactly this 24-character UTC form.
+    //
+    // STRONGER than what it replaces, deliberately: `timestamptz` refused a non-timestamp on its
+    // own and a text column refuses nothing, so this is the only thing left saying the value is a
+    // timestamp — the same move `enumCheck` makes for a vocabulary. It does NOT carry calendar
+    // validity: `2026-02-31T10:00:00.000Z` is accepted, where the old column type refused it.
     check(
       "order_amendments_event_at_second_ck",
-      sql`date_trunc('second', ${t.eventAt}) = ${t.eventAt}`,
+      sql`${t.eventAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,
     ),
     // Exactly one chain shape (mirrors time_entries_chaining_ck): the genesis carries no
     // predecessor, every later entry carries one.

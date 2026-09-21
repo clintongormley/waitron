@@ -1,19 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1789497914408,
-      "tag": "0000_bookings_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789497914916,
-      "tag": "0001_bookings_baseline_sql",
+      "version": "6",
+      "when": 1789995443300,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

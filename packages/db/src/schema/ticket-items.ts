@@ -1,5 +1,5 @@
-import { index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "./columns.js";
+import { check, index, unique } from "drizzle-orm/sqlite-core";
+import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "./columns.js";
 
 /**
  * The per-line kitchen state (KDS-1, §2d). A NEW enum, NOT `order_prep`'s `prep_state`: ticket items
@@ -8,7 +8,7 @@ import { id, label, table, tsString } from "./columns.js";
  * conflation of "kitchen done" with "customer handed the order". `prep_state` is dropped with
  * `order_prep` (it had no other consumer), so there is no reused-enum-with-a-dead-value to carry.
  */
-export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready"]);
+export const ticketState = enumType(["queued", "preparing", "ready"]);
 
 /**
  * A per-line, per-station kitchen TICKET ITEM (KDS-1) — the replacement for `order_prep`'s
@@ -30,7 +30,7 @@ export const ticketState = pgEnum("ticket_state", ["queued", "preparing", "ready
 export const ticketItems = table(
   "ticket_items",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The node the prep happens on — node-scoped, as order_prep was. Bare column: the
     // (node_id) → nodes(id) FK is hand-written in the --custom migration.
     nodeId: id("node_id").notNull(),
@@ -46,7 +46,7 @@ export const ticketItems = table(
     // station_id) → kitchen_stations(id) FK is hand-written in the --custom migration.
     stationId: id("station_id").notNull(),
     state: ticketState("state").notNull().default("queued"),
-    queuedAt: tsString("queued_at").notNull().defaultNow(),
+    queuedAt: tsString("queued_at").notNull().$defaultFn(nowIso),
     preparingAt: tsString("preparing_at"),
     readyAt: tsString("ready_at"),
     // The kitchen COURSE this item was fired to (KDS-2, §2b), SNAPSHOTTED from the line at fire time
@@ -68,5 +68,9 @@ export const ticketItems = table(
     unique("ticket_items_working_order_line_id_key").on(t.workingOrderLineId),
     // The per-station queue scan (the analogue of order_prep_queue_idx, re-keyed on station).
     index("ticket_items_queue_idx").on(t.stationId, t.state),
+    // The `ticket_state` PostgreSQL enum TYPE refused a value outside the set on its own; the SQLite
+    // text column that replaces it does not, so the refusal is written here instead. The values are
+    // read off the column (`enumCheck`), so the vocabulary is still declared once, above.
+    check("ticket_items_state_ck", enumCheck(t.state)),
   ],
 );

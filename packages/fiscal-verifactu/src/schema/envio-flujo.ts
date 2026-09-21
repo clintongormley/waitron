@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
+import { check } from "drizzle-orm/sqlite-core";
 import { count, table, ts } from "@waitron/db";
 
 /**

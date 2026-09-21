@@ -1,8 +1,21 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 // The FK targets are core tables — this module's schema points INTO core (a clean leaf), so they
 // import from @waitron/db rather than a sibling file.
-import { count, day, id, label, locations, table, timeOfDay, tsString } from "@waitron/db";
+import {
+  count,
+  day,
+  enumCheck,
+  enumType,
+  id,
+  label,
+  locations,
+  newId,
+  nowIso,
+  table,
+  timeOfDay,
+  tsString,
+} from "@waitron/db";
 
 /**
  * The lifecycle of a staff-entered reservation (design §1). `booked` on creation; `seated` when the
@@ -10,13 +23,7 @@ import { count, day, id, label, locations, table, timeOfDay, tsString } from "@w
  * `cancelled`. There is no hard-delete — a booking is CANCELLED, never removed (hence app_user holds
  * no DELETE, see the custom migration) — so every reservation stays auditable.
  */
-export const bookingStatus = pgEnum("booking_status", [
-  "booked",
-  "seated",
-  "completed",
-  "no_show",
-  "cancelled",
-]);
+export const bookingStatus = enumType(["booked", "seated", "completed", "no_show", "cancelled"]);
 
 /**
  * WALL-CLOCK, NOT AN INSTANT (design §2b, the #52 lesson): a booking is a future intention
@@ -38,7 +45,7 @@ export const bookingStatus = pgEnum("booking_status", [
 export const bookings = table(
   "bookings",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** The workplace the reservation is for. */
     locationId: id("location_id").notNull(),
     // Venue-local wall-clock date + time (§2b) — `day`/`timeOfDay`, a plain `date` and a plain
@@ -60,7 +67,7 @@ export const bookings = table(
     status: bookingStatus("status").notNull().default("booked"),
     // The identity person who took the booking. Plain uuid, NO FK — the drawer_opens.person_id seam.
     createdBy: id("created_by").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason
@@ -84,5 +91,6 @@ export const bookings = table(
     ),
     // A party of zero or fewer is malformed.
     check("bookings_party_size_ck", sql`${t.partySize} > 0`),
+    check("bookings_status_ck", enumCheck(t.status)),
   ],
 );

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index } from "drizzle-orm/pg-core";
-import { bigCount, flag, id, json, label, money, table, ts } from "./columns.js";
+import { check, index } from "drizzle-orm/sqlite-core";
+import { bigCount, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
 
 /**
  * The db-layer copy of the allergen-declaration shape: a per-code presence map with an optional
@@ -13,22 +13,22 @@ export type AllergenMap = Record<string, { presence: "contains" | "may_contain";
 /** A named, shareable menu. Many locations may point at one catalogue (N identical delis share it);
  * a heterogeneous venue set uses one catalogue each. `version` is the sync seam (bumped later). */
 export const catalogues = table("catalogues", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   name: label("name").notNull(),
   active: flag("active").notNull().default(true),
   version: bigCount("version").notNull().default(1),
-  createdAt: ts("created_at").notNull().defaultNow(),
-  updatedAt: ts("updated_at").notNull().defaultNow(),
+  createdAt: ts("created_at").notNull().$defaultFn(now),
+  updatedAt: ts("updated_at").notNull().$defaultFn(now),
 });
 
 /** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
 export const categories = table("categories", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   name: json<Record<string, string>>("name").notNull(),
   stationId: id("station_id"),
-  createdAt: ts("created_at").notNull().defaultNow(),
-  updatedAt: ts("updated_at").notNull().defaultNow(),
+  createdAt: ts("created_at").notNull().$defaultFn(now),
+  updatedAt: ts("updated_at").notNull().$defaultFn(now),
 });
 
 /** A priced item. Catalogue-owned `product_units` assigns its unit without a reverse migration edge.
@@ -39,7 +39,7 @@ export const categories = table("categories", {
 export const products = table(
   "products",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     catalogueId: id("catalogue_id")
       .notNull()
       /* v8 ignore start */
@@ -110,8 +110,8 @@ export const products = table(
       halal?: "yes" | "no";
       kosher?: "yes" | "no";
     }>("diet"),
-    createdAt: ts("created_at").notNull().defaultNow(),
-    updatedAt: ts("updated_at").notNull().defaultNow(),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),

@@ -1,4 +1,4 @@
-import { id, json, label, table, ts } from "./columns.js";
+import { id, json, label, newId, now, table, ts } from "./columns.js";
 import type { Endorsement } from "@waitron/membership";
 import { locations } from "./tenants.js";
 
@@ -28,7 +28,7 @@ import { locations } from "./tenants.js";
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
 // the same reason, as ./sales.ts.
 export const nodes = table("nodes", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   locationId: id("location_id")
     .notNull()
     /* v8 ignore start */
@@ -53,5 +53,5 @@ export const nodes = table("nodes", {
   // NULL. Set owner-role at adopt (insertReservedNodeTx); app_user holds SELECT only. Read at R3
   // promotion to attach to the minted membership document.
   endorsement: json<Endorsement>("endorsement"),
-  createdAt: ts("created_at").notNull().defaultNow(),
+  createdAt: ts("created_at").notNull().$defaultFn(now),
 });

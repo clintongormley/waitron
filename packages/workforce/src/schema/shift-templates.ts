@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, id, label, locations, smallCount, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  id,
+  label,
+  locations,
+  newId,
+  nowIso,
+  smallCount,
+  table,
+  tsString,
+} from "@waitron/db";
 
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
@@ -17,7 +27,7 @@ import { count, id, label, locations, smallCount, table, tsString } from "@waitr
 export const shiftTemplates = table(
   "shift_templates",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** The workplace the template's shifts are scheduled at. */
     locationId: id("location_id").notNull(),
     /** A human label for the slot (e.g. "Evening bar"). */
@@ -30,7 +40,7 @@ export const shiftTemplates = table(
     endsMinute: count("ends_minute").notNull(),
     /** The role the slot is for (bar, kitchen, …), free text; null when unspecified. */
     role: label("role"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

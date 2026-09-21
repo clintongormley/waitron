@@ -1,19 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1789505368635,
-      "tag": "0000_fiscal_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789505369239,
-      "tag": "0001_fiscal_baseline_sql",
+      "version": "6",
+      "when": 1789995583309,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

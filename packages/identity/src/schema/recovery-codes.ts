@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
@@ -9,10 +9,10 @@ import { persons } from "./persons.js";
 export const recoveryCodes = table(
   "recovery_codes",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     codeHash: label("code_hash").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     usedAt: tsString("used_at"),
   },
   /* v8 ignore start */

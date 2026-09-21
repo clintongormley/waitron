@@ -1,4 +1,4 @@
-import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
 import { devices, id, table } from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
 

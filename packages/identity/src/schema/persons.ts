@@ -1,18 +1,19 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "@waitron/db";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A person's role. A single `role` column is this slice's permission-assignment mechanism (design
  * decision 3): call sites gate on a permission, and packages/identity/src/permissions.ts maps each
- * role to its permission set. A pgEnum, not a text CHECK: the four values are settled, and one
- * declaration yields both the TypeScript union and the database constraint.
+ * role to its permission set. An enumType, not a hand-written text CHECK: the four values are
+ * settled, and one declaration yields both the TypeScript union and the `persons_role_ck`
+ * constraint below.
  */
-export const personRole = pgEnum("person_role", ["staff", "supervisor", "manager", "admin"]);
+export const personRole = enumType(["staff", "supervisor", "manager", "admin"]);
 
 /** A person's account status. `suspended` keeps the row (and any history that references it) while
  * refusing login — the reason a status enum exists rather than a hard delete. */
-export const personStatus = pgEnum("person_status", ["pending", "active", "suspended"]);
+export const personStatus = enumType(["pending", "active", "suspended"]);
 
 /**
  * A member of staff who can log in, ring sales, and (by role) authorize privileged actions.
@@ -23,7 +24,7 @@ export const personStatus = pgEnum("person_status", ["pending", "active", "suspe
 export const persons = table(
   "persons",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     displayName: label("display_name").notNull(),
     firstNames: label("first_names"),
     lastNames: label("last_names"),
@@ -63,7 +64,7 @@ export const persons = table(
     googleSubject: label("google_subject"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     uniqueIndex("persons_tenant_google_subject_uq")
@@ -87,5 +88,7 @@ export const persons = table(
       "persons_pending_email_ck",
       sql`${t.pendingEmail} is null or length(${t.pendingEmail}) > 0`,
     ),
+    check("persons_role_ck", enumCheck(t.role)),
+    check("persons_status_ck", enumCheck(t.status)),
   ],
 );

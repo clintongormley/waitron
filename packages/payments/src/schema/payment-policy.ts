@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { count, label, money, table, tsString } from "@waitron/db";
+import { check } from "drizzle-orm/sqlite-core";
+import { count, label, money, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * The venue's offline-acceptance policy — at most one row, `id` pinned to 1 (the `deployment` /
@@ -21,8 +21,8 @@ export const paymentPolicy = table(
     // packages/db/src/schema/columns.ts has the table, and says how to control for it.
     offlineMode: label("offline_mode").notNull(),
     offlineAmountCap: money("offline_amount_cap").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     check("payment_policy_singleton_ck", sql`${t.id} = 1`),

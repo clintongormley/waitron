@@ -1,5 +1,5 @@
-import { foreignKey, unique } from "drizzle-orm/pg-core";
-import { count, flag, id, label, table, tsString } from "./columns.js";
+import { foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -22,7 +22,7 @@ import { locations } from "./tenants.js";
 export const kitchenCourses = table(
   "kitchen_courses",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Bare column: the FK is the (location_id) →
     // locations(id) declared below (mirroring kitchen_stations_location_fk).
     locationId: id("location_id").notNull(),
@@ -32,7 +32,7 @@ export const kitchenCourses = table(
     // courses are held. Author-controlled in the Cursos config editor.
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // No two courses share a name within a venue.

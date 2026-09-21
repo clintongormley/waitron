@@ -1,17 +1,32 @@
 import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  json,
+  label,
+  money,
+  newId,
+  nowIso,
+  quantity,
+  rate,
+  table,
+  tsString,
+} from "./columns.js";
 import { products } from "./catalogue.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
 /**
- * A pgEnum rather than a text CHECK, deliberately: unlike invoice_series.purpose
- * these four values are settled by the spec, and one declaration yields both
- * the TypeScript union and the database constraint.
+ * One declaration rather than a repeated list, deliberately: unlike invoice_series.purpose
+ * these four values are settled by the spec, and the single `enumType` call yields both
+ * the TypeScript union and the database constraint (`working_orders_status_ck` below reads
+ * its values back off the column).
  */
-export const workingOrderStatus = pgEnum("working_order_status", [
+export const workingOrderStatus = enumType([
   "open",
   // placed (7c): the order is finalized — composition FROZEN (require_open_parent already rejects
   // line writes on a non-open parent) and the fiscal issuance basis fixed. A NON-terminal state
@@ -39,7 +54,7 @@ export const workingOrderStatus = pgEnum("working_order_status", [
 export const workingOrders = table(
   "working_orders",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     tillId: id("till_id")
       .notNull()
       /* v8 ignore start */
@@ -64,7 +79,7 @@ export const workingOrders = table(
     // Walk-up orders without a label or table keep NULL.
     label: label("label"),
     status: workingOrderStatus("status").notNull().default("open"),
-    openedAt: tsString("opened_at").notNull().defaultNow(),
+    openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     settledAt: tsString("settled_at"),
     // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
     // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
@@ -81,6 +96,7 @@ export const workingOrders = table(
       foreignColumns: [nodes.id],
       name: "working_orders_node_fk",
     }),
+    check("working_orders_status_ck", enumCheck(t.status)),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
     check(
@@ -111,7 +127,7 @@ export const workingOrders = table(
 export const workingOrderLines = table(
   "working_order_lines",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.

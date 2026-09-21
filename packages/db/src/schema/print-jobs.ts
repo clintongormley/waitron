@@ -1,14 +1,26 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgEnum } from "drizzle-orm/pg-core";
-import { binary, count, id, label, table, tsString } from "./columns.js";
+import { check, index } from "drizzle-orm/sqlite-core";
+import {
+  binary,
+  count,
+  enumCheck,
+  enumType,
+  id,
+  label,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
  * The lifecycle of one outbox job (§2c). `queued` (default) → the agent atomically claims it as
  * `printing` (a locking UPDATE … RETURNING, so two agent instances never double-print) → `done` on a
- * successful push, or `failed` (retried with bounded backoff). A pgEnum, matching the repo precedent.
+ * successful push, or `failed` (retried with bounded backoff). A closed vocabulary declared once
+ * (`enumType`), matching the repo precedent.
  */
-export const printJobStatus = pgEnum("print_job_status", ["queued", "printing", "done", "failed"]);
+export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
 /**
  * The print OUTBOX (§2c) — delivery decoupled from creation so a fire or a sale is NEVER blocked by a
@@ -25,7 +37,7 @@ export const printJobStatus = pgEnum("print_job_status", ["queued", "printing", 
 export const printJobs = table(
   "print_jobs",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id")
       .notNull()
       /* v8 ignore start */
@@ -52,7 +64,7 @@ export const printJobs = table(
     attempts: count("attempts").notNull().default(0),
     // The last delivery failure message, for the dashboard's failing-printer surface. NULL until a failure.
     lastError: label("last_error"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     // The claim LEASE anchor (failover-printing design §5, Gap 1). Stamped `now()` each time the agent
     // pull claims the row (queued/failed/lease-expired-printing → printing); NULL until first claimed
     // and while `queued`. The pull re-selects a `printing` row whose `claimed_at` is older than
@@ -69,5 +81,6 @@ export const printJobs = table(
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
+    check("print_jobs_status_ck", enumCheck(t.status)),
   ],
 );

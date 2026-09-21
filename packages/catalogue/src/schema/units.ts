@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, products, table } from "@waitron/db";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
+import { count, id, json, label, newId, products, table } from "@waitron/db";
 
 export const units = table(
   "units",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     seedKey: label("seed_key"),
     name: json<Record<string, string>>("name").notNull(),
     abbreviation: json<Record<string, string>>("abbreviation").notNull(),

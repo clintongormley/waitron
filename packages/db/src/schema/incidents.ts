@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index } from "drizzle-orm/pg-core";
-import { id, json, label, table, tsString } from "./columns.js";
+import { check, index } from "drizzle-orm/sqlite-core";
+import { id, json, label, newId, table, tsString } from "./columns.js";
 import { sales } from "./sales.js";
 import { tills } from "./tenants.js";
 
@@ -26,7 +26,7 @@ export type IncidentSeverity = "warning" | "error";
 export const incidents = table(
   "incidents",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     tillId: id("till_id")
       .notNull()
       /* v8 ignore start */

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, flag, id, json, label, money, products, table } from "@waitron/db";
+import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
 import { optionLists } from "./options.js";
 
@@ -18,7 +18,7 @@ import { optionLists } from "./options.js";
 export const extraLists = table(
   "extra_lists",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Staff-facing list name — plain text, like the product's own name.
     name: label("name").notNull(),
     // Customer-facing translated name; null or a blank entry means "use `name`".
@@ -53,7 +53,7 @@ export const extraLists = table(
 export const extraListItems = table(
   "extra_list_items",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     listId: id("list_id").notNull(),
     productId: id("product_id").notNull(),
     sort: count("sort").notNull().default(0),
@@ -196,7 +196,7 @@ export const menuItemExtraItems = table(
 export const productModifiers = table(
   "product_modifiers",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     productId: id("product_id").notNull(),
     // Position in the product's list, written from the body's order by `writeProductModifiers`
     // (packages/catalogue/src/product-modifiers.ts) the way `extra_list_items.sort` is.

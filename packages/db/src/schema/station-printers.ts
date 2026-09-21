@@ -1,4 +1,4 @@
-import { primaryKey } from "drizzle-orm/pg-core";
+import { primaryKey } from "drizzle-orm/sqlite-core";
 import { id, table } from "./columns.js";
 
 /**

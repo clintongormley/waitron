@@ -1,5 +1,5 @@
-import { index } from "drizzle-orm/pg-core";
-import { id, table, tsString } from "@waitron/db";
+import { index } from "drizzle-orm/sqlite-core";
+import { id, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A browser "management session": a person signed into the management dashboard from a browser,
@@ -10,13 +10,13 @@ import { id, table, tsString } from "@waitron/db";
 export const managementSessions = table(
   "management_sessions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
     // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The caller has
     // already authenticated the person it passes to `startManagementSession`.
     personId: id("person_id").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
-    lastSeenAt: tsString("last_seen_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
   },
   (t) => [

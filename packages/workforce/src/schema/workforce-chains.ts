@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey } from "drizzle-orm/pg-core";
-import { count, id, label, locations, nodes, table, ts, tsString } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/sqlite-core";
+import { count, id, label, locations, nodes, now, table, ts, tsString } from "@waitron/db";
 import { timeEntries } from "./time-entries.js";
 
 /**
@@ -32,7 +32,7 @@ export const workforceChains = table(
     // without a mode, which is drizzle's date default. Nothing in the tree reads or writes it from
     // JavaScript, so no test catches the wrong helper here — the measurement is in the P1b workforce
     // report in docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md.
-    updatedAt: ts("updated_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   // Drizzle stores this extraConfig callback lazily and runs it only when something walks the table's
   // full metadata. Unlike fiscal's `cadenas.ts`, this one IS exercised inside this package's own

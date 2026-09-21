@@ -1,5 +1,17 @@
-import { foreignKey, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, flag, id, label, smallCount, table, tsString } from "./columns.js";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  label,
+  newId,
+  nowIso,
+  smallCount,
+  table,
+  tsString,
+} from "./columns.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations } from "./tenants.js";
 
@@ -7,7 +19,7 @@ import { locations } from "./tenants.js";
  * The rendered shape of a table on the FP-2 floor plan. Venue layout only — nowhere near the fiscal
  * fingerprint — so it carries no Spanish vocabulary and needs no fiscal review.
  */
-export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"]);
+export const floorTableShape = enumType(["round", "square", "rect"]);
 
 /**
  * A dining table — location scoped, long-lived. Anchored to the venue-wide `location`, NOT to
@@ -24,7 +36,7 @@ export const floorTableShape = pgEnum("floor_table_shape", ["round", "square", "
 export const diningTables = table(
   "dining_tables",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Bare column: the FK is the (location_id) →
     // locations(id) declared below (mirroring working_orders_node_fk).
     locationId: id("location_id").notNull(),
@@ -38,7 +50,7 @@ export const diningTables = table(
     // Covers. Nullable.
     capacity: count("capacity"),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     // The open tab covering this table (design §2b). Nullable back-pointer; a set value points at an
     // `open` working order. BARE column — its (tab_id) → working_orders(id) FK is
     // hand-written in Task 2's custom migration (the mutual-FK cycle note above).
@@ -62,5 +74,8 @@ export const diningTables = table(
       foreignColumns: [tableServiceStatuses.id],
       name: "dining_tables_status_fk",
     }),
+    // The values are read off the column itself (`enumCheck`), so the vocabulary is declared once,
+    // in `floorTableShape` above.
+    check("dining_tables_shape_ck", enumCheck(t.shape)),
   ],
 );

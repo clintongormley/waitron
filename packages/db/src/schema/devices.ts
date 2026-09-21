@@ -1,4 +1,4 @@
-import { flag, id, label, table, tsString } from "./columns.js";
+import { flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -24,7 +24,7 @@ import { locations } from "./tenants.js";
  * SIMPLE (the FK default) skips the check on a NULL station_id.
  */
 export const devices = table("devices", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   // The venue the device lives in — a required scope. A DIRECT location_id →
   // locations.id FK with onDelete restrict, mirroring `shifts` (shifts_location_fk), the precedent
   // the spec cites (§2a "the shifts shape") — NOT the hand-written (location_id) FK
@@ -66,6 +66,6 @@ export const devices = table("devices", {
   active: flag("active").notNull().default(true),
   // Touched by requireDevice on each authenticated request. NULL until the device is first seen.
   lastSeenAt: tsString("last_seen_at"),
-  enrolledAt: tsString("enrolled_at").notNull().defaultNow(),
-  createdAt: tsString("created_at").notNull().defaultNow(),
+  enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
+  createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
 });

@@ -461,10 +461,10 @@ export interface FloorZone {
 }
 
 /**
- * The rendered shape of a placed table on the FP-2 floor plan. A LOCAL union mirroring `@waitron/db`'s
- * `floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"])` and `@waitron/ui`'s
- * `TableShape` — deliberately NOT imported (the bundle-decoupling rule the whole file follows; a server
- * round-trip re-validates against the real enum).
+ * The rendered shape of a placed table on the FP-2 floor plan. A LOCAL union mirroring
+ * `@waitron/db`'s `floorTableShape = enumType(["round", "square", "rect"])` and `@waitron/ui`'s
+ * `TableShape` — deliberately NOT imported (the bundle-decoupling rule the whole file follows; a
+ * server round-trip re-validates against the real vocabulary).
  */
 export type TableShape = "round" | "square" | "rect";
 

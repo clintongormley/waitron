@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, day, id, smallCount, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, day, id, newId, nowIso, smallCount, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -17,7 +17,7 @@ import { persons } from "@waitron/identity";
 export const availability = table(
   "availability",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** Day of week, 0–6. */
     weekday: smallCount("weekday").notNull(),
@@ -29,7 +29,7 @@ export const availability = table(
     effectiveFrom: day("effective_from").notNull(),
     /** Last day the window applies, inclusive; null while open-ended. */
     effectiveTo: day("effective_to"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

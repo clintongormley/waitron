@@ -1,6 +1,20 @@
 import { sql } from "drizzle-orm";
-import { check, index, text, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, day, flag, id, json, label, nodes, sales, table, tills, ts } from "@waitron/db";
+import { check, index, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  day,
+  flag,
+  id,
+  json,
+  label,
+  newId,
+  nodes,
+  now,
+  sales,
+  table,
+  tills,
+  ts,
+} from "@waitron/db";
 import { registroSif } from "./sif.js";
 
 /**
@@ -13,7 +27,7 @@ import { registroSif } from "./sif.js";
 export const registrosFacturacion = table(
   "registros_facturacion",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The till the sale rang at — an informational SNAPSHOT on this immutable record (node-id
     // rekey, 2026-08-03: `till_id` deliberately STAYS here, NOT NULL, while the chain/uniqueness key
     // moved to `node_id` below). `reconcile.ts`/`drain.ts` read it directly; it is never read for
@@ -125,7 +139,7 @@ export const registrosFacturacion = table(
     // reason — a value that reached recomputation would make one environment's chain unverifiable
     // under the other.
     entorno: label("entorno"),
-    creadoEn: ts("creado_en").notNull().defaultNow(),
+    creadoEn: ts("creado_en").notNull().$defaultFn(now),
   },
   // Drizzle invokes this extraConfig callback lazily — via `drizzle(client, { schema })`
   // walking each table for its metadata — not merely from `pgTable(...)` running at import
@@ -161,7 +175,17 @@ export const registrosFacturacion = table(
     index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
     check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
-    check("registros_huella_ck", sql`${t.huella} ~ '^[0-9A-F]{64}$'`),
+    // Uppercase SHA-256 hex. Was `~ '^[0-9A-F]{64}$'`; SQLite has no regex operator, and `glob` is
+    // the case-SENSITIVE matcher the `[0-9A-F]` class needs. What the pair does NOT carry is a value
+    // holding a NUL byte: measured 2026-09-21 on node:sqlite (Node v26.7.0), 64 hex digits followed
+    // by `\0zz` is ACCEPTED and 67 bytes are stored, because `length()` and `glob` both stop at the
+    // first NUL. The regex never had to refuse that value — measured the same day on PGlite, the
+    // insert was refused as `22021 invalid byte sequence for encoding "UTF8": 0x00` before any check
+    // ran.
+    check(
+      "registros_huella_ck",
+      sql`length(${t.huella}) = 64 and ${t.huella} not glob '*[^0-9A-F]*'`,
+    ),
     check("registros_secuencia_ck", sql`${t.secuencia} > 0`),
     check(
       "registros_entorno_ck",
@@ -175,9 +199,13 @@ export const registrosFacturacion = table(
     ),
     // A rectification type requires an R1–R5 invoice type. Explicit NOT NULL rejects
     // anulación rows: SQL CHECK accepts NULL results as well as true.
+    // `glob 'R[1-5]'` replaces `~ '^R[1-5]$'`: glob matches the WHOLE value, so it needs no anchors,
+    // and it is case-sensitive where `like` is not. Measured 2026-09-21 on node:sqlite (Node
+    // v26.7.0): `R1` and `R5` accepted; `R6`, `r1`, `XR1`, `R1X` and `R1\n` each refused. It carries
+    // the same NUL gap as registros_huella_ck above — `R1\0x` is accepted — for the same reason.
     check(
       "registros_tipo_factura_rectificativa_ck",
-      sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} ~ '^R[1-5]$')`,
+      sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} glob 'R[1-5]')`,
     ),
     // A substitution block requires F3. Explicit NOT NULL rejects anulación rows
     // because SQL CHECK accepts NULL results as well as true.

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
-import { day, id, label, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { day, enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -13,12 +13,12 @@ import { persons } from "@waitron/identity";
  * roster_versions' `rosterVersionStatus` precedent: the four kinds are settled, and one declaration
  * yields both the TypeScript union and the DB constraint.
  */
-export const absenceKind = pgEnum("absence_kind", ["holiday", "sick_leave", "leave", "unpaid"]);
+export const absenceKind = enumType(["holiday", "sick_leave", "leave", "unpaid"]);
 
 /** An absence request's lifecycle. A new absence is created `requested`; a manager moves it to
  * `approved` or `rejected` (`setAbsenceStatus`, ../absences.ts). English tokens, same reason as
  * `absenceKind`. */
-export const absenceStatus = pgEnum("absence_status", ["requested", "approved", "rejected"]);
+export const absenceStatus = enumType(["requested", "approved", "rejected"]);
 
 /** One of `holiday`/`sick_leave`/`leave`/`unpaid` — the `absence_kind` enum's TypeScript union. */
 export type AbsenceKind = (typeof absenceKind.enumValues)[number];
@@ -41,7 +41,7 @@ export type AbsenceStatus = (typeof absenceStatus.enumValues)[number];
 export const absences = table(
   "absences",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     kind: absenceKind("absence_kind").notNull(),
     /** First day of the absence, inclusive. */
@@ -56,7 +56,7 @@ export const absences = table(
     decidedByPersonId: id("decided_by_person_id"),
     /** When the absence was decided; null until it is. */
     decidedAt: tsString("decided_at"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
@@ -78,5 +78,10 @@ export const absences = table(
     index("absences_person_idx").on(t.personId, t.startsOn),
     // An absence ends on or after it starts — a single day is starts_on = ends_on.
     check("absences_range_ck", sql`${t.endsOn} >= ${t.startsOn}`),
+    // The refusal the PostgreSQL enum TYPE performed, put back as a constraint: the SQLite column
+    // is plain text and refuses nothing on its own (see enumText in
+    // packages/db/src/schema/columns.ts).
+    check("absences_absence_kind_ck", enumCheck(t.kind)),
+    check("absences_status_ck", enumCheck(t.status)),
   ],
 );

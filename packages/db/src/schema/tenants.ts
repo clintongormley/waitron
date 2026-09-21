@@ -1,6 +1,18 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, id, label, table, timeOfDay, ts } from "./columns.js";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  label,
+  labelList,
+  newId,
+  now,
+  table,
+  timeOfDay,
+  ts,
+} from "./columns.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -9,50 +21,50 @@ export const DEFAULT_TIME_ZONE = "Europe/Madrid";
  * The per-venue pay-timing / service mode — see the `orderFlow` column on `locations` below for the
  * three modes and why the degenerate fourth cell is unrepresentable (design §3).
  */
-export const orderFlow = pgEnum("order_flow", ["prepay", "invoice_first", "ticket_then_pay"]);
+export const orderFlow = enumType(["prepay", "invoice_first", "ticket_then_pay"]);
 
 /**
  * The per-venue KDS bump mode (KDS-1, §2e). `line` (default): the per-line ticket-item state is the
  * only source of truth, each line bumped on its own. `ticket`: the display additionally offers a
  * whole-ticket bump that advances every one of an order's lines at a station together. Governs ONLY
- * that display convenience — the per-line state is always the truth. A pgEnum on `locations`, matching
+ * that display convenience — the per-line state is always the truth. A shared enum declaration on `locations`, matching
  * `order_flow`'s precedent on the same table (one declaration yields both the union and the constraint).
  */
-export const bumpMode = pgEnum("bump_mode", ["line", "ticket"]);
+export const bumpMode = enumType(["line", "ticket"]);
 
 /**
  * The per-venue FIRE CONTROL mode (KDS-2, §2c). `waiter` (default): the tab-ordering screen surfaces
  * the fire action per held course. `kitchen`: the station display surfaces it instead. Governs ONLY
  * which UI shows the affordance — `fireCourse` is the same verb either way, and all surfaces are
  * session-gated. `expo` (KDS-3, §2c): a dedicated expediter/pass display surfaces the fire action — its
- * surface, the session-gated `till-expo-screen`, ships in this same KDS-3 track. A pgEnum on `locations`,
+ * surface, the session-gated `till-expo-screen`, ships in this same KDS-3 track. A shared enum declaration on `locations`,
  * matching `bump_mode` / `order_flow`'s precedent on the same table (one declaration yields both the
  * union and the constraint).
  */
-export const fireControlMode = pgEnum("fire_control_mode", ["waiter", "kitchen", "expo"]);
+export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 
 /**
  * The per-venue RECEIPT PRINT MODE (counter-receipt/drawer slice §2). `auto` (default): after a sale
  * is filed, the server auto-enqueues the customer receipt to the calling till's `receipt_printer_id`.
  * `on_request`: no auto-print — a manual reprint is always available. `never`: never auto-print.
  * Governs ONLY the post-filing auto-enqueue; it touches no fiscal record, and a manual reprint works
- * in every mode. A pgEnum on `locations`, matching `order_flow` / `bump_mode` / `fire_control`'s
+ * in every mode. A shared enum declaration on `locations`, matching `order_flow` / `bump_mode` / `fire_control`'s
  * precedent on the same table (a per-venue config mode — one declaration yields both the union and
  * the constraint).
  */
-export const receiptPrintMode = pgEnum("receipt_print_mode", ["auto", "on_request", "never"]);
+export const receiptPrintMode = enumType(["auto", "on_request", "never"]);
 
 /**
  * The per-venue CASH-DRAWER OPEN POLICY (cash-drawer-authorization slice §2). `gated` (default): a
  * cash-drawer open must be authorized — the drawer route requires the `cash.drawer` permission
  * (@waitron/identity), and the `drawer_opens` audit row records who authorized it and whether an
- * override was used. `open`: no authorization is consulted; any operator may open the drawer. A pgEnum
+ * override was used. `open`: no authorization is consulted; any operator may open the drawer. A shared enum declaration
  * on `locations`, matching `order_flow` / `bump_mode` / `fire_control` / `receipt_print_mode`'s precedent
  * on the same table (a per-venue config mode — one declaration yields both the union and the constraint).
  * Unlike those siblings, the DEFAULT is the SECURE value `'gated'`, not an inert one: a venue that has
  * not chosen a policy gets cash accountability, not an open drawer (spec §2).
  */
-export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
+export const drawerOpenPolicy = enumType(["gated", "open"]);
 
 /**
  * One taxpayer per database. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
@@ -70,7 +82,7 @@ export const tenants = table(
     country: label("country").notNull(),
     taxId: label("tax_id").notNull(),
     legalName: label("legal_name").notNull(),
-    createdAt: ts("created_at").notNull().defaultNow(),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
   },
   (t) => [
     check("tenants_singleton_ck", sql`${t.id} = 1`),
@@ -111,9 +123,9 @@ export const tenants = table(
 export const locations = table(
   "locations",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
-    invoiceLocales: label("invoice_locales").array().notNull(),
+    invoiceLocales: labelList("invoice_locales").notNull(),
     operationDescription: label("operation_description").notNull(),
     fiscalTerritory: label("fiscal_territory").notNull().default("ES-common"),
     addressLine1: label("address_line1"),
@@ -164,11 +176,34 @@ export const locations = table(
     catalogueId: id("catalogue_id"),
   },
   (t) => [
-    // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK
-    // whose expression is NULL is satisfied, and an empty locale list would
-    // therefore be accepted — verified on PostgreSQL 18.4. cardinality('{}')
-    // is 0 and the constraint bites.
-    check("locations_invoice_locales_len", sql`cardinality(${t.invoiceLocales}) between 1 and 2`),
+    // json_array_length(), because `invoice_locales` is now a JSON array in a text column rather
+    // than a PostgreSQL array. The reason the old expression picked its function carries across:
+    // `json_array_length('[]')` is 0, so an empty locale list fails `between 1 and 2` and the
+    // constraint still bites (measured on node:sqlite, Node v26.7.0, and recorded in
+    // /tmp/f1-ddl-probe/RECIPE.md item 6).
+    //
+    // Until 2026-09-21 this comment read: "cardinality(), NOT array_length(). array_length('{}', 1)
+    // is NULL, a CHECK whose expression is NULL is satisfied, and an empty locale list would
+    // therefore be accepted — verified on PostgreSQL 18.4. cardinality('{}') is 0 and the
+    // constraint bites." That was a claim about PostgreSQL's two array functions, and neither
+    // function is reachable from here any more.
+    //
+    // What the rewrite does NOT carry: the old expression could only ever be handed a value the
+    // `text[]` column type had already accepted as an array, and this one is handed whatever text
+    // the column holds.
+    check(
+      "locations_invoice_locales_len",
+      sql`json_array_length(${t.invoiceLocales}) between 1 and 2`,
+    ),
+    // The five per-venue mode columns were PostgreSQL enum TYPES, which refused a value outside
+    // their set on their own; the SQLite text columns that replace them do not, so the refusals are
+    // written here instead. Each one's values are read off the column (`enumCheck`), so every
+    // vocabulary is still declared once, at the top of this file.
+    check("locations_order_flow_ck", enumCheck(t.orderFlow)),
+    check("locations_bump_mode_ck", enumCheck(t.bumpMode)),
+    check("locations_fire_control_ck", enumCheck(t.fireControl)),
+    check("locations_receipt_print_mode_ck", enumCheck(t.receiptPrintMode)),
+    check("locations_drawer_open_policy_ck", enumCheck(t.drawerOpenPolicy)),
   ],
 );
 
@@ -190,7 +225,7 @@ export const locations = table(
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
 // the same reason, as ./sales.ts.
 export const tills = table("tills", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   locationId: id("location_id")
     .notNull()
     /* v8 ignore start */
@@ -204,5 +239,5 @@ export const tills = table("tills", {
   // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
   // the FK check on a NULL.
   receiptPrinterId: id("receipt_printer_id"),
-  createdAt: ts("created_at").notNull().defaultNow(),
+  createdAt: ts("created_at").notNull().$defaultFn(now),
 });

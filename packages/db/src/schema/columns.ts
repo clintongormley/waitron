@@ -1,125 +1,120 @@
-import { getTableColumns, sql, type AnyColumn } from "drizzle-orm";
-import {
-  bigint,
-  boolean,
-  customType,
-  date,
-  integer,
-  jsonb,
-  pgTable,
-  smallint,
-  text,
-  time,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { randomUUID } from "node:crypto";
+import { sql, type AnyColumn } from "drizzle-orm";
+import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
  * The one place the storage engine's column and table types are named.
  *
  * Every table definition imports its columns from here so the engine can be changed in one file
- * rather than in every column definition across the schema. The bodies below emit PostgreSQL types;
- * the SQLite switch replaces them and nothing else.
+ * rather than in every column definition across the schema. The bodies below emit SQLite types.
  *
- * Scale is part of the meaning, not decoration: money, quantity and rate are three different
- * scales and a single "numeric" helper would let one silently truncate another.
+ * ## What the engine no longer refuses
+ *
+ * SQLite gives these helpers three storage classes, and most of the vocabulary lands on two of
+ * them. `id`, `ts`, `tsString`, `day`, `timeOfDay`, `enumText`, `enumType`, `label`, `labelList`
+ * and `json` all emit `text`;
+ * `money`, `quantity`, `rate`, `count`, `smallCount`, `bigCount` and `flag` all emit `integer`;
+ * `binary` alone emits `blob`. So a column's SQL type no longer separates a count of cents from a
+ * count of thousandths, a calendar day from a time of day, or either from free text, and picking
+ * the wrong helper of a group leaves the generated schema and any migration diff byte-identical.
+ * What still separates them is the helper's NAME, the read mapping (below), and the typechecker.
+ *
+ * The PostgreSQL types these replaced refused a wrong value on their own, and that refusal is gone.
+ * Measured 2026-09-21, the same seven inserts against PGlite and against a real `node:sqlite` file:
+ * `uuid` refused `'not-a-uuid'` (22P02), `date` refused `'not-a-day'` (22007), `time` refused
+ * `'not-a-time'` (22023), `jsonb` refused `'{not json'` (22P02), `numeric(5, 2)` refused 1000.00,
+ * `integer` refused 2147483648 and `smallint` refused 32768 (22003 each). Every one of the seven is
+ * ACCEPTED and stored by the SQLite column that replaces it. The only refusal left in this module is
+ * an `enumText` column's own `check()` constraint, which `columns.test.ts` asks a real engine to
+ * perform.
+ *
+ * Two consequences worth stating rather than discovering. `smallCount` and `bigCount` no longer
+ * bound anything — SQLite's INTEGER is 64-bit whatever the declared type says — so those names now
+ * carry the caller's meaning and the record of the width the column held when the engine had
+ * widths. And the integer-digit bounds the old `numeric` columns enforced live only in the
+ * converters in `@waitron/shared` (`MAX_MONEY_INTEGER_DIGITS`, `MAX_QUANTITY_INTEGER_DIGITS`,
+ * `MAX_RATE_INTEGER_DIGITS`); nothing below them checks.
+ *
+ * Scale is still part of the meaning: money, quantity and rate are three different scales and a
+ * single "integer" helper would let one silently truncate another.
  */
 
-/** A uuid identifier. */
-export const id = (name: string) => uuid(name);
+/** An identifier. `newId` below supplies the value a PostgreSQL `defaultRandom()` used to. */
+export const id = (name: string) => text(name);
+
+const isoTimestamp = customType<{ data: Date; driverData: string }>({
+  dataType: () => "text",
+  toDriver: (value) => value.toISOString(),
+  fromDriver: (value) => new Date(value),
+});
 
 /**
- * A moment on the server clock, read back as a JavaScript `Date`.
+ * A moment on the server clock, stored as an ISO-8601 string and read back as a JavaScript `Date`.
  *
- * `ts` and `tsString` emit the SAME SQL type (`timestamp with time zone`), so converting a column
- * to the wrong one is invisible to the SCHEMA PROBE and to any migration diff: the generated SQL is
- * byte-identical either way. It is not invisible to everything else. The two differ in `columnType`
- * (`PgTimestamp` against `PgTimestampString` — the one-line discriminator, asserted in
- * `columns.test.ts`), in what a read returns, and in the WRITE mapper: measured 2026-09-17, a
- * date-mode column's `mapToDriverValue` given a string threw "value.toISOString is not a function",
- * while a string-mode column's given a `Date` returned "2026-09-16T10:00:00.000Z". The typechecker
- * usually gets there first: the swap flips the inferred select type between `Date | null` and
- * `string | null` and the insert type between `Date` and `string`, so a call site using the value as
- * one of those stops compiling. Pick by what the existing column declared, never by which helper is
- * shorter.
+ * `ts` and `tsString` do NOT collapse into one helper on SQLite, which is the question the storage
+ * swap's plan left open. They store the same bytes and emit the same SQL type (`text`), and the
+ * read mapping is the entire difference — the same split they had on PostgreSQL. Measured through a
+ * real `node:sqlite` file on 2026-09-21 (`columns.test.ts`, "round-trips one row of every helper's
+ * value through the engine"): the stored string `2026-09-16T10:00:00.000Z` comes back from this
+ * helper as a `Date` and from `tsString` as that string.
+ *
+ * The typechecker is what usually catches a column converted to the wrong one: the swap flips the
+ * inferred select type between `Date | null` and `string | null` and the insert type between `Date`
+ * and `string`, so a call site using the value as one of those stops compiling. Pick by what the
+ * existing column declared, never by which helper is shorter.
  */
-export const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+export const ts = (name: string) => isoTimestamp(name);
 
 /**
- * A moment on the server clock, read back as the STRING the driver rendered — no `Date` is
+ * A moment on the server clock, read back as the STRING the driver returned — no `Date` is
  * constructed. See `ts` above for why the generated schema cannot tell the two apart, and what can.
  */
-export const tsString = (name: string) => timestamp(name, { withTimezone: true, mode: "string" });
+export const tsString = (name: string) => text(name);
 
-/**
- * A calendar day: no time, no zone. Read back as the string the driver rendered — a bare
- * `date(name)` is drizzle's STRING mode. `date(name, { mode: "date" })` emits the same SQL type and
- * returns a `Date`, so the schema tells them apart no better than it does `ts` from `tsString`; the
- * read mapping does, and `columns.test.ts` pins it.
- */
-export const day = (name: string) => date(name);
+/** A calendar day: no time, no zone, handed to a caller as the string the driver returned. */
+export const day = (name: string) => text(name);
 
 /** A time of day: no date, no zone — a venue's opening time rather than a moment. */
-export const timeOfDay = (name: string) => time(name);
+export const timeOfDay = (name: string) => text(name);
 
-/** A structured document. */
-export const json = <T>(name: string) => jsonb(name).$type<T>();
+/**
+ * A structured document, stored as JSON text. The read mapping parses it, which is the only thing
+ * separating this column from `label`; `columns.test.ts` pins both directions.
+ */
+export const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
 
 /**
  * A monetary amount, counted in whole cents: 12.34 euros is the number 1234.
  *
- * An integer rather than a decimal because the engine this vocabulary exists to switch to has no
- * exact decimal type, and a float cannot hold a cent exactly. The name says cents so a caller
- * cannot read the number as units. Decimal arithmetic and the decimal literals a receipt or a
- * fiscal record carries live at the edges, in `@waitron/shared`'s money module.
- *
- * Eight bytes, not four, and that is the whole reason this is not `count`. The money bound the
- * rest of the system states is twelve integer digits (`MAX_MONEY_INTEGER_DIGITS`, enforced by
- * `assertMoney` and by the price validators in `packages/catalogue`), which is 99999999999999
- * cents. Measured on the development PostgreSQL: `2147483647::integer` succeeds and
- * `2147483648::integer` gives `integer out of range` — so a four-byte column would stop at
- * 21474836.47 and leave a wide band of amounts the converters accept and the column refuses with
- * a bare `22003`. `bigint` holds the whole declared range, and is read back as a number because
- * 99999999999999 is well inside the 9007199254740991 a number counts exactly.
+ * An integer rather than a decimal because SQLite has no exact decimal type and a float cannot hold
+ * a cent exactly. The name says cents so a caller cannot read the number as units. Decimal
+ * arithmetic and the decimal literals a receipt or a fiscal record carries live at the edges, in
+ * `@waitron/shared`'s money module. SQLite's INTEGER is 64-bit, so the twelve-integer-digit money
+ * bound the rest of the system states fits with room to spare — but see the header: the column no
+ * longer refuses anything outside it.
  */
-export const money = (name: string) => bigint(name, { mode: "number" });
+export const money = (name: string) => integer(name);
 
 /**
  * A quantity, counted in whole thousandths: 1.5 kg is the number 1500, and 5 grams is 5.
  *
- * An integer for the same reason `money` above is one, and a SEPARATE scale for a reason of its
- * own: a quantity carries three decimal places, so reading one at the money scale gives a
- * different number rather than an obviously wrong one — 0.005 kg is 5 thousandths and 1 cent,
- * because the money conversion ROUNDS that third place rather than dropping it (pinned by the
- * 0.005 cases in `packages/shared/src/scales.test.ts`). The conversions are named after the scale
- * — `decimalToThousandths` and `thousandthsToDecimal` in `@waitron/shared`'s scales module — so a
- * call site cannot reach for the money pair by autocomplete.
- *
- * EIGHT bytes, and unlike `rate` below that is not arbitrary. The decimal column this replaces was
- * `numeric(12, 3)`, whose widest value is 999999999.999 — 999999999999 thousandths, past the
- * 2147483647 an `integer` holds (the measurement is in `money`'s comment above). The nine-integer-
- * digit bound the old column enforced now lives in the converter, as
- * `MAX_QUANTITY_INTEGER_DIGITS`.
- *
- * This emits the same SQL type as `money` and `bigCount`, so picking the wrong one of the three is
- * invisible to the generated schema and to any migration diff — the same trap `ts`/`tsString`
- * carries. `columns.test.ts` pins all three: their SQL type in one case together, and their READ
- * MODE in a case each, which is the only part a test can separate. What it cannot separate is the
- * three from each other — that is what a caller does with the number, and nothing checks it.
+ * A SEPARATE scale from money, for a reason of its own: a quantity carries three decimal places, so
+ * reading one at the money scale gives a different number rather than an obviously wrong one —
+ * 0.005 kg is 5 thousandths and 1 cent, because the money conversion ROUNDS that third place rather
+ * than dropping it (pinned by the 0.005 cases in `packages/shared/src/scales.test.ts`). The
+ * conversions are named after the scale — `decimalToThousandths` and `thousandthsToDecimal` in
+ * `@waitron/shared`'s scales module — so a call site cannot reach for the money pair by
+ * autocomplete.
  */
-export const quantity = (name: string) => bigint(name, { mode: "number" });
+export const quantity = (name: string) => integer(name);
 
 /**
  * A percentage rate, counted in whole basis points: a 21.00% VAT rate is the number 2100.
  *
- * FOUR bytes, where `quantity` above needs eight: the decimal column this replaces was
- * `numeric(5, 2)`, whose widest value is 999.99, and that is 99999 basis points. The three-
- * integer-digit bound moves to the converter as `MAX_RATE_INTEGER_DIGITS`.
- *
  * A check constraint written against the decimal form does NOT follow the column across.
- * `ALTER COLUMN ... SET DATA TYPE` keeps the constraint and casts it, so a `rate <= 100` left
- * alone would refuse every rate above one percent. The four such constraints in the tree are
- * re-derived against 10000 in the same migration that changes the type.
+ * `ALTER COLUMN ... SET DATA TYPE` keeps the constraint and casts it, so a `rate <= 100` left alone
+ * would refuse every rate above one percent; the four such constraints in the tree are re-derived
+ * against 10000.
  */
 export const rate = (name: string) => integer(name);
 
@@ -129,84 +124,9 @@ export const rate = (name: string) => integer(name);
  * The values array is written ONCE, at the call site. This helper derives the column's TypeScript
  * type from it and hands the same array to drizzle as the column's `enumValues`; `enumCheck` below
  * builds the constraint's SQL from those, so the type and the constraint cannot state different
- * sets.
- *
- * There is no house rule choosing between this shape and a `pgEnum`, and no two-family split to
- * apply: the repository carries both, declares more `pgEnum` types than checked text columns (a
- * `pgEnum` declaration looks like `receiptPrintMode` in `packages/db/src/schema/tenants.ts`), and
- * the checked text columns it does carry were each taken for their own stated reason. Two of those
- * reasons, and they are different reasons: `invoiceSeries.purpose` in
- * `packages/db/src/schema/series.ts`, because the permitted set depends on an unverified question
- * to the accountant, so widening must cost one line of migration rather than an `ALTER TYPE`;
- * `payments.cardEntryMode` in `packages/payments/src/schema/payments.ts`, because adding a value
- * later must not hit the one-transaction `ALTER TYPE` trap (its constraint is
- * `payments_card_entry_mode_ck` in the same file). So: read the sibling column's own comment before
- * copying either shape, rather than looking for a rule here.
- *
- * This pair is for a NEW column. Every existing text column that already carried a hand-written
- * `check()` LISTING ITS PERMITTED VALUES stays as `label()` beside its untouched constraint as the
- * rollout reaches its package, and the reason is NOT one reason for all of them. The two reasons
- * below are the ones met so far; the list of columns each covers grew with the rollout and was
- * never complete, so read it as a property and not as a roll-call. A checked text column whose
- * check is NOT a value set — a pattern, a length, a range — is not in that group at all, because
- * the substitution was never available there, and those columns carry no comment:
- * `payments.card_last4` and `persons`'s length-checked columns are the shape.
- *
- * For THIS package the reason is measured, but on NEITHER of the columns that carry it today. The
- * measurement was taken 2026-09-17 on a third such column, since removed with its table:
- * `enumCheck` joins its values with `", "`, and on that column's constraint — written WITHOUT those
- * spaces — the schema probe produced a migration dropping and re-adding the check with the spaced
- * value list for the unspaced one, and nothing else. `products.pricing_unit` and
- * `products.vat_class` (`schema/catalogue.ts`) are the two written without the spaces today; that
- * they are in the same shape is READ OFF `products_pricing_unit_ck` and `products_vat_class_ck`,
- * never probed.
- *
- * For five others here — `deployment.mode`, `deployment.singleton_role`, `incidents.severity`,
- * `print_jobs.kind` and `invoice_series.purpose` — that reason does not apply at all: their
- * constraints already carry the spacing `enumCheck` emits, which `columns.test.ts` renders
- * byte-for-byte for `invoice_series_purpose_ck`'s body. Substituting there would be schema-silent.
- * They were left alone because rewriting a constraint was out of that conversion's scope — a
- * scope decision, not a measurement. `incidents.severity` has a reason of its own on top: it
- * brands its type as the exported `IncidentSeverity`, and `enumText` would replace that with a
- * union derived from the values array.
- *
- * The second group reaches outside this package, and it grew as the rollout did: checked text
- * columns written with `enumCheck`'s spacing exist elsewhere too, among them
- * `units.hardware_unit` in `packages/catalogue` (converted 2026-09-17),
- * `payment_policy.offline_mode` in `packages/payments` (converted 2026-09-18),
- * `packages/fiscal-verifactu` (converted 2026-09-18 — `acks.state`, `envios.estado` and
- * `registros_facturacion`'s `tipo_registro`, `tipo_rectificativa` and `entorno`), and
- * `google_oidc_states.mode` and `management_account_actions.purpose` in `packages/identity`
- * (converted 2026-09-18 — and SCOPE alone is what keeps those two: measured there, substituting
- * leaves the generated schema identical and breaks no caller today, while the narrowing itself
- * still happens, a converter writing the values inline. Receipts in the P1b identity report in
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`), and
- * `scheduled_runs.state` in `packages/scheduler` (converted 2026-09-18), where the narrowing costs
- * nothing at all: the column is already declared `.$type<RunState>()`, so `enumText` would change
- * no caller-facing type — `RunState` is `(typeof runState)[number]`, which is the union `enumText`
- * derives. The rollout finished on 2026-09-18 with `packages/media`, so no further conversion will
- * add a name here — but this was never a roll-call and is not one now, and the gap is in the FIRST
- * of the two reasons rather than this one: `packages/venue-service`'s five value-set checks in
- * `src/schema/service.ts` are all written without `enumCheck`'s spacing, so substituting there
- * would rewrite a constraint, and none of the five is named anywhere here. So take the two reasons
- * as the property and the names as a dated reading.
- *
- * Scope keeps `scheduled_runs.state` plain, like the identity pair above, but it is the only column
- * measured so far where none of the three COSTS — the spacing, the narrowing, the branding —
- * applies, so it is the sub-case to reach for if these constraints are ever rewritten. That is not
- * a claim about the cheapest instance in the tree: the others have not been measured for narrowing
- * or branding at all.
- *
- * One mechanical note, because a converter meeting a NULLABLE checked column will ask: `enumCheck`
- * returns only the `in (…)` fragment, so a null arm is composed AROUND it rather than emitted by
- * it, and the values stay inline through that nesting. A nullable column is therefore NOT a reason
- * the pair cannot be used — `payments.card_entry_mode` stays `label()` for the spacing reason
- * above, like the other three. Guard: `columns.test.ts`, "keeps its values inline when a caller
- * composes a null arm around it".
- *
- * `units.hardware_unit` carries a reason worth stating in general: substituting there is
- * schema-silent, but `enumText` NARROWS what a caller may write. **Whether it narrows depends on
- * where the values come from**, so measure it rather than reading it off the spelling.
+ * sets. On SQLite the constraint is the only thing standing between the column and any string at
+ * all, since the stored type is plain `text` (see the header) — so a checked text column is not a
+ * weaker shape than the PostgreSQL enum type it replaces, it is the same shape.
  *
  * Every cell of the table below is a compile-time case in `columns.test.ts`. Reading it: values
  * written INLINE narrow whatever the column's nullability, and `as const` on top of an inline list
@@ -223,63 +143,64 @@ export const rate = (name: string) => integer(name);
  *   enumText(n, VALUES_ANNOTATED)        "a" | "b" | null | undefined "a" | "b"
  *
  * (`VALUES` being a `const VALUES = ["a", "b"]` declared elsewhere, `VALUES_AS_CONST` the same
- * declaration written `as const`, `VALUES_ANNOTATED` the same declaration typed `("a" | "b")[]`.) The top-left cell read `string | null | undefined` until this
- * helper took a `const` type parameter on 2026-09-18; reverting that one word fails the pin on that
- * cell and no other, which is what says the rest of the table is unchanged by it. How that reading
- * was arrived at is in the rollout's report in
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`.
+ * declaration written `as const`, `VALUES_ANNOTATED` the same declaration typed `("a" | "b")[]`.)
+ * The top-left cell read `string | null | undefined` until this helper took a `const` type
+ * parameter; reverting that one word fails the pin on that cell and no other, which is what says
+ * the rest of the table is unchanged by it.
  *
- * The practical rule, because two earlier attempts at this sentence were both wrong in the
- * unsafe direction: **never conclude from the spelling that a substitution is caller-safe.** Take a
- * control that reaches the column — narrow it to a set the code does not write and watch the
- * typechecker fail — and if that control passes, the typechecker cannot see that column and you have
- * measured nothing.
- *
- * Per-package receipts live in the rollout's report in
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, not here. Its short form for
- * `packages/fiscal-verifactu`: four of its five checked text columns take the pair with no caller
- * breaking, and the fifth, `acks.state`, is a column the typechecker cannot see at all.
- *
- * Two shapes that package met which the pair does not reach, and they are NOT the same kind of
- * reason:
- *
- * - **A constraint written as an EQUALITY** rather than an `in (…)` list.
- *   `registros_tipo_huella_ck` is `= '01'`, and a singleton list accepts exactly the same values —
- *   run against PGlite for `'01'`, `'02'`, `''` and NULL by the run-it reviewer on 2026-09-18. So the
- *   reason is the same one the DDL reasons above share, that the GENERATED TEXT changes:
- *   substituting made the schema probe drop and re-add the constraint as `in ('01')`.
- * - **A constraint that is a PATTERN rather than a set**, `registros_huella_ck`'s
- *   `~ '^[0-9A-F]{64}$'`. Read off `enumText`'s signature and NOT measured: the helper takes a list
- *   of values, and a 64-character hex pattern has no list to hand it.
+ * The practical rule, because two earlier attempts at this sentence were both wrong in the unsafe
+ * direction: **never conclude from the spelling that a substitution is caller-safe.** Take a control
+ * that reaches the column — narrow it to a set the code does not write and watch the typechecker
+ * fail — and if that control passes, the typechecker cannot see that column and you have measured
+ * nothing.
  */
 export const enumText = <const T extends string>(name: string, values: readonly T[]) =>
   text(name, { enum: values as readonly [T, ...T[]] });
 
 /**
+ * A closed vocabulary declared ONCE at the top of a schema file and used to build columns, which is
+ * what `pgEnum` did. It takes no type name, because `pgEnum`'s first argument created a SQL type
+ * and SQLite has none: the values reach the database as the `check()` constraint `enumCheck` builds
+ * at each table.
+ *
+ * A `pgEnum` declaration was used three ways, and all three still work — `columns.test.ts` has a
+ * case for each. As a column builder (`ticketState("state")`); for its values at runtime, where a
+ * request validator reads `ticketState.enumValues` rather than repeating the list; and for its
+ * values at type level, as `(typeof ticketState.enumValues)[number]`. The narrowing is `enumText`'s,
+ * so the table in that helper's note applies here unchanged — including its one wide row, which is
+ * pinned: values handed in through an unannotated variable widen to `string` here too.
+ *
+ * The `const` modifier mirrors `enumText`'s and is NOT what makes the narrowing work: removing it
+ * moves no pin in `columns.test.ts`, measured 2026-09-21, where removing `enumText`'s fails the
+ * inline-literal nullable cell. It is kept for symmetry, not for an effect anybody has shown.
+ */
+export const enumType = <const T extends string>(values: readonly T[]) =>
+  Object.assign((name: string) => enumText(name, values), {
+    enumValues: values as readonly [T, ...T[]],
+  });
+
+/**
  * The `in (...)` constraint body for an `enumText` column, read off that column's own values, so
  * the constraint and the column's TypeScript type cannot list different sets.
  *
- * Two measurements from 2026-09-17 shape the body:
+ * `.inlineParams()` is what writes the values into the DDL as literals. Without it drizzle renders
+ * them as bind placeholders, which lands in the generated migration and changes the schema.
  *
- * - `.inlineParams()` is what writes the values into the DDL as literals. Without it drizzle
- *   renders them as bind placeholders — `in ($1, $2)` — which lands in the generated migration and
- *   changes the schema.
- * - A table's extra-config callback is handed an `ExtraConfigColumn`, a different object from the
- *   table's own column. It renders as the right column reference, but its `enumValues` is
- *   undefined at runtime, so reading it directly threw "Cannot read properties of undefined
- *   (reading 'map')" — both inside `drizzle-kit generate` and when the node-postgres client builds
- *   its relational config. Every column knows its table, and the table's own column does carry the
- *   values, which is what the fallback reads.
+ * This used to carry a fallback that re-found the column on its table, because on PostgreSQL a
+ * table's extra-config callback — the only place a check can be declared — was handed an
+ * `ExtraConfigColumn` whose `enumValues` was undefined at runtime. **That is a PostgreSQL fact, not
+ * a drizzle one.** Measured 2026-09-21 on drizzle-orm 0.45.2, one table per dialect declaring the
+ * same checked text column and reading the callback's argument after `getTableConfig`: PostgreSQL
+ * gave an `ExtraConfigColumn` with `enumValues: undefined`, SQLite gave the table's own
+ * `SQLiteText` with `enumValues: ["a", "b"]`. The fallback is therefore dead code here and has
+ * gone; the control that says so is deleting it and finding nothing red, which is how it was found.
  *
- * That second measurement is also why the parameter is any column rather than a type that demands
- * a vocabulary: TypeScript types the extra-config column's `enumValues` as `string[] | undefined` —
- * not the vocabulary union — so no call from the only place a check can be declared would compile.
- * A column `enumText` did not declare is refused at runtime instead.
+ * The parameter stays any column rather than a type demanding a vocabulary, because the extra-config
+ * argument is still typed loosely enough that a narrower parameter would refuse the only call a
+ * caller can make. A column `enumText` did not declare is refused at runtime instead.
  */
 export const enumCheck = (column: AnyColumn) => {
-  const onTable: readonly AnyColumn[] = Object.values(getTableColumns(column.table));
-  const values: readonly string[] | undefined =
-    column.enumValues ?? onTable.find((c) => c.name === column.name)?.enumValues;
+  const values: readonly string[] | undefined = column.enumValues;
   if (values === undefined) {
     throw new Error(`enumCheck: column "${column.name}" was not declared with enumText`);
   }
@@ -289,82 +210,89 @@ export const enumCheck = (column: AnyColumn) => {
   )})`.inlineParams();
 };
 
-/** A true/false flag. */
-export const flag = (name: string) => boolean(name);
+/**
+ * A true/false flag, stored as 0 or 1 and read back as a boolean.
+ *
+ * The read mapping is the only thing separating this from `count`. It also does the conversion the
+ * driver will not: measured on Node v26.7.0, `node:sqlite` refuses to bind a JavaScript boolean
+ * ("cannot be bound to SQLite parameter"), and drizzle's boolean mode converts before the bind, so
+ * a column declared here is safe where a hand-written `sql` fragment passing a boolean is not
+ * (receipt: `docs/handoffs/2026-09-21-f1-the-flip.md`).
+ */
+export const flag = (name: string) => integer(name, { mode: "boolean" });
 
 /** A whole number. */
 export const count = (name: string) => integer(name);
 
-/**
- * A whole number stored as `smallint`.
- *
- * The name spells the SQL WIDTH out because width is the only thing separating it from `count`, and
- * a converter must pick by what a column ALREADY stores, never by what it means. Two columns can
- * carry the same meaning and different widths: `availability.weekday` and `shift_templates.weekday`
- * in `packages/workforce` are `smallint`, while `department_hours.weekday` in
- * `packages/venue-service` is `integer` and takes `count`. Choosing this helper for that last one
- * writes a migration.
- */
-export const smallCount = (name: string) => smallint(name);
+/** A whole number that was `smallint` when the engine had integer widths. See the header. */
+export const smallCount = (name: string) => integer(name);
 
-/**
- * A whole number wider than `count`, read back as a JavaScript number.
- * `bigint(name, { mode: "bigint" })` emits the same SQL type and reads back a `bigint` instead, so
- * only the read mapping separates the two; `columns.test.ts` pins which one this is.
- */
-export const bigCount = (name: string) => bigint(name, { mode: "number" });
+/** A whole number that was `bigint` when the engine had integer widths. See the header. */
+export const bigCount = (name: string) => integer(name);
 
 /**
  * Free text.
  *
- * A fiscal amount held as `text` is NOT free text and must not become `label()`:
- * `packages/fiscal-verifactu/src/schema/registros.ts:74-89` keeps `cuota_total`/`importe_total` as
- * `text` because the fiscal fingerprint hashes the stored bytes verbatim, so the stored bytes must
- * equal the hashed bytes.
- *
- * Nothing catches that substitution, so do not expect a test to stop you.
- * `packages/fiscal-verifactu/src/monetary-columns.test.ts` builds its database from the migration
- * SQL and reads no schema source: measured 2026-09-17, with both columns redeclared through a
- * locally defined helper whose body is `label()`'s, `vitest run src/monetary-columns.test.ts`
- * exited 0 with one test passing. What that test does catch is a stored type that has become lossy
- * — the amount it round-trips is rejected by `numeric(12, 2)` with SQLSTATE 22003.
+ * A fiscal amount held as text is NOT free text and must not become `label()`:
+ * `packages/fiscal-verifactu/src/schema/registros.ts` keeps `cuota_total`/`importe_total` as their
+ * own text column because the fiscal fingerprint hashes the stored bytes verbatim, so the stored
+ * bytes must equal the hashed bytes. Nothing catches that substitution, so do not expect a test to
+ * stop you.
  */
 export const label = (name: string) => text(name);
 
-const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
-  dataType: () => "bytea",
-  toDriver: (value) => Buffer.from(value),
+/**
+ * A list of free-text values, stored as a JSON array in one text column.
+ *
+ * This replaces `label(name).array()`: SQLite has no array type, and the storage swap's design maps
+ * an array to text holding JSON. A caller still receives a `string[]`, which is what the array
+ * column handed them, so the five columns that use it need no other change.
+ *
+ * Nothing below this layer understands the list. A PostgreSQL array column could be searched with
+ * `= any(...)` and indexed per element; a query that wants to match one entry of one of these now
+ * matches inside a JSON string, or the code filters in JavaScript after the read.
+ */
+export const labelList = (name: string) => text(name, { mode: "json" }).$type<string[]>();
+
+/**
+ * The values `defaultRandom()` and `defaultNow()` used to supply. Those are PostgreSQL builder
+ * methods with no SQLite equivalent, so the value is generated in JavaScript and passed to
+ * `$defaultFn`, which drizzle calls per insert and binds like any other parameter — it is NOT a SQL
+ * DEFAULT, so a row written by anything other than drizzle gets nothing.
+ *
+ * `now` and `nowIso` are two functions on purpose, and the split is enforced by the typechecker
+ * rather than by care: a `ts` column stores a `Date` and a `tsString` column a `string`, so
+ * `ts(n).$defaultFn(nowIso)` and `tsString(n).$defaultFn(now)` both fail to compile. Pinned by the
+ * "refuses the generator that belongs to the other timestamp helper" case in `columns.test.ts`,
+ * which holds each wrong pairing under a `@ts-expect-error` — a directive that fails the typecheck
+ * if the pairing ever starts compiling.
+ */
+export const newId = () => randomUUID();
+export const now = () => new Date();
+export const nowIso = () => new Date().toISOString();
+
+const bytes = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "blob",
+  toDriver: (value) => value,
   fromDriver: (value) => new Uint8Array(value),
 });
 
 /**
- * Opaque bytes (`bytea`), handed to callers as a `Uint8Array` and bound as a node `Buffer`.
+ * Opaque bytes, handed to callers as a `Uint8Array` — which is what the callers hold:
+ * `enqueuePrintJob` in `packages/printing/src/outbox.ts` takes one and passes it straight to the
+ * insert.
  *
- * A custom type because drizzle-orm 0.45 ships no first-class `bytea`.
- *
- * `Uint8Array` is the caller-facing type because that is what the callers hold: `enqueuePrintJob`
- * in `packages/printing/src/outbox.ts` takes a `Uint8Array` and passes it straight to the insert.
- *
- * `runAgentOnce` in `packages/printing/src/runtime.ts` also copies a read-back payload into a
- * `Uint8Array`, and that copy STAYS, because the row it copies was never read through a column:
- * `claimPrintJobs` in the same file reads it with raw SQL through `tx.execute`, and its
- * `ClaimedJob.payload` is hand-declared `Buffer`. Drizzle's `execute` hands back the driver's own
- * row values — no column's `fromDriver` runs over them. Measured 2026-09-17 against real
- * PostgreSQL, one physical row read twice — through
- * `.select({ payload: <a binary column> })` and through `tx.execute` — printed
- * `BUILDER: Uint8Array isBuffer=false | RAW: Buffer isBuffer=true`, with both reads carrying the
- * same bytes, so the difference is the mapping and not the data.
- *
- * This is the tree's only `bytea` declaration. `grep -rn customType packages apps --include="*.ts"`
- * on 2026-09-18 matched no file but this one and `columns.test.ts`, where the one match is prose.
- * The receipt is stated at FILE granularity on purpose: this sentence is itself one of the matches,
- * so a count of matching LINES can move on a reword — which is what happened, an earlier draft
- * counting five where this wording gives four.
+ * A custom type rather than drizzle's `blob(name, { mode: "buffer" })`, because that mode hands a
+ * caller a node `Buffer` and every existing call site is written against `Uint8Array`. Measured on
+ * a real `node:sqlite` file, 2026-09-21: the driver binds a `Uint8Array` or a `Buffer`, refuses a
+ * bare `ArrayBuffer`, and hands a BLOB back as a plain `Uint8Array` already. So `fromDriver` is a
+ * belt-and-braces copy on this driver rather than a conversion, and `columns.test.ts` says so where
+ * it round-trips a row — the mapping itself is pinned by calling it directly with a `Buffer`.
  *
  * The custom type itself stays private: drizzle's overloads on it also accept no name at all and a
  * config object, so exporting it directly would make `binary()` compile where every sibling helper
  * here demands a column name.
  */
-export const binary = (name: string) => bytea(name);
+export const binary = (name: string) => bytes(name);
 
-export const table = pgTable;
+export const table = sqliteTable;

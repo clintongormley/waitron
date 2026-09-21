@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, day, id, label, money, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, day, id, label, money, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -20,7 +20,7 @@ import { persons } from "@waitron/identity";
 export const employments = table(
   "employments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** Ordinary weekly working time, in minutes — the overtime baseline (art. 35.5). Minutes, not hours,
      * so the projection never carries a fractional-hour rounding error. */
@@ -31,7 +31,7 @@ export const employments = table(
     endDate: day("end_date"),
     /** Tenant currency, no currency column (single-currency-per-tenant convention, `sales.total`). */
     payRate: money("pay_rate").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a

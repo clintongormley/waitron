@@ -1,1 +1,0 @@
-ALTER TABLE "products" ADD COLUMN "sold_alone" boolean DEFAULT true NOT NULL;

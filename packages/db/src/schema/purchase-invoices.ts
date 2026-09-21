@@ -1,6 +1,18 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { day, id, label, money, rate, table, ts } from "./columns.js";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  day,
+  enumCheck,
+  enumType,
+  id,
+  label,
+  money,
+  newId,
+  now,
+  rate,
+  table,
+  ts,
+} from "./columns.js";
 
 /**
  * A received supplier invoice — a `factura recibida` — and its per-rate VAT breakdown, the input
@@ -25,14 +37,14 @@ import { day, id, label, money, rate, table, ts } from "./columns.js";
  *   excluded from the deducible aggregate. WHICH of a deli's activities are RE is an asesor-fiscal
  *   call the code must never assume; the marker is the seam, not a decision.
  */
-export const purchaseRegime = pgEnum("purchase_regime", ["general", "equivalence_surcharge"]);
+export const purchaseRegime = enumType(["general", "equivalence_surcharge"]);
 
 /**
  * What a received-invoice VAT line was spent on, driving the 303 box split (spec §7):
  * - `ordinary` — `operaciones interiores corrientes` (casilla 28/29), the primary deli case.
  * - `capital` — *bienes de inversión* (casilla 30/31).
  */
-export const purchaseVatKind = pgEnum("purchase_vat_kind", ["ordinary", "capital"]);
+export const purchaseVatKind = enumType(["ordinary", "capital"]);
 
 /**
  * The received-invoice header (mutable). One row per supplier invoice we have received and entered
@@ -41,7 +53,7 @@ export const purchaseVatKind = pgEnum("purchase_vat_kind", ["ordinary", "capital
 export const purchaseInvoices = table(
   "purchase_invoices",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The supplier's own tax identity (NIF/CIF) and legal name — theirs, not ours; not validated as
     // one of our own identifiers.
     supplierTaxId: label("supplier_tax_id").notNull(),
@@ -61,8 +73,8 @@ export const purchaseInvoices = table(
     // sets it below the whole is asesor-driven and out of scope; this column is only the seam.
     deductibleProportion: rate("deductible_proportion").notNull().default(10000),
     note: label("note"),
-    createdAt: ts("created_at").notNull().defaultNow(),
-    updatedAt: ts("updated_at").notNull().defaultNow(),
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   (t) => [
     // Composite target for the FK from `purchase_invoice_vat` (mirrors
@@ -74,6 +86,7 @@ export const purchaseInvoices = table(
     // Supports the monthly deducible aggregate's `received_on` bucketing (mirrors
     // `sales_tenant_issued_idx`).
     index("purchase_invoices_tenant_received_idx").on(t.receivedOn),
+    check("purchase_invoices_regime_ck", enumCheck(t.regime)),
     check(
       "purchase_invoices_deductible_proportion_ck",
       sql`${t.deductibleProportion} >= 0 and ${t.deductibleProportion} <= 10000`,
@@ -93,7 +106,7 @@ export const purchaseInvoices = table(
 export const purchaseInvoiceVat = table(
   "purchase_invoice_vat",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     purchaseInvoiceId: id("purchase_invoice_id").notNull(),
     // The VAT rate, in basis points: 2100 is 21%.
     rate: rate("rate").notNull(),
@@ -112,5 +125,6 @@ export const purchaseInvoiceVat = table(
     index("purchase_invoice_vat_invoice_idx").on(t.purchaseInvoiceId),
     // 10000 basis points is 100%; see the twin on `working_order_lines` for why it was re-derived.
     check("purchase_invoice_vat_rate_ck", sql`${t.rate} >= 0 and ${t.rate} <= 10000`),
+    check("purchase_invoice_vat_kind_ck", enumCheck(t.kind)),
   ],
 );

@@ -1,5 +1,5 @@
-import { check } from "drizzle-orm/pg-core";
-import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
 
 /**
  * The cash-drawer AUDIT log (counter-receipt/drawer slice §2). One append-only row per drawer kick,
@@ -26,7 +26,7 @@ import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
 export const drawerOpens = table(
   "drawer_opens",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Bare column: the (till_id) → tills(id) FK is
     // hand-written in the --custom migration.
     tillId: id("till_id").notNull(),
@@ -34,9 +34,9 @@ export const drawerOpens = table(
     // slice and this audit row must not depend on it (the daily_closes.closed_by / sale_voids.voided_by
     // shape).
     personId: id("person_id").notNull(),
-    // Server-clock kick time — defaultNow(), the daily_closes.closedAt shape (a server-generated
+    // Server-clock kick time — $defaultFn(now), the daily_closes.closedAt shape (a server-generated
     // timestamp, not an application-supplied one).
-    openedAt: ts("opened_at").notNull().defaultNow(),
+    openedAt: ts("opened_at").notNull().$defaultFn(now),
     // Why the drawer opened: 'cash_sale' (auto kick on a cash sale) or 'manual' (staff open). A text
     // column + CHECK, matching invoice_series.purpose / incidents.severity. `enumText` and
     // `enumCheck` (`packages/db/src/schema/columns.ts`) build the column and its constraint from the

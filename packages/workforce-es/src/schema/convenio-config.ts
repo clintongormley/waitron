@@ -1,13 +1,26 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, flag, id, locations, money, rate, table, tsString } from "@waitron/db";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  locations,
+  money,
+  newId,
+  nowIso,
+  rate,
+  table,
+  tsString,
+} from "@waitron/db";
 
 /**
  * The overtime-model reading a convenio selects (art. 35 daily-accrual vs art. 34.2 distribución
  * irregular / period-net). Underscored to match SQL convention; the generic `OvertimeModel`
  * (`daily-accrual` / `period-net`) is hyphenated and the workforce-es resolver bridges the two.
  */
-export const overtimeModel = pgEnum("overtime_model", ["daily_accrual", "period_net"]);
+export const overtimeModel = enumType(["daily_accrual", "period_net"]);
 
 /**
  * `convenio_config` — the Spain-specific configuration surface that supplies the overtime rule and
@@ -30,7 +43,7 @@ export const overtimeModel = pgEnum("overtime_model", ["daily_accrual", "period_
 export const convenioConfig = table(
   "convenio_config",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
 
     // Overtime / projection inputs (plan §3.1) — the two D2.0 consumes plus the period-net terms.
@@ -80,7 +93,7 @@ export const convenioConfig = table(
      * default. */
     breaksCountAsWorked: flag("breaks_count_as_worked").notNull().default(false),
 
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
@@ -96,5 +109,9 @@ export const convenioConfig = table(
     // The load-bearing check: the projection divides the contracted week by working_days_per_week, so
     // it must be 1..7 (never zero) or a resolved ruleset would produce a NaN daily target.
     check("convenio_config_working_days_ck", sql`${t.workingDaysPerWeek} between 1 and 7`),
+    // The refusal the `overtime_model` PostgreSQL enum TYPE performed, put back as a constraint:
+    // the SQLite column is plain text and refuses nothing on its own (see enumText in
+    // packages/db/src/schema/columns.ts).
+    check("convenio_config_overtime_model_ck", enumCheck(t.overtimeModel)),
   ],
 );

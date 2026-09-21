@@ -1,5 +1,5 @@
 import type { ResourceChange } from "@waitron/shared";
-import { id, json, table } from "./columns.js";
+import { id, json, newId, table } from "./columns.js";
 
 /**
  * What changed, written by the change trigger and taken out again by the transaction that caused
@@ -36,6 +36,6 @@ export const changeLog = table("change_log", {
   // `grep -rn change_log --include='*.ts' --include='*.sql' --include='*.mjs' packages apps scripts`
   // returns hits that name `payload` and never `id`. Kept so the table carries an identity of its
   // own, the way most of this schema's tables do; no behaviour depends on its value.
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   payload: json<ResourceChange>("payload").notNull(),
 });

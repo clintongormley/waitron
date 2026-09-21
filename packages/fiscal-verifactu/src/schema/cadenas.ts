@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey } from "drizzle-orm/pg-core";
-import { count, id, label, nodes, table, ts } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/sqlite-core";
+import { count, id, label, nodes, now, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -35,7 +35,7 @@ export const cadenas = table(
     ultimoRegistroId: id("ultimo_registro_id").references(() => registrosFacturacion.id),
     /* v8 ignore stop */
     ultimaHuella: label("ultima_huella"),
-    actualizadoEn: ts("actualizado_en").notNull().defaultNow(),
+    actualizadoEn: ts("actualizado_en").notNull().$defaultFn(now),
   },
   // Drizzle stores this extraConfig callback lazily and invokes it only when something walks the
   // table's full metadata — `drizzle-kit generate`, in its own separate CLI process, or a

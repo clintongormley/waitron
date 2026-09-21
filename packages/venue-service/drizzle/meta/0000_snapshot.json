@@ -1,46 +1,60 @@
 {
-  "id": "5c6b78a6-b79b-4d94-a6e7-fa549fc48cfb",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "a9a32df6-316b-49a5-99b1-b72da743d8d2",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.department_hours": {
+    "department_hours": {
       "name": "department_hours",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "department_id": {
           "name": "department_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "weekday": {
           "name": "weekday",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "opens_at": {
           "name": "opens_at",
-          "type": "time",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "closes_at": {
           "name": "closes_at",
-          "type": "time",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "department_hours_interval_key": {
+          "name": "department_hours_interval_key",
+          "columns": [
+            "department_id",
+            "weekday",
+            "opens_at",
+            "closes_at"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "department_hours_department_fk": {
           "name": "department_hours_department_fk",
@@ -57,85 +71,86 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "department_hours_interval_key": {
-          "name": "department_hours_interval_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "department_id",
-            "weekday",
-            "opens_at",
-            "closes_at"
-          ]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "department_hours_weekday_ck": {
           "name": "department_hours_weekday_ck",
           "value": "\"department_hours\".\"weekday\" between 0 and 6"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.departments": {
+    "departments": {
       "name": "departments",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "location_id": {
           "name": "location_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "trading_name": {
           "name": "trading_name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "default_service_mode": {
           "name": "default_service_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "is_default": {
           "name": "is_default",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "active": {
           "name": "active",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": true
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "departments_location_name_key": {
+          "name": "departments_location_name_key",
+          "columns": [
+            "location_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "departments_location_fk": {
           "name": "departments_location_fk",
@@ -152,40 +167,30 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "departments_location_name_key": {
-          "name": "departments_location_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "location_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "departments_service_mode_ck": {
           "name": "departments_service_mode_ck",
           "value": "\"departments\".\"default_service_mode\" in ('table_tab','prepay','invoice_first','ticket_then_pay')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.device_zone_defaults": {
+    "device_zone_defaults": {
       "name": "device_zone_defaults",
-      "schema": "",
       "columns": {
         "device_id": {
           "name": "device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "zone_id": {
           "name": "zone_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -217,52 +222,47 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "device_zone_defaults_pk": {
-          "name": "device_zone_defaults_pk",
-          "columns": [
-            "device_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.order_service_contexts": {
+    "order_service_contexts": {
       "name": "order_service_contexts",
-      "schema": "",
       "columns": {
         "working_order_id": {
           "name": "working_order_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "location_id": {
           "name": "location_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "zone_id": {
           "name": "zone_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "department_id": {
           "name": "department_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "service_mode": {
           "name": "service_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -307,70 +307,66 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "order_service_contexts_pk": {
-          "name": "order_service_contexts_pk",
-          "columns": [
-            "working_order_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "order_service_contexts_mode_ck": {
           "name": "order_service_contexts_mode_ck",
           "value": "\"order_service_contexts\".\"service_mode\" in ('table_tab','prepay','invoice_first','ticket_then_pay')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.preparation_routes": {
+    "preparation_routes": {
       "name": "preparation_routes",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "location_id": {
           "name": "location_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "zone_id": {
           "name": "zone_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "category_id": {
           "name": "category_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "product_id": {
           "name": "product_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "station_id": {
           "name": "station_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "no_preparation": {
           "name": "no_preparation",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         }
       },
@@ -378,35 +374,12 @@
         "preparation_routes_lookup_idx": {
           "name": "preparation_routes_lookup_idx",
           "columns": [
-            {
-              "expression": "location_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "zone_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "category_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "location_id",
+            "zone_id",
+            "product_id",
+            "category_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -478,118 +451,131 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "preparation_routes_subject_ck": {
           "name": "preparation_routes_subject_ck",
-          "value": "num_nonnulls(\"preparation_routes\".\"category_id\", \"preparation_routes\".\"product_id\") = 1"
+          "value": "(\"preparation_routes\".\"category_id\" is not null) + (\"preparation_routes\".\"product_id\" is not null) = 1"
         },
         "preparation_routes_target_ck": {
           "name": "preparation_routes_target_ck",
-          "value": "num_nonnulls(\"preparation_routes\".\"station_id\", nullif(\"preparation_routes\".\"no_preparation\", false)) = 1"
+          "value": "(\"preparation_routes\".\"station_id\" is not null) + (nullif(\"preparation_routes\".\"no_preparation\", false) is not null) = 1"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.working_line_contexts": {
+    "working_line_contexts": {
       "name": "working_line_contexts",
-      "schema": "",
       "columns": {
         "working_order_line_id": {
           "name": "working_order_line_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "menu_item_id": {
           "name": "menu_item_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "menu_id": {
           "name": "menu_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "menu_name": {
           "name": "menu_name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "department_id": {
           "name": "department_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "department_name": {
           "name": "department_name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "category_name": {
           "name": "category_name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "unit_id": {
           "name": "unit_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "unit_name": {
           "name": "unit_name",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "unit_precision": {
           "name": "unit_precision",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "hardware_unit": {
           "name": "hardware_unit",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "vat_class": {
           "name": "vat_class",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "allergens": {
           "name": "allergens",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "diet": {
           "name": "diet",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "diet_derivation": {
           "name": "diet_derivation",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "diet_override": {
           "name": "diet_override",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -621,16 +607,8 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "working_line_contexts_pk": {
-          "name": "working_line_contexts_pk",
-          "columns": [
-            "working_order_line_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "working_line_contexts_unit_precision_ck": {
           "name": "working_line_contexts_unit_precision_ck",
@@ -644,30 +622,31 @@
           "name": "working_line_contexts_vat_class_ck",
           "value": "\"working_line_contexts\".\"vat_class\" in ('general','reduced','super_reduced','zero')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.zone_menus": {
+    "zone_menus": {
       "name": "zone_menus",
-      "schema": "",
       "columns": {
         "zone_id": {
           "name": "zone_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "menu_id": {
           "name": "menu_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "display_order": {
           "name": "display_order",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         }
       },
@@ -675,23 +654,10 @@
         "zone_menus_order_idx": {
           "name": "zone_menus_order_idx",
           "columns": [
-            {
-              "expression": "zone_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "display_order",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "zone_id",
+            "display_order"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -724,57 +690,60 @@
       },
       "compositePrimaryKeys": {
         "zone_menus_pk": {
-          "name": "zone_menus_pk",
           "columns": [
             "zone_id",
             "menu_id"
-          ]
+          ],
+          "name": "zone_menus_pk"
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.zone_service_policies": {
+    "zone_service_policies": {
       "name": "zone_service_policies",
-      "schema": "",
       "columns": {
         "location_id": {
           "name": "location_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "zone_id": {
           "name": "zone_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "department_id": {
           "name": "department_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "service_mode": {
           "name": "service_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "default_menu_id": {
           "name": "default_menu_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "is_counter_default": {
           "name": "is_counter_default",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         }
       },
@@ -833,34 +802,24 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "zone_service_policies_pk": {
-          "name": "zone_service_policies_pk",
-          "columns": [
-            "zone_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "zone_service_policies_mode_ck": {
           "name": "zone_service_policies_mode_ck",
           "value": "\"zone_service_policies\".\"service_mode\" is null or \"zone_service_policies\".\"service_mode\" in ('table_tab','prepay','invoice_first','ticket_then_pay')"
         }
-      },
-      "isRLSEnabled": false
+      }
     }
   },
-  "enums": {},
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

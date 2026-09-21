@@ -28,10 +28,15 @@ Every task's requirements implicitly include this section.
 - **Money is whole cents; quantity is whole thousandths; rates are whole basis points.** Never a blanket "numeric becomes cents" — the scales differ and truncating them is silent corruption.
 - **A new workspace package must be wired in, or the root guards fail.** Guards that the pre-push
   hook and CI's lint job run on every push read workspace members BY NAME. Measured on 2026-09-16 by
-  adding a member and then removing the wiring: unwired, `npx vitest run` at the repository root gives
-  `Test Files  3 failed | 39 passed`, including `scripts/coverage-thresholds.test.ts` crashing with
-  `ENOENT` looking for a `vitest.config.ts`; wired, `42 passed` and 3033 tests. This bites task F1,
-  which creates `packages/store`.
+  adding a member and then removing the wiring. _Re-measured 2026-09-21 when task F1 actually created
+  `packages/store`, because the 2026-09-16 reading no longer describes what happens: unwired, `npx
+  vitest run` at the repository root gives TWO failures of 51 files —
+  `scripts/ci-workflow.test.mjs` and `scripts/coverage-thresholds.test.ts` — and
+  coverage-thresholds does NOT crash with `ENOENT`, because the new package's `vitest.config.ts`
+  already exists by the time the member is wired, so it fails on the coverage BAR instead. Wired, 51
+  files and 3241 tests. What survives unchanged is the rule: a new member must be named in the
+  guards that read workspace members BY NAME, or the pre-push hook and CI's lint job go red. Read
+  the failures on the day rather than the count here._
 - **`WAITRON_ENV` unset means preproduction.** Nothing in this plan may make a production database reachable by accident.
 
 ### The review boundary the campaign runner obeys
@@ -3927,7 +3932,7 @@ It is still built in order, with a commit and a passing check at each step. Work
 
 - Create: `packages/store/` — `index.ts`, `node-sqlite-adapter.ts`, `write-queue.ts`, `append-only.ts`, `archive.ts`, and a test beside each
 - Modify: `packages/db/src/schema/columns.ts`, `packages/db/src/client.ts`, `packages/db/src/tenancy.ts`, `packages/db/src/testing/venue-db.ts`, `packages/db/src/job-claim.ts`, `packages/db/src/constraint-target.ts`
-- Regenerate: all twelve migration sets
+- Regenerate: every migration set (thirteen on 2026-09-21 — `find packages apps -name drizzle.config.ts -not -path '*/node_modules/*'`; this plan said twelve before `packages/fiscal-none` was counted)
 - Delete: `apps/server/src/pg-restore.ts`, the PostgreSQL test harness files, `scripts/append-only-enable-always.test.ts`
 
 **Interfaces:**
@@ -4288,7 +4293,11 @@ If P1a's report said the enum could not be hidden, apply that report's resolutio
 
 - [ ] **Step 13: Regenerate every migration set as one baseline**
 
-Pre-production: schema changes drop and recreate, so there is no history to keep. For each of the twelve sets:
+Pre-production: schema changes drop and recreate, so there is no history to keep. Read the set list
+off the tree on the day — `find packages apps -name drizzle.config.ts -not -path '*/node_modules/*'`
+answered thirteen on 2026-09-21, where this plan was written expecting twelve. Each config also
+needs its `dialect` changed from `postgresql` to `sqlite`, and SQLite has no schema namespace for
+the migrations table. For each set:
 
 ```bash
 rm -rf packages/<pkg>/drizzle

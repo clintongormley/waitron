@@ -1,1 +1,0 @@
-ALTER TABLE "convenio_config" ALTER COLUMN "split_shift_premium" SET DATA TYPE bigint;

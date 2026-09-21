@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey } from "drizzle-orm/pg-core";
-import { binary, count, label, table, tsString } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/sqlite-core";
+import { binary, count, label, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * The credentials for one purpose, sealed. The payload is a JSON object of string fields
@@ -32,7 +32,7 @@ export const tenantCredentials = table(
      * assuming the current one, which is what lets a half-finished `rotate` keep serving both
      * halves instead of becoming an outage. */
     keyVersion: count("key_version").notNull(),
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     primaryKey({ columns: [t.purpose], name: "tenant_credentials_pk" }),

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, id, label, locations, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, id, label, locations, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -25,7 +25,7 @@ import { rosterVersions } from "./roster-versions.js";
 export const shifts = table(
   "shifts",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** The workplace the shift is scheduled at. */
     locationId: id("location_id").notNull(),
@@ -38,7 +38,7 @@ export const shifts = table(
     role: label("role"),
     /** The published roster version this shift belongs to; null while an unpublished draft. */
     rosterVersionId: id("roster_version_id"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason

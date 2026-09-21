@@ -2171,6 +2171,22 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**On SQLite a read taken while a write transaction is open can see uncommitted rows — OPEN (found
+2026-09-21, task F1).** The store opens ONE connection and one Drizzle instance per database file
+(`packages/store/src/index.ts`), following the flip plan's own interface rather than the slice-1
+spec's §3.3 "small set of connections for reading", because a read pool would have to route every
+read away from the write handle and no step in the plan describes that machinery. The consequence
+was measured rather than reasoned about, with a second connection to the same file as the control:
+while the write lock holds a transaction open, a read on the writer's own connection returns that
+transaction's rows — including a row a rollback then removes — where the second connection returns
+committed rows only. A second connection is what node-postgres's pool used to hand a reader, so this
+is a behaviour CHANGE, not a property SQLite forces. It is reachable in Waitron rather than
+theoretical: the write queue holds the lock across the transaction body's awaits, so the event loop
+can serve another request inside that window. Adding a read connection per file later touches
+`packages/store` and whatever routes reads, not the 1,556 `withTransaction` call sites. The full
+measurement, with the owner's options, is in the flip's pull request and in the campaign's
+`questions.md`.
+
 **The verifactu extraction's compliance-doc references — DONE (2026-09-21).** The compliance
 provenance doc now reads `@waitron/verifactu` and notes the extraction. The library's own
 follow-ups now live in the verifactu repo's own backlog (`docs/backlog.md` there), not here — the

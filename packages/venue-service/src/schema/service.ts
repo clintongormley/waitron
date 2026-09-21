@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
 import { menuItems } from "@waitron/catalogue";
 import {
   catalogues,
@@ -13,6 +13,8 @@ import {
   kitchenStations,
   label,
   locations,
+  newId,
+  nowIso,
   products,
   table,
   timeOfDay,
@@ -24,7 +26,7 @@ import {
 export const departments = table(
   "departments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
@@ -38,7 +40,7 @@ export const departments = table(
     defaultServiceMode: label("default_service_mode").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     unique("departments_location_name_key").on(t.locationId, t.name),
@@ -142,7 +144,7 @@ export const deviceZoneDefaults = table(
 export const preparationRoutes = table(
   "preparation_routes",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id"),
     categoryId: id("category_id"),
@@ -176,10 +178,22 @@ export const preparationRoutes = table(
       foreignColumns: [kitchenStations.id],
       name: "preparation_routes_station_fk",
     }),
-    check("preparation_routes_subject_ck", sql`num_nonnulls(${t.categoryId}, ${t.productId}) = 1`),
+    // Until 2026-09-21 both of these counted with `num_nonnulls(...)`, which SQLite does not have
+    // (`no such function: num_nonnulls`, measured at CREATE TABLE time). A comparison is either
+    // true or false and SQLite spells those 1 and 0, so adding them counts the same thing.
+    // Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/nonnulls.mjs, against tables
+    // carrying exactly these bodies: exactly one of the pair accepted, both refused, neither
+    // refused. The `nullif(no_preparation, false)` half survives unchanged — `flag` stores 0 or 1
+    // and SQLite reads `false` as 0, so a false flag still becomes NULL and stops counting: with a
+    // station and the flag false accepted, with a station and the flag true refused, with no
+    // station and the flag true accepted, and with neither refused.
+    check(
+      "preparation_routes_subject_ck",
+      sql`(${t.categoryId} is not null) + (${t.productId} is not null) = 1`,
+    ),
     check(
       "preparation_routes_target_ck",
-      sql`num_nonnulls(${t.stationId}, nullif(${t.noPreparation}, false)) = 1`,
+      sql`(${t.stationId} is not null) + (nullif(${t.noPreparation}, false) is not null) = 1`,
     ),
     index("preparation_routes_lookup_idx").on(t.locationId, t.zoneId, t.productId, t.categoryId),
   ],
@@ -188,7 +202,7 @@ export const preparationRoutes = table(
 export const departmentHours = table(
   "department_hours",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     departmentId: id("department_id").notNull(),
     weekday: count("weekday").notNull(),
     opensAt: timeOfDay("opens_at").notNull(),

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "@waitron/db";
+import { check, index } from "drizzle-orm/sqlite-core";
+import { id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
@@ -8,14 +8,14 @@ import { id, label, table, tsString } from "@waitron/db";
 export const totpEnrollments = table(
   "totp_enrollments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
     // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). The id comes
     // from the person row `ownPerson` read in `profile.ts`.
     personId: id("person_id").notNull(),
     encryptedSecret: label("encrypted_secret").notNull(),
     expiresAt: tsString("expires_at").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   /* v8 ignore start */
   (t) => [

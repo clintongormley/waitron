@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, primaryKey, unique } from "drizzle-orm/pg-core";
-import { count, flag, id, json, label, money, products, table } from "@waitron/db";
+import { check, foreignKey, primaryKey, unique } from "drizzle-orm/sqlite-core";
+import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
 
 export const productVariants = table(
   "product_variants",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     productId: id("product_id").notNull(),
     // Staff-facing variant name — plain text, like the product's own name.
     name: label("name").notNull(),

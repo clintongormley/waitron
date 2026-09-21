@@ -1,7 +1,21 @@
 import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  json,
+  label,
+  labelList,
+  money,
+  newId,
+  quantity,
+  rate,
+  table,
+  tsString,
+} from "./columns.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
@@ -24,15 +38,9 @@ import { tills } from "./tenants.js";
  * enumerate the regimes it may one day serve, and the module owns that
  * vocabulary.
  */
-export const fiscalState = pgEnum("fiscal_state", ["recorded", "not_applicable"]);
+export const fiscalState = enumType(["recorded", "not_applicable"]);
 
-export const tenderMethod = pgEnum("tender_method", [
-  "cash",
-  "card",
-  "voucher",
-  "transfer",
-  "other",
-]);
+export const tenderMethod = enumType(["cash", "card", "voucher", "transfer", "other"]);
 
 /**
  * The immutable commercial record of a completed sale — written once, at
@@ -60,7 +68,7 @@ export const tenderMethod = pgEnum("tender_method", [
 export const sales = table(
   "sales",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // These thunks are resolved by `drizzle-kit generate` in its own CLI process, never by
     // `vitest run`, so v8 reports them as never-invoked functions. The markers keep the explicit
     // `onDelete` rather than dropping it for coverage's sake.
@@ -93,7 +101,7 @@ export const sales = table(
     // immutable); NOT a recompute. Reporting reads this for an exact VAT summary (spec 8a).
     vatBreakdown: json<{ rate: string; base: string; tax: string }[]>("vat_breakdown").notNull(),
     locale: label("locale").notNull(),
-    invoiceLocales: label("invoice_locales").array().notNull(),
+    invoiceLocales: labelList("invoice_locales").notNull(),
     fiscalBackend: label("fiscal_backend").notNull(),
     fiscalState: fiscalState("fiscal_state").notNull(),
     // The generic-layer projection of "this sale corrects that one" — set on a
@@ -182,9 +190,26 @@ export const sales = table(
     // (link set) may be negative; an ordinary sale (link NULL) may not.
     check("sales_total_ck", sql`${t.total} >= 0 or ${t.correctsSaleId} is not null`),
     check("sales_invoice_number_ck", sql`${t.invoiceNumber} >= 1`),
-    check("sales_invoice_locales_ck", sql`array_length(${t.invoiceLocales}, 1) between 1 and 2`),
-    check("sales_locale_member_ck", sql`${t.locale} = any(${t.invoiceLocales})`),
+    // `invoice_locales` is a JSON array in a text column now, not a PostgreSQL array, so the length
+    // is read with `json_array_length` rather than `array_length(x, 1)`. What the rewrite does NOT
+    // carry: the old expression could only ever be handed a value the `text[]` column type had
+    // already accepted as an array, and this one is handed whatever text the column holds.
+    check("sales_invoice_locales_ck", sql`json_array_length(${t.invoiceLocales}) between 1 and 2`),
+    // Membership in that same list. `= any(<array>)` is a PostgreSQL array operator SQLite refuses
+    // at CREATE TABLE time (`no such function: any`, measured), and a CHECK may not hold the
+    // `json_each` subquery that would replace it — SQLite answers
+    // `subqueries prohibited in CHECK constraints`. So the membership is matched on the QUOTED
+    // token, which is exact while a locale tag carries no `"` and needs no JSON escape: measured on
+    // node:sqlite (Node v26.7.0, probe /tmp/f1-ddl-probe/arrays.mjs), `["es-ES"]` refuses `es` and
+    // accepts `es-ES`, `["es","en"]` accepts `es` and refuses `fr`, and an empty list refuses every
+    // value. The same rewrite is on `content_languages_default_ck`
+    // (`packages/catalogue/src/schema/menu.ts`).
+    check("sales_locale_member_ck", sql`instr(${t.invoiceLocales}, '"' || ${t.locale} || '"') > 0`),
     check("sales_issued_offset_ck", sql`${t.issuedOffsetMinutes} between -840 and 840`),
+    // The `fiscal_state` PostgreSQL enum TYPE refused a value outside the set on its own; the SQLite
+    // text column that replaces it does not, so the refusal is written here instead. The values are
+    // read off the column (`enumCheck`), so the vocabulary is still declared once, at `fiscalState`.
+    check("sales_fiscal_state_ck", enumCheck(t.fiscalState)),
   ],
 );
 
@@ -192,7 +217,7 @@ export const sales = table(
 export const saleLines = table(
   "sale_lines",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
     lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at sale time) — snapshotted, never read live.
@@ -275,7 +300,7 @@ export const saleLines = table(
 export const tenders = table(
   "tenders",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
     method: tenderMethod("method").notNull(),
     amount: money("amount").notNull(),
@@ -300,6 +325,11 @@ export const tenders = table(
       sql`${t.cashTendered} is null or (${t.method} = 'cash' and ${t.cashTendered} >= ${t.amount})`,
     ),
     check("tenders_tip_amount_ck", sql`${t.tipAmount} >= 0 and ${t.tipAmount} <= ${t.amount}`),
+    // The `tender_method` PostgreSQL enum TYPE refused a value outside the set on its own; the
+    // SQLite text column that replaces it does not, so the refusal is written here instead. The
+    // values are read off the column (`enumCheck`), so the vocabulary is still declared once, at
+    // `tenderMethod`.
+    check("tenders_method_ck", enumCheck(t.method)),
   ],
 );
 
@@ -313,7 +343,7 @@ export const tenders = table(
 export const saleSettlements = table(
   "sale_settlements",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     saleId: id("sale_id").notNull(),
     settledAt: tsString("settled_at").notNull(),
   },
@@ -343,7 +373,7 @@ export const saleSettlements = table(
 export const saleSubstitutions = table(
   "sale_substitutions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The F3 canje sale — the substitute.
     substitutionSaleId: id("substitution_sale_id").notNull(),
     // One substituted simplified ticket. N of these per F3.

@@ -1,5 +1,5 @@
-import { unique } from "drizzle-orm/pg-core";
-import { flag, id, label, table, tsString } from "@waitron/db";
+import { unique } from "drizzle-orm/sqlite-core";
+import { flag, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * One row per physical card reader the venue owns (SumUp/Stripe). Manager configuration, not a
@@ -11,14 +11,14 @@ import { flag, id, label, table, tsString } from "@waitron/db";
 export const cardReaders = table(
   "card_readers",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // A plain config token (the provider's id), NOT a credential.
     provider: label("provider").notNull(),
     // The provider's own opaque reference (SumUp/Stripe reader id). A public identifier, NOT a credential.
     providerRef: label("provider_ref").notNull(),
     name: label("name").notNull(),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     // Set when `active` flips false; the row is kept so historical payments still resolve a name.
     disabledAt: tsString("disabled_at"),
     // Local Enable cannot restore a registration we removed at the provider; verified adoption can.

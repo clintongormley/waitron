@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { count, id, label, table, ts } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { count, id, label, now, table, ts } from "./columns.js";
 
 /**
  * The cloud mirror's connection config (sync cloud-mirror C2b). A whole-database operational
@@ -33,7 +33,7 @@ export const mirrorConfig = table(
     // owner-role at adopt = designated.nodeId (the primary's). NOT NULL: every mirror has exactly one
     // origin; the table is empty until adopt, so the ADD COLUMN NOT NULL is safe pre-production.
     originNodeId: id("origin_node_id").notNull(),
-    adoptedAt: ts("adopted_at").notNull().defaultNow(),
+    adoptedAt: ts("adopted_at").notNull().$defaultFn(now),
   },
   /* v8 ignore start */
   (t) => [check("mirror_config_singleton_ck", sql`${t.id} = 1`)],

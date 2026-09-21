@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
-import { day, id, locations, table, tsString } from "@waitron/db";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  day,
+  enumCheck,
+  enumType,
+  id,
+  locations,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -19,11 +29,7 @@ import { persons } from "@waitron/identity";
  * three values are settled, and one declaration yields both the TypeScript union and the DB
  * constraint.
  */
-export const rosterVersionStatus = pgEnum("roster_version_status", [
-  "draft",
-  "published",
-  "superseded",
-]);
+export const rosterVersionStatus = enumType(["draft", "published", "superseded"]);
 
 /**
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
@@ -44,7 +50,7 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
 export const rosterVersions = table(
   "roster_versions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** The workplace this schedule covers. */
     locationId: id("location_id").notNull(),
     /** First day of the scheduled period, inclusive. */
@@ -59,7 +65,7 @@ export const rosterVersions = table(
      * only writer. */
     publishedByPersonId: id("published_by_person_id"),
     status: rosterVersionStatus("status").notNull().default("draft"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
@@ -98,5 +104,9 @@ export const rosterVersions = table(
       "roster_versions_publish_shape_ck",
       sql`(${t.status} = 'draft') = (${t.publishedAt} is null)`,
     ),
+    // The refusal the PostgreSQL enum TYPE performed, put back as a constraint: the SQLite column
+    // is plain text and refuses nothing on its own (see enumText in
+    // packages/db/src/schema/columns.ts).
+    check("roster_versions_status_ck", enumCheck(t.status)),
   ],
 );

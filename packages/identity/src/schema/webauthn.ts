@@ -1,5 +1,5 @@
-import { foreignKey, index, unique } from "drizzle-orm/pg-core";
-import { bigCount, id, label, table, tsString } from "@waitron/db";
+import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { bigCount, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -12,7 +12,7 @@ import { persons } from "./persons.js";
 export const webauthnCredentials = table(
   "webauthn_credentials",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** The credential id the authenticator returned, base64url. Unique, so a login lookup resolves
      * exactly one credential; `credential_id` is the seam the verifier keys on. */
@@ -26,7 +26,7 @@ export const webauthnCredentials = table(
     counter: bigCount("counter").notNull().default(0),
     /** JSON array string of the authenticator's transports ("usb", "internal", …), optional. */
     transports: label("transports"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk form makes v8 count a
@@ -56,10 +56,10 @@ export const webauthnCredentials = table(
  * future follow-up).
  */
 export const webauthnChallenges = table("webauthn_challenges", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   /** null for a login (discoverable) ceremony — the person is resolved from the returned
    * credential, not known when the challenge is minted. */
   personId: id("person_id"),
   challenge: label("challenge").notNull(),
-  createdAt: tsString("created_at").notNull().defaultNow(),
+  createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
 });

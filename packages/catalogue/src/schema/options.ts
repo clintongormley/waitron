@@ -1,5 +1,5 @@
-import { foreignKey, index } from "drizzle-orm/pg-core";
-import { count, flag, id, json, label, table } from "@waitron/db";
+import { foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, flag, id, json, label, newId, table } from "@waitron/db";
 
 /** A reusable, named list of labels the diner picks exactly one of — a kitchen instruction, not a
  * priced thing. Each list and each label carries three names (staff, customer-facing, kitchen),
@@ -13,7 +13,7 @@ import { count, flag, id, json, label, table } from "@waitron/db";
  * them on the till is Task 12 of
  * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. */
 export const optionLists = table("option_lists", {
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   // Staff-facing list name — plain text, like the product's own name.
   name: label("name").notNull(),
   // Customer-facing translated name; null or a blank entry means "use `name`".
@@ -38,7 +38,7 @@ export const optionLists = table("option_lists", {
 export const optionLabels = table(
   "option_labels",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     listId: id("list_id").notNull(),
     name: label("name").notNull(),
     customerName: json<Record<string, string>>("customer_name"),

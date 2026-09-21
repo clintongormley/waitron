@@ -1,6 +1,19 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, flag, id, label, locations, nodes, table, tills, tsString } from "@waitron/db";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  flag,
+  id,
+  label,
+  locations,
+  newId,
+  nodes,
+  table,
+  tills,
+  tsString,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -9,13 +22,7 @@ import { persons } from "@waitron/identity";
  * an existing row (the immutability floor forbids UPDATE/DELETE), it APPENDS a `correction` entry
  * that carries the corrected timestamp and points at the entry it supersedes via `corrects_entry_id`.
  */
-export const workforceEntryKind = pgEnum("workforce_entry_kind", [
-  "in",
-  "out",
-  "break_start",
-  "break_end",
-  "correction",
-]);
+export const workforceEntryKind = enumType(["in", "out", "break_start", "break_end", "correction"]);
 
 /**
  * A correction's lifecycle, append-only like everything else in this table. A `requested` correction
@@ -24,10 +31,7 @@ export const workforceEntryKind = pgEnum("workforce_entry_kind", [
  * forbids that — it is a SECOND append (see WorkforceBackend.approveCorrection), so the request row
  * stays visible in history beside the approval.
  */
-export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
-  "requested",
-  "approved",
-]);
+export const workforceCorrectionStatus = enumType(["requested", "approved"]);
 
 /**
  * The single append-only stream of clock events — the working-time record floor (art. 34.9).
@@ -48,7 +52,7 @@ export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
 export const timeEntries = table(
   "time_entries",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** The workplace the event was captured at — the site the Inspección scopes to. */
     locationId: id("location_id").notNull(),
@@ -169,8 +173,14 @@ export const timeEntries = table(
     // full chain key (node, location), so two nodes at one location never collide across a
     // promotion.
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
-    // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`.
-    check("time_entries_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
+    // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`,
+    // including the rewrite away from `~ '^[0-9A-F]{64}$'` and the NUL gap that rewrite does not
+    // carry — the measurement is stated once, over that constraint in
+    // packages/fiscal-verifactu/src/schema/registros.ts.
+    check(
+      "time_entries_entry_hash_ck",
+      sql`length(${t.entryHash}) = 64 and ${t.entryHash} not glob '*[^0-9A-F]*'`,
+    ),
     check("time_entries_sequence_no_ck", sql`${t.sequenceNo} > 0`),
     // Exactly one chain shape, mirroring the fiscal `registros_encadenamiento_ck`: the genesis entry
     // carries no predecessor, every later entry carries one. `is_first_entry` and `prev_entry_hash`
@@ -186,17 +196,43 @@ export const timeEntries = table(
     // would recompute to a different hash and read as tampered — a false `hash_mismatch` on genuine
     // data. `appendToChain` truncates to whole seconds at the write choke point (../chain.ts); this
     // CHECK backstops any writer that bypasses it (the escape-or-validate ethos, CLAUDE.md §3).
+    //
+    // Replaced 2026-09-21, when the engine changed: this was
+    // `date_trunc('second', event_at) = event_at`, and `date_trunc` does not exist on SQLite (`no
+    // such function: date_trunc`, measured on node:sqlite, Node v26.7.0). The whole 24-character
+    // shape is pinned by a glob instead — `truncateToWholeSecond` (../chain.ts) writes
+    // `new Date(...).toISOString()`, which is always exactly that form, UTC and whole-second.
+    // It is NOT a like-for-like swap, in both directions, measured the same day on both engines:
+    //   - Stronger, deliberately. The column was `timestamp with time zone` and refused a
+    //     non-timestamp itself; a SQLite text column refuses nothing, so this check is now the only
+    //     thing saying the value is a timestamp at all. On node:sqlite it refuses
+    //     `2026-09-21T10:00:00.250Z` (the sub-second value the old check existed for),
+    //     `2026-09-21T10:00:00Z`, `2026-09-21T10:00:00.000+02:00`, `2026-09-21 10:00:00.000Z` and
+    //     `not a timestamp`. Same move as `enumCheck` above: put the lost refusal back.
+    //   - Weaker in one way: a glob does not parse a date, so it does not carry calendar validity.
+    //     `2026-02-31T10:00:00.000Z` is ACCEPTED here; on PGlite the old column refused it with
+    //     `22008 date/time field value out of range`.
     check(
       "time_entries_event_at_second_ck",
-      sql`date_trunc('second', ${t.eventAt}) = ${t.eventAt}`,
+      sql`${t.eventAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,
     ),
     // Same whole-second defence for `recorded_at`: it is hashed as the instant and read back at second
     // precision (`to_char(… 'HH24:MI:SS')`), so a stored sub-second component would recompute to a
     // different hash. `appendToChain` truncates at the write choke point; this CHECK backstops it,
     // mirroring `time_entries_event_at_second_ck`.
+    // Same rewrite, and the same two differences from what it replaced, as
+    // time_entries_event_at_second_ck above — the measurement is stated once there. `recorded_at`
+    // is written by the same `new Date(...).toISOString()` shape in `appendToChain`.
     check(
       "time_entries_recorded_at_second_ck",
-      sql`date_trunc('second', ${t.recordedAt}) = ${t.recordedAt}`,
+      sql`${t.recordedAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,
     ),
+    // The two refusals the PostgreSQL enum TYPES performed, put back as constraints: both columns
+    // are plain text on SQLite and refuse nothing on their own (see enumText in
+    // packages/db/src/schema/columns.ts). `correction_status` is nullable on a base event, which
+    // this shape still admits — measured 2026-09-21 on node:sqlite (Node v26.7.0), a NULL inserted
+    // against `check (v in ('requested','approved'))` is ACCEPTED and `'other'` is refused.
+    check("time_entries_entry_kind_ck", enumCheck(t.entryKind)),
+    check("time_entries_correction_status_ck", enumCheck(t.correctionStatus)),
   ],
 );

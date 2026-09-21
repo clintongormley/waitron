@@ -1,18 +1,24 @@
-import { pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, table, tsString } from "./columns.js";
+import { check, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  json,
+  label,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "./columns.js";
 
 /**
  * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
  * values MUST equal `FORM_FACTORS` in `packages/layouts/src/canvas.ts`; @waitron/layouts owns the
- * type, this pgEnum is the storage. A pgEnum, not a text CHECK, matching the repo precedent
- * (device_kind, working_order_status): adding a form factor is an `ALTER TYPE`, a deliberate change.
+ * type, this declaration is the storage. What refuses a value outside the set is the
+ * `device_profiles_form_factor_ck` constraint below, built from this same array by `enumCheck`.
  */
-export const deviceFormFactorEnum = pgEnum("device_form_factor", [
-  "till",
-  "phone-portrait",
-  "tablet-landscape",
-  "kds",
-]);
+export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-landscape", "kds"]);
 
 /**
  * A reusable DEVICE PROFILE (design 2026-09-05 §5.1): the binding bundle a device uses — a name, a
@@ -32,7 +38,7 @@ export const deviceFormFactorEnum = pgEnum("device_form_factor", [
 export const deviceProfiles = table(
   "device_profiles",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
     canvasId: id("canvas_id"),
@@ -42,8 +48,13 @@ export const deviceProfiles = table(
     // write. Added --custom (snapshot-less) so `db:generate` never proposes dropping the module-owned
     // `bookings` table it still carries in the core snapshot chain.
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
-  (t) => [unique("device_profiles_tenant_name_key").on(t.name)],
+  (t) => [
+    unique("device_profiles_tenant_name_key").on(t.name),
+    // The values are read off the column itself (`enumCheck`), so the vocabulary is declared once,
+    // in `deviceFormFactorEnum` above.
+    check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
+  ],
 );

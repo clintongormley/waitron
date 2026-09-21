@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { count, label, table, ts } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { count, label, now, table, ts } from "./columns.js";
 
 /**
  * One row, id pinned to 1 — see 0001_db_baseline_sql.sql for why a second row must be impossible.
@@ -48,7 +48,7 @@ export const deployment = table(
     // drizzle has no pg_lsn type — safe only because this table is outside the schema barrel, so no
     // snapshot diff is derived from this declaration (see the header).
     fenceLsn: label("fence_lsn"),
-    stampedAt: ts("stamped_at").notNull().defaultNow(),
+    stampedAt: ts("stamped_at").notNull().$defaultFn(now),
   },
   /* v8 ignore start */
   (t) => [

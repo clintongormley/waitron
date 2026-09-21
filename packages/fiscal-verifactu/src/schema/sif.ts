@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, id, label, nodes, table, ts } from "@waitron/db";
+import { check, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { count, id, label, newId, nodes, now, table, ts } from "@waitron/db";
 
 /**
  * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
@@ -15,7 +15,7 @@ import { count, id, label, nodes, table, ts } from "@waitron/db";
 export const registroSif = table(
   "registro_sif",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The node this SIF identity belongs to (node-id rekey, 2026-08-03: was `till_id`; the SIF IS
     // the node — #33). Plain one-argument FK.
     nodeId: id("node_id")
@@ -26,7 +26,7 @@ export const registroSif = table(
     nif: label("nif").notNull(),
     idSistemaInformatico: label("id_sistema_informatico").notNull(),
     numeroInstalacion: count("numero_instalacion").notNull(),
-    registradoEn: ts("registrado_en").notNull().defaultNow(),
+    registradoEn: ts("registrado_en").notNull().$defaultFn(now),
     revocadoEn: ts("revocado_en"),
   },
   // See cadenas.ts's identical comment: this extraConfig callback is invoked lazily, only by

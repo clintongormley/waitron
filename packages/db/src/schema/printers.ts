@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum } from "drizzle-orm/pg-core";
-import { count, flag, id, label, table } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { count, enumCheck, enumType, flag, id, label, newId, table } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -9,30 +9,26 @@ import { locations } from "./tenants.js";
  * (ESC/POS over TCP:9100) is keyed on `host`. Any agent serving the venue drives whichever devices it
  * can currently see — the binding is discovered at run time, not stored. `cloud_poll` (Star CloudPRNT
  * / Epson Server Direct Print — the printer firmware dials out and polls for jobs) is carried in the
- * enum FROM DAY ONE, its adapter a fast-follow (§3e): an additive enum value already present is a
- * config choice later, not a destructive migration. A pgEnum, not a text check, matching
- * `order_flow`'s precedent.
+ * vocabulary FROM DAY ONE, its adapter a fast-follow (§3e): an additive value already present is a
+ * config choice later, not a destructive migration. One `enumType` declaration, matching
+ * `order_flow`'s precedent: the values are written once here and reach the database as this table's
+ * `printers_transport_ck`.
  */
-export const printTransport = pgEnum("print_transport", [
-  "usb",
-  "network_tcp",
-  "bluetooth",
-  "cloud_poll",
-]);
+export const printTransport = enumType(["usb", "network_tcp", "bluetooth", "cloud_poll"]);
 
 /**
  * What a printer prints, for the KDS station→printer routing Slice B consumes (§2b). `station`
  * (default): one ticket per kitchen station. `order`: one ticket per whole order. Carried now, read
- * by Slice B — a pgEnum matching the `bump_mode`/`fire_control_mode` precedent.
+ * by Slice B — one `enumType` declaration matching the `bump_mode`/`fire_control_mode` precedent.
  */
-export const printTicketScope = pgEnum("print_ticket_scope", ["station", "order"]);
+export const printTicketScope = enumType(["station", "order"]);
 
 /** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm (design 2026-09-14). */
-export const printPaperWidth = pgEnum("print_paper_width", ["58mm", "80mm"]);
+export const printPaperWidth = enumType(["58mm", "80mm"]);
 /** The print head's dot density; it sets the QR dot size for the legal 30-40 mm. */
-export const printResolution = pgEnum("print_resolution", ["180dpi", "203dpi"]);
+export const printResolution = enumType(["180dpi", "203dpi"]);
 /** The character table the printer is switched to, so accents and the euro sign print correctly. */
-export const printCharacterSet = pgEnum("print_character_set", ["wpc1252", "pc858", "plain"]);
+export const printCharacterSet = enumType(["wpc1252", "pc858", "plain"]);
 
 /**
  * A managed PRINTER (§2b) — central config, distributed execution. All config lives centrally (the one
@@ -52,7 +48,7 @@ export const printCharacterSet = pgEnum("print_character_set", ["wpc1252", "pc85
 export const printers = table(
   "printers",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id")
       .notNull()
       /* v8 ignore start */
@@ -86,5 +82,12 @@ export const printers = table(
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: flag("active").notNull().default(true),
   },
-  (t) => [check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`)],
+  (t) => [
+    check("printers_transport_ck", enumCheck(t.transport)),
+    check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),
+    check("printers_paper_width_ck", enumCheck(t.paperWidth)),
+    check("printers_resolution_ck", enumCheck(t.resolution)),
+    check("printers_character_set_ck", enumCheck(t.characterSet)),
+    check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`),
+  ],
 );

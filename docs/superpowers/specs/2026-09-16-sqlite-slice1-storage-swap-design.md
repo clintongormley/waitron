@@ -176,8 +176,14 @@ Established by running them, on 2026-09-16, on Node v26.7.0 with `drizzle-orm@0.
   `BEGIN`/`COMMIT` around Drizzle statements (the shape §4's queue uses), and **Drizzle's migration
   runner**, which created `__drizzle_migrations`, applied a migration and was a no-op on a second run.
   The adapter needs two things beyond the obvious: Drizzle's raw-array mode maps onto
-  `setReturnArrays`, and the migrator calls a `transaction(fn)` method on the client, which the
-  adapter supplies as explicit `BEGIN`/`COMMIT`/`ROLLBACK`.
+  `setReturnArrays`, and the client must carry a transaction wrapper, which the adapter supplies as
+  explicit `BEGIN`/`COMMIT`/`ROLLBACK`. _Corrected 2026-09-21 while building that adapter: this
+  sentence used to say the MIGRATION RUNNER calls a `transaction(fn)` method. It does not —
+  `SQLiteSyncDialect.migrate` sends its own `BEGIN` through the session. The caller is the
+  user-facing `db.transaction(...)`, and it does not CALL the wrapper, it INDEXES it by SQLite
+  transaction mode (`nativeTx[config.behavior ?? "deferred"](tx)`,
+  `drizzle-orm/better-sqlite3/session.js:40`), so the wrapper carries one property per mode rather
+  than being one function._
 - **`node:sqlite` is stable on Node 26**, not experimental: importing it on v26.7.0 emits no warning.
 - **Both drivers bundle the same SQLite**, 3.53.4.
 
@@ -200,8 +206,13 @@ dependencies, not speed**, and the scan case is the only one where it costs anyt
 **Feature differences that matter here.** `node:sqlite` has no `.backup()`, no `.pragma()` helper and
 no `.transaction()` helper; none is needed — archiving uses `VACUUM INTO` (§6.4), pragmas are plain
 statements, and slice 1 writes its own transaction handling anyway (§4). Raw driver access returns a
-blob as a `Uint8Array` rather than a `Buffer`, but a Drizzle-mapped blob column returns a `Buffer` on
-both, so this only reaches code that bypasses Drizzle. `node:sqlite` additionally carries SQLite's
+blob as a `Uint8Array` rather than a `Buffer`. Drizzle's OWN `blob(name, { mode: "buffer" })` column
+converts that back to a `Buffer` — measured 2026-09-21 through a real file, `Buffer.isBuffer` true —
+so for that column the driver difference does not reach a caller. _Corrected the same day: this
+sentence used to stop there, and it was about to be read as the answer to what this repository's
+`binary` columns hand back. They are not Drizzle's blob. `binary` is a private custom type in
+`packages/db/src/schema/columns.ts`, and on BOTH engines it hands callers a plain `Uint8Array` —
+measured on SQLite in the same run, `Buffer.isBuffer` false._ `node:sqlite` additionally carries SQLite's
 session and changeset extension, which `better-sqlite3` does not; slices 2–5 use Litestream and do not
 need it, and it is noted here only so nobody rediscovers it as an argument later.
 
@@ -267,8 +278,12 @@ B threw: cannot start a transaction within a transaction
 rows after A rolled back and B committed: []
 ```
 
-The second transaction could not begin, and the first one's rollback destroyed the row the second had
-already inserted. **The control in the other direction**, the same two transactions run one after the
+The second transaction never inserted anything: its `begin immediate` was refused, which is the line
+the run prints, and the empty table afterwards is the FIRST transaction's own row being rolled back.
+_Corrected 2026-09-21, measured again during the flip with a control that empties the table: this
+paragraph used to say the second transaction had already inserted its row and the first one's
+rollback destroyed it. The printed output above never supported that; the misreading was in this
+prose alone._ **The control in the other direction**, the same two transactions run one after the
 other:
 
 ```
@@ -347,8 +362,10 @@ reports exactly what the vocabulary could not hide, and only then rolls out to t
 ### 5.2 Migrations
 
 **Every migration set regenerates as one fresh baseline.** Waitron is pre-production and schema changes
-drop and recreate (CLAUDE.md §3), so there is no history to preserve. Twelve sets regenerate; core's 38
-files collapse into one.
+drop and recreate (CLAUDE.md §3), so there is no history to preserve. Core's 38 files collapse into
+one. The number of sets is a property to read off the tree
+(`find packages apps -name drizzle.config.ts -not -path '*/node_modules/*'`), not a number to
+remember: this paragraph said twelve, and on 2026-09-21 the answer was thirteen.
 
 This also disposes of a trap rather than carrying it across: CLAUDE.md §3 records that the core journal
 is in a shape no edit repairs, because Drizzle picks what to apply from `max(created_at)` alone, so a
@@ -553,7 +570,8 @@ P1 and P2 are large but mechanical, and both split per package into several pull
 ### The flip — one pull request, and it cannot be smaller
 
 `packages/store`; the transaction helper and its write queue; the vocabulary bodies switched to
-SQLite; twelve migration sets regenerated as one baseline each; the two-file split and its
+SQLite; every migration set regenerated as one baseline each (thirteen on 2026-09-21, where this
+spec said twelve); the two-file split and its
 cross-file foreign-key guard; the append-only triggers as `RAISE(ABORT)`; `VACUUM INTO` archiving
 replacing the `pg_dump` path; `asAppUser` reduced to a no-op; the test helper's body switched; the 66
 PostgreSQL-only tests converted or deleted. Depends on every prepare item. **Owner review.**
