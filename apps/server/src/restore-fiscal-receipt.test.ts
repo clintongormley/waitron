@@ -32,14 +32,14 @@ import { restoreDatabase } from "./restore.js";
  * refused. `docs/handoffs/2026-09-21-f1-step25-disposition.md` says this must be REBUILT rather
  * than retired, and all five are reachable on this engine.
  *
- * WHAT IT DOES NOT COVER, stated so nobody assumes it. **The product installs no append-only
- * trigger on its own boot path today** — `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`)
- * is called from nowhere in `apps/` or `packages/` outside those packages' own tests, and
- * `docs/handoffs/2026-09-21-f1-the-flip.md` → "STILL OPEN" names the step that owes the wiring.
- * (The `appendOnly` helper's own comment in `packages/sync-enrolment/src/classification.ts` says
- * `applyMigrations` installs them; on this tree `packages/migrations/src/apply.ts` says in as many
- * words that it does not.) So this suite installs the pair itself, with the text that installer
- * emits, copied rather than imported because `apps/server` does not depend on `@waitron/store`.
+ * WHY THIS SUITE INSTALLS THE TRIGGERS ITSELF, stated so nobody reads it as a claim about the
+ * product. The product's own migrating paths DO carry them — `applyMigrations` installs the pair
+ * per set (`packages/migrations/src/apply.ts:105`). This database is not one of those: `useVenueDb`
+ * migrates with `runMigrations` (`packages/db/src/testing/venue-db.ts:168`), which hands drizzle
+ * only a folder and a table name (`packages/db/src/migrate.ts:37-40`) and never reaches the
+ * installer — so a `useVenueDb` database carries no append-only trigger unless its `setup` puts one
+ * there. Hence the pair below, with the text the installer emits, copied rather than imported
+ * because `apps/server` does not depend on `@waitron/store`.
  * What the INSTALLER produces is pinned by `scripts/append-only-triggers.test.ts`; what is pinned
  * HERE is the restore — and the "present in the copy" assertion below compares the copy's whole
  * trigger set against the SOURCE's rather than against a hand-written list, so it says the same
