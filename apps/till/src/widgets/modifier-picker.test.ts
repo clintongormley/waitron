@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
@@ -131,7 +132,11 @@ const sandwich: TillProduct = {
   offeredModifiers: [breadList],
 };
 
-afterEach(() => {
+/** The size the runner started at — a test that resizes the iframe hands it back here. */
+const viewport = { width: window.innerWidth, height: window.innerHeight };
+
+afterEach(async () => {
+  await page.viewport(viewport.width, viewport.height);
   cleanupWidgets();
   if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
   if (vi.isMockFunction(history.replaceState)) vi.mocked(history.replaceState).mockRestore();
@@ -628,6 +633,117 @@ describe("till-modifier-picker", () => {
         variantKitchenName: "SGL",
         unitPrice: "1.75",
       });
+    });
+  });
+
+  describe("what blocks Add reads as more than body copy", () => {
+    /** Computed style of the first element matching `selector` inside the picker. */
+    function styleOf(picker: TillModifierPicker, selector: string): CSSStyleDeclaration {
+      return getComputedStyle(picker.shadowRoot!.querySelector<HTMLElement>(selector)!);
+    }
+
+    it("sets the per-list counter apart from the item names beside it", async () => {
+      const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+      const counter = styleOf(picker, ".selected-total");
+      const name = styleOf(picker, ".option-name");
+      expect(counter.color).not.toBe(name.color);
+      expect(parseFloat(counter.fontSize)).toBeLessThan(parseFloat(name.fontSize));
+      // A paragraph with no rule of its own keeps the user agent's 1em margins, which is also the
+      // only em-derived spacing this file would carry.
+      expect(counter.marginTop).toBe("0px");
+    });
+
+    it("marks an options list with nothing to choose as a refusal, not as prose", async () => {
+      const empty: TillProduct = {
+        ...burger,
+        offeredModifiers: [extrasList, { ...cookedList, defaultLabelId: null, labels: [] }],
+      };
+      const { picker } = await openPicker(empty, "Burger", new WorkingOrderStore());
+      expect(addButton(picker).disabled).toBe(true);
+      const alert = styleOf(picker, '[role="alert"]');
+      const name = styleOf(picker, ".option-name");
+      expect(alert.color).not.toBe(name.color);
+      expect(Number(alert.fontWeight)).toBeGreaterThan(Number(name.fontWeight));
+    });
+
+    it("marks a pick the dish no longer offers as a refusal, not as prose", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        initialSelections: {
+          extras: [
+            { listId: "list-extras", productId: "p-gone", name: "Ido", price: "1.00", quantity: 1 },
+          ],
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
+        },
+      });
+      expect(addButton(el).disabled).toBe(true);
+      const alert = styleOf(el, '[role="alert"]');
+      const name = styleOf(el, ".option-name");
+      expect(alert.color).not.toBe(name.color);
+      expect(Number(alert.fontWeight)).toBeGreaterThan(Number(name.fontWeight));
+    });
+  });
+
+  describe("reaching the actions", () => {
+    /** A dish with the lists a real burger carries — six extras and four cooking points. Its body is
+     * taller than a phone screen, which is the case the actions have to survive. */
+    const loadedBurger: TillProduct = {
+      ...burger,
+      offeredModifiers: [
+        {
+          ...(extrasList as OfferedModifier & { kind: "extras" }),
+          items: [
+            offeredItem("p-bacon", "Bacon", "1.50"),
+            offeredItem("p-cheese", "Queso", "1.00", 3),
+            offeredItem("p-egg", "Huevo", "1.20"),
+            offeredItem("p-onion", "Cebolla caramelizada", "0.80"),
+            offeredItem("p-jalapeno", "Jalapenos", "0.60"),
+            offeredItem("p-avocado", "Aguacate", "1.80"),
+          ],
+          maxPicks: 6,
+        },
+        {
+          ...(cookedList as OfferedModifier & { kind: "options" }),
+          labels: [
+            ...(cookedList as OfferedModifier & { kind: "options" }).labels,
+            {
+              id: "label-well",
+              name: "Muy hecha",
+              customerName: { es: "Muy hecha carta" },
+              kitchenName: "Muy hecha KDS",
+              available: true,
+            },
+            {
+              id: "label-blue",
+              name: "Vuelta y vuelta",
+              customerName: { es: "Vuelta y vuelta carta" },
+              kitchenName: "Vuelta y vuelta KDS",
+              available: true,
+            },
+          ],
+        },
+      ],
+    };
+
+    /** Both viewports are measured with `page.viewport`, which resizes the iframe the components
+     * actually render in; `commands.setViewportSize` resizes the outer page and leaves the iframe
+     * at its default, so a width claim taken through it measures nothing (testing-guide.md). Each
+     * case reads `window.innerWidth` back before it asserts anything about a layout. */
+    it.each([
+      [390, 844],
+      [1024, 768],
+    ])("keeps Cancel and Add on screen at %ix%i", async (width, height) => {
+      await page.viewport(width, height);
+      const { picker } = await openPicker(loadedBurger, "Burger", new WorkingOrderStore());
+      expect(window.innerWidth).toBe(width);
+      expect(window.innerHeight).toBe(height);
+      const confirm = addButton(picker).getBoundingClientRect();
+      const cancel = picker
+        .shadowRoot!.querySelector<HTMLElement>(".cancel")!
+        .getBoundingClientRect();
+      expect(confirm.bottom).toBeLessThanOrEqual(height);
+      expect(cancel.bottom).toBeLessThanOrEqual(height);
+      expect(confirm.top).toBeGreaterThanOrEqual(0);
     });
   });
 

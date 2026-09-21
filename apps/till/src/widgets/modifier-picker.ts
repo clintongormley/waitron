@@ -59,6 +59,24 @@ export class TillModifierPicker extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* The per-list counter reads OUT the list's state; it is not another choice in it. A size down
+         and muted keeps the eye walking the item names from stopping on it. Without a rule of its own
+         a <p> also keeps the user agent's 1em margins, which is em-derived spacing no token governs. */
+      .selected-total {
+        margin: 0 0 var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      /* A refusal is the reason Add is shut, so it has to be what the operator's eye lands on: the
+         emphasis the basket gives .allergen-pending, in the danger colour because this one stops the
+         dish being added rather than cautioning about it. */
+      .refusal {
+        margin: 0 0 var(--wt-space-3);
+        color: var(--wt-color-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .option {
         display: flex;
         align-items: center;
@@ -364,7 +382,11 @@ export class TillModifierPicker extends LitElement {
 
   override render() {
     const stale = this.#stalePicks();
-    return html`<wt-dialog
+    // wt-MODAL, not wt-dialog: the body scrolls inside the frame and the footer keeps its own row, so
+    // Add and Cancel stay on screen however many lists a dish offers. The design system draws that
+    // line — wt-modal for an add or edit form, wt-dialog for a compact confirmation
+    // (docs/developers/design-system.md) — and this is the till's add-a-dish form.
+    return html`<wt-modal
       .open=${true}
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#cancel(event)}
@@ -397,7 +419,10 @@ export class TillModifierPicker extends LitElement {
         entry.kind === "extras" ? this.#renderExtras(entry) : this.#renderOptions(entry),
       )}
       ${stale.map(
-        (extra) => html`<p role="alert">${extra.name}: ${t("modifier.selection_changed")}</p>`,
+        (extra) =>
+          html`<p class="refusal" role="alert">
+            ${extra.name}: ${t("modifier.selection_changed")}
+          </p>`,
       )}
       ${
         this.initialSelections !== undefined
@@ -430,7 +455,7 @@ export class TillModifierPicker extends LitElement {
       >
         ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
       </wt-button>
-    </wt-dialog>`;
+    </wt-modal>`;
   }
 
   /** One extras list: its items at their resolved prices, bounded by the list's own allowance. */
@@ -537,7 +562,9 @@ export class TillModifierPicker extends LitElement {
         )}
         ${
           list.labels.length === 0
-            ? html`<p role="alert">${list.name}: ${t("modifier.unavailable_choices")}</p>`
+            ? html`<p class="refusal" role="alert">
+                ${list.name}: ${t("modifier.unavailable_choices")}
+              </p>`
             : nothing
         }
       </fieldset>
