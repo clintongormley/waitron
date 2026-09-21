@@ -3052,8 +3052,9 @@ whole, and it locks only the one table the caller names. That narrowing is not a
 — `app_user` is granted `select, insert` alone on `registros_facturacion`, so PostgreSQL refuses an
 unnarrowed `for update` over the drain's join with `42501`. The rule and its case live on
 `claimLockedRows`; the case is in `packages/db/src/job-claim.test.ts`, which runs the refused form
-first as a control. What holds it for the drain's own join is a deletion control recorded at the
-call site in `packages/fiscal-verifactu/src/drain.ts`. The steps below are left as they
+first as a control. What holds it for the drain's own two tables is a second case,
+`drain.test.ts`'s "refuses the same selection when the lock is not narrowed", which runs the join
+both ways round against the real migrations; the drain's call site points at it. The steps below are left as they
 were written.
 
 The same change for `packages/fiscal-verifactu/src/drain.ts`. Separate because a mistake here delays or duplicates a filing to the tax agency.

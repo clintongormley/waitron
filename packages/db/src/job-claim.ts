@@ -60,10 +60,10 @@ export interface ClaimSpec {
  * leaving the conditional update as the whole mechanism — under the write queue one transaction
  * writes at a time, so there are no locked rows to skip
  * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 16). Keeping the clause
- * here means that step edits this module rather than each caller. What still spells the clause
- * outside it is only ever a suite, never a caller: two hold a row against the claim under test
- * (`packages/payments/src/forward.concurrency.test.ts` and this module's `job-claim.pg.test.ts`),
- * and one runs the clause as a control it expects to be refused (`job-claim.test.ts`).
+ * here means that step edits this module rather than each caller. The clause is still spelled
+ * outside it, but only ever by a suite and never by a caller — some hold a row against the claim
+ * under test, others run it as a control they expect to be refused. Grep rather than trust a list
+ * here: this sentence has carried a count twice and been wrong both times.
  */
 export async function claimRows<Row extends Record<string, unknown>>(
   tx: Transaction,

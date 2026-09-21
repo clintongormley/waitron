@@ -246,8 +246,10 @@ describe("claiming job rows against another session", () => {
 
     // The negative control for this case, measured 2026-09-21: with `skip locked` deleted from
     // `claimLockedRows` alone, it fails on the 30s test timeout — which IS the waiting the clause
-    // exists to avoid. It is the last case in the file, so it takes nothing down with it; what it
-    // does park is the per-test reset, which then hits its own 120s hook timeout.
+    // exists to avoid, and it then parks the per-test reset on its own 120s hook timeout. On the
+    // day it was measured another case followed it and went down with it; it is the file's last
+    // case now, so there is nothing left for it to take — that part is a deduction from the shape
+    // of the file, not something that was run again.
     const pending = (limit: number) => ({
       selection: sql`select j.position from probe_jobs j
         where j.status = 'pending' order by j.position limit ${limit}`,

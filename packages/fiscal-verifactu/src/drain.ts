@@ -552,8 +552,9 @@ async function claimBatch(
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   // `of: "e"` locks the envío rows alone, and this join is why the helper takes that parameter at
   // all: `app_user` may read `registros_facturacion` and never write it, so a lock this claim did
-  // not narrow would be refused `42501`. Held on this exact selection, both ways round, by
-  // `drain.test.ts`'s "refuses the same selection when the lock is not narrowed".
+  // not narrow would be refused `42501`. Held over these same two tables and this same join, both
+  // ways round, by `drain.test.ts`'s "refuses the same selection when the lock is not narrowed" —
+  // which runs a shorter select list and predicate, since the refusal turns on the join alone.
   const rows = await claimLockedRows<DueRow>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e
@@ -607,12 +608,15 @@ async function claimBatch(
     // Named by id alone, with no `and estado = 'pendiente'` of its own — the SELECT above already
     // applied that, and these ids came from it. The distinction `claimRows`' doc comment draws
     // between a caller whose predicate excludes the state it stamps and one whose does not puts
-    // this drainer in the first group: a second drainer that runs its SELECT after this
-    // transaction commits cannot see these rows again, because they are no longer `pendiente`.
-    // What the lock covers is the window before that commit, where READ COMMITTED would still
-    // show them as `pendiente` to somebody else. Task F1 removes the lock and closes that window
-    // a different way — the write queue admits one writer at a time, so there is no second
-    // drainer inside it.
+    // this drainer in the first group: while these rows are `enviando` a second drainer's SELECT
+    // does not match them at all. Only for as long as they stay that way, though — both
+    // `recoverStaleClaims` above and `backoffBatch` below deliberately set them back to
+    // `pendiente`, which is how an abandoned claim becomes somebody else's work. What the lock
+    // covers is the window before this transaction commits, where READ COMMITTED would still show
+    // them as `pendiente` to somebody else. Task F1 removes the lock, and what would close that
+    // window instead is the write queue admitting one writer at a time — a reading of that plan
+    // rather than a line in it (`claimLock`'s own paragraph in @waitron/db says the same), so
+    // decide it deliberately when the step runs.
     await tx.execute(sql`
       update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
