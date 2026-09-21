@@ -275,7 +275,9 @@ export async function insertShiftSwap(
  * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
  *
  * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry;
- * both a `Database` (BEGIN) and a `Transaction` (SAVEPOINT) expose `.transaction()`, so this
+ * both a `Database` and a `Transaction` expose `.transaction()` — and which statement that becomes
+ * is the connection's business, not the handle's: the adapter emits SAVEPOINT when a transaction is
+ * already open and BEGIN when none is (`packages/store/src/node-sqlite-adapter.ts`), so this
  * fixture works whether a suite hands it a connection or a live tx. The head lock this note also
  * named is gone — `selectHead` (src/chain.ts) says why. */
 export async function insertTimeEntry(

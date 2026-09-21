@@ -77,8 +77,9 @@ export async function recordDailyClose(
   );
 
   // 6. Append the immutable row inside a savepoint. A second close of the same day trips
-  //    daily_closes_business_day_key (23505) → close.already_closed; the savepoint confines that abort
-  //    to the failed insert so the caller's enclosing transaction is not poisoned by it.
+  //    daily_closes_business_day_key → close.already_closed; the savepoint confines that attempt's
+  //    writes to the attempt. What it no longer has to do is keep the enclosing transaction usable
+  //    — insertClose says why.
   const id = await insertClose(tx, {
     nodeId: input.nodeId,
     businessDay: input.businessDay,
@@ -289,10 +290,14 @@ interface CloseRow {
 }
 
 /**
- * Appends the immutable row in a savepoint (`tx.transaction`, which Drizzle emits as SAVEPOINT /
- * RELEASE / ROLLBACK TO SAVEPOINT). The savepoint is not decoration: in Postgres a unique violation
- * aborts the WHOLE enclosing transaction, so without it a caller could not translate the failure and
- * continue. Only a `daily_closes_business_day_key` collision — a second close of the same day — is
+ * Appends the immutable row in a savepoint (`tx.transaction`, which the adapter emits as SAVEPOINT /
+ * RELEASE / ROLLBACK TO whenever a transaction is already open —
+ * `packages/store/src/node-sqlite-adapter.ts`). On PostgreSQL the savepoint was what let a caller
+ * translate the failure and carry on at all, because a unique violation aborted the WHOLE enclosing
+ * transaction; SQLite backs out the refused statement and leaves the transaction open
+ * (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need"), so
+ * here it confines this attempt's own writes rather than rescuing the transaction. Only a
+ * `daily_closes_business_day_key` collision — a second close of the same day — is
  * translated to `close.already_closed`; anything else (an impossible-under-the-lock
  * `daily_closes_sequence_key` collision, an FK violation) propagates raw, because masking it as
  * "already closed" would hide a genuine single-writer bug for a day that is NOT closed.

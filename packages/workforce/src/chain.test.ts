@@ -282,10 +282,13 @@ describe("appendToChain", () => {
   });
 
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
-    // Occupy position 1 directly, so every attempt collides for the same reason — three REAL 23505s
-    // from Postgres, which only a savepoint per attempt can survive. Without one, the first 23505
-    // aborts the whole transaction and the second attempt fails 25P02, a code the retry does not
-    // recognise. Mirrors fiscal chain.test.ts's equivalent.
+    // Occupy position 1 directly, so every attempt collides for the same reason — three refusals
+    // the database issued, driving the retry to exhaustion. The savepoint-deletion proof this was
+    // written as belonged to PostgreSQL, where the first 23505 aborted the whole transaction and
+    // the second attempt came back 25P02; SQLite backs out the refused statement and leaves the
+    // transaction open, and whether the case still discriminates the savepoint here is UNMEASURED
+    // (this suite does not pass on this branch yet). Mirrors fiscal chain.test.ts's equivalent,
+    // where the same note is recorded.
     await pg.db.execute(sql`
       insert into time_entries (
         person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,

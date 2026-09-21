@@ -102,8 +102,11 @@ export async function readOpenAlerts(
   for (const source of deps.registry.sources) {
     if (!held.has(source.permission)) continue;
     try {
-      // A savepoint per source: a failed query aborts only this source's work, not the transaction
-      // every later source reads on.
+      // A savepoint per source, so a failed source's own writes go with it rather than sitting in
+      // the transaction every later source reads on. On PostgreSQL this was also what kept that
+      // transaction usable after a refusal; SQLite backs out the refused statement alone
+      // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not
+      // need"), so only the first half of that is still this line's doing.
       const found = await tx.transaction((sp) => source.read({ tx: sp, now: deps.now }));
       for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
     } catch (error) {

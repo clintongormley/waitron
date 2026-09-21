@@ -220,17 +220,20 @@ describe("appendToChain", () => {
   });
 
   it("retries inside a savepoint, so a real collision does not poison the whole transaction", async () => {
-    // Unlike the stubbed test below (which proves the RETRY BOUND deterministically, since PGlite
-    // cannot generate three real CONCURRENT collisions), this one proves the SAVEPOINT itself,
-    // deterministically, with no concurrency at all: a single writer, sequentially, against a
+    // Unlike the stubbed test below (which proves the RETRY BOUND deterministically), this one
+    // drives REAL refusals, with no concurrency at all: a single writer, sequentially, against a
     // position that is ALREADY occupied before appendToChain ever runs. Every attempt collides for
-    // the same reason, so this also reaches exhaustion — but it reaches it via three REAL 23505s
-    // from Postgres, not a stubbed rejection, which only a savepoint per attempt can survive even
-    // once. Without one (this is exactly what the mutation this test was written to catch does),
-    // the first real 23505 aborts the OUTER transaction, and the second attempt's very first
-    // statement fails immediately with 25P02 ("current transaction is aborted") — a code
-    // isUniqueViolation does not recognise — so appendToChain rethrows that raw driver error
-    // instead of ever reaching a clean, structured chain.append_contention.
+    // the same reason, so it reaches exhaustion through three refusals the database issued.
+    //
+    // What this case was ORIGINALLY written to catch was deleting the savepoint: on PostgreSQL the
+    // first 23505 aborted the outer transaction and the second attempt's first statement came back
+    // 25P02, which isUniqueViolation does not recognise, so appendToChain rethrew a raw driver
+    // error instead of chain.append_contention. That mechanism is gone — SQLite backs out the
+    // refused statement and leaves the transaction open. Whether this case still discriminates the
+    // savepoint on SQLite is UNMEASURED: the control could not be re-run, because this suite does
+    // not pass on this branch yet for reasons of its own. Treat it as a case about exhaustion
+    // surfacing as a structured error until somebody re-runs the deletion (CLAUDE.md §4, "a
+    // proof-by-deletion belongs to the SHAPE of the code it was taken against").
     const occupied = await seedSale(pg.db, till, 1);
     await pg.db.execute(sql`
       insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,

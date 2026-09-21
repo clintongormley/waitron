@@ -16,6 +16,37 @@ type TransactionWrapper<A extends unknown[], R> = ((...args: A) => R) &
   Record<Behaviour, (...args: A) => R>;
 
 /**
+ * Names the next savepoint.
+ *
+ * A savepoint needs a name, and SQLite offers nothing to read the current depth from, so the name
+ * comes from a counter rather than from the engine. The counter never restarts and never reuses a
+ * value, so a name identifies exactly one savepoint however the depths interleave — which is what
+ * makes `release`/`rollback to` unambiguous. It is module-level rather than per client because two
+ * clients can be built over one connection, and it is the CONNECTION the names live on.
+ *
+ * The prefix is for reading a trace, not for correctness: Drizzle names the savepoints it emits
+ * itself `sp0`, `sp1`, … (`drizzle-orm/better-sqlite3/session.js:46`, read against 0.45.2), and a
+ * repeated name is resolved by SQLite to the most recent savepoint holding it, which under strict
+ * nesting is always the right one (measured on node v26.7.0: with two savepoints named `same`, one
+ * `release same` left the outer one standing and its rows intact).
+ */
+let savepointsTaken = 0;
+const nextSavepoint = () => `wt_sp_${(savepointsTaken += 1)}`;
+
+/**
+ * Is this what a body returned, or what it will return later?
+ *
+ * The engine is synchronous and Drizzle's session is built for a synchronous driver, so its
+ * transaction wrapper is written as though a body finishes when it returns. An `async` body returns
+ * at its FIRST `await`, with its remaining work and its throw still ahead of it, so a wrapper that
+ * believes the return commits early and never sees the throw at all. Checked at the six places that
+ * open a transaction on a transaction-typed value — `tx.transaction(`, `grep`ped over `packages`
+ * and `apps` — every one of them hands in a body that returns a promise.
+ */
+const isPending = (value: unknown): value is PromiseLike<unknown> =>
+  typeof (value as PromiseLike<unknown> | undefined)?.then === "function";
+
+/**
  * Lets Drizzle's SQLite session drive Node's own SQLite.
  *
  * Drizzle publishes no driver for `node:sqlite` (checked against 0.45.2, the installed and the
@@ -48,9 +79,36 @@ export function adaptNodeSqlite(db: DatabaseSync) {
     },
     close: () => db.close(),
     /**
-     * Runs `fn` between `begin` and `commit`, rolling back if it throws.
+     * Runs `fn` as a transaction, undoing its work if it throws.
      *
-     * The returned wrapper carries one property per SQLite transaction mode because Drizzle's
+     * With nothing open that is `begin` / `commit` / `rollback`. With a transaction already open it
+     * is `savepoint` / `release` / `rollback to`, because SQLite refuses a `begin` inside a
+     * transaction — `cannot start a transaction within a transaction`. Both halves are reached in
+     * this repository: a request arrives here with the connection already inside the
+     * `begin immediate` that `createWriteQueue` opened (`./write-queue.ts`), and `withTransaction`
+     * hands its body the DATABASE handle (`packages/db/src/tenancy.ts`), so a write path's
+     * `tx.transaction(...)` is a nested call on this client.
+     *
+     * Openness is read from the engine (`DatabaseSync.isTransaction`, a wrapper around
+     * `sqlite3_get_autocommit()`), never from a count kept here, so a transaction the engine ended
+     * on its own is not one this client still believes in.
+     *
+     * A body that returns a promise finishes when the promise settles, not when it returns — see
+     * {@link isPending}. That holds the transaction open across the wait, which is what the write
+     * queue already does for the enclosing one (`./write-queue.ts` runs one body at a time). What
+     * NOTHING here enforces is the order WITHIN one body: two transactions opened on this
+     * connection concurrently — `Promise.all` over two `tx.transaction(...)` calls — would finish
+     * out of order, and a savepoint released out of order takes every savepoint after it with it.
+     * No caller does that today (the loops that nest here `await` in turn), and no guard says so.
+     *
+     * A savepoint the body left behind is released on both paths. `rollback to` undoes the work but
+     * leaves the savepoint on the stack (measured on node v26.7.0: a second `rollback to` the same
+     * name succeeds, and only after `release` does it read `no such savepoint`), and the retrying
+     * callers — `appendToChain` in `packages/fiscal-verifactu/src/chain.ts` and in
+     * `packages/workforce/src/chain.ts` — would otherwise leave one behind per failed attempt.
+     *
+     * The mode is the enclosing transaction's business: a savepoint has no mode of its own. The
+     * returned wrapper still carries one property per SQLite transaction mode, because Drizzle's
      * session indexes it by name rather than calling it
      * (`drizzle-orm/better-sqlite3/session.js:40`: `nativeTx[config.behavior ?? "deferred"](tx)`),
      * so a wrapper that is only callable fails with a type error rather than a query error.
@@ -59,15 +117,39 @@ export function adaptNodeSqlite(db: DatabaseSync) {
       const inMode =
         (behaviour: Behaviour) =>
         (...args: A): R => {
-          db.exec(`begin ${behaviour}`);
+          const savepoint = db.isTransaction ? nextSavepoint() : undefined;
+          db.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
+          const keep = () => {
+            db.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
+          };
+          const undo = () => {
+            if (savepoint === undefined) db.exec("rollback");
+            else {
+              db.exec(`rollback to ${savepoint}`);
+              db.exec(`release ${savepoint}`);
+            }
+          };
+          let result: R;
           try {
-            const result = fn(...args);
-            db.exec("commit");
-            return result;
+            result = fn(...args);
           } catch (error) {
-            db.exec("rollback");
+            undo();
             throw error;
           }
+          if (!isPending(result)) {
+            keep();
+            return result;
+          }
+          return result.then(
+            (value: unknown) => {
+              keep();
+              return value;
+            },
+            (error: unknown) => {
+              undo();
+              throw error;
+            },
+          ) as R;
         };
       const wrapper = inMode("deferred") as TransactionWrapper<A, R>;
       for (const behaviour of BEHAVIOURS) wrapper[behaviour] = inMode(behaviour);

@@ -261,13 +261,24 @@ async function attemptAppend(
 /**
  * Appends one record to the node's chain, in the caller's transaction.
  *
- * Each attempt runs inside a nested `tx.transaction()`, which Drizzle emits as
- * SAVEPOINT / RELEASE / ROLLBACK TO SAVEPOINT. That is not decoration: in Postgres a unique
- * violation aborts the WHOLE enclosing transaction, so without a savepoint the "retry" would
- * issue its next statement against a transaction that can only accept ROLLBACK — destroying the
- * sale already written alongside it in that same outer transaction. The savepoint confines the
- * abort to the failed attempt; the outer transaction, and whatever the caller already did in it,
- * survive to try again.
+ * Each attempt runs inside a nested `tx.transaction()`. A request reaches here with a transaction
+ * already open on the connection — `withTransaction` runs inside the `begin immediate` that
+ * `packages/store/src/write-queue.ts` took — so the adapter emits that nested call as
+ * SAVEPOINT / RELEASE / ROLLBACK TO rather than as a BEGIN
+ * (`packages/store/src/node-sqlite-adapter.ts`, which is also where the two halves are proven).
+ *
+ * The savepoint's REASON is not PostgreSQL's any more, and the difference matters to anyone
+ * reading this loop. PostgreSQL aborted the whole enclosing transaction on a unique violation, so
+ * the savepoint was what kept the transaction usable at all. SQLite backs out the refused
+ * STATEMENT and leaves the transaction open — its own words about ABORT, its default conflict
+ * resolution, quoted with a probe and a control in `bench/sqlite-failover/README.md` under "What
+ * S5 measures, and the savepoint it does not need", and confirmed again here on node v26.7.0
+ * against a transaction that committed the rows written either side of a refusal.
+ *
+ * What the savepoint still does is undo whatever a losing attempt wrote BEFORE the statement that
+ * was refused, so the next attempt starts from the state the caller's transaction was in rather
+ * than from a half-finished attempt. It no longer rescues a transaction that can only accept
+ * ROLLBACK, because on this engine there is no such state to rescue.
  *
  * Exhaustion throws the structured `AppError` declared in ./errors.ts, never a bare string — the
  * Global Constraint's requirement (spec §9) that anything reaching a till screen be translatable,

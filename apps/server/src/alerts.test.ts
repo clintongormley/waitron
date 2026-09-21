@@ -268,7 +268,8 @@ describe("readOpenAlerts", () => {
     const failing: AlertSource = {
       area: "backup",
       permission: "diagnostics.view",
-      // A failed QUERY, not just a throw: without a savepoint it would abort the shared transaction.
+      // A failed QUERY, not just a throw: a source that dies in the database, not in JavaScript,
+      // is the case `readOpenAlerts` wraps each source for.
       read: async ({ tx }) => {
         await tx.execute(sql`select * from no_such_table`);
         return [];

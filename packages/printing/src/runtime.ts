@@ -274,10 +274,13 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       // resolution is the host's job (Task 6), so passing the raw key here is correct for both.
       devicePath: job.local_key,
     };
-    // HAZARD, deliberately left: if it is the `reportPrintJob` INSIDE this `try` that PostgreSQL
-    // refuses, rather than `transport.send`, the transaction aborts and the catch's write on the
-    // same `tx` fails `25P02` with no SAVEPOINT to clear it — one job's refusal takes the whole
-    // batch down instead of marking that job failed (CLAUDE.md §3). No caller in the tree today
+    // HAZARD, deliberately left, and NARROWER on SQLite than the PostgreSQL note it replaces: if
+    // it is the `reportPrintJob` INSIDE this `try` that the database refuses, rather than
+    // `transport.send`, the catch's write runs on a transaction SQLite has left open and usable
+    // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not
+    // need"), so it is no longer a `25P02` that takes the whole batch down. What is still wrong is
+    // that the refused report's own partial work stays in the caller's transaction, unconfined by
+    // any savepoint. No caller in the tree today
     // reaches it: `apps/server/src/print-api.ts` calls the split `claimPrintJobs`/`reportPrintJob`,
     // and `runAgentOnce`'s only callers are this package's `runtime.test.ts`, `runtime.race.test.ts`
     // and `runtime.reclaim.test.ts`. That is a fact about today's tree, not a property of the API —

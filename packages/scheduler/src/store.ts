@@ -286,13 +286,18 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    // A SAVEPOINT around the insert, not a bare insert: a statement PostgreSQL rejects aborts the
-    // whole transaction, so catching the violation without one leaves every LATER statement failing
-    // with 25P02. `completeRun` is not one of those — the caller completes first and enqueues second
-    // (`run.ts`) — so what a lost race cost it was not a refusal but its own already-executed write,
-    // discarded when the aborted transaction ended as a ROLLBACK, leaving the run to be reclaimed
-    // as stale. Drizzle emits a nested `tx.transaction` as SAVEPOINT / ROLLBACK TO, which clears
-    // the abort and leaves the enclosing transaction usable. Same shape as `appendToChain` in
+    // A SAVEPOINT around the insert, not a bare insert. The adapter emits a nested
+    // `tx.transaction` as SAVEPOINT / ROLLBACK TO whenever a transaction is already open
+    // (`packages/store/src/node-sqlite-adapter.ts`), which inside `withTransaction` it always is.
+    //
+    // The danger this was written against was PostgreSQL's: a rejected statement aborted the whole
+    // transaction, so catching the violation without a savepoint left every LATER statement failing
+    // with 25P02 — and cost `completeRun` (the caller completes first and enqueues second,
+    // `run.ts`) its own already-executed write when the aborted transaction ended as a ROLLBACK,
+    // leaving the run to be reclaimed as stale. SQLite does not abort the transaction; it backs out
+    // the refused statement alone (receipt, with a control: `bench/sqlite-failover/README.md` →
+    // "What S5 measures, and the savepoint it does not need"). The savepoint stays because it still
+    // confines a losing attempt's own writes to that attempt. Same shape as `appendToChain` in
     // `packages/fiscal-verifactu/src/chain.ts` and `insertClose` in
     // `packages/reporting/src/record-daily-close.ts`.
     await tx.transaction(async (attempt) => {

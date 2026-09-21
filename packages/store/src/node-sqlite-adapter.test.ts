@@ -76,6 +76,183 @@ describe("the node:sqlite adapter", () => {
     expect(raw.prepare("select name from t").all()).toEqual([{ name: "outer" }]);
   });
 
+  it("rolls back only the inner work when a transaction is already open on the connection", () => {
+    const { raw, db } = open();
+    // What a request leaves open before any Drizzle call: `createWriteQueue` runs `begin immediate`
+    // on the connection and `withTransaction` (`packages/db/src/tenancy.ts`) hands the body the
+    // DATABASE handle, so the body's `tx.transaction(...)` reaches THIS client. Drizzle's own
+    // savepoint path is the other one — it belongs to a transaction object, not to the database.
+    raw.exec("begin immediate");
+    db.insert(rows).values({ id: 1, name: "outer" }).run();
+    expect(() =>
+      db.transaction((tx) => {
+        tx.insert(rows).values({ id: 2, name: "inner" }).run();
+        throw new Error("deliberate");
+      }),
+    ).toThrow("deliberate");
+    // The enclosing transaction is still usable, which is the whole point of the savepoint.
+    db.insert(rows).values({ id: 3, name: "after" }).run();
+    raw.exec("commit");
+    expect(raw.prepare("select name from t order by id").all()).toEqual([
+      { name: "outer" },
+      { name: "after" },
+    ]);
+  });
+
+  it("keeps the work of a nested transaction that returns", () => {
+    const { raw, db } = open();
+    raw.exec("begin immediate");
+    expect(
+      db.transaction((tx) => {
+        tx.insert(rows).values({ id: 1, name: "inner" }).run();
+        return "done";
+      }),
+    ).toBe("done");
+    raw.exec("commit");
+    expect(rowCount(raw)).toBe(1);
+  });
+
+  it("gives each depth its own savepoint, so releasing an inner one leaves the outer standing", () => {
+    const { raw, db } = open();
+    raw.exec("begin immediate");
+    db.insert(rows).values({ id: 1, name: "outer" }).run();
+    expect(() =>
+      db.transaction(() => {
+        db.insert(rows).values({ id: 2, name: "depth one" }).run();
+        // Depth two, released normally. If that release also discarded depth one's savepoint, the
+        // rollback below would be refused `no such savepoint` and this case would throw that
+        // instead of "deliberate".
+        db.transaction(() => {
+          db.insert(rows).values({ id: 3, name: "depth two" }).run();
+        });
+        throw new Error("deliberate");
+      }),
+    ).toThrow("deliberate");
+    raw.exec("commit");
+    expect(raw.prepare("select name from t order by id").all()).toEqual([{ name: "outer" }]);
+  });
+
+  it("emits begin at the top and a separately named savepoint at each depth below it", () => {
+    const { raw, db } = open();
+    const emitted: string[] = [];
+    const exec = raw.exec.bind(raw);
+    raw.exec = (statement: string): void => {
+      emitted.push(statement);
+      exec(statement);
+    };
+    expect(() =>
+      // Three levels: the outermost finds nothing open, the two below it each find the level
+      // above. Drizzle's own savepoints are not in play — those belong to a nested call on a
+      // TRANSACTION object, and every call here is on the database.
+      db.transaction(() => {
+        db.transaction(() => {
+          db.transaction(() => {
+            throw new Error("deliberate");
+          });
+        });
+      }),
+    ).toThrow("deliberate");
+    const names = emitted
+      .filter((statement) => statement.startsWith("savepoint "))
+      .map((statement) => statement.slice("savepoint ".length));
+    // One name per depth. A single name for every depth would still pass the behavioural cases
+    // above, because SQLite resolves a repeated name to the most recent one — so this is what
+    // stands between the scheme and a name that means two things at once.
+    expect(new Set(names).size).toBe(2);
+    expect(emitted).toEqual([
+      "begin deferred",
+      `savepoint ${names[0]}`,
+      `savepoint ${names[1]}`,
+      // `rollback to` undoes the work and leaves the savepoint on the stack; the `release` is what
+      // takes it off, so a retrying caller does not grow the stack by one per failed attempt.
+      `rollback to ${names[1]}`,
+      `release ${names[1]}`,
+      `rollback to ${names[0]}`,
+      `release ${names[0]}`,
+      "rollback",
+    ]);
+  });
+
+  it("undoes the work of an async nested body that rejects, and keeps the work around it", async () => {
+    const { raw, db } = open();
+    raw.exec("begin immediate");
+    db.insert(rows).values({ id: 1, name: "outer" }).run();
+    // Every nested call in this repository hands in an async function — `appendToChain`'s attempt
+    // (`packages/fiscal-verifactu/src/chain.ts`, `packages/workforce/src/chain.ts`),
+    // `enqueueSuccessor`'s insert, `insertClose`, an alert source's read. A wrapper that finishes
+    // the transaction as soon as the body RETURNS finishes it at the body's first `await`, with
+    // the work still to come and the throw still to happen.
+    await expect(
+      db.transaction(async (tx) => {
+        tx.insert(rows).values({ id: 2, name: "before the await" }).run();
+        await Promise.resolve();
+        tx.insert(rows).values({ id: 3, name: "after the await" }).run();
+        throw new Error("deliberate");
+      }),
+    ).rejects.toThrow("deliberate");
+    db.insert(rows).values({ id: 4, name: "after" }).run();
+    raw.exec("commit");
+    expect(raw.prepare("select name from t order by id").all()).toEqual([
+      { name: "outer" },
+      { name: "after" },
+    ]);
+  });
+
+  it("keeps the work of an async nested body that resolves", async () => {
+    const { raw, db } = open();
+    raw.exec("begin immediate");
+    expect(
+      await db.transaction(async (tx) => {
+        await Promise.resolve();
+        tx.insert(rows).values({ id: 1, name: "inner" }).run();
+        return "done";
+      }),
+    ).toBe("done");
+    raw.exec("commit");
+    expect(rowCount(raw)).toBe(1);
+  });
+
+  it("undoes the work of an async top-level body that rejects", async () => {
+    const { raw, db } = open();
+    await expect(
+      db.transaction(async (tx) => {
+        await Promise.resolve();
+        tx.insert(rows).values({ id: 1, name: "x" }).run();
+        throw new Error("deliberate");
+      }),
+    ).rejects.toThrow("deliberate");
+    expect(rowCount(raw)).toBe(0);
+  });
+
+  it("keeps the work of an async top-level body that resolves", async () => {
+    const { raw, db } = open();
+    await db.transaction(async (tx) => {
+      await Promise.resolve();
+      tx.insert(rows).values({ id: 1, name: "x" }).run();
+    });
+    expect(rowCount(raw)).toBe(1);
+  });
+
+  it("waits for an async body before releasing its savepoint", async () => {
+    const { raw, db } = open();
+    const emitted: string[] = [];
+    const exec = raw.exec.bind(raw);
+    raw.exec = (statement: string): void => {
+      emitted.push(statement);
+      exec(statement);
+    };
+    raw.exec("begin immediate");
+    let sawReleaseEarly = false;
+    await db.transaction(async () => {
+      await Promise.resolve();
+      // The savepoint is still the newest statement: nothing has finished this transaction yet.
+      sawReleaseEarly = emitted.some((statement) => statement.startsWith("release "));
+    });
+    expect(sawReleaseEarly).toBe(false);
+    expect(emitted.at(-1)).toMatch(/^release /);
+    raw.exec("commit");
+  });
+
   it("offers a transaction in each mode SQLite names", () => {
     const { raw } = open();
     const client = adaptNodeSqlite(raw);

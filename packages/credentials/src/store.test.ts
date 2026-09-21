@@ -204,8 +204,9 @@ describe("putCredential and getCredential", () => {
     // not what a rollback erased on its behalf. Carrying on inside the transaction is safe HERE
     // for one reason: `credentials.invalid_payload` is a JavaScript throw raised BEFORE any
     // statement reaches the database (`putCredential` calls `validatePayload` first), which is the
-    // property this test is about. Catching a refusal PostgreSQL itself issued is a different
-    // shape — that transaction is already aborted and needs a savepoint (CLAUDE.md §3).
+    // property this test is about. Catching a refusal the DATABASE issued is a different shape:
+    // on SQLite the transaction survives it, so what a savepoint buys there is discarding the
+    // failed attempt's own earlier writes (`packages/store/src/node-sqlite-adapter.ts`).
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {

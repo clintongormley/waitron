@@ -241,11 +241,17 @@ async function attemptAppend(
  * `clock` supplies `recorded_at` (default `() => new Date()`); it is never a caller input like
  * `event_at`, and it is injectable so a test can drive the monotonic-clamp behaviour (spec §4.1).
  *
- * Each attempt runs inside a nested `tx.transaction()`, which Drizzle emits as SAVEPOINT / RELEASE /
- * ROLLBACK TO SAVEPOINT. That is not decoration: in Postgres a unique violation aborts the WHOLE
- * enclosing transaction, so without a savepoint the retry would issue its next statement against a
- * transaction that can only accept ROLLBACK — destroying whatever the caller already did in it. The
- * savepoint confines the abort to the failed attempt.
+ * Each attempt runs inside a nested `tx.transaction()`. A request reaches here with a transaction
+ * already open on the connection, so the adapter emits that nested call as SAVEPOINT / RELEASE /
+ * ROLLBACK TO rather than as a BEGIN (`packages/store/src/node-sqlite-adapter.ts`).
+ *
+ * The savepoint's REASON is not PostgreSQL's any more. There a unique violation aborted the whole
+ * enclosing transaction and the savepoint was what kept it usable; SQLite backs out the refused
+ * STATEMENT and leaves the transaction open (the receipt, with a control, is in
+ * `bench/sqlite-failover/README.md` under "What S5 measures, and the savepoint it does not need").
+ * What it still does is undo whatever a losing attempt wrote BEFORE the refusal — `readChainHead`
+ * above creates the head row when none exists — so the next attempt starts where the caller's
+ * transaction was.
  *
  * Exhaustion throws the structured `attendance.append_contention`, never a bare string — the Global
  * Constraint's requirement that anything reaching a till screen be translatable, applied to exactly
