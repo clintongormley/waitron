@@ -1987,8 +1987,8 @@ treatment as above — one pass, not a sweep.
 
 `recordSale` now names a Spanish recipient on a full invoice. A non-Spanish one is refused by name
 (`fiscal.foreign_recipient_unsupported`), deliberately: AEAT's `IDOtro` needs an `IDType` — NIF-IVA,
-passport, residence certificate and so on, enumerated at
-`packages/verifactu/schemas/SuministroInformacion.xsd:894-927` — and choosing wrongly files a record
+passport, residence certificate and so on, enumerated in
+`@waitron/verifactu`'s AEAT XSD (`SuministroInformacion.xsd`) — and choosing wrongly files a record
 into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
 that call. No HTTP route supplies a counterparty today — core's `recordSale` hardcodes `null` and
 nothing calls `recordSubstitution` from a route — but `packages/core`'s substitution path types it as
@@ -2012,7 +2012,7 @@ rule the issuer's does (`sf:NIFType` is the identical XSD type). Regression at t
 Each was judged and deliberately left; none blocks the merge.
 
 - **The audited AEAT package's own shared record fixture is still a full invoice naming no
-  recipient.** `packages/verifactu/test/fixtures.ts`'s `ALTA_INPUT` is the exact shape A1 corrected
+  recipient.** `@waitron/verifactu`'s test fixtures (`ALTA_INPUT`) are the exact shape A1 corrected
   everywhere else. Not free to fix: it reproduces AEAT's own vector-1 hash, and the exact-XML
   expectations in `xml/serialize.test.ts` would all move. Whoever touches it does so with those two
   facts in hand.
@@ -3676,7 +3676,7 @@ comparison could see a difference. Three things it leaves open:
 - **Read it as a self-baselined pin, which is weaker than the pins already here.** Pinned output is
   not new — `conformance.test.ts` in `packages/verifactu` pins a SHA-256 against a literal, and
   `xml/serialize.test.ts` pins whole XML documents. But `conformance.test.ts`'s expected values are
-  AEAT's own published huella vectors (`packages/verifactu/test/vectors.ts`, "Huella spec v0.1.2"),
+  AEAT's own published huella vectors (`@waitron/verifactu`'s huella test vectors, "Huella spec v0.1.2"),
   so that pin compares the code against an authority. This one compares the code against itself on
   the day it was written. (What `serialize.test.ts` compares against was not checked here.) There is also no
   `toMatchSnapshot`/`toMatchFileSnapshot`/`__snapshots__` anywhere in the repository, so a byte pin

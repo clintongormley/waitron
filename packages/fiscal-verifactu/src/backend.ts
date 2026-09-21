@@ -779,8 +779,8 @@ export class VerifactuBackend implements FiscalBackend {
    * `fiscal.foreign_recipient_unsupported`, a DELIBERATE refusal rather than a dead branch, because
    * `registros_facturacion` is append-only and hash-chained (CLAUDE.md §5) — a guessed IDType would
    * be filed and could never be unfiled. The vocabulary itself is not restated here: the XSD
-   * enumerates it (`PersonaFisicaJuridicaIDTypeType`,
-   * `packages/verifactu/schemas/SuministroInformacion.xsd:894-927`) and which values AEAT admits,
+   * enumerates it (`PersonaFisicaJuridicaIDTypeType` in `@waitron/verifactu`'s AEAT XSD,
+   * `SuministroInformacion.xsd`) and which values AEAT admits,
    * and when it demands a specific one, is an open question with the asesor
    * (`docs/compliance/asesor-questions.md`, Q17(a), which quotes it in the source's own words).
    *

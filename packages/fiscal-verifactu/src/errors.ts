@@ -393,7 +393,7 @@ declare module "@waitron/shared" {
      * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`. AEAT
      * names a foreign recipient through `IDOtro`, which carries an `IDType` this project has not
      * chosen a value for: the vocabulary is enumerated by the XSD
-     * (`packages/verifactu/schemas/SuministroInformacion.xsd`, `PersonaFisicaJuridicaIDTypeType`)
+     * (`@waitron/verifactu`'s AEAT XSD `SuministroInformacion.xsd`, `PersonaFisicaJuridicaIDTypeType`)
      * but which value AEAT admits for which non-resident is open with the asesor
      * (`docs/compliance/asesor-questions.md`, Q17(a)). `registros_facturacion` is append-only and
      * hash-chained (CLAUDE.md §5), so a guessed identifier type would be filed and could never be
