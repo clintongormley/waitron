@@ -2110,6 +2110,14 @@ form, places Scan at the trailing edge, orders unsupported results last, and hid
 status filter for an all-active or all-disabled list.
 [Physical evidence and updated decisions](superpowers/specs/2026-09-16-printer-setup-refinements.md#owner-follow-up-and-physical-character-table-probe-2026-09-16).
 
+The later calibration chooser starts with tables 0–15, prints a broader two-line glyph sample, and
+lets you choose one compact code that sets both the printer table and Waitron encoding. Later ranges
+remain selectable. Each candidate line first selects table 0, so a printer that accepts table 0 but
+ignores an invalid number does not inherit the previous candidate's table. **Still open:** check
+this two-line finder on another printer, including how it responds to an unassigned table number.
+The byte sequence and dashboard flow have been tested, but no printer was available on the
+development network. [Chooser design and limitation](superpowers/specs/2026-09-16-printer-setup-refinements.md#calibration-chooser-follow-up-2026-09-21).
+
 - **NT-806 profile established on paper:** Windows-1252 bytes with `ESC t 6`. The earlier Kanji-mode
   correction did not make the manual's table 16 or 19 assignments true on this firmware.
 - **Every printer saved before this change must be recalibrated** through the printer editor's test

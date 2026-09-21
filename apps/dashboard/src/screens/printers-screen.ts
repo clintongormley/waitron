@@ -977,7 +977,6 @@ export class PrintersScreen extends LitElement {
 
   async #testCharacterTables(p: EditablePrinter): Promise<void> {
     if (this.printingTableTest) return;
-    if (!this.#validatePrinter(p)) return;
     this.printingTableTest = true;
     this.errorKey = null;
     const blockStart = this.tableBlockStart;
@@ -985,8 +984,8 @@ export class PrintersScreen extends LitElement {
     try {
       const { calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
       if (epoch === this.#tableTestEpoch && this.tableBlockStart === blockStart) {
+        if (this.finderCalibrationLocale !== calibrationLocale) this.finderChosenCode = "";
         this.finderCalibrationLocale = calibrationLocale;
-        this.finderChosenCode = "";
       }
       await this.#load();
     } catch (error) {

@@ -1438,7 +1438,7 @@ describe("mountPrintApi — management: test-print", () => {
         "content-type": "application/json",
         "accept-language": "es-ES",
       },
-      body: JSON.stringify({ startTable: 32 }),
+      body: JSON.stringify({ startTable: 5 }),
     });
     expect(res.status).toBe(202);
     const { jobId, calibrationLocale } = (await res.json()) as {
@@ -1452,7 +1452,7 @@ describe("mountPrintApi — management: test-print", () => {
       .where(eq(printJobs.id, jobId));
     expect([...new Uint8Array(job!.payload)]).toEqual([
       ...formatCharacterTableTest({
-        startTable: 32,
+        startTable: 5,
         locale: "es-ES",
         calibrationLocale: "en-GB",
       }),

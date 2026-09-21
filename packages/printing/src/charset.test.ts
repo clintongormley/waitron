@@ -84,6 +84,11 @@ describe("prepareText / encodeText", () => {
     const last = characterFinderOptions("en-GB", 240);
     expect(last[0]?.code).toBe("T240W");
     expect(last.at(-1)?.code).toBe("T2558");
+    const unaligned = characterFinderOptions("es-ES", 5);
+    expect(unaligned[0]?.code).toBe("T5W");
+    expect(unaligned.at(-1)?.code).toBe("T208");
+    expect(() => characterFinderOptions("en-GB", -1)).toThrow(RangeError);
+    expect(() => characterFinderOptions("en-GB", 256)).toThrow(RangeError);
   });
 
   it("probes Spanish receipt glyphs and bytes that separate the offered encodings", () => {

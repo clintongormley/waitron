@@ -2732,6 +2732,58 @@ it("does not show a previous pairing deadline after reopening before the next op
 });
 
 describe("printer layout settings", () => {
+  it("prints the finder even when an unfinished manual table field prevents saving", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    typeField(el, 'wt-input[name="printer-character-table"]', "");
+    await flush(el);
+    expect(
+      (q(el, 'wt-input[name="printer-character-table"]') as import("@waitron/ui").WtInput).value,
+    ).toBe("");
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    expect(api.testCharacterTables).toHaveBeenCalledWith("p1", 0);
+    q(el, '[data-test="save-printer-p1"]')!.click();
+    await flush(el);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+  });
+
+  it("keeps an operator-chosen code when reprinting the same range", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    await chooseOption(el, "printer-matching-code", "T68");
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("T68");
+    expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
+  });
+
+  it("sets both saved text fields when switching from a matching code to plain letters", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    await chooseOption(el, "printer-matching-code", "T68");
+    await chooseOption(el, "printer-matching-code", "plain");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
+      "plain",
+    );
+    q(el, '[data-test="save-printer-p1"]')!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ characterSet: "plain", characterTable: 0 }),
+    );
+  });
+
   it("starts the finder at table zero and one printed code sets both text settings", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });

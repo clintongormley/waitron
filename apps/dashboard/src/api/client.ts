@@ -2616,7 +2616,7 @@ export class DashboardApi {
     );
   }
 
-  /** Print the selected sixteen-table block and return the venue locale used for its samples. */
+  /** Print sixteen table numbers and return the venue locale used for their samples. */
   testCharacterTables(
     printerId: string,
     startTable: number,

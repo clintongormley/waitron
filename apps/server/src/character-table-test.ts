@@ -17,7 +17,7 @@ const CAPTIONS: Readonly<Record<SupportedLocale, { title: string; instruction: s
   },
 };
 
-/** Print a human-readable probe for the sixteen-table block containing `startTable`. */
+/** Print sixteen table numbers from `startTable`, capped at the final complete range. */
 export function formatCharacterTableTest({
   startTable,
   locale,

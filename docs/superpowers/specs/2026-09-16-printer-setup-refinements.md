@@ -116,6 +116,8 @@ operator choose another sixteen-table range only if no printed candidate matches
 letters and other receipt characters, including the euro sign, inverted punctuation and quotation
 marks. Compare both lines with the examples shown in the editor. A compact code such as `T6W`
 identifies one numeric printer table and one Waitron byte encoding; choosing it sets both fields.
+The dashboard offers aligned sixteen-table ranges; the API retains its earlier arbitrary starting
+number, capped at 240 so the last request still prints sixteen tables through 255.
 The editor keeps the individual fields in a collapsed Advanced section for manual correction.
 Multiple candidates may print the same tested glyphs; choosing the first matching code establishes
 that sample, not the whole 256-character table or every possible language. A sample receipt checks

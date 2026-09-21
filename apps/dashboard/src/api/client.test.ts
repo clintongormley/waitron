@@ -2522,7 +2522,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ jobId: "j11", calibrationLocale: "en-GB" }, true, 202));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.testCharacterTables("p1", 32)).toEqual({
+    expect(await api.testCharacterTables("p1", 5)).toEqual({
       jobId: "j11",
       calibrationLocale: "en-GB",
     });
@@ -2530,7 +2530,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ startTable: 32 }),
+      body: JSON.stringify({ startTable: 5 }),
     });
   });
 

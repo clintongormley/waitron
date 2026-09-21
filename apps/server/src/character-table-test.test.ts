@@ -42,7 +42,7 @@ describe("formatCharacterTableTest", () => {
     expect(
       bytesInclude(
         bytes,
-        Uint8Array.from([0x1b, 0x74, 0, ...encodeText("T0W A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "wpc1252")]),
+        Uint8Array.from([0x1b, 0x74, 6, ...encodeText("T6W A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "wpc1252")]),
       ),
     ).toBe(true);
     expect(
@@ -54,10 +54,10 @@ describe("formatCharacterTableTest", () => {
     expect(
       bytesInclude(
         bytes,
-        Uint8Array.from([0x1b, 0x74, 15, ...encodeText("T158 A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "pc858")]),
+        Uint8Array.from([0x1b, 0x74, 21, ...encodeText("T218 A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "pc858")]),
       ),
     ).toBe(true);
-    expect(Buffer.from(bytes).toString("latin1")).not.toContain("T16W");
+    expect(Buffer.from(bytes).toString("latin1")).not.toContain("T0W A:");
   });
 
   it("prints a complete final block and keeps every English and Spanish line within 58mm", () => {

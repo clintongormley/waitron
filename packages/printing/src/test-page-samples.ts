@@ -109,7 +109,7 @@ export function characterFinderOptions(
   if (!Number.isInteger(startTable) || startTable < 0 || startTable > 255) {
     throw new RangeError(`start table must be an integer in [0, 255], got ${startTable}`);
   }
-  const firstTable = Math.floor(startTable / 16) * 16;
+  const firstTable = Math.min(startTable, 240);
   const encodings = characterCalibration(locale).finderEncodings;
   return Array.from({ length: 16 }, (_, offset) => firstTable + offset).flatMap((characterTable) =>
     encodings.map(({ label, characterSet }) => ({
