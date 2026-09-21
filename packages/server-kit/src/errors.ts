@@ -12,9 +12,12 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * A request-shape screen (`request-screens.ts`) refused a malformed body/query field — a date,
-     * enum, nullable, or plain body uuid — naming the FIELD, never its value (a PIN or password is
-     * exactly the kind of secret a caller can mis-send). `management.*` names the DOMAIN CONCEPT (a
+     * A request screen refused a body/query field, naming the FIELD, never its value (a PIN or
+     * password is
+     * exactly the kind of secret a caller can mis-send). Mostly SHAPE — a date, enum, nullable or
+     * plain body uuid refused by `request-screens.ts` — but not only: a surface may also refuse a
+     * well-formed VALUE its own boundary owns, as `apps/server/src/catalogue-api.ts` does for a
+     * negative catalogue price. `management.*` names the DOMAIN CONCEPT (a
      * request to the management surface), not the throwing package; it is a deliberately distinct
      * namespace from `@waitron/identity`'s `management_session.*` (the session LIFECYCLE), which names
      * a separate concern. Codes are never renamed once shipped.

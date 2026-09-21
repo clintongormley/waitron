@@ -2536,3 +2536,291 @@ it("authors translated hierarchy and shares full membership replacement through 
   expect((await send(app, "PUT", memberships, { body: { categoryIds: [] } })).status).toBe(200);
   expect((await send(app, "GET", path)).status).toBe(404);
 });
+
+// A negative CATALOGUE price is never a valid one (owner ruling, 2026-09-21) — the scope matters,
+// because a corrective invoice's prices are deliberately negative elsewhere in the tree. The
+// catalogue's price-carrying routes were driven with `"-1.00"` before the screen was written. Four
+// answered wrongly: the two product writes stored the value, and the two menu-item writes answered
+// 500. The rest already refused with a clean 400 of their own. The two blocks below cover both --
+// the four fixed here, and the already-refusing ones, pinned so a later change cannot quietly lose
+// them. The second block is a sample of that second group and does not claim to be all of it.
+describe("a negative price is refused at the catalogue request boundary", () => {
+  it("POST /management-api/products refuses a negative unitPrice and stores no row", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Negative price catalogue");
+    const body = {
+      catalogueId,
+      categoryId: null,
+      name: "Precio negativo",
+      pricingUnit: "each",
+      unitPrice: "-1.00",
+      vatClass: "general",
+    };
+    const res = await send(app, "POST", "/management-api/products", { body });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "unitPrice" } },
+    });
+    // Measured on main before the screen: this answered 201 and the row read back `unitPrice: "-1.00"`.
+    const stored = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(await stored.json()).toEqual([]);
+    // The control that separates "refuses a negative" from "refuses a non-positive": zero is a
+    // legitimate price and still creates the product.
+    expect(
+      (
+        await send(app, "POST", "/management-api/products", {
+          body: { ...body, unitPrice: "0.00" },
+        })
+      ).status,
+    ).toBe(201);
+  });
+
+  it("PATCH /management-api/products/:id refuses a negative unitPrice and leaves the price alone", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Negative patch catalogue");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Precio bueno",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await created.json()) as { id: string }).id;
+    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { unitPrice: "-1.00" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "unitPrice" } },
+    });
+    // Measured on main before the screen: this answered 204 and overwrote the price with `-1.00`.
+    const rows = (await (
+      await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`)
+    ).json()) as { id: string; unitPrice: string }[];
+    expect(rows.find((r) => r.id === productId)?.unitPrice).toBe("2.00");
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/products/${productId}`, {
+          body: { unitPrice: "0.00" },
+        })
+      ).status,
+    ).toBe(204);
+  });
+
+  it("the two menu-item writes refuse a negative grossPrice with a 400, not a 500", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Negative menu catalogue");
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+      body: { name: { es: "Sección" }, displayOrder: 0 },
+    });
+    const sectionId = ((await section.json()) as { id: string }).id;
+    const items = `/management-api/catalogues/${catalogueId}/items`;
+
+    // Measured on main before the screen: both of these answered 500 `server.internal`, because
+    // `menu_items_gross_price_ck` refused the row and the route could not classify a driver error.
+    const badCreate = await send(app, "POST", items, {
+      body: { productId, sectionId, grossPrice: "-1.00", displayOrder: 0 },
+    });
+    expect(badCreate.status).toBe(400);
+    expect(await badCreate.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+
+    // The zero control, which also supplies the item the patch below acts on.
+    const good = await send(app, "POST", items, {
+      body: { productId, sectionId, grossPrice: "0.00", displayOrder: 0 },
+    });
+    expect(good.status).toBe(201);
+    const itemId = ((await good.json()) as { id: string }).id;
+
+    const badPatch = await send(app, "PATCH", `${items}/${itemId}`, {
+      body: { grossPrice: "-1.00" },
+    });
+    expect(badPatch.status).toBe(400);
+    expect(await badPatch.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "grossPrice" } },
+    });
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: "0.00" } })).status,
+    ).toBe(204);
+  });
+
+  it("leaves a malformed price to the refusal it already had, so no shipped code changes meaning", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Malformed price catalogue");
+    // The screen reads the SIGN and nothing else: a value `decimal()` cannot parse falls straight
+    // through to the write's own `decimal()`, which is where `shared.invalid_decimal` comes from.
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Coma decimal",
+        pricingUnit: "each",
+        unitPrice: "1,00",
+        vatClass: "general",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_decimal" } });
+    // `decimal()` strips the sign from a zero magnitude, so `-0.00` is not below zero and is stored
+    // as plain zero rather than refused.
+    const zero = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Cero firmado",
+        pricingUnit: "each",
+        unitPrice: "-0.00",
+        vatClass: "general",
+      },
+    });
+    expect(zero.status).toBe(201);
+    expect(await zero.json()).toMatchObject({ unitPrice: "0.00" });
+  });
+});
+
+// Catalogue write routes that already refused a negative before this branch, each through
+// `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`), whose pattern carries no sign.
+// They are pinned at the ROUTE here, which is what the package tests on the operations behind them
+// cannot cover: without these, a later change could drop the wiring and nothing would notice. This
+// is the set that was checked, not a claim that no other route carries a price.
+describe("catalogue routes that already refused a negative price", () => {
+  it("the product-editor, offer-variant and extras-list writes each answer their own 400", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Already-refusing catalogue");
+    const unitId = (
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
+    ).rows[0]!.id;
+    const variant = (name: string, unitPrice: string) => ({
+      name,
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice,
+      available: true,
+    });
+    const editor = {
+      name: "Con variantes",
+      customerName: null,
+      description: null,
+      kitchenName: null,
+      image: null,
+      unitId,
+      unitPrice: "2.00",
+      available: true,
+      soldAlone: true,
+      vatClass: "general",
+      variants: [variant("A", "2.00"), variant("B", "3.00")],
+      categoryIds: [],
+      primaryCategoryId: null,
+      modifiers: [],
+      allergens: {},
+      dietaryDeclarations: [],
+    };
+    const editorPath = `/management-api/catalogues/${catalogueId}/product-editor`;
+
+    const badProductPrice = await send(app, "POST", editorPath, {
+      body: { ...editor, unitPrice: "-1.00", variants: [] },
+    });
+    expect(badProductPrice.status).toBe(400);
+    expect(await badProductPrice.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "unitPrice" } },
+    });
+
+    const badVariantPrice = await send(app, "POST", editorPath, {
+      body: { ...editor, variants: [variant("A", "-1.00"), variant("B", "3.00")] },
+    });
+    expect(badVariantPrice.status).toBe(400);
+    expect(await badVariantPrice.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "variants.0.unitPrice" } },
+    });
+
+    const saved = (await (await send(app, "POST", editorPath, { body: editor })).json()) as {
+      id: string;
+      variants: { id: string }[];
+    };
+    const badEditorUpdate = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: { ...editor, unitPrice: "-1.00", variants: [] },
+    });
+    expect(badEditorUpdate.status).toBe(400);
+    expect(await badEditorUpdate.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "unitPrice" } },
+    });
+
+    const sectionId = (
+      (await (
+        await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+          body: { name: { es: "Sección" }, displayOrder: 0 },
+        })
+      ).json()) as { id: string }
+    ).id;
+    const itemId = (
+      (await (
+        await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
+          body: { productId: saved.id, sectionId, grossPrice: "1.00", displayOrder: 0 },
+        })
+      ).json()) as { id: string }
+    ).id;
+    const badOfferVariant = await send(
+      app,
+      "PUT",
+      `/management-api/catalogues/${catalogueId}/items/${itemId}/variants`,
+      {
+        body: {
+          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "-1.00", available: true }],
+        },
+      },
+    );
+    expect(badOfferVariant.status).toBe(400);
+    expect(await badOfferVariant.json()).toMatchObject({
+      error: { code: "product.variant_invalid", params: { field: "unitPrice" } },
+    });
+
+    const badExtra = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: { name: "Extras", items: [{ productId: saved.id, price: "-1.00", maxQuantity: 1 }] },
+    });
+    expect(badExtra.status).toBe(400);
+    expect(await badExtra.json()).toMatchObject({
+      error: { code: "extras.invalid", params: { field: "items.0.price" } },
+    });
+
+    // The two the first pass of this enumeration missed, added after a reviewer drove them: the
+    // extras list UPDATE (the create's sibling, which reaches the same screen), and a negative
+    // VARIANT price on the editor UPDATE (the editor tests above vary the product price there).
+    const goodExtra = await send(app, "POST", "/management-api/modifiers/extras", {
+      body: {
+        name: "Extras buenos",
+        items: [{ productId: saved.id, price: "1.00", maxQuantity: 1 }],
+      },
+    });
+    expect(goodExtra.status).toBe(201);
+    const extraListId = ((await goodExtra.json()) as { extraList: { id: string } }).extraList.id;
+    const badExtraPatch = await send(
+      app,
+      "PATCH",
+      `/management-api/modifiers/extras/${extraListId}`,
+      {
+        body: {
+          name: "Extras buenos",
+          items: [{ productId: saved.id, price: "-1.00", maxQuantity: 1 }],
+        },
+      },
+    );
+    expect(badExtraPatch.status).toBe(400);
+    expect(await badExtraPatch.json()).toMatchObject({
+      error: { code: "extras.invalid", params: { field: "items.0.price" } },
+    });
+
+    const badEditorVariant = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: { ...editor, variants: [variant("A", "-1.00"), variant("B", "3.00")] },
+    });
+    expect(badEditorVariant.status).toBe(400);
+    expect(await badEditorVariant.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "variants.0.unitPrice" } },
+    });
+  });
+});

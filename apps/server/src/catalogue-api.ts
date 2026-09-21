@@ -3,7 +3,7 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/shared";
 import { asAppUser, products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
@@ -149,6 +149,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `unitPrice` (`:737` and `:898`). A CLIENT request fault -> 400. Listed explicitly as the house
   // style requires; the `?? 400` default already covers it — measured 2026-09-21 with the entry
   // absent, a `unitPrice` of `01.00` answered 400 `shared.invalid_decimal`.
+  // `refuseNegativePrice` below calls `decimal()` too, and is NOT a second source of this code: it
+  // swallows the throw so the refusal still comes from the write, in the write's own order.
   "shared.invalid_decimal": 400,
   // A price too wide for the money scale's twelve integer digits, thrown by `assertMoney` inside the
   // `decimalToCents` that wraps each of those four `decimal()` calls — raised by the op, not by this
@@ -278,6 +280,39 @@ const run = createErrorBoundary(STATUS, "catalogue.failed");
 function requireUuidParam(id: string, kind: string): string {
   if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
   return id;
+}
+
+/**
+ * Refuse a CATALOGUE price a caller sent as a negative amount — a product's `unitPrice` and a menu
+ * item's `grossPrice`. Scoped to the catalogue deliberately: a corrective invoice's sale total and
+ * its line TOTALS are negative on purpose (`packages/core/src/record-correction.ts`, and
+ * `sales_total_ck` exempts a row with a `corrects_sale_id`), so "a price is never negative" is only
+ * true of the prices this file writes.
+ *
+ * SIGN ONLY, and the two halves of that both matter. A value `decimal()` cannot parse is swallowed
+ * here and left to the write's own `decimal()` a moment later, which keeps both the error code AND
+ * the order in which a request carrying two faults reports them. And `decimal()` strips the sign
+ * from a zero magnitude (`packages/shared/src/money.ts:27`), so a leading `-` on what it returns
+ * means strictly below zero: `-0.00` is not refused.
+ *
+ * The code is `management.request_invalid`, the body-shape code most of this file's screens use,
+ * rather than the `product.invalid` the product-editor routes use for the same fact: a boundary
+ * screen answering in the boundary's own code. The file is not uniform about this and a quantifier
+ * here would be wrong — `screenRouting` and `parseProductModifiers` both screen a body field and
+ * answer in a domain code instead. Neither of these two refusals reaches an operator: every
+ * dashboard form carrying a catalogue price refuses a negative in the browser first.
+ *
+ * What each route did before this screen, and how far the fix reaches, is in `docs/backlog.md` →
+ * Track C.
+ */
+function refuseNegativePrice(value: string, field: string): void {
+  let parsed: Decimal;
+  try {
+    parsed = decimal(value);
+  } catch {
+    return;
+  }
+  if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
 function parseMenuVariants(value: unknown): MenuVariant[] {
@@ -800,6 +835,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (typeof body.grossPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "grossPrice" });
       }
+      refuseNegativePrice(body.grossPrice, "grossPrice");
       const productId = requireUuidParam(body.productId, "ProductId");
       const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
       const displayOrder = parseDisplayOrder(body.displayOrder);
@@ -822,8 +858,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
       const body = await readJsonBody<Record<string, unknown>>(c);
-      if (body.grossPrice !== undefined && typeof body.grossPrice !== "string") {
-        throw new AppError("management.request_invalid", { field: "grossPrice" });
+      if (body.grossPrice !== undefined) {
+        if (typeof body.grossPrice !== "string") {
+          throw new AppError("management.request_invalid", { field: "grossPrice" });
+        }
+        refuseNegativePrice(body.grossPrice, "grossPrice");
       }
       const displayOrder = parseDisplayOrder(body.displayOrder);
       await gated(sessionId, (tx) =>
@@ -1159,6 +1198,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (typeof body.unitPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "unitPrice" });
       }
+      refuseNegativePrice(body.unitPrice, "unitPrice");
       if (typeof body.vatClass !== "string") {
         throw new AppError("management.request_invalid", { field: "vatClass" });
       }
@@ -1259,6 +1299,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         if (typeof body.unitPrice !== "string") {
           throw new AppError("management.request_invalid", { field: "unitPrice" });
         }
+        refuseNegativePrice(body.unitPrice, "unitPrice");
         patch.unitPrice = body.unitPrice;
       }
       if (body.vatClass !== undefined) {
