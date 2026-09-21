@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
  * on PGlite through the append path), never against a real-role Postgres (CLAUDE.md §4). The DB side
  * — the row-locked head, the retry — lives in ./chain.ts.
  *
- * Mirrors `packages/verifactu/src/huella.ts` (the proven fiscal precedent): an ORDERED array of
+ * Mirrors `@waitron/verifactu`'s fiscal hash chain (the proven precedent): an ORDERED array of
  * name/value pairs joined into a canonical string, SHA-256, uppercase hex. English field names
  * throughout — this chain is generic (`entry_hash`/`prev_entry_hash`/`sequence_no`), unlike the
  * fiscal chain whose vocabulary is a regime concept.

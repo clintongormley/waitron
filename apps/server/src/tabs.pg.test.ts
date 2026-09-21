@@ -43,7 +43,7 @@ import "./errors.js";
 //         packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts
 //     → (no output; exit 1)
 //   `RecordSaleInput` carries `workingOrderId` but no table column, and `computeHuella`
-//   (packages/verifactu/src/huella.ts:45-58) hashes ONLY the eight AEAT alta fields — IDEmisorFactura
+//   (`@waitron/verifactu`'s huella computation) hashes ONLY the eight AEAT alta fields — IDEmisorFactura
 //   (issuer NIF), NumSerieFactura, FechaExpedicionFactura, TipoFactura, CuotaTotal, ImporteTotal, the
 //   previous Huella, and FechaHoraHusoGenRegistro — none of which is a table column.
 //

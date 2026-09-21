@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { qrSvg } from "./qr.js";
 
-// The four values, and their order, are what `buildQrPayload` in packages/verifactu/src/qr.ts
+// The four values, and their order, are what `buildQrPayload` in `@waitron/verifactu`
 // emits; percent-encoding included, since that is what reaches the drawing code.
 const AEAT_LINK =
   "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F2026%2F000123&fecha=20-09-2026&importe=12.34";

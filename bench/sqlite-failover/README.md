@@ -1050,7 +1050,7 @@ would cost. Neither changes the measurement.
   "filed".** AEAT answers error 3000 on a record it already holds — per record, not per batch — and
   says what state the stored record is in (`docs/compliance/verifactu-findings.md` → "Record identity
   and duplicates", taken from AEAT's documentation; no live resend of an identical record has been
-  observed). `resolveEstadoEfectivo` (`packages/verifactu/src/xml/parse-suministro.ts`) reads 3000
+  observed). `resolveEstadoEfectivo` (in `@waitron/verifactu`) reads 3000
   plus `Correcta` as `accepted`, so the receiver's copy is marked filed and its chain carries on. The
   stub here never answers that way: it records the repeat and accepts it. So every second filing S2
   counts is, against the real endpoint, a submission AEAT refuses and the drain then records as filed

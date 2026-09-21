@@ -11,7 +11,7 @@ const pg = useVenueDb({
 
 /**
  * `cuota_total`/`importe_total` must be `text`, not `numeric(12,2)` — this is the test that would
- * have caught the regression. `packages/verifactu/src/huella.ts`'s `buildCadena` reads
+ * have caught the regression. `@waitron/verifactu`'s `buildCadena` reads
  * `record.CuotaTotal`/`record.ImporteTotal` verbatim as strings and hashes them byte-for-byte; it
  * never re-runs `formatAmountExact`. The stored column value therefore IS the huella's hash input, and
  * the bytes read back must equal the bytes written — a guarantee only `text` gives. `numeric`

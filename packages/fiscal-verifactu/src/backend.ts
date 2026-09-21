@@ -420,9 +420,9 @@ export class VerifactuBackend implements FiscalBackend {
       //
       // Carrying the ORIGINAL alta's own stored `offset_minutos` through instead (Task 16's own
       // suggested fix) is not available here: `AnulacionInput.offsetMinutes`
-      // (`RecordInputBase`, packages/verifactu/src/types.ts) is a SINGLE field shared with
+      // (`RecordInputBase` in `@waitron/verifactu`) is a SINGLE field shared with
       // `FechaHoraHusoGenRegistro`'s own generation instant a few lines down, and it must be
-      // `now.offsetMinutes` for THAT field to be correct — a `packages/verifactu` type change
+      // `now.offsetMinutes` for THAT field to be correct — a `@waitron/verifactu` type change
       // this task does not make would be needed to carry a second, independent offset through.
       //
       // The fix instead cancels the shift algebraically, which needs no second offset at all:

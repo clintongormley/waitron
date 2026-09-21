@@ -161,7 +161,7 @@ function localDate(eventAt: string, offsetMinutes: number): string {
  * January event carries +60 and a July one +120 with no timezone lookup. Whole seconds only (the
  * stored instants are already whole-second, `time_entries_event_at_second_ck`).
  *
- * Deliberately MIRRORS the fiscal `formatDateTime` (`@waitron/verifactu/src/format.ts`) — same
+ * Deliberately MIRRORS the fiscal `formatDateTime` (from `@waitron/verifactu`) — same
  * `YYYY-MM-DDThh:mm:ss±hh:mm` shape — without importing it: `@waitron/workforce` must not depend on
  * the fiscal domain. Also
  * mirrors its file-local sibling `localDate`, which renders the date half of the same instant.

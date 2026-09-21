@@ -249,7 +249,7 @@ async function insertLocationTillSeries(
  * `options.nif` overrides that minting. The minted NIF comes from a module-level counter
  * (`freshNif` above), so which one a test gets is decided by how many `seedTenantWithSif` calls ran
  * before it in the same file. The NIF is a HASHED field (`IDEmisorFactura`,
- * `packages/verifactu/src/huella.ts`), so a test that asserts a recorded huella literal would
+ * hashed by `@waitron/verifactu`), so a test that asserts a recorded huella literal would
  * otherwise break whenever a test is added or removed ABOVE it. Measured: the same basket filed
  * 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K` and to `A1AF497F…`
  * standalone under `20000001K`; pinning the NIF made both positions agree. Pass a value no other
@@ -263,7 +263,7 @@ async function insertLocationTillSeries(
  * (`../src/backend.ts`, `../src/registro-sif.ts`). The only tenant value that reaches a record at all
  * is the legal name — `taxpayer` in `../src/backend.ts` hands its callers nothing else — and the
  * legal name is not among the eight fields `buildCadenaAlta` hashes
- * (`packages/verifactu/src/huella.ts`). A test that needs `tenants.tax_id` itself to match must
+ * (in `@waitron/verifactu`). A test that needs `tenants.tax_id` itself to match must
  * seed before anything else does.
  */
 export async function seedTenantWithSif(

@@ -77,13 +77,13 @@ export const registrosFacturacion = table(
     // canje and an F1 full invoice alike.
     // `jsonb`, not `text`, for the same reason as the four rectificativa fields above and the
     // module-level note: it is NOT a huella input (huella.ts hashes 8 named fields, the recipient is
-    // not among them — packages/verifactu/src/types.ts), only ever re-serialised into XML, so jsonb
+    // not among them — see `@waitron/verifactu`), only ever re-serialised into XML, so jsonb
     // key-reordering is harmless. NULLABLE with no backfill (pre-production).
     destinatarios: json("destinatarios"),
     descripcionOperacion: label("descripcion_operacion"),
     desglose: json("desglose"),
-    // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `packages/verifactu/src/
-    // huella.ts`'s `buildCadena` reads `CuotaTotal`/`ImporteTotal` verbatim as strings and hashes
+    // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `@waitron/verifactu`'s
+    // `buildCadena` reads `CuotaTotal`/`ImporteTotal` verbatim as strings and hashes
     // them byte-for-byte; it never re-runs `formatAmountExact`. The stored column value therefore IS
     // the huella's input, and the stored bytes must equal the hashed bytes, which a character type
     // gives and `numeric` does not: `numeric` silently re-renders on read, and `numeric(12,2)` is

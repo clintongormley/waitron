@@ -12,7 +12,8 @@ import { readFileSync } from "node:fs";
 // The rule is an ALLOWLIST OF PATHS, never a file extension. A `**/*.md` rule looks equivalent and
 // is not: a package-nested README can be a test fixture — a primary source whose bytes a test
 // asserts against — so treating it as inert documentation by its extension would let an edit to it
-// skip the very test whose purpose is to catch that edit.
+// skip the very test whose purpose is to catch that edit. The concrete case this was written for
+// was the now-extracted `packages/verifactu`'s schemas README, whose bytes a conformance test hashed.
 
 /**
  * Root directories and root files that no `code`-gated job reads — the typecheck, test, build and

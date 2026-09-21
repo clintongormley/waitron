@@ -29,7 +29,7 @@ let seriesId: SeriesId;
  * This IS the end-to-end test — the one place both sides of the boundary may be imported
  * together (`packages/core`, which is English and must never see `RegistroAlta`/`computeHuella`,
  * and this module, which may depend on `@waitron/core`, `@waitron/verifactu` and `@waitron/db`
- * alike). It follows `packages/verifactu/src/conformance.test.ts`'s precedent: a test file with no
+ * alike). It follows `@waitron/verifactu`'s conformance-test precedent: a test file with no
  * sibling source, the established slot for a cross-cutting policy test.
  *
  * What this proves that `FakeFiscalBackend` cannot (packages/core's own suite proves everything
@@ -586,7 +586,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   //     pnpm --filter @waitron/fiscal-verifactu test write-path
   //
   // WHY THE NIF IS PINNED, and why it is not decoration. `IDEmisorFactura` is one of the eight
-  // fields the huella hashes (`packages/verifactu/src/huella.ts`), and `seedTenantWithSif` mints it
+  // fields the huella hashes (in `@waitron/verifactu`), and `seedTenantWithSif` mints it
   // from a counter that advances once per call in a file. The first capture of this basket was
   // taken standalone and hashed to `A1AF497F…` under NIF `20000001K`; the same basket run 16th in
   // THIS file hashed to `38CCE164…` under `20000016K`. Both are correct records of their own

@@ -357,7 +357,7 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     NombreRazonEmisor: row.nombre_razon_emisor,
     TipoFactura: row.tipo_factura as RegistroAlta["TipoFactura"],
     // The four AEAT rectificativa fields, spread back on ONLY when stored non-null — matching
-    // buildAltaRecord's own conditional-spread shape (packages/verifactu/src/records.ts:101-118),
+    // buildAltaRecord's own conditional-spread shape (in `@waitron/verifactu`),
     // so an absent field is OMITTED, never set to null. A `TipoRectificativa: null` would make this
     // rebuilt record deep-unequal to one built without the field, and — more to the point — would
     // serialise a spurious empty element. None is a huella input (huella.ts hashes 8 named fields,
@@ -378,7 +378,7 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
       ImporteRectificacion: row.importe_rectificacion,
     }),
     // The recipient, spread back on ONLY when stored non-null — matching buildAltaRecord's
-    // own conditional-spread shape (packages/verifactu/src/records.ts:133), so an absent recipient is
+    // own conditional-spread shape (in `@waitron/verifactu`), so an absent recipient is
     // OMITTED, never set to null (a `Destinatarios: null` would serialise a spurious empty element
     // and make an ordinary alta's rebuilt record deep-unequal to one built without the field). Not a
     // huella input, exactly like the four rectificativa fields above; it exists so the drainer files

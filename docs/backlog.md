@@ -1929,7 +1929,7 @@ What it left open:
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
-`packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
+`@waitron/verifactu`'s validation holds AEAT's rules and no production file called it, confirmed by
 experiment (a series code of `Serie A` reached `registros_facturacion` as `Serie A/1`, which AEAT
 would reject). What landed: a record AEAT could not accept is refused at the chain seam, before
 anything is written; one whose totals disagree with its own VAT lines is written, filed and flagged as
@@ -3204,8 +3204,9 @@ image constraints under *Detail → Box image*.
   receipt is a pointer in [testing-guide.md](developers/testing-guide.md). The deletion changes
   nothing about vitest itself — `projects` and `--shard` are as incompatible as they were.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
-  together with N at or below the file count; `mutation-verifactu` is the next critical-path
-  candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
+  together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
+  dominates. (`mutation-verifactu` used to be named here as the next critical-path candidate; that
+  job was removed when `@waitron/verifactu` was extracted to its own repository.)
 - **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about
   cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Of the
   four things the review raised and that PR did not take, two are now done on
@@ -3399,9 +3400,11 @@ deliberately did not settle.
   there is the plan's stated reason rather than an instruction it gave. The
   cost is not small and not new: in verifactu, `src/testing/fake-aeat.ts` holds **43 of the package's
   60 surviving mutants**, and recomputing that same report without the file's mutants gives 98.76%
-  against the 96.18% it scores as configured. That score gates
-  merges — `mutation-verifactu` is one of `ci`'s `needs`, and `ci` is the required check — so the
-  exclusion is a real decision, which is why the bump left it alone.
+  against the 96.18% it scores as configured. That score gated
+  merges — `mutation-verifactu` was one of `ci`'s `needs`, and `ci` is the required check — so the
+  exclusion was a real decision, which is why the bump left it alone. (Since removed — the
+  `mutation-verifactu` job and the in-repo `packages/verifactu` both went with the extraction of
+  `@waitron/verifactu` to its own repository, so this whole entry is now historical.)
 - **A Vitest 5 retry has to re-measure mutation — nothing about Stryker 10 settles it.** Vitest 5 was
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
@@ -3626,7 +3629,7 @@ The upgrade shipped WITHOUT compensating for it. Every parsed AEAT value that ge
 one of ours is a value WE minted and AEAT echoed: `RefExterna`, which is our
 `registros_facturacion.id`, a UUID (`drain.ts` in `persistResponse`, and `reconcile.ts` building its
 authority map); `NumSerieFactura`, which we only ever emit from the `A-Za-z0-9/_.-` charset
-`NUMSERIE_PATTERN` in `packages/verifactu/src/validate.ts` holds the outgoing record to; and
+`NUMSERIE_PATTERN` in `@waitron/verifactu` holds the outgoing record to; and
 `Huella`, which is hex. No character in any of those sets is ever entity-encoded. Everything else
 parsed is either compared against a constant (the status and error-code enums) or stored and
 displayed and compared against nothing, such as `DescripcionErrorRegistro` → `envios.mensaje_error`.
@@ -6506,7 +6509,7 @@ open is under *A2* in Track A, not here.
 - *What a code may contain.* The database takes any non-empty text, unique per node. On the wire it
   is joined as `<code>/<number>` (`formatInvoiceNumber`, `packages/core/src/record-sale.ts`) and the
   whole string must be 1–60 characters from `A-Z a-z 0-9 / _ . -` — our own deliberately narrow charset
-  (`packages/verifactu/src/validate.ts`). The practical ceiling on the code alone is 38
+  (in `@waitron/verifactu`). The practical ceiling on the code alone is 38
   (`MAX_BASE_CODE_LENGTH`, `packages/fiscal-verifactu/src/reserved-series.ts`), because a cold restore
   appends `-<installation number>`.
 - *What to default them to.* Avoid a trailing `-<digits>`: `stripOwnSuffixes` removes a trailing

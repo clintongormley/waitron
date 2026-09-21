@@ -21,8 +21,8 @@ import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
- * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`,
- * `@waitron/verifactu/src/testing/fake-aeat.ts`) — the wait a database with no `envio_flujo` row
+ * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`, from
+ * `@waitron/verifactu`) — the wait a database with no `envio_flujo` row
  * yet (never sent, so `readFlujo` reports `tiempoEsperaSeg: 0`) should assume before its first
  * envío. `drainDue`'s own `let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG` is the
  * one call site — kept as a named constant, not a bare literal, so this file's one guess at "what
@@ -791,7 +791,7 @@ async function persistResponse(
   result.batchesSent += 1;
   result.recordsSubmitted += batch.length;
   // `respuesta.CSV` is only ever undefined for a wholesale-rejected envío (`RespuestaSuministro`'s
-  // own doc comment, packages/verifactu/src/xml/parse-suministro.ts) — not reachable through this
+  // own doc comment in `@waitron/verifactu`) — not reachable through this
   // package's own fake AEAT (`createFakeAeat` always returns a CSV, per-line rejections included;
   // see its own `handleEnvio` doc comment), so the `?? null` fallback stays unexercised by this
   // task's tests too, same as Task 6's original note here.
@@ -899,7 +899,7 @@ async function applyOutcome(
  * accepted-with-errors/rejected, and Task 10's Route A/B) has the envío's own CSV in hand — even a
  * duplicate LINE's envío still returns one (AEAT's CSV is per-submission, not per-line), and Route
  * B's own `routeB` never needs to read one off its consulta response (which carries none at all —
- * `RegistroConsultado`'s own doc comment, @waitron/verifactu/src/xml/parse-consulta.ts) because it
+ * `RegistroConsultado`'s own doc comment in `@waitron/verifactu`) because it
  * reuses the SAME outer envío CSV every other branch already has. An earlier draft of this
  * function made `csv` optional and `coalesce`d it against the existing column, anticipating a
  * hypothetical future caller with no CSV to report at all — no such caller exists as of this
@@ -1014,7 +1014,7 @@ async function raiseIncident(
  * holds (`resolveEstadoEfectivo`'s own doc comment on the "3000 inverts" rule) — a targeted
  * consulta for exactly this one record is how the ambiguity resolves. Comparing AEAT's stored
  * `Huella` against ours is deliberately the ONLY field compared: `RegistroConsultado`'s own doc
- * comment (@waitron/verifactu/src/xml/parse-consulta.ts) — "a single-field check equivalent to
+ * comment (in `@waitron/verifactu`) — "a single-field check equivalent to
  * diffing every hashed field" — the huella already IS the summary of every hashed field on the
  * record, so nothing else `DatosRegistroFacturacion` carries needs comparing.
  *

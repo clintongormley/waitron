@@ -23,7 +23,7 @@ import type { VatReturn, VatReturnInput } from "./types.js";
  * Bucketing is by the filed *fecha de expedición* on the output side (a CIVIL calendar date, not the
  * operational business day, spec §4/D4): the filed `FechaExpedicionFactura` is the civil-local date of
  * the issuance instant using the sale's OWN snapshotted offset, exactly what AEAT received
- * (`formatDate(issued_at, issued_offset_minutes)` — `packages/verifactu/src/format.ts`). The SQL below
+ * (`formatDate(issued_at, issued_offset_minutes)` — from `@waitron/verifactu`). The SQL below
  * applies the same fixed snapshot offset to the same instant and reads the same date components, so it
  * yields the same civil date `formatDate` filed and needs no `timeZone` input. The +120-offset
  * July/August boundary case in `vat-return.test.ts` pins that equivalence. The input side buckets by
