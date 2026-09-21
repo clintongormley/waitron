@@ -5,17 +5,27 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import {
+  constraintTarget,
   diningTables,
   floorTableShape,
   floorZones,
+  isPgError,
   isUniqueViolation,
+  sameTarget,
   tableServiceStatuses,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { ConstraintTarget, Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 const FOREIGN_KEY_VIOLATION = "23503";
-const ZONE_FK = "dining_tables_zone_fk";
+/**
+ * The table and column a refusal on `dining_tables_zone_fk` names. The constraint is
+ * `FOREIGN KEY ("zone_id") REFERENCES "floor_zones" ("id")`, declared in migration 0034 (which
+ * re-declared it after the tenant column went). A 23503 names the REFERENCING side — the table
+ * written and the column that held the unmatched value — so this is `dining_tables.zone_id`, not
+ * `floor_zones.id`.
+ */
+const ZONE_FK: ConstraintTarget = { table: "dining_tables", columns: ["zone_id"] };
 
 /**
  * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
@@ -44,32 +54,18 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
- * naming no `floor_zones` row at all? Walks the cause chain because Drizzle wraps every
- * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
- * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — verified
- * against this file's PGlite suite, where the 23503 arrives at depth 1 with `constraint =
- * "dining_tables_zone_fk"`. Stops at a fixed depth so a self-referential `cause` cannot spin forever.
- * Reads the CONSTRAINT NAME, not just the 23503 code, so the sibling `dining_tables_location_fk` /
- * `dining_tables_status_fk` violations are deliberately NOT matched — a bad location or status is not
- * a zone fault and stays a raw driver error. Mirrors `@waitron/db`'s `isUniqueViolation` and
- * `@waitron/reporting`'s `isBusinessDayConflict` shape (the latter extends the same walk with a
- * constraint check for the identical reason). Exported for the crafted-error unit tests.
+ * naming no `floor_zones` row at all? Both halves come from `@waitron/db`, each walking the cause
+ * chain Drizzle wraps a failed query in: `isPgError` for the SQLSTATE, `constraintTarget` for the
+ * table and columns.
+ *
+ * It matches on {@link ZONE_FK}'s table and column as well as the 23503, so the sibling
+ * `dining_tables_location_fk` / `dining_tables_status_fk` violations — 23503s on the same table,
+ * differing only in the column — are deliberately NOT matched: a bad location or status is not a
+ * zone fault and stays a raw driver error. A 23503 naming no key at all is not attributed here
+ * either. Exported for the crafted-error unit tests.
  */
 export function isZoneFkViolation(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      (current as { code?: unknown }).code === FOREIGN_KEY_VIOLATION &&
-      (current as { constraint?: unknown }).constraint === ZONE_FK
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
+  return isPgError(error, FOREIGN_KEY_VIOLATION) && sameTarget(constraintTarget(error), ZONE_FK);
 }
 
 /** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer
@@ -100,8 +96,8 @@ export interface DiningTable {
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
  * trips `dining_tables_zone_fk` (23503) and is surfaced as
- * `zone.not_found` — the location FK is a 23503 too, so the check reads the CONSTRAINT NAME
- * (`isZoneFkViolation`) rather than the bare code.
+ * `zone.not_found` — the location FK is a 23503 too, so the check reads the table and column the
+ * refusal names (`isZoneFkViolation`) rather than the bare code.
  */
 export async function createTable(
   tx: Transaction,

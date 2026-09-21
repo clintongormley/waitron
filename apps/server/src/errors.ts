@@ -1084,11 +1084,11 @@ declare module "@waitron/shared" {
     /**
      * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
      * that matches no row in this database. Surfaced by translating the `23503` an FK on `devices` raises
-     * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the CONSTRAINT NAME
-     * (`devices_device_profile_fk` / `devices_receipt_printer_fk`) — the `isZoneFkViolation` idiom
+     * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the TABLE AND COLUMN the refusal
+     * names (`devices.device_profile_id` / `devices.receipt_printer_id`) — the `isZoneFkViolation` idiom
      * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
      * venue a FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
-     * never reaches this, and a 23503 on any OTHER constraint is rethrown raw rather than mislabelled.
+     * never reaches this, and a 23503 naming any OTHER key is rethrown raw rather than mislabelled.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
      * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape

@@ -136,12 +136,7 @@ export {
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTransaction } from "./tenancy.js";
-export {
-  isPgError,
-  isUniqueViolation,
-  pgErrorConstraint,
-  uniqueViolationConstraint,
-} from "./unique-violation.js";
+export { isPgError, isUniqueViolation } from "./unique-violation.js";
 export { constraintTarget, sameTarget, type ConstraintTarget } from "./constraint-target.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 

@@ -4,6 +4,7 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  constraintTarget,
   pgErrorCode,
   withTransaction,
 } from "@waitron/db";
@@ -26,9 +27,9 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 // Those live in `record-daily-close.pg.test.ts` on real Postgres: the single-writer `FOR UPDATE`
 // lock, the concurrent `close.already_closed`, and the gap-free sequence under ten racing closers.
 // This mirrors `daily-close.test.ts`, which computes the same close on PGlite for the
-// same reason. The `close.already_closed` catch path (a real 23505 from `daily_closes_business_day_key`
-// carrying a `constraint` name node-postgres populates) is proven in `record-daily-close.pg.test.ts`,
-// not here.
+// same reason. The `close.already_closed` catch path is driven by a real 23505 here (the sequential
+// second close, and the raw insert that pins the refusal's table and columns) and again on
+// node-postgres in `record-daily-close.pg.test.ts`, where the two closers actually contend.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -293,12 +294,44 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(isAppError(error)).toBe(false); // NOT translated to close.already_closed
     expect(pgErrorCode(error)).toBe("23505"); // the raw unique violation surfaces
   });
+
+  it("reports the business-day key as the table and columns insertClose recognises", async () => {
+    // The receipt behind the target `insertClose` compares against. Driven through a REAL refusal,
+    // because `table` and `detail` are the DRIVER's fields: a crafted error would only prove the
+    // parser reads the craft. A raw insert-select duplicating the committed row on (node_id,
+    // business_day) — with sequence_no moved clear — so the refusal is the business-day key's and
+    // not the sequence key's.
+    await record("2026-08-04", []);
+    const error = await captureError(() =>
+      withTransaction(suite.db, async (tx) => {
+        await asAppUser(tx);
+        await tx.execute(sql`
+          insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash,
+                                    entry_hash, closed_at, closed_by, snapshot)
+          select node_id, business_day, sequence_no + 100, prev_entry_hash,
+                 entry_hash, closed_at, closed_by, snapshot
+            from daily_closes`);
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23505");
+    expect(constraintTarget(error)).toEqual({
+      table: "daily_closes",
+      columns: ["node_id", "business_day"],
+    });
+  });
 });
 
 describe("isBusinessDayConflict", () => {
   // Crafted errors, no database — the walk's branches are cheap to cover directly, exactly as
-  // @waitron/db's own isUniqueViolation suite does for its (structurally identical) predicate.
-  const conflict = { code: "23505", constraint: "daily_closes_business_day_key" };
+  // @waitron/db's own isUniqueViolation suite does for its (structurally identical) predicate. The
+  // shape crafted here is the one the drivers actually report, and that the real-refusal cases above
+  // pin: the SQLSTATE plus the written `table` and a `detail` naming the key that collided.
+  const key = (columns: string, values: string) => `Key (${columns})=(${values}) already exists.`;
+  const conflict = {
+    code: "23505",
+    table: "daily_closes",
+    detail: key("node_id, business_day", "8eb8a4d6-0000-4000-8000-000000000001, 2026-08-04"),
+  };
 
   it("recognises a bare business-day unique violation", () => {
     expect(isBusinessDayConflict(conflict)).toBe(true);
@@ -308,16 +341,22 @@ describe("isBusinessDayConflict", () => {
     expect(isBusinessDayConflict({ cause: { cause: conflict } })).toBe(true);
   });
 
-  it("does NOT match a sequence-key collision (same code, different constraint)", () => {
-    expect(isBusinessDayConflict({ code: "23505", constraint: "daily_closes_sequence_key" })).toBe(
-      false,
-    );
+  it("does NOT match a sequence-key collision (same code and table, different columns)", () => {
+    expect(
+      isBusinessDayConflict({
+        code: "23505",
+        table: "daily_closes",
+        detail: key("node_id, sequence_no", "8eb8a4d6-0000-4000-8000-000000000001, 1"),
+      }),
+    ).toBe(false);
   });
 
-  it("does NOT match a non-unique error on the same constraint name", () => {
-    expect(
-      isBusinessDayConflict({ code: "23503", constraint: "daily_closes_business_day_key" }),
-    ).toBe(false);
+  it("does NOT match the same columns on a different table", () => {
+    expect(isBusinessDayConflict({ ...conflict, table: "daily_close_chain" })).toBe(false);
+  });
+
+  it("does NOT match a non-unique error on the same table and columns", () => {
+    expect(isBusinessDayConflict({ ...conflict, code: "23503" })).toBe(false);
   });
 
   it("terminates on a self-referential cause chain", () => {

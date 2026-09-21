@@ -1,9 +1,10 @@
 import "./errors.js";
 import {
+  constraintTarget,
   deviceProfiles,
+  isPgError,
   isUniqueViolation,
-  pgErrorConstraint,
-  uniqueViolationConstraint,
+  sameTarget,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
@@ -79,45 +80,67 @@ function toRow(row: {
   };
 }
 
+/** SQLSTATE 23503, foreign_key_violation: a written value that names no row in the referenced table. */
 const FOREIGN_KEY_VIOLATION = "23503";
+/** SQLSTATE 23001, restrict_violation: a delete refused by an ON DELETE RESTRICT foreign key. */
 const RESTRICT_VIOLATION = "23001";
 
-/** The FK a device holds on a profile, ON DELETE RESTRICT (Task 5's
- * `devices_device_profile_fk`). A delete that trips it is a "still in use" conflict; matched on the
- * constraint NAME so an unrelated RESTRICT can never be mislabelled `device_profile.in_use`. `devices`
- * is the ONLY table that references a profile. */
-const DEVICE_PROFILE_FK = "devices_device_profile_fk";
+/** `device_profiles_tenant_name_key`: UNIQUE (name) on device_profiles,
+ * `packages/db/drizzle/0033_drop_tenant_id.sql:230`. */
+const PROFILE_NAME = { table: "device_profiles", columns: ["name"] } as const;
+
+/** What a `canvas_id` naming no canvas reports — the referencing column of
+ * `device_profiles_canvas_fk`, `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:36`. It is the
+ * only foreign key a client value can trip on these writes. */
+const PROFILE_CANVAS_REF = { table: "device_profiles", columns: ["canvas_id"] } as const;
+
+/** What a delete refused by `devices_device_profile_fk` reports — devices.device_profile_id →
+ * device_profiles.id ON DELETE RESTRICT,
+ * `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:32`. The REFERENCING table paired with the
+ * REFERENCED table's key columns, which is how PostgreSQL reports a restrict_violation (measured
+ * 2026-09-21; the refusal itself is driven in `device-profile-store.pg.test.ts`). `devices` is the
+ * ONLY table that references a profile. */
+const PROFILE_REFERENCED_BY_DEVICE = { table: "devices", columns: ["id"] } as const;
 
 /**
- * Translate the driver errors the profile write/delete paths care about into their domain codes, and
- * re-throw anything else untouched:
- *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
- *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, matched on
- *     the CONSTRAINT NAME so a 23505 on any other constraint is re-thrown untouched, with the same
- *     "no constraint name reported ⇒ translate" fallback for PGlite;
- *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that names no canvas, SQLSTATE 23503) →
- *     `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the constraint name, and it is
- *     the only 23503 a client value can trip here;
- *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
- *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
- *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
- * The 23503/23001 detection uses `@waitron/db`'s `pgErrorConstraint` (a cause-chain walk), the same
- * mechanism `@waitron/printing`'s `printers.ts` uses, not a top-level `.code` read. Exported for the
- * crafted-error unit test (`device-profile-store.test.ts`), NOT from the package barrel — the same
- * shape as `canvas-store.ts`'s `translateWriteError`.
+ * Translate the driver refusals the profile write/delete paths care about into their domain codes,
+ * and re-throw anything else untouched:
+ *   - a duplicate profile name (SQLSTATE 23505 on {@link PROFILE_NAME}) → `device_profile.name_taken`
+ *     — the `translateWriteError` twin from `canvas-store.ts`, with the same two edges: a 23505 on
+ *     any other key of `device_profiles` is re-thrown untouched, and a 23505 that named no key at
+ *     all is translated anyway (the name key is the only unique these writes can trip on an
+ *     author-supplied value);
+ *   - a `canvas_id` that names no canvas (SQLSTATE 23503 on {@link PROFILE_CANVAS_REF}) →
+ *     `device_profile.invalid` {reason: "bad_canvas_ref"};
+ *   - a delete refused because a live device still references the profile (SQLSTATE 23001 on
+ *     {@link PROFILE_REFERENCED_BY_DEVICE}) → `device_profile.in_use`, a clean 409 rather than a raw
+ *     500. A restrict_violation from any other foreign key is re-thrown untouched.
+ * The SQLSTATE and the target are separate questions: `isUniqueViolation`/`isPgError` say which
+ * class of refusal this is, `constraintTarget` says which table and columns it named. Both walk the
+ * cause chain rather than reading a top-level `.code`, because the driver wraps every failure in
+ * Drizzle's `DrizzleQueryError`. The two 23503/23001 targets of `device_profiles_canvas_fk` differ —
+ * a bad reference names `canvas_id`, a refused canvas delete names `id` — so only the profile's own
+ * refusal reaches the `bad_canvas_ref` branch.
+ * Exported for the crafted-error unit test (`device-profile-store.test.ts`), NOT from the package
+ * barrel — the same shape as `canvas-store.ts`'s `translateWriteError`.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
-    const constraint = uniqueViolationConstraint(err);
-    if (constraint === undefined || constraint === "device_profiles_tenant_name_key") {
+    const target = constraintTarget(err);
+    if (target === undefined || sameTarget(target, PROFILE_NAME)) {
       throw new AppError("device_profile.name_taken", {});
     }
   }
-  if (pgErrorConstraint(err, FOREIGN_KEY_VIOLATION) === "device_profiles_canvas_fk") {
+  if (
+    isPgError(err, FOREIGN_KEY_VIOLATION) &&
+    sameTarget(constraintTarget(err), PROFILE_CANVAS_REF)
+  ) {
     throw new AppError("device_profile.invalid", { reason: "bad_canvas_ref" });
   }
-  const restrictConstraint = pgErrorConstraint(err, RESTRICT_VIOLATION);
-  if (restrictConstraint === DEVICE_PROFILE_FK) {
+  if (
+    isPgError(err, RESTRICT_VIOLATION) &&
+    sameTarget(constraintTarget(err), PROFILE_REFERENCED_BY_DEVICE)
+  ) {
     throw new AppError("device_profile.in_use", {});
   }
   throw err;

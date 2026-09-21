@@ -7,11 +7,16 @@ import { translateWriteError } from "./canvas-store.js";
 // branches directly with crafted errors — no DB — so the re-throw branches are covered
 // deterministically. `translateWriteError` is exported from canvas-store.ts for exactly this, not from
 // the package barrel. Mirrors identity's `asEmailTaken` unit tests (staff.test.ts).
+//
+// Each crafted error carries the `table` + `detail` pair `constraintTarget` reads, copied from what
+// PostgreSQL reported for the same refusal on 2026-09-21 (the real ones are driven in
+// canvas-store.pg.test.ts).
 describe("translateWriteError", () => {
-  it("translates a Drizzle-wrapped unique violation (23505) with no constraint name to canvas.name_taken", () => {
-    // PGlite omits the constraint name, so a bare 23505 falls back to translating (the only NON-PK
-    // unique an insert/update can trip is the name key; a primary-key clash is a
-    // cryptographically-unreachable defaultRandom collision).
+  it("translates a Drizzle-wrapped unique violation (23505) that named no key to canvas.name_taken", () => {
+    // The fallback branch: a 23505 whose target cannot be identified still translates, because the
+    // name key is the only unique an insert/update can trip on an author-supplied value (a
+    // primary-key clash is a cryptographically-unreachable defaultRandom collision, and an UPDATE
+    // never changes `id`).
     let thrown: unknown;
     try {
       translateWriteError({ cause: { code: "23505" } });
@@ -22,21 +27,29 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  it("translates a 23505 whose constraint is canvases_tenant_name_key", () => {
+  it("translates a 23505 on canvases (name)", () => {
     let thrown: unknown;
     try {
-      translateWriteError({ cause: { code: "23505", constraint: "canvases_tenant_name_key" } });
+      translateWriteError({
+        cause: { code: "23505", table: "canvases", detail: "Key (name)=(Twin) already exists." },
+      });
     } catch (e) {
       thrown = e;
     }
     expect(isAppError(thrown) && thrown.code).toBe("canvas.name_taken");
   });
 
-  // A 23505 on a DIFFERENT canvases constraint (the primary key, or any added later) must NOT be
-  // mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-deletion: drop the
-  // constraint gate and this fails (the error becomes name_taken).
-  it("re-throws a 23505 whose constraint is not the name key", () => {
-    const original = { cause: { code: "23505", constraint: "canvases_pkey" } };
+  // A 23505 on a DIFFERENT canvases key (the primary key, or any unique added later) must NOT be
+  // mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-deletion: drop the target
+  // gate and this fails (the error becomes name_taken).
+  it("re-throws a 23505 on canvases whose key is not (name)", () => {
+    const original = {
+      cause: {
+        code: "23505",
+        table: "canvases",
+        detail: "Key (id)=(6a9cebbb-d0d5-4411-8209-71a202afcb47) already exists.",
+      },
+    };
     let thrown: unknown;
     try {
       translateWriteError(original);
@@ -46,12 +59,20 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  // A 23001 restrict_violation on device_profiles_canvas_fk (a delete of a profile-referenced canvas)
-  // → canvas.in_use, no params. Proof-by-deletion: drop the 23001 branch and this becomes the re-throw.
-  it("translates a 23001 on device_profiles_canvas_fk to canvas.in_use", () => {
+  // A 23001 restrict_violation reported against device_profiles (id) — a delete of a canvas a
+  // profile still references — → canvas.in_use, no params. Proof-by-deletion: drop the 23001 branch
+  // and this becomes the re-throw.
+  it("translates a 23001 reported against device_profiles (id) to canvas.in_use", () => {
     let thrown: unknown;
     try {
-      translateWriteError({ cause: { code: "23001", constraint: "device_profiles_canvas_fk" } });
+      translateWriteError({
+        cause: {
+          code: "23001",
+          table: "device_profiles",
+          detail:
+            'Key (id)=(6a9cebbb-d0d5-4411-8209-71a202afcb47) is referenced from table "device_profiles".',
+        },
+      });
     } catch (e) {
       thrown = e;
     }
@@ -59,9 +80,17 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  // A 23001 on a DIFFERENT (unrelated) constraint must NOT be mislabelled canvas.in_use — re-thrown.
-  it("re-throws a 23001 whose constraint is not the canvas FK", () => {
-    const original = { cause: { code: "23001", constraint: "some_other_fk" } };
+  // A 23001 from some OTHER foreign key must NOT be mislabelled canvas.in_use — re-thrown. This one
+  // is the devices → device_profiles RESTRICT, which reports a different table.
+  it("re-throws a 23001 from a foreign key that does not reference canvases", () => {
+    const original = {
+      cause: {
+        code: "23001",
+        table: "devices",
+        detail:
+          'Key (id)=(2053a761-bbc0-4007-a2f4-be0ff9f220a5) is referenced from table "devices".',
+      },
+    };
     let thrown: unknown;
     try {
       translateWriteError(original);

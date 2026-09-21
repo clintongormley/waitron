@@ -3,13 +3,8 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  isUniqueViolation,
-  pgErrorConstraint,
-  tills,
-  uniqueViolationConstraint,
-} from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import { constraintTarget, isPgError, isUniqueViolation, sameTarget, tills } from "@waitron/db";
+import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
@@ -36,43 +31,56 @@ export type { DeviceKind };
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
- * A device binding FK and the input FIELD it guards. A 23503 on one of these means a device
- * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding no row matches —
- * the FK makes that check atomic with the write (no read-then-write race), so the routes translate it
- * here rather than pre-checking. Existence is all it can check: every profile and printer in the
- * database belongs to the one taxpayer.
- *  - `devices_device_profile_fk (device_profile_id)` — a reassign to an unknown
- *    profile (`deviceProfileId`);
- *  - `devices_receipt_printer_fk (receipt_printer_id)` — a hardware PATCH naming an
- *    unknown printer (`receiptPrinterId`).
- * Only `devices` carries a binding FK: a join request names none, so nothing at knock time can trip one.
+ * Each device binding FK, as the table and column a refusal on it names, beside the input FIELD it
+ * guards. A 23503 on one of these means a device write (`assign-device-profile` or the hardware
+ * PATCH) named a binding no row matches — the FK makes that check atomic with the write (no
+ * read-then-write race), so the routes translate it here rather than pre-checking. Existence is all
+ * it can check: every profile and printer in the database belongs to the one taxpayer.
+ *  - `devices_device_profile_fk` — a reassign to an unknown profile (`deviceProfileId`);
+ *  - `devices_receipt_printer_fk` — a hardware PATCH naming an unknown printer (`receiptPrinterId`).
+ * Both are declared in migration 0034, which is also where each lost the tenant column it used to
+ * carry. Only `devices` carries a binding FK: a join request names none, so nothing at knock time can
+ * trip one.
+ *
+ * A 23503 names the REFERENCING side — the table written and the column that held the unmatched
+ * value — so these are `devices` columns, not `device_profiles.id` or `printers.id`. Measured
+ * against the real migrated schema: an insert naming an absent profile reports `23503` with
+ * `{devices, [device_profile_id]}`, while DELETING a referenced `device_profiles` row reports
+ * `23001` with `{devices, [id]}` — a different SQLSTATE and a different key, so neither half of this
+ * check claims it.
  */
-const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> = {
-  devices_device_profile_fk: "deviceProfileId",
-  devices_receipt_printer_fk: "receiptPrinterId",
-};
+const BINDING_FK_FIELDS: readonly {
+  readonly target: ConstraintTarget;
+  readonly field: "deviceProfileId" | "receiptPrinterId";
+}[] = [
+  { target: { table: "devices", columns: ["device_profile_id"] }, field: "deviceProfileId" },
+  { target: { table: "devices", columns: ["receipt_printer_id"] }, field: "receiptPrinterId" },
+];
 
 /**
- * If `error` (or anything it wraps) is a 23503 on one of the device binding FKs, the input
- * FIELD it guards (`deviceProfileId`/`receiptPrinterId`); otherwise `undefined`. Reuses `@waitron/db`'s
- * `pgErrorConstraint` to walk the cause chain and read the offending constraint name — Drizzle wraps
- * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, so the real SQLSTATE and
- * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — then maps
- * that name through {@link BINDING_FK_FIELD}. It keys on the CONSTRAINT NAME, not merely the 23503
- * code, so a 23503 on a DIFFERENT constraint (the tenant/location direct FKs) — or one whose driver
- * reported no constraint name — returns `undefined` and is rethrown raw rather than mislabelled
- * `device.binding_invalid`. The `isZoneFkViolation` idiom (`tables.ts`). Exported for the crafted-error
- * unit tests, NOT from a package barrel (this is an application, not a library).
+ * If `error` (or anything it wraps) is a 23503 naming one of the device binding FKs' table and
+ * column, the input FIELD that key guards (`deviceProfileId`/`receiptPrinterId`); otherwise
+ * `undefined`. Both halves come from `@waitron/db`, each walking the cause chain Drizzle wraps a
+ * failed query in: `isPgError` for the SQLSTATE, `constraintTarget` for the table and columns.
+ *
+ * It keys on the TARGET as well as the 23503, so a 23503 on a different key of `devices` (the
+ * station, register or location FKs), on the same column name of another table, or one naming no key
+ * at all, returns `undefined` and is rethrown raw rather than mislabelled `device.binding_invalid`.
+ * The `isZoneFkViolation` idiom (`tables.ts`). Exported for the crafted-error unit tests, NOT from a
+ * package barrel (this is an application, not a library).
  */
 export function bindingFkField(error: unknown): "deviceProfileId" | "receiptPrinterId" | undefined {
-  const constraint = pgErrorConstraint(error, FOREIGN_KEY_VIOLATION);
-  return constraint === undefined ? undefined : BINDING_FK_FIELD[constraint];
+  if (!isPgError(error, FOREIGN_KEY_VIOLATION)) return undefined;
+  const target = constraintTarget(error);
+  return BINDING_FK_FIELDS.find((binding) => sameTarget(target, binding.target))?.field;
 }
 
-/** The UNIQUE index that makes a duplicate register name at one venue unrepresentable
- * (`tills_tenant_location_name_key`, migration 0006). {@link createRegister} keys its 23505
- * translation on this name so an unrelated unique violation is rethrown raw, not mislabelled. */
-const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
+/** The UNIQUE index that makes a duplicate register name at one venue unrepresentable, as the table
+ * and columns a refusal on it names: `tills_tenant_location_name_key`, which since migration 0034
+ * covers `(location_id, name)` and no longer the tenant column its name still carries.
+ * {@link createRegister} keys its 23505 translation on this target so an unrelated unique violation
+ * is rethrown raw, not mislabelled. */
+const TILL_NAME_UNIQUE: ConstraintTarget = { table: "tills", columns: ["location_id", "name"] };
 
 /**
  * Auto-create the cash register a `till`-form-factor device rings against, named after the device, and
@@ -80,8 +88,9 @@ const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
  * including this function's own — discards the register with the device (no orphan till, CLAUDE.md §3).
  * A name already used at this venue trips {@link TILL_NAME_UNIQUE} (23505) → `device.register_name_taken`
  * (the operator renames the device rather than ending up with two indistinguishable registers); the
- * unique index is the whole guard (`tills` is a `state` table), keyed by CONSTRAINT NAME so an unrelated
- * unique violation is rethrown raw — the `translateWriteError` idiom (device-profile-store.ts).
+ * unique index is the whole guard (`tills` is a `state` table), keyed by the table and columns the
+ * refusal names so an unrelated unique violation is rethrown raw — the `translateWriteError` idiom
+ * (device-profile-store.ts).
  */
 async function createRegister(tx: Transaction, locationId: string, name: string): Promise<string> {
   try {
@@ -89,10 +98,10 @@ async function createRegister(tx: Transaction, locationId: string, name: string)
     return till!.id;
   } catch (error) {
     if (isUniqueViolation(error)) {
-      const constraint = uniqueViolationConstraint(error);
-      // PGlite may report no constraint name; the only unique this narrow insert can trip is the
-      // venue-scoped name index, so a nameless 23505 here is that one (the `translateWriteError` fallback).
-      if (constraint === undefined || constraint === TILL_NAME_UNIQUE) {
+      const target = constraintTarget(error);
+      // A 23505 that names no key is translated too: the only unique this narrow insert can trip is
+      // the venue-scoped name index (the `translateWriteError` fallback).
+      if (target === undefined || sameTarget(target, TILL_NAME_UNIQUE)) {
         throw new AppError("device.register_name_taken", {});
       }
     }

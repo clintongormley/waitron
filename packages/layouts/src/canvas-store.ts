@@ -1,10 +1,5 @@
 import "./errors.js";
-import {
-  isUniqueViolation,
-  canvases,
-  pgErrorConstraint,
-  uniqueViolationConstraint,
-} from "@waitron/db";
+import { canvases, constraintTarget, isPgError, isUniqueViolation, sameTarget } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -34,34 +29,52 @@ import { validateCanvas } from "./validate-canvas.js";
  * `packages/db/src/schema/canvases.ts`).
  */
 
+/** SQLSTATE 23001, restrict_violation: a delete refused by an ON DELETE RESTRICT foreign key. */
+const RESTRICT_VIOLATION = "23001";
+
+/** `canvases_tenant_name_key`: UNIQUE (name) on canvases,
+ * `packages/db/drizzle/0033_drop_tenant_id.sql:229`. */
+const CANVAS_NAME = { table: "canvases", columns: ["name"] } as const;
+
+/** What a delete refused by `device_profiles_canvas_fk` reports — device_profiles.canvas_id →
+ * canvases.id ON DELETE RESTRICT, `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:36`. The
+ * REFERENCING table paired with the REFERENCED table's key columns, which is how PostgreSQL reports
+ * a restrict_violation (measured 2026-09-21; the refusal itself is driven in
+ * `canvas-store.pg.test.ts`). Not the same target as that FK's 23503, which names `canvas_id`. */
+const CANVAS_REFERENCED_BY_PROFILE = { table: "device_profiles", columns: ["id"] } as const;
+
 /**
- * Translate the two driver errors the canvas write/delete paths care about into their domain codes,
- * and re-throw anything else untouched — the twin of `device-profile-store.ts`'s `translateWriteError`:
- *   - a `canvases_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
- *     `canvas.name_taken`. This closes the Phase-3 reviewer's flagged gap: a duplicate name must
- *     return a clean 409, not the raw 23505 an unwrapped INSERT/UPDATE would surface as a 500. It
- *     matches on the CONSTRAINT NAME, not merely on 23505: any 23505 on a constraint added later is
- *     re-thrown untouched rather than mislabelled `canvas.name_taken`. When the driver reports no
- *     constraint name (PGlite omits it) it falls back to translating: the name key is the only unique
- *     these writes can trip on an author-supplied value (the primary key is a
- *     cryptographically-unreachable `defaultRandom()` collision, and an UPDATE never changes `id`).
- *     The same constraint-targeted shape as identity's `asEmailTaken`;
- *   - a `device_profiles_canvas_fk` violation (a delete of a canvas a device profile still references,
- *     ON DELETE RESTRICT, SQLSTATE 23001) → `canvas.in_use` — a clean 409 rather than a raw 500.
- *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
- * Detection goes through `@waitron/db`'s `isUniqueViolation` / `pgErrorConstraint` (cause-chain walks),
- * not a top-level `.code` read, because the driver wraps every failure in Drizzle's `DrizzleQueryError`.
+ * Translate the two driver refusals the canvas write/delete paths care about into their domain
+ * codes, and re-throw anything else untouched — the twin of `device-profile-store.ts`'s
+ * `translateWriteError`:
+ *   - a duplicate canvas name (SQLSTATE 23505 on {@link CANVAS_NAME}) → `canvas.name_taken`, so a
+ *     duplicate returns a clean 409 rather than the raw 23505 an unwrapped INSERT/UPDATE would
+ *     surface as a 500. A 23505 on any OTHER key of `canvases` is re-thrown untouched rather than
+ *     mislabelled. A 23505 that named no key at all — {@link constraintTarget} returns `undefined` —
+ *     is translated anyway: the name key is the only unique these writes can trip on an
+ *     author-supplied value (the primary key is a cryptographically-unreachable `defaultRandom()`
+ *     collision, and an UPDATE never changes `id`);
+ *   - a delete refused because a device profile still references the canvas (SQLSTATE 23001 on
+ *     {@link CANVAS_REFERENCED_BY_PROFILE}) → `canvas.in_use`, a clean 409 rather than a raw 500. A
+ *     restrict_violation from any other foreign key is re-thrown untouched.
+ * The SQLSTATE and the target are separate questions: `isUniqueViolation`/`isPgError` say which
+ * class of refusal this is, `constraintTarget` says which table and columns it named. Both walk the
+ * cause chain rather than reading a top-level `.code`, because the driver wraps every failure in
+ * Drizzle's `DrizzleQueryError`.
  * Pinned by crafted-error unit tests in `canvas-store.test.ts` and end to end in
  * `canvas-store.pg.test.ts`. Exported for the unit test, NOT from the package barrel.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
-    const constraint = uniqueViolationConstraint(err);
-    if (constraint === undefined || constraint === "canvases_tenant_name_key") {
+    const target = constraintTarget(err);
+    if (target === undefined || sameTarget(target, CANVAS_NAME)) {
       throw new AppError("canvas.name_taken", {});
     }
   }
-  if (pgErrorConstraint(err, "23001") === "device_profiles_canvas_fk") {
+  if (
+    isPgError(err, RESTRICT_VIOLATION) &&
+    sameTarget(constraintTarget(err), CANVAS_REFERENCED_BY_PROFILE)
+  ) {
     throw new AppError("canvas.in_use", {});
   }
   throw err;

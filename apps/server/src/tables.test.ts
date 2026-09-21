@@ -350,24 +350,38 @@ describe("zone CRUD", () => {
   });
 });
 
-// The FK-name check createTable/updateTable use to tell the zone FK apart from the sibling
-// location/status FKs. Crafted-error unit tests (no DB) pin every branch — the real-DB tests above
-// already prove the true path (a bad zoneId → zone.not_found) and the location-FK false path.
+// The check createTable/updateTable use to tell the zone FK apart from the sibling location/status
+// FKs. Crafted-error unit tests (no DB) pin every branch — the real-DB tests above already prove the
+// true path (a bad zoneId → zone.not_found) and the location-FK false path.
+//
+// The two fields a crafted error must carry are the two `constraintTarget` reads: `table`, and the
+// `Key (…)=(…)` clause of `detail`. That is the shape node-postgres and PGlite both put on a real
+// 23503 — measured in packages/db/src/constraint-target.test.ts, which drives real refusals through
+// both targets.
 describe("isZoneFkViolation", () => {
-  it("matches a 23503 on dining_tables_zone_fk, at the top level and nested under .cause", () => {
-    expect(isZoneFkViolation({ code: "23503", constraint: "dining_tables_zone_fk" })).toBe(true);
-    // Drizzle wraps the driver error; the real code/constraint live one level down under `.cause`.
-    expect(
-      isZoneFkViolation({ cause: { code: "23503", constraint: "dining_tables_zone_fk" } }),
-    ).toBe(true);
+  const fk = (code: string, table: string, column: string): Record<string, unknown> => ({
+    code,
+    table,
+    detail: `Key (${column})=(0f9e) is not present in table "floor_zones".`,
   });
 
-  it("does NOT match a sibling constraint, a different code, a non-object, or a self-referential cause", () => {
-    // The location FK is a 23503 too, but a different constraint — must stay raw.
-    expect(isZoneFkViolation({ code: "23503", constraint: "dining_tables_location_fk" })).toBe(
-      false,
-    );
-    expect(isZoneFkViolation({ code: "23505", constraint: "dining_tables_zone_fk" })).toBe(false);
+  it("matches a 23503 on dining_tables.zone_id, at the top level and nested under .cause", () => {
+    expect(isZoneFkViolation(fk("23503", "dining_tables", "zone_id"))).toBe(true);
+    // Drizzle wraps the driver error; the real code and target live one level down under `.cause`.
+    expect(isZoneFkViolation({ cause: fk("23503", "dining_tables", "zone_id") })).toBe(true);
+  });
+
+  it("does NOT match a sibling FK, a different code, a non-object, or a self-referential cause", () => {
+    // The location and status FKs are 23503s on the SAME table, told apart by their column — a bad
+    // location or status is not a zone fault and must stay raw.
+    expect(isZoneFkViolation(fk("23503", "dining_tables", "location_id"))).toBe(false);
+    expect(isZoneFkViolation(fk("23503", "dining_tables", "status_id"))).toBe(false);
+    // …and a `zone_id` on some other table is not this FK either — `zone_service_policies` carries
+    // one too, so the table half of the comparison is what separates them.
+    expect(isZoneFkViolation(fk("23503", "zone_service_policies", "zone_id"))).toBe(false);
+    expect(isZoneFkViolation(fk("23505", "dining_tables", "zone_id"))).toBe(false);
+    // A 23503 that names no key at all cannot be attributed to the zone FK.
+    expect(isZoneFkViolation({ code: "23503" })).toBe(false);
     expect(isZoneFkViolation(null)).toBe(false);
     expect(isZoneFkViolation("nope")).toBe(false);
     // A self-referential cause must terminate the walk rather than spin forever.
