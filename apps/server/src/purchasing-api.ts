@@ -140,7 +140,9 @@ function requireDecimal(v: unknown, field: string): Decimal {
  * line, a negative `base`, a negative `tax` and a `rate` outside 0–100, all as `purchase.invalid`.
  * The header's `total` has no range check on either side and no column constraint: measured
  * 2026-09-21 through this route, a POST carrying `total: "-121.00"` answered 201 and the row read
- * back `-121.00`. The dashboard form is what refuses one today (docs/backlog.md → Track C).
+ * back `-121.00`. That is INTENDED and not a gap to close: a negative total is a supplier credit
+ * note (owner ruling 2026-09-21, docs/backlog.md → Track C). The dashboard form refuses one anyway,
+ * which the same entry records as an open consequence of the ruling.
  */
 function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
   if (!isPlainObject(v)) throw new AppError("management.request_invalid", { field: "header" });

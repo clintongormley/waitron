@@ -3313,8 +3313,14 @@ refused by BOTH `decimal()` and `isProductPrice`, so no case in that set could t
 apart — CLAUDE.md §1's class-representative rule, where the representative has to be a value the two
 sides could treat differently. A negative can tell them apart, and does: the next entry.
 
-**A negative gross total is accepted and stored on the purchase-invoice routes — OPEN (found
-2026-09-21, task N1).** Measured through the real route in `apps/server`'s PGlite harness: a POST to
+**A negative gross total is accepted and stored on the purchase-invoice routes — NOT A DEFECT, the
+behaviour is intended (owner ruling 2026-09-21; found 2026-09-21, task N1).** A negative gross total
+is a supplier credit note — a corrective adjustment for a return, a cancellation, an overpayment, a
+retroactive rebate or goods that arrived damaged or never arrived — so accepting and storing one is
+correct and there is no `negative_total` refusal to add. Whether a credit note should eventually be
+its own document type rather than a negative-total purchase invoice is a separate design question
+and is not queued. The measurement that raised it is kept below, because it is the receipt for what
+the routes do today. Measured through the real route in `apps/server`'s PGlite harness: a POST to
 `/management-api/purchase-invoices` carrying `total: "-121.00"` answered **201**, and the list
 route read the row back with `total` `-121.00`. `validateProportion` and `validateLines` in
 `packages/purchasing/src/operations.ts` check the deductible proportion 0–100 and, per line, base ≥
@@ -3322,16 +3328,42 @@ route read the row back with `total` `-121.00`. `validateProportion` and `valida
 `packages/db/src/schema/purchase-invoices.ts` carries check constraints for `deductible_proportion`
 and the line `rate` and none for `total`. The dashboard form's `inRange(this.total, 0, Infinity)`
 (`apps/dashboard/src/widgets/purchase-form.ts`) is the only thing refusing one, so a direct POST
-walks past it. **Next action:** decide whether a negative total is ever legitimate — a supplier
-credit note is the case to settle first — before adding a `negative_total` reason beside
-`negative_base`/`negative_tax`.
+walks past it. **One consequence the ruling creates, unqueued:** that form check refuses the very
+document the ruling calls legitimate, so an operator cannot enter a supplier credit note through the
+dashboard at all. Nobody has decided whether the form should be relaxed or the credit note should
+become its own document type; this records the gap, it does not resolve it.
 
-**A negative price is stored by the product writes, and answered as a SERVER fault by the menu-item
-writes — OPEN (found 2026-09-21, task N1).** Four catalogue writes convert a price with a bare
+**A negative price WAS stored by the product writes, and answered as a SERVER fault by the menu-item
+writes — FIXED 2026-09-21, task N4 (found 2026-09-21, task N1).** A negative CATALOGUE price is never valid
+(owner ruling 2026-09-21) — scoped to the catalogue, because a corrective invoice's sale total and
+its line TOTALS are deliberately negative (`packages/core/src/record-correction.ts`; that model
+negates the QUANTITY, and the unit price in its own fixture stays positive).
+`apps/server/src/catalogue-api.ts` now screens the sign at the request boundary on the four writes
+below, refusing one as `management.request_invalid` naming the field, so the product writes store
+nothing and the menu-item writes answer a 400 rather than a 500. The screen reads the SIGN alone: a
+value `decimal()` cannot parse is left to the write's own refusal, which keeps both the error code
+and the order a request carrying two faults reports them in. The measurement below is kept as the
+receipt for what the routes did before.
+
+**What the fix does NOT reach, stated so nobody assumes it.** It is at the request boundary only.
+`createProduct` and `updateProduct` still accept and store a negative when called directly — a seed,
+a script or a future caller — and `products.unit_price` still carries no check constraint.
+`createMenuItem` and `updateMenuItem` are different and were wrongly grouped with them in the first
+version of this entry: called directly they are refused, by the database, with a raw `23514` naming
+`menu_items_gross_price_ck` rather than a domain error — and only once the product and the section
+both exist, since `createMenuItem` throws `product.not_found`/`menu_section.not_found` before it
+converts the price. The reason the ops were left alone is simply that
+`packages/catalogue/src/operations.ts` is inside the in-flight SQLite flip's diff, and the two-lane
+rule bars a second writer in a file the other lane has open. It is NOT that the flip is rewriting
+the price conversion: checked, it does not touch the four `decimal()` calls. **Next action, once the
+flip has landed:** decide whether the screen belongs in the ops or as a `products.unit_price >= 0`
+check beside the sibling price checks the other catalogue tables carry. Four catalogue writes convert a price with a bare
 `decimal()`, whose pattern allows a leading minus (`packages/shared/src/money.ts:19`):
 `createProduct` (`packages/catalogue/src/operations.ts:737`), `updateProduct` (`:898`),
 `createMenuItem` (`:355`) and `updateMenuItem` (`:391`). What happens after that differs, measured
 2026-09-21 by driving each of those routes end to end in `apps/server`'s PGlite harness.
+
+**What follows was measured on `main` BEFORE the fix; every sentence in it is past behaviour.**
 
 **The stored half.** `POST /management-api/products` carrying `unitPrice: "-1.00"` answered **201**,
 and `PATCH /management-api/products/:id` carrying the same value answered **204**; reading the
@@ -3349,10 +3381,35 @@ Nothing is stored wrong; what is wrong is who the answer blames, and it needs it
 leading minus, and none of those four writes goes through it. Inside `packages/catalogue` it is
 imported by `product-editor-input.ts`, `variants.ts` and `extra-contract.ts` alone, which covers the
 product editor, the menu-variant route and extras; three dashboard widgets import it as well, for
-the same check in the browser. **Next action:** screen the price inside `createProduct`,
-`updateProduct`, `createMenuItem` and `updateMenuItem`, or add a non-negative check to
-`products.unit_price` — and either way give the two menu-item routes a 400 that names the field
-instead of a 500.
+the same check in the browser. **Measured as part of the N4 fix**, by driving the catalogue's
+price-carrying routes with `"-1.00"`: the four named above were the ones answering wrongly, and the
+routes reached through `isProductPrice` already answered a clean 400 of their own — the
+product-editor create and update (`product.invalid`), `PUT …/items/:itemId/variants`
+(`product.variant_invalid`) and the extras list create and update (`extras.invalid`). Both groups are
+pinned by tests in `apps/server/src/catalogue-api.test.ts`. **That is the set that was driven, not a
+proof that it is every price-carrying route** — the first pass of this enumeration missed two of the
+already-refusing ones, and a review found them by running the routes.
+
+**Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
+`isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
+and ten whole digits; the `decimal()` + `decimalToCents` pair the four screened catalogue writes use
+allows any number of decimals and twelve whole digits, and ROUNDS the excess. Measured 2026-09-21
+through the repository's own converters:
+
+```text
+1.999            decimal=1.999            cents=200              isProductPrice=false
+12345678901.00   decimal=12345678901.00   cents=1234567890100    isProductPrice=false
+-0.00            decimal=0.00             cents=0                isProductPrice=false
+```
+
+So `POST /management-api/products` with `unitPrice: "1.999"` stores `2.00` without saying so, while
+the product-editor route refuses the same value with `product.invalid`; an eleven-digit price splits
+the same way, and `-0.00` is accepted by one and refused by the other. N4 deliberately did not close
+this: widening the four routes to `isProductPrice` would start refusing values that save today, which
+is the regression shape #485 met (it tightened its own dashboard form in the same change so the two
+matched). **Next action:** decide whether one rule
+should govern every catalogue price, and if so which — and check each dashboard form against it
+before changing the server, since a server stricter than its own form is the failure #485 met.
 
 **The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
 2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE

@@ -935,7 +935,7 @@ declare module "@waitron/shared" {
      */
     "placement.invalid": { field: string };
     // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
-    // request-shape screens that throw it, and reaches this program through their package barrel.
+    // request screens that throw it, and reaches this program through their package barrel.
     // Codes are never renamed once shipped.
     /**
      * A request to a device-authenticated route (a KDS station display, device-identity-1 §3c) carried
