@@ -230,6 +230,16 @@ export class TillTableOrderScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      /* A CHILD extras row belongs to the dish above it, and a waiter must be able to see that at a
+         glance: three of a €12.50 cheese is a pick on a burger, not three portions of cheese. Same
+         shape the basket gives a pick (the .option rule in ../widgets/basket.ts) — indented and muted —
+         with the smaller type the screen already uses for a line's subordinate text. */
+      .child-line {
+        padding-left: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
       /* The per-line course control (coursing editing A1): an editable select on a held line, a muted
          read-only label on a fired one. Capped so a long course name never crowds out the line total. */
       .line-course {
@@ -1152,7 +1162,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #pendingLine(line: TabLine): TemplateResult {
     const name = this.#nameForLine(line);
-    return html`<li class="line pending-line">
+    return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
       <span class="name"
         >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
       >
@@ -1182,7 +1192,7 @@ export class TillTableOrderScreen extends LitElement {
           : html`<ul>
               ${served.map(
                 (line) =>
-                  html`<li class="line served-line">
+                  html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
                     <span class="name"
                       >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}</span
                     >

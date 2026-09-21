@@ -742,6 +742,22 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
     });
 
+    it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {
+      // A waiter scanning "Pendiente de servir" must not read a pick as another dish. The basket's
+      // `.option` rule is the house shape for a pick: indented under its dish and muted. Measured
+      // here rather than asserted as a class, because a class the stylesheet has no rule for paints
+      // nothing.
+      const { el } = await mount({ lines: [pendingLine, childLine], courses });
+      await openDrawer(el);
+      const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".pending-line")];
+      expect(rows).toHaveLength(2);
+      const dish = getComputedStyle(rows[0]!);
+      const child = getComputedStyle(rows[1]!);
+      expect(parseFloat(child.paddingLeft)).toBeGreaterThan(parseFloat(dish.paddingLeft));
+      expect(child.color).not.toBe(dish.color);
+      expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
+    });
+
     it("hides Send all on a fully-fired tab that merely contains a modifier'd dish (child excluded)", async () => {
       // pendingLine: firedAt set (fired). childLine: firedAt null, so it is the held-LOOKING row — but
       // it is not held. HONEST about what this pins: on the real wire a child never has a ticket item,

@@ -86,6 +86,32 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a child extras row in the drawer", async () => {
+    // The child row is painted muted and a size down from its dish, so its contrast against the
+    // drawer surface is its own state — the scan above, which has no child row, cannot see it.
+    const childLine: TabLine = {
+      lineNo: 3,
+      productId: "cafe",
+      parentLineNo: 1,
+      quantity: "1.000",
+      unitPriceGross: "0.50",
+      servedAt: null,
+      courseId: null,
+      firedAt: null,
+      state: null,
+    };
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      { products, lines: [...lines, childLine], statuses, courses, orderId: "wo-1" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations in the split quantity picker", async () => {
     const splitLines: TabLine[] = [
       { ...lines[0]!, quantity: "4.000" },
