@@ -2,13 +2,10 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import {
-  openVenueDatabase,
-  runMigrations,
-  type Database,
-  type MigrationOptions,
-} from "@waitron/db";
+import { openVenueDatabase, runMigrations, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { installAppendOnlyTriggers } from "@waitron/store";
+import type { VenueMigrationOptions } from "./manifest.js";
 import { appliedSchemaVersion } from "./schema-version.js";
 import "./errors.js";
 
@@ -61,12 +58,15 @@ const LOCK_WAIT_MS = 120_000;
  * **Every set goes to the VENUE handle, and the node file stays empty**, for the reason
  * `packages/db/src/testing/venue-db.ts` states on `useVenueDb`.
  *
- * Nothing here installs the append-only triggers. That is a separate decision about a fiscal
- * invariant (CLAUDE.md §5) and this function is only the seam it would sit behind.
+ * **It also installs the append-only triggers**, set by set, from each set's `appendOnlyTables`. This
+ * is where they go because it is the one place that knows a set's tables now exist: boot, the cold
+ * restore, `rejoin-command`, `waitron-provision instance` and `dev-setup` all migrate through here,
+ * so none of them can forget. What a caller that hands over no `appendOnlyTables` gets is a migrated
+ * database with no triggers on it, which is the hedge `VenueMigrationOptions` states.
  */
 export async function applyMigrations(
   directory: string,
-  options: readonly MigrationOptions[],
+  options: readonly VenueMigrationOptions[],
 ): Promise<void> {
   // Before the venue file is opened, not after: two migrators also collide on the OPEN, where
   // `pragma journal_mode = wal` is refused `database is locked` (errcode 5).
@@ -88,7 +88,7 @@ export async function applyMigrations(
 
 async function migrateEverySet(
   directory: string,
-  options: readonly MigrationOptions[],
+  options: readonly VenueMigrationOptions[],
 ): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
@@ -97,6 +97,12 @@ async function migrateEverySet(
     for (const set of options) {
       await runMigrations(store.venue, set);
       await assertSetApplied(store.venue, set);
+      // Inside the loop, immediately after this set migrated — not once at the end. A set whose
+      // tables already exist is then protected even when a LATER set aborts the run. Measured on
+      // this tree: core followed by a set whose journal names a file the folder does not ship (so
+      // drizzle throws mid-run), `select name from sqlite_master where tbl_name='sales'` afterwards
+      // reads both triggers with the call here and an empty list with it moved below the loop.
+      installAppendOnlyTriggers(store.venue, set.appendOnlyTables ?? []);
     }
   } finally {
     await store.close();
@@ -133,7 +139,7 @@ async function migrateEverySet(
  */
 async function assertSetApplied(
   db: Pick<Database, "execute">,
-  set: MigrationOptions,
+  set: VenueMigrationOptions,
 ): Promise<void> {
   // `MigrationOptions` carries no set NAME, only a folder and a table, so the table names the set
   // here and in the thrown params. It is also what `appliedSchemaVersion` validates against the

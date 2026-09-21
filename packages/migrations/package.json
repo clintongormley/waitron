@@ -18,6 +18,7 @@
   "dependencies": {
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 export {
+  appendOnly,
   classify,
   tablesForPublication,
   type ClassifiedTable,

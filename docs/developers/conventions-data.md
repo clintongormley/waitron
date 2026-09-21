@@ -642,7 +642,7 @@ guard kept its `1.2345::numeric(12,3)` SQL probe as a control and now measures
 `decimalToThousandths` beside it: both round to `1.235`, so the rounding that guard defends against
 moved with the storage and did not change.
 
-## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and classifying one `ledger` is what makes it append-only
+## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
 A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what
 those triggers exist to refuse. `ENABLE ALWAYS` is kept although the PostgreSQL replication that
@@ -667,10 +667,35 @@ append-only-enable-always guard (named without a path: the file is deleted, and 
 **2026-09-21, task F1 step group 6: everything above the line is now history, and it went the way
 §8.1 said.** The flag and its guard are both deleted. `ENABLE ALWAYS` was a PostgreSQL trigger state
 and SQLite has no equivalent, so the thing the flag protected — an apply worker copying a corrupted
-row past an ordinary trigger — has no path left to take. The class carried over and now does more
-than before: it is what INSTALLS the enforcement. `installAppendOnlyTriggers`
-(`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on every table the modules
-classify `ledger`, so the enforcement is no longer written into each migration by hand.
+row past an ordinary trigger — has no path left to take. The enforcement is no longer written into
+each migration by hand: `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`) puts a
+`RAISE(ABORT)` trigger pair on each named table, and `applyMigrations`
+(`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot, the cold restore,
+`rejoin-command`, `waitron-provision instance` and `dev-setup` all install them.
+
+**2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
+going to.** The first design said "every table the modules classify `ledger`", and the guard that
+stood here asserted exactly that — against a database it migrated and then installed the triggers
+on itself, so it proved the installer and never the product. Nothing in the product called the
+installer at all, which is why the mismatch stayed invisible. Measured when the wiring went in: with
+the trigger set taken from the class, nine tables came back refusing an update and a delete that
+ordinary product code performs — `payments` (nine call sites in `packages/payments/src/store.ts`,
+a card payment's row moving through its states), `cadenas` and `registro_sif`
+(`packages/fiscal-verifactu`), `ticket_items` (`apps/server/src/working-order.ts`),
+`daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat`, `workforce_chains` and `envios` —
+and `order_amendments` came back with no trigger at all, although PostgreSQL's hand-written
+`reject_mutation()` triggers DID protect it, because it is classified `state`. The class is wrong in
+both directions.
+
+So the declaration is its own marker: `appendOnly(table, class, reason)` beside `classify()` in
+`@waitron/sync-enrolment`, read by `orderedMigrationSets` off the descriptor's `classification` seat
+and carried to `applyMigrations` through `MigrationSet.appendOnlyTables`. The set it names is the
+set PostgreSQL protected, table for table — `sales`, `sale_lines`, `tenders`, `sale_settlements`,
+`sale_voids`, `sale_substitutions`, `daily_closes`, `order_amendments`, `registros_facturacion`,
+`time_entries` — read out of `origin/main`'s six trigger-carrying baselines with
+`grep -oiE "BEFORE (UPDATE OR DELETE|DELETE OR UPDATE) ON ..."` before anything was written. The
+cost of the class-derived version was never paid in production because the installer was never
+wired; it would have been paid by the first card capture after the flip.
 
 Three things about the replacement that a reader should not have to re-derive:
 
@@ -692,12 +717,17 @@ Three things about the replacement that a reader should not have to re-derive:
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
 `scripts/classification-complete.test.ts` (every table in every module's `drizzle/` is classified
-exactly once) and `scripts/append-only-triggers.test.ts` (every table classified `ledger` refuses a
-plain `UPDATE` and a plain `DELETE`, tried against a real database built from the tree's own
-migrations). The second is narrower than its name in one way it states itself: it covers those two
-shapes only, because the other two need a conflicting key, which is per-table — those are proven
-once against the trigger pair in `packages/store/src/append-only.test.ts`. Run both after adding any
-table anywhere.
+exactly once) and `scripts/append-only-triggers.test.ts` (every declared table refuses a plain
+`UPDATE` and a plain `DELETE`, tried against a database `applyMigrations` migrated — the product's
+own entry point, not one the guard builds and protects itself). The second is narrower than its name
+in two ways it states itself: it covers those two statement shapes only, because the other two need
+a conflicting key, which is per-table — those are proven once against the trigger pair in
+`packages/store/src/append-only.test.ts`; and it drives the DESCRIPTOR path, leaving the
+manifest-JSON path that `rejoin-command`, `dev-setup` and `waitron-provision instance` take to
+`packages/composition/src/composition.test.ts`'s `toEqual` of the two, plus
+`packages/migrations/src/apply-append-only.test.ts`, which runs it end to end. It also PINS the set
+by name rather than counting it, so adding or dropping an append-only table costs a deliberate edit.
+Run both after adding any table anywhere.
 
 ## The class also chooses the database FILE, so no foreign key may join a `local` table to a `ledger`/`state` one
 

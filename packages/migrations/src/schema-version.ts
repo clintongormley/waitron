@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { type MigrationSet, resolveExistingMigrationsFolder } from "./manifest.js";
+import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
 import "./errors.js";
 
 /**
@@ -25,7 +25,7 @@ const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
  * Read synchronously: it is called from planning code, not a hot path, and a journal that cannot be
  * read is a packaging fault that should fail loudly and immediately, not resolve to a wrong number.
  */
-export function expectedSchemaVersion(set: MigrationSet, root: string | null): number {
+export function expectedSchemaVersion(set: MigrationSetSource, root: string | null): number {
   // Shared with `migrationOptionsFor`: the same journal-existence guard and the same classified
   // `migrations.set_missing`, so a set whose journal is absent fails LOUD here rather than throwing
   // a bare `ENOENT` out of `readFileSync`. (A journal that is PRESENT but unparseable still escapes
@@ -58,7 +58,7 @@ export function expectedSchemaVersion(set: MigrationSet, root: string | null): n
  */
 export async function appliedSchemaVersion(
   db: Pick<Database, "execute">,
-  set: MigrationSet,
+  set: MigrationSetSource,
 ): Promise<number> {
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });

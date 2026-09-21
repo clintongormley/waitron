@@ -443,20 +443,25 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   every rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core
   set only.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
-  list, and classifying one `ledger` is what makes it append-only** — `installAppendOnlyTriggers`
-  (`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on every table the
-  classification names, so a new ledger table is protected by being classified and nobody has to
-  remember a second step. It needs `PRAGMA recursive_triggers`, which the store turns on: without it
-  `INSERT OR REPLACE` rewrites a ledger row silently, while the other three mutation shapes are
-  refused either way — so a suite that omits the replace case passes with the hole open. What a
-  trigger cannot refuse is `DROP TABLE`: SQLite has no trigger event for it and no `TRUNCATE`
-  statement at all, so the truncate-blocking trigger the PostgreSQL schema carried has no equivalent
-  (2026-09-21, the storage switch; the `ENABLE ALWAYS` rule that stood here belonged to PostgreSQL's
-  replication apply worker and went with it). No policies, no RLS: one tenant per database. Guards,
-  on a new table: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` —
-  which proves the refusal of a plain `UPDATE` and `DELETE` on every ledger table against a real
-  database built from the tree's migrations, and leaves the other two shapes to
-  `packages/store/src/append-only.test.ts`, where a conflicting key is available.
+  list, and a table that must never be corrected is declared with `appendOnly()` instead of
+  `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
+  after each set migrates (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`), so
+  every migrating path installs them and none can forget. **The CLASS is not the trigger set.**
+  Nine `ledger` tables are updated or deleted by ordinary product code — `payments` records a card
+  payment's progress, `cadenas` and `workforce_chains` hold chain heads — and `order_amendments` is
+  `state` and must still refuse both; deriving the triggers from the class refused a card capture
+  and left an amendment rewritable, measured 2026-09-22. It needs `PRAGMA recursive_triggers`,
+  which the store turns on: without it `INSERT OR REPLACE` rewrites a protected row silently, while
+  the other three mutation shapes are refused either way — so a suite that omits the replace case
+  passes with the hole open. What a trigger cannot refuse is `DROP TABLE`: SQLite has no trigger
+  event for it and no `TRUNCATE` statement at all, so the truncate-blocking trigger the PostgreSQL
+  schema carried has no equivalent (2026-09-21, the storage switch; the `ENABLE ALWAYS` rule that
+  stood here belonged to PostgreSQL's replication apply worker and went with it). No policies, no
+  RLS: one tenant per database. Guards, on a new table:
+  `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` — which migrates
+  a real database through `applyMigrations` and then tries a plain `UPDATE` and `DELETE` on every
+  declared table, and leaves the other two shapes to `packages/store/src/append-only.test.ts`, where
+  a conflicting key is available.
 - **The class also chooses the database FILE, so no foreign key may join a `local` table to a
   `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
   and names, at the column, what establishes the target exists — or that nothing does, and where the
@@ -472,10 +477,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `packages/provisioning/src/instance-apply.pg.test.ts` (C5). Any new provisioning path that creates
   schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
-  trigger executing a function owned by a different migration set. Both exist today — `workforce` and
-  `fiscal-verifactu` run append-only `reject_mutation()` triggers, and that function is owned by
-  `core` (harmless: both declare `requires.core`). Guard: `scripts/module-graph-honesty.test.ts`,
-  which reads text (and says so) for any cross-module `EXECUTE FUNCTION`, not one named function.
+  trigger executing a function owned by a different migration set. Only the first has an instance
+  today: the SQLite baselines carry no `CREATE TRIGGER` at all — a `create trigger` grep over
+  `packages/*/drizzle/*.sql` counted 0 on 2026-09-22 — because append-only enforcement moved to
+  `applyMigrations` at runtime, and the `workforce`/`fiscal-verifactu` → `core` edge that
+  `reject_mutation()` used to make went with it. The rule stays because the SHAPE can come back.
+  Guard: `scripts/module-graph-honesty.test.ts`, which reads text (and says so) for any
+  cross-module `EXECUTE FUNCTION`, not one named function.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its grants travel with it.
 - **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,

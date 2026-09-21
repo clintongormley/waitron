@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import { type Database, pgErrorCode } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { type MigrationSet, resolveExistingMigrationsFolder } from "./manifest.js";
+import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
 import "./errors.js";
 
 /** The same guard `appliedSchemaVersion` uses: the table name reaches SQL as TEXT, never a placeholder. */
@@ -18,7 +18,7 @@ const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
  * `journal-hashes.test.ts` pins that against a hand-computed digest so a change in drizzle fails
  * loudly rather than reporting every migration as unknown.)
  */
-export function imageMigrationHashes(set: MigrationSet, root: string | null): string[] {
+export function imageMigrationHashes(set: MigrationSetSource, root: string | null): string[] {
   const folder = resolveExistingMigrationsFolder(set, root);
   return readMigrationFiles({ migrationsFolder: folder }).map((migration) => migration.hash);
 }
@@ -40,7 +40,7 @@ export function imageMigrationHashes(set: MigrationSet, root: string | null): st
  */
 export async function journalHashes(
   db: Pick<Database, "execute">,
-  set: MigrationSet,
+  set: MigrationSetSource,
 ): Promise<string[] | null> {
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });

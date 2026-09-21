@@ -14,19 +14,64 @@ import "./errors.js";
  */
 const MANIFEST_DIR = dirname(fileURLToPath(import.meta.url));
 
-export interface MigrationSet {
+/**
+ * What `applyMigrations` needs for one set: drizzle's own two fields, plus the tables it must make
+ * append-only once that set has run.
+ *
+ * Declared here rather than beside `MigrationOptions` in `@waitron/db` because `MigrationOptions`
+ * is drizzle's migrator config and nothing else — `runMigrations` passes its two fields through by
+ * name, so a third would be a field that looks like configuration and is read by nobody. A plain
+ * `MigrationOptions[]` is still accepted everywhere this type is asked for; such a caller migrates
+ * and installs nothing, which is what the package's own suites do.
+ */
+export interface VenueMigrationOptions extends MigrationOptions {
+  readonly appendOnlyTables?: readonly string[];
+}
+
+/**
+ * Where one migration set's SQL lives. What a module DESCRIPTOR declares — everything a caller
+ * needs to find and journal a set, and nothing about what the set's tables mean.
+ */
+export interface MigrationSetSource {
   name: string;
   table: string;
   /** Source folder, relative to this package — used when running from source (tests, dev). */
   from: string;
 }
 
+export interface MigrationSet extends MigrationSetSource {
+  /**
+   * Every table this set creates that its owning module declared with `appendOnly()`, in the order
+   * the module declares them. {@link migrationOptionsFor} carries them to `applyMigrations`, which
+   * puts the refusal trigger pair on each one after the set has migrated. Not the `ledger` CLASS:
+   * `ClassifiedTable.appendOnly` records why those are different sets.
+   *
+   * Two producers fill it and both have to, because the product reaches `applyMigrations` two ways:
+   * `orderedMigrationSets` derives it from the descriptor's `classification` seat, and the manifest
+   * JSON repeats it for the callers that have no descriptors to hand (`waitron-provision instance`,
+   * `rejoin-command`, `dev-setup`). `composition.test.ts`'s `toEqual` of those two is what keeps
+   * them in step.
+   *
+   * **Required, so a hand-built set has to state it**, and an empty list is a set that says it owns
+   * nothing unrepairable. The type reaches only as far as TypeScript does: `manifestSets()` casts
+   * parsed JSON, so a hand-edited entry that drops the key gets a `TypeError` from the copy below
+   * rather than a quiet `undefined`. What catches a list that is merely WRONG is that `toEqual` pin,
+   * plus `scripts/append-only-triggers.test.ts`, which migrates a real database through
+   * `applyMigrations` and tries an update and a delete against every table the modules declare.
+   */
+  appendOnlyTables: readonly string[];
+}
+
 export function manifestSets(): MigrationSet[] {
   // A fresh array of fresh objects on every call: `manifest` is the parsed JSON module's own
   // array, shared across every import of this module. Returning it directly would let one
   // caller's mutation (a test fixture doing `sets[0].table = "x"`, say) leak into every other
-  // caller's view of the manifest.
-  return (manifest as MigrationSet[]).map((set) => ({ ...set }));
+  // caller's view of the manifest. `appendOnlyTables` is copied rather than spread along, for the
+  // same reason one level down.
+  return (manifest as MigrationSet[]).map((set) => ({
+    ...set,
+    appendOnlyTables: [...set.appendOnlyTables],
+  }));
 }
 
 /**
@@ -36,7 +81,7 @@ export function manifestSets(): MigrationSet[] {
  * rather than copy-pasting the path logic. The resolution rules — and why the base is
  * `import.meta.url`'s parent, not `process.cwd()` — are documented on {@link migrationOptionsFor}.
  */
-export function resolveMigrationsFolder(set: MigrationSet, root: string | null): string {
+export function resolveMigrationsFolder(set: MigrationSetSource, root: string | null): string {
   return root === null
     ? resolve(MANIFEST_DIR, "..", set.from)
     : join(isAbsolute(root) ? root : resolve(MANIFEST_DIR, "..", root), set.name);
@@ -56,7 +101,10 @@ export function resolveMigrationsFolder(set: MigrationSet, root: string | null):
  * database and fail later, somewhere else. This refuses both up front, before Drizzle ever sees
  * either.
  */
-export function resolveExistingMigrationsFolder(set: MigrationSet, root: string | null): string {
+export function resolveExistingMigrationsFolder(
+  set: MigrationSetSource,
+  root: string | null,
+): string {
   const folder = resolveMigrationsFolder(set, root);
   if (!existsSync(join(folder, "meta", "_journal.json"))) {
     throw new AppError("migrations.set_missing", { name: set.name, folder });
@@ -109,9 +157,9 @@ export function resolveExistingMigrationsFolder(set: MigrationSet, root: string 
 export function migrationOptionsFor(
   sets: readonly MigrationSet[],
   root: string | null,
-): MigrationOptions[] {
+): VenueMigrationOptions[] {
   return sets.map((set) => {
     const migrationsFolder = resolveExistingMigrationsFolder(set, root);
-    return { migrationsFolder, migrationsTable: set.table };
+    return { migrationsFolder, migrationsTable: set.table, appendOnlyTables: set.appendOnlyTables };
   });
 }

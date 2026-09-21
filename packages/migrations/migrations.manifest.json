@@ -2,66 +2,88 @@
   {
     "name": "core",
     "table": "__drizzle_migrations_db",
-    "from": "../db/drizzle"
+    "from": "../db/drizzle",
+    "appendOnlyTables": [
+      "sales",
+      "sale_lines",
+      "tenders",
+      "sale_settlements",
+      "sale_voids",
+      "sale_substitutions",
+      "daily_closes",
+      "order_amendments"
+    ]
   },
   {
     "name": "catalogue",
     "table": "__drizzle_migrations_catalogue",
-    "from": "../catalogue/drizzle"
+    "from": "../catalogue/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "media",
     "table": "__drizzle_migrations_media",
-    "from": "../media/drizzle"
+    "from": "../media/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "venue-service",
     "table": "__drizzle_migrations_venue_service",
-    "from": "../venue-service/drizzle"
+    "from": "../venue-service/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "identity",
     "table": "__drizzle_migrations_identity",
-    "from": "../identity/drizzle"
+    "from": "../identity/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "workforce",
     "table": "__drizzle_migrations_workforce",
-    "from": "../workforce/drizzle"
+    "from": "../workforce/drizzle",
+    "appendOnlyTables": ["time_entries"]
   },
   {
     "name": "workforce-es",
     "table": "__drizzle_migrations_workforce_es",
-    "from": "../workforce-es/drizzle"
+    "from": "../workforce-es/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "payments",
     "table": "__drizzle_migrations_payments",
-    "from": "../payments/drizzle"
+    "from": "../payments/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "scheduler",
     "table": "__drizzle_migrations_scheduler",
-    "from": "../scheduler/drizzle"
+    "from": "../scheduler/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "credentials",
     "table": "__drizzle_migrations_credentials",
-    "from": "../credentials/drizzle"
+    "from": "../credentials/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "fiscal-verifactu",
     "table": "__drizzle_migrations_fiscal",
-    "from": "../fiscal-verifactu/drizzle"
+    "from": "../fiscal-verifactu/drizzle",
+    "appendOnlyTables": ["registros_facturacion"]
   },
   {
     "name": "fiscal-none",
     "table": "__drizzle_migrations_fiscal_none",
-    "from": "../fiscal-none/drizzle"
+    "from": "../fiscal-none/drizzle",
+    "appendOnlyTables": []
   },
   {
     "name": "bookings",
     "table": "__drizzle_migrations_bookings",
-    "from": "../bookings/drizzle"
+    "from": "../bookings/drizzle",
+    "appendOnlyTables": []
   }
 ]

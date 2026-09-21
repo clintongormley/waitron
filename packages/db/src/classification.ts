@@ -1,4 +1,4 @@
-import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
@@ -14,15 +14,15 @@ const LOCAL = "this node's own record of what it is; not copied";
  */
 export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   // ledger — append-only history copied to a standby AND drained back from a returned box.
-  classify("sales", "ledger", LEDGER),
-  classify("sale_lines", "ledger", LEDGER),
-  classify("tenders", "ledger", LEDGER),
-  classify("sale_settlements", "ledger", LEDGER),
-  classify("sale_voids", "ledger", LEDGER),
-  classify("sale_substitutions", "ledger", LEDGER),
+  appendOnly("sales", "ledger", LEDGER),
+  appendOnly("sale_lines", "ledger", LEDGER),
+  appendOnly("tenders", "ledger", LEDGER),
+  appendOnly("sale_settlements", "ledger", LEDGER),
+  appendOnly("sale_voids", "ledger", LEDGER),
+  appendOnly("sale_substitutions", "ledger", LEDGER),
   classify("ticket_items", "ledger", LEDGER),
   classify("drawer_opens", "ledger", LEDGER),
-  classify("daily_closes", "ledger", LEDGER),
+  appendOnly("daily_closes", "ledger", LEDGER),
   classify(
     "daily_close_chain",
     "ledger",
@@ -72,7 +72,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "order lines in flight; copied to a standby, never drained back",
   ),
-  classify(
+  appendOnly(
     "order_amendments",
     "state",
     "hash-chained order amendments in flight; copied to a standby, never drained back",

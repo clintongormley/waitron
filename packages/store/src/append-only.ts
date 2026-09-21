@@ -34,16 +34,19 @@ const suffix = "is append-only";
  * statement at all, so the truncate-blocking trigger the PostgreSQL schema carried has no
  * equivalent here. A caller that can issue DDL can drop the table; nothing in the engine stops it.
  *
- * The names come from the caller — the modules' `ledger` classification, assembled at the
- * composition root — so a new ledger table is protected by being classified, with nobody having to
- * remember this function exists.
+ * The names come from the caller: the tables a module declared with `appendOnly()`
+ * (`@waitron/sync-enrolment`), carried set by set through `MigrationSet.appendOnlyTables`.
+ * **NOT every `ledger` table** — that was this function's first design and it is wrong in both
+ * directions. Nine `ledger`-classified tables are updated or deleted by ordinary product code
+ * (`payments` nine times in `packages/payments/src/store.ts` alone, and the chain heads `cadenas`
+ * and `workforce_chains`), while `order_amendments` is classified `state` and must refuse both.
+ * `ClassifiedTable.appendOnly` carries the receipt.
  *
- * Running it again over a database that already carries the triggers is a no-op, so it can sit on
- * the boot path after migrations rather than in a one-shot install. **Nothing calls it there yet**
- * — the code that knows when migrations finished is still the PostgreSQL one
- * (`packages/migrations/src/apply.ts`), so today the callers are this package's own tests and
- * `scripts/append-only-triggers.test.ts`. `docs/handoffs/2026-09-21-f1-the-flip.md` names the step
- * that owes the wiring.
+ * Running it again over a database that already carries the triggers is a no-op, so it sits on the
+ * boot path rather than in a one-shot install: `packages/migrations/src/apply.ts` calls it after
+ * each set migrates, which is the one place that knows a set's tables now exist, and every
+ * migrating path in the product — boot, the cold restore, `rejoin-command`,
+ * `waitron-provision instance`, `dev-setup` — goes through it.
  */
 export function installAppendOnlyTriggers(
   target: StatementTarget,

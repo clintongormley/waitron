@@ -1,6 +1,6 @@
 import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { imageMigrationHashes, journalHashes, type MigrationSet } from "@waitron/migrations";
+import { imageMigrationHashes, journalHashes, type MigrationSetSource } from "@waitron/migrations";
 import "./errors.js";
 
 export interface AheadSet {
@@ -29,7 +29,7 @@ export function unknownHashes(inDatabase: readonly string[], inImage: readonly s
  */
 export async function findAheadSets(
   db: Pick<Database, "execute">,
-  sets: readonly MigrationSet[],
+  sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<AheadSet[]> {
   const ahead: AheadSet[] = [];
@@ -53,7 +53,7 @@ export async function findAheadSets(
  */
 export async function assertNotAhead(
   db: Pick<Database, "execute">,
-  sets: readonly MigrationSet[],
+  sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<void> {
   const ahead = await findAheadSets(db, sets, root);

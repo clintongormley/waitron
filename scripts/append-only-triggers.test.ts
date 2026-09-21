@@ -1,70 +1,86 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { packageDirOf } from "../packages/module/src/module.js";
-import { installAppendOnlyTriggers } from "../packages/store/src/append-only.js";
-import { drizzleNodeSqlite } from "../packages/store/src/node-sqlite-adapter.js";
+import { applyMigrations } from "../packages/migrations/src/apply.js";
+import { migrationOptionsFor } from "../packages/migrations/src/manifest.js";
+import { orderedMigrationSets } from "../packages/module/src/module.js";
 
 /**
- * Every table classified `ledger` refuses an update and a delete — checked by trying both against a
- * real database built from the tree's own migrations, not by reading SQL as text.
+ * Every table a module declared `appendOnly()` refuses an update and a delete — checked against a
+ * database the PRODUCT migrated, by trying both, not by reading SQL as text.
  *
  * The enforcement moved from the schema to the runtime with the storage switch. PostgreSQL carried
  * `reject_mutation()` triggers written into each migration, and the guard that stood here before
  * (`append-only-enable-always.test.ts`) paired each one with an `ENABLE ALWAYS`, because the
  * replication apply worker skipped ordinary triggers. SQLite has neither an apply worker nor
- * `ENABLE ALWAYS`, and the triggers are now installed by `installAppendOnlyTriggers` from the
- * modules' own `ledger` classification. So the thing worth guarding changed shape: not "is each
- * written trigger also enabled", but "does the classification actually reach every ledger table".
+ * `ENABLE ALWAYS`; `applyMigrations` installs the pair after each set migrates, from the names the
+ * owning module declared.
  *
- * WHY A TREE-WIDE ROOT-PROJECT PROGRAM. The classification is assembled in one package
+ * **It migrates through `applyMigrations` rather than installing the triggers itself.** The version
+ * of this file that stood here before built its own database and called `installAppendOnlyTriggers`
+ * on it, which proved the INSTALLER works and said nothing about whether the product ever runs it —
+ * and at the time the product did not, on any path. A guard that supplies the step under test
+ * cannot see that step missing.
+ *
+ * **The declared set is NOT the `ledger` class**, and the pin below is what holds the difference.
+ * Measured on this tree: with the trigger set derived from the class instead, nine tables ordinary
+ * product code updates or deletes came back refusing both — `payments`, `cadenas`, `registro_sif`,
+ * `ticket_items`, `daily_close_chain`, `purchase_invoices`, `purchase_invoice_vat`,
+ * `workforce_chains`, `envios` — and `order_amendments`, which PostgreSQL DID protect, came back
+ * with no trigger at all, because it is classified `state`.
+ *
+ * WHY A TREE-WIDE ROOT-PROJECT PROGRAM. The declarations are assembled in one package
  * (`@waitron/composition`), the tables are created by every domain package's `drizzle/` directory,
- * and the installer lives in a third (`@waitron/store`). No package suite can see all three, so
- * this sits in the root Vitest project beside `classification-complete.test.ts` — and, like
+ * and the install happens in a third (`@waitron/migrations`). No package suite can see all three,
+ * so this sits in the root Vitest project beside `classification-complete.test.ts` — and, like
  * everything under `scripts/`, it is NOT typechecked, so it stays plain.
  *
  * WHAT IT DOES NOT COVER. It proves the refusal for a plain `UPDATE` and a plain `DELETE` only.
- * The other two shapes a ledger row can be rewritten through — `INSERT OR REPLACE` and
+ * The other two shapes a row can be rewritten through — `INSERT OR REPLACE` and
  * `INSERT … ON CONFLICT DO UPDATE` — need a conflicting key, which is per-table, so they are proven
- * once against the trigger pair in `packages/store/src/append-only.test.ts` instead. And nothing
- * here runs the installer on the BOOT path: what calls it in production is still to be wired, and
- * `docs/handoffs/2026-09-21-f1-the-flip.md` names the step that owes it.
+ * once against the trigger pair in `packages/store/src/append-only.test.ts` instead. It also goes
+ * through the DESCRIPTOR path (`orderedMigrationSets`); the manifest-JSON path that
+ * `rejoin-command`, `dev-setup` and `waitron-provision instance` take is pinned equal to it by
+ * `packages/composition/src/composition.test.ts` and driven end to end by
+ * `packages/migrations/src/apply-append-only.test.ts`.
  */
 
-const REPO_ROOT = join(import.meta.dirname, "..");
-const PACKAGES_DIR = join(REPO_ROOT, "packages");
+/**
+ * Every table the modules declare append-only, pinned by name.
+ *
+ * A pin rather than a floor: this is the list of tables whose contents can never be corrected
+ * (CLAUDE.md §5), so adding one or dropping one is a decision that should cost an edit here. It is
+ * exactly the set PostgreSQL's hand-written triggers protected, read out of `origin/main`'s
+ * baselines before the switch.
+ */
+const EXPECTED = [
+  "daily_closes",
+  "order_amendments",
+  "registros_facturacion",
+  "sale_lines",
+  "sale_settlements",
+  "sale_substitutions",
+  "sale_voids",
+  "sales",
+  "tenders",
+  "time_entries",
+];
 
-/** Every table the modules classify `ledger`, from the descriptors themselves. */
-function ledgerTables(): string[] {
-  return ALL_MODULES.flatMap((module) => module.classification ?? [])
-    .filter((entry) => entry.class === "ledger")
-    .map((entry) => entry.table);
+/** What the modules declare, through the same call boot makes. */
+function declaredTables() {
+  return orderedMigrationSets(ALL_MODULES).flatMap((set) => set.appendOnlyTables ?? []);
 }
 
-/** Every `drizzle/*.sql` a descriptor points at, in a fixed order. */
-function migrationSql(): string[] {
-  const statements: string[] = [];
-  for (const module of ALL_MODULES) {
-    const drizzleDir = join(PACKAGES_DIR, packageDirOf(module), "drizzle");
-    let entries: string[];
-    try {
-      entries = readdirSync(drizzleDir);
-    } catch {
-      // A descriptor pointing at a package with no `drizzle/` dir (`fiscal-none` ships only
-      // `meta/`). The table-count floor below catches a discovery that found too little.
-      continue;
-    }
-    for (const name of entries.filter((n) => n.endsWith(".sql")).sort()) {
-      statements.push(readFileSync(join(drizzleDir, name), "utf8"));
-    }
-  }
-  return statements;
-}
+const scratch = [];
+afterAll(() => {
+  for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
+});
 
 /** The real tables, drizzle's own bookkeeping excluded. */
-function realTables(connection: DatabaseSync): string[] {
+function realTables(connection) {
   return connection
     .prepare(`select name from sqlite_master where type = 'table' order by name`)
     .all()
@@ -82,16 +98,19 @@ function realTables(connection: DatabaseSync): string[] {
  * Foreign keys and check constraints are both turned off for the seeding, which is what lets one
  * generic row satisfy every table: measured on this tree, 64 of 108 tables take the row with checks
  * on and all 108 take it with them off. Neither pragma touches triggers, which is the thing under
- * test — and the "a state table still accepts both statements" case below is the control that says
- * so, because it runs under exactly the same two pragmas.
+ * test — and the "a table nobody declared append-only still takes both statements" case below is
+ * the control that says so, because it runs under exactly the same two.
+ *
+ * An INSERT is what the triggers permit, so seeding AFTER the product installed them is safe; the
+ * cases below are what prove the two statements it forbids are forbidden.
  */
-function seedOneRowEverywhere(connection: DatabaseSync): void {
+function seedOneRowEverywhere(connection) {
   for (const table of realTables(connection)) {
     const columns = connection
       .prepare(`pragma table_info("${table}")`)
       .all()
       .filter((column) => column.notnull === 1 || column.pk === 1);
-    const value = (type: string) => {
+    const value = (type) => {
       const declared = type.toUpperCase();
       if (declared.includes("INT") || declared.includes("REAL") || declared.includes("NUM")) {
         return "1";
@@ -108,21 +127,24 @@ function seedOneRowEverywhere(connection: DatabaseSync): void {
 }
 
 /**
- * A database carrying every migration set, one row per table, and the append-only triggers.
+ * A venue file migrated by `applyMigrations`, reopened raw, with one row in every table.
+ *
+ * Raw `node:sqlite` rather than the store's handle, because the seeding needs two pragmas the
+ * product deliberately does not offer. The product's own connection is the one that CREATED the
+ * triggers; this one only has to fire them, and a trigger belongs to the file.
  *
  * `seeded` is counted before any case runs and not re-read afterwards. The cases share this one
  * connection, so a table whose triggers are MISSING has its row deleted by its own failing case,
  * and a live count taken later would report the seeding as the thing that went wrong.
  */
-function buildDatabase(tables: readonly string[]): {
-  connection: DatabaseSync;
-  seeded: Map<string, number>;
-} {
-  const connection = new DatabaseSync(":memory:");
+async function migratedDatabase() {
+  const directory = mkdtempSync(join(tmpdir(), "wt-append-only-guard-"));
+  scratch.push(directory);
+  await applyMigrations(directory, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
+  const connection = new DatabaseSync(join(directory, "venue.db"));
   connection.exec("pragma recursive_triggers = on");
   connection.exec("pragma foreign_keys = off");
   connection.exec("pragma ignore_check_constraints = on");
-  for (const statements of migrationSql()) connection.exec(statements);
   seedOneRowEverywhere(connection);
   const seeded = new Map(
     realTables(connection).map((table) => [
@@ -130,12 +152,11 @@ function buildDatabase(tables: readonly string[]): {
       Number(connection.prepare(`select count(*) as n from "${table}"`).get().n),
     ]),
   );
-  installAppendOnlyTriggers(drizzleNodeSqlite(connection, { schema: {} }), tables);
   return { connection, seeded };
 }
 
 /** What the driver said, or `undefined` if the statement was accepted. */
-function refusalFor(connection: DatabaseSync, statement: string): string | undefined {
+function refusalFor(connection, statement) {
   try {
     connection.exec(statement);
     return undefined;
@@ -144,10 +165,10 @@ function refusalFor(connection: DatabaseSync, statement: string): string | undef
   }
 }
 
-describe("every ledger table refuses an update and a delete", () => {
-  const tables = ledgerTables();
-  const { connection, seeded } = buildDatabase(tables);
+const tables = declaredTables();
+const { connection, seeded } = await migratedDatabase();
 
+describe("every table declared append-only refuses an update and a delete", () => {
   it.each(tables)("%s refuses an update", (table) => {
     const column = connection.prepare(`pragma table_info("${table}")`).all()[0];
     expect(
@@ -164,27 +185,25 @@ describe("every ledger table refuses an update and a delete", () => {
 
   // The control, in the other direction. Without it every case above would also pass if the
   // seeding had failed, the pragmas had broken every statement, or `refusalFor` always reported a
-  // refusal. A `state` table is not given triggers and must still take both statements.
-  it("leaves a state table writable", () => {
-    const state = ALL_MODULES.flatMap((module) => module.classification ?? []).find(
-      (entry) => entry.class === "state",
-    );
-    expect(state).toBeDefined();
-    expect(refusalFor(connection, `delete from "${state.table}"`)).toBeUndefined();
+  // refusal. `payments` is the sharp choice: it is classified `ledger` and is NOT append-only,
+  // because `packages/payments/src/store.ts` moves a card payment's row through its states.
+  it("leaves a ledger table nobody declared append-only writable", () => {
+    expect(tables).not.toContain("payments");
+    expect(refusalFor(connection, `delete from "payments"`)).toBeUndefined();
   });
 
-  // Vacuous-pass anchors. `it.each([])` reports NOTHING and exits 0, so an empty classification, a
-  // discovery that read no migrations, or a schema with no tables would all look identical to a
-  // fully protected tree.
-  it("discovers the known ledger tables and the whole schema, at a floor", () => {
-    expect(tables).toContain("registros_facturacion");
-    expect(tables).toContain("sales");
-    expect(tables).toContain("time_entries");
-    expect(tables.length).toBeGreaterThanOrEqual(20);
+  // Vacuous-pass anchors. `it.each([])` reports NOTHING and exits 0, so an empty declaration set, a
+  // migrate that created nothing, or a schema with no tables would all look identical to a fully
+  // protected tree.
+  it("declares exactly the tables whose rows can never be corrected", () => {
+    expect([...tables].sort()).toEqual(EXPECTED);
+  });
+
+  it("migrated the whole schema, at a floor", () => {
     expect(realTables(connection).length).toBeGreaterThanOrEqual(100);
   });
 
-  it("seeds a row into every ledger table, so a row trigger has something to fire on", () => {
+  it("seeds a row into every declared table, so a row trigger has something to fire on", () => {
     for (const table of tables) expect(seeded.get(table)).toBeGreaterThanOrEqual(1);
   });
 });

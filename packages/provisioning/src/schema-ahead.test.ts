@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { imageMigrationHashes, manifestSets, type MigrationSet } from "@waitron/migrations";
+import { imageMigrationHashes, manifestSets, type MigrationSetSource } from "@waitron/migrations";
 import { assertNotAhead, findAheadSets, unknownHashes } from "./schema-ahead.js";
 
-const CORE: MigrationSet = manifestSets().find((set) => set.name === "core")!;
+const CORE: MigrationSetSource = manifestSets().find((set) => set.name === "core")!;
 /** What this image really ships for `core` — read from disk, so nothing here restates drizzle's hash rule. */
 const SHIPPED = imageMigrationHashes(CORE, null);
 
 /** A set this image ships no migrations folder for: reading its files throws `migrations.set_missing`. */
-const PHANTOM: MigrationSet = {
+const PHANTOM: MigrationSetSource = {
   name: "phantom",
   table: "__drizzle_migrations_phantom",
   from: "../phantom/drizzle",
