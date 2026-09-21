@@ -10,10 +10,9 @@ import { readFileSync } from "node:fs";
 // Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
 //
 // The rule is an ALLOWLIST OF PATHS, never a file extension. A `**/*.md` rule looks equivalent and
-// is not: packages/verifactu/schemas/README.md holds the SHA-256 of every AEAT schema file, and
-// packages/verifactu/src/schemas.test.ts:40-48 asserts they match — a test whose stated purpose is
-// catching someone editing a primary source to make a test pass. Extension-matching would let
-// exactly that edit skip exactly that test.
+// is not: a package-nested README can be a test fixture — a primary source whose bytes a test
+// asserts against — so treating it as inert documentation by its extension would let an edit to it
+// skip the very test whose purpose is to catch that edit.
 
 /**
  * Root directories and root files that no `code`-gated job reads — the typecheck, test, build and
@@ -250,8 +249,7 @@ export const SERVER_PACKAGE = "@waitron/server";
  * two-shard run 32425078097, fiscal-verifactu ran 219s inside test-light-a's 270s while the lighter
  * test-light-b packed ten packages into 127s. Its own runner lets its `maxWorkers: 4` run uncontended AND
  * stops it inflating whatever it shared a bin with. Unlike apps/server (whose split took it from one
- * worker to four), no config change here — it already runs several; see its vitest.config.ts. NOT
- * to be confused with the `verifactu` gate, the mutation run over the separate packages/verifactu.
+ * worker to four), no config change here — it already runs several; see its vitest.config.ts.
  */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 
@@ -325,7 +323,6 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/printing",
   "@waitron/print-agent",
   "@waitron/print-agent-app",
-  "@waitron/verifactu",
   "@waitron/bench-pglite",
   "@waitron/bench-sqlite-failover",
   "@waitron/diagnostics",
@@ -371,12 +368,13 @@ const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin))
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
  *
- * `heavy` was the first, and the two mutation jobs joined it on a measurement rather than a
+ * `heavy` was the first, and the mutation jobs joined it on a measurement rather than a
  * principle. Read off run 30650089655 (`gh run view 30650089655 --json createdAt,updatedAt,jobs`,
- * head 4926cf5): the run spanned 4m8s, `mutation-verifactu` was 3m26s of it, and every other job
+ * head 4926cf5): the run spanned 4m8s, the mutation jobs were 3m26s of it, and every other job
  * had finished 1m39s in — with both mutation jobs gated on `code` alone, so both ran on any code
- * change at all, however far from `packages/verifactu` or `packages/shared`. That made mutation the
- * critical path for the common case, which is most of what the scoping was for.
+ * change at all, however far from `packages/shared` (`mutation-shared` is the survivor of that
+ * pair). That made mutation the critical path for the common case, which is most of what the
+ * scoping was for.
  *
  * `ui` joined them on a reproducible CI HANG rather than on cost — see UI_PACKAGE above for both
  * runs and what their logs do and do not show.
@@ -418,7 +416,6 @@ export const SCOPE_GATES = [
   { output: "payments_sumup", covers: membership(PAYMENTS_SUMUP_PACKAGE) },
   { output: "light_a", covers: lightGate(LIGHT_A_PACKAGES) },
   { output: "light_b", covers: lightGate(LIGHT_B_PACKAGES) },
-  { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
 ];
 
@@ -494,12 +491,11 @@ export function packagesInScope(scopedPackagesJson) {
  *     dangerous direction.
  *
  * The scope is changed-packages-and-their-dependents, so a membership gate fires when its package
- * changed OR when its package depends on something that changed. For the two mutation gates the
+ * changed OR when its package depends on something that changed. For the mutation gate the
  * second half is inert today and will not stay that way by itself. Run in this workspace on
  * 2026-07-31,
- * `pnpm --filter "@waitron/shared..." ls --depth -1` and
- * `pnpm --filter "@waitron/verifactu..." ls --depth -1` each print exactly one line, that package
- * itself, so neither has a workspace dependency to inherit a change from. Nothing enforces that,
+ * `pnpm --filter "@waitron/shared..." ls --depth -1` prints exactly one line, that package
+ * itself, so it has no workspace dependency to inherit a change from. Nothing enforces that,
  * and it is one package.json edit from being false — which is why the gate resolves membership
  * instead of matching the package name against the diff.
  */
