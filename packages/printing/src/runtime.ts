@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { claimRows, type Transaction } from "@waitron/db";
+import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
 /**
@@ -34,7 +34,7 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
 
 /**
  * The claim LEASE (failover-printing design §5 Gap 1, §10) — a visibility timeout. `claimPrintJobs`
- * stamps `claimed_at = now()` on every claim; a job still `printing` whose `claimed_at` is older than
+ * stamps `claimed_at` with the moment of the claim; a job still `printing` whose `claimed_at` is older than
  * this is treated as a DROPPED claim (the agent crashed or the box died mid-service) and re-selected by
  * the pull, exactly like a fresh job. (A `printing` row whose `claimed_at IS NULL` — anomalous, since
  * every real claim stamps it — is likewise not a live claim, so the pull reclaims it immediately; see the
@@ -43,7 +43,9 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
  * 60s is reasoned per-push, but `claimed_at` is stamped once per CLAIM (a batch of up to
  * `PULL_BATCH_LIMIT` jobs): a large batch to a slow printer can age its unsent tail past the lease.
  * Harmless in the shipped model — a printer is pinned to one `agent_id` and the agent loop is
- * sequential, so in local mode the batch tx holds the row locks (SKIP LOCKED blocks any reclaim) and in
+ * sequential, so in local mode nothing else is claiming while the batch transaction is open (what
+ * held that open used to be `for update … skip locked`; `claimRows` in `@waitron/db` records what
+ * replaced it), and in
  * server mode no second agent serves the same printer to reclaim the tail. The un-pin follow-on
  * (failover-printing §4a, "any LAN agent serves") makes it reachable and must weigh it (a per-claim
  * token, a lease heartbeat, or a batch sized against the lease) alongside its own distinct-agents race
@@ -114,7 +116,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * both are needed — the selection's decides eligibility, the stamp's supplies the columns the agent
  * pushes with — so neither is redundant, and neither is the authorization scope.
  *
- * All values bind as `$n` (Drizzle-parameterised), never concatenated. Eligibility is DERIVED
+ * All values bind as parameters (Drizzle renders them `?` on this engine), never concatenated. Eligibility is DERIVED
  * (design §3): a `network_tcp` printer is claimable by any
  * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
  * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
@@ -128,6 +130,12 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * (the reclaim below is suppressed too). Its jobs are not failed or dropped, just left unclaimed until
  * the printer is reactivated — the delivery half of "deactivated = disabled" (the enqueue half is the
  * `active = true` pre-check in outbox.ts). Proven load-bearing by deletion in runtime.active.test.ts.
+ * The predicate is spelled the same on SQLite, which has no boolean type but does know the keyword:
+ * measured on Node v26.7.0 against the generated `active integer DEFAULT true NOT NULL`, a row that
+ * took the DEFAULT and a row given a bound 1 both store the integer 1 and both match
+ * `where active = true`, while a row given a bound 0 does not. (A JavaScript `true` bound as a
+ * parameter is a different thing and is REFUSED by the driver — `columns.ts`'s `flag` converts
+ * before the bind. Nothing here binds one.)
  *
  * LEASE RECLAIM (failover-printing design §5 Gap 1, IMPLEMENTED here): the predicate re-picks `queued`
  * rows, under-cap `failed` rows, AND a row still `printing` that is NOT a live claim — either its
@@ -137,21 +145,46 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * stranded forever: once the lease elapses the pull reclaims it and delivers it, on the SAME agent
  * rebooted or on any surviving agent serving the printer. The `claimed_at IS NULL` alternative is
  * defense-in-depth for the lease's OWN guarantee: today every `printing` row HAS `claimed_at` set (the
- * claim UPDATE stamps `status='printing'` and `claimed_at=now()` atomically and is the only writer of
+ * claim UPDATE stamps `status='printing'` and `claimed_at` in one statement and is the only writer of
  * `status='printing'`), but a `printing` row with no lease timestamp is by definition not a live claim —
  * a real claim always stamps `claimed_at` — so it is anomalous/stuck and must be reclaimed immediately
  * rather than stranded forever (SQL `claimed_at < …` is UNKNOWN for NULL, so the time bound alone would
  * never re-select it). A committed stuck `printing` row is held by nobody, so the claim does not pass
- * over it once the lease predicate makes it eligible; the reclaim then re-stamps `claimed_at = now()`,
+ * over it once the lease predicate makes it eligible; the reclaim then re-stamps `claimed_at`,
  * treating it exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
  * job that printed but lost its `done` — a nuisance duplicate we accept over a dropped ticket. Proven by
- * deletion of the reclaim branch in runtime.reclaim.test.ts (the stuck job is not reclaimed without it).
+ * deletion of the reclaim branch in runtime.reclaim.test.ts (the stuck job is not reclaimed without it);
+ * the cutoff's two directions are pinned by the lease case in runtime.test.ts, which is the one of the
+ * two that runs on this engine.
  */
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
+  // The claim's instant, read ONCE so the stamp it writes and the lease cutoff it compares against
+  // are the same moment — which is what `now()` gave for free, being transaction-start time.
+  //
+  // Both are ISO-8601 strings produced by `nowIso`, the generator `print_jobs.created_at` takes its
+  // own default from, because `claimed_at` is a text column and `<` on it is a STRING comparison.
+  // That comparison is a correct time ordering only for this one spelling. Measured on Node
+  // v26.7.0's `node:sqlite`, inserting two stamps and asking the engine which is smaller: two
+  // `toISOString()` values compare in instant order, and three other spellings of the same instants
+  // do not — a `+02:00` offset ('…T10:00:00.000+02:00' vs '…T09:00:00.000Z'), a space-separated
+  // zone-less stamp, which is what SQLite's own `datetime('now')` returns, and a second-precision
+  // stamp with no milliseconds ('…T09:00:00Z' reads as LATER than '…T09:00:00.500Z', because 'Z'
+  // sorts after '.'). So the cutoff is computed here rather than in SQL: `strftime` can be made to
+  // emit the same spelling, but it would be a SECOND spelling of it with nothing holding the two
+  // together, and nothing in the generated schema writes a timestamp from SQL today.
+  //
+  // What this gives up, stated rather than discovered: `now()` was the PostgreSQL SERVER's clock, so
+  // every node that connected measured the lease against one clock. Here the clock is the process
+  // that holds the venue file. Today that is the same single process either way — `node:sqlite` runs
+  // in the server, and a remote agent never opens the database but calls `claimPrintJobs` /
+  // `reportPrintJob` through `apps/server/src/print-api.ts` — so stamp and cutoff are one machine's
+  // reading. A topology with two processes writing one venue file would have to re-establish it.
+  const claimedAt = nowIso();
+  const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
   // A usb/bluetooth printer is eligible only when its `local_key` is one the agent currently SEES. An
   // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard), so guard it
   // with `false`. `local_key in ${array}` is the
@@ -171,12 +204,11 @@ export async function claimPrintJobs(
         j.status = 'queued'
         or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
-            and (j.claimed_at is null
-                 or j.claimed_at < now() - ${PRINT_JOB_LEASE_MS}::double precision * interval '1 millisecond'))
+            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
       )`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
-    set: sql`status = 'printing', claimed_at = now(), claimed_by = ${agentId}`,
+    set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
     // The printer's four columns come back through correlated subqueries rather than a joined
     // table: SQLite refuses a RETURNING clause naming a column of the table an `UPDATE … FROM`
     // joins (`no such column: p.host`, measured on SQLite 3.53.4). `claimRows`'s `returning`
@@ -206,7 +238,7 @@ export async function claimPrintJobs(
  *    holds for `runAgentOnce` too, which reports the job it just claimed to `printing` in the same tx.
  *
  * `done` sets `delivered_at`; `failed` records `last_error` and bumps `attempts` (the bounded-retry
- * counter). All values bind as `$n`, never concatenated.
+ * counter). All values bind as parameters, never concatenated.
  *
  * Returns whether a row matched. The server route treats a no-match as an idempotent no-op (a job that
  * is not this agent's, already terminal, or unknown) rather than an oracle, so it never discloses which
@@ -229,10 +261,15 @@ export async function reportPrintJob(
   // Only the SET clause differs by outcome; the WHERE — the job id, the `status = 'printing'`
   // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
   // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
-  // `attempts`. `${outcome.error}` binds as `$n` like every other value here, never concatenated.
+  // `attempts`. `${outcome.error}` binds like every other value here, never concatenated.
   const setClause =
     outcome.status === "done"
-      ? sql`status = 'done', delivered_at = now()`
+      ? // `delivered_at` is a text column, so the stamp is the same ISO-8601 spelling `claimed_at`
+        // and `created_at` carry and for the same reason (see `claimPrintJobs`). It is the moment
+        // the report is recorded, which under `now()` was the enclosing transaction's START: in
+        // `runAgentOnce`, where the claim and the report share one transaction, the two stamps were
+        // equal and are now the push apart.
+        sql`status = 'done', delivered_at = ${nowIso()}`
       : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}

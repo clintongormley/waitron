@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, isPgError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, isPgError, locations, printers, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -21,9 +21,14 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
  */
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
+  // Through the table definition rather than raw SQL: `locations.id` is supplied by
+  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
+  // `NOT NULL constraint failed: locations.id`.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -74,14 +79,20 @@ async function fullRow(printerId: string): Promise<{
   ticket_scope: string;
   active: boolean;
 }> {
-  const { rows } = await suite.db.execute<{
-    name: string;
-    host: string | null;
-    local_key: string | null;
-    ticket_scope: string;
-    active: boolean;
-  }>(sql`select name, host, local_key, ticket_scope, active from printers where id = ${printerId}`);
-  return rows[0]!;
+  // Read THROUGH the table definition: `active` is the shared `flag` helper, an integer column with
+  // a boolean read mapping, so a raw `select active` hands back 0 or 1 and only this route gives the
+  // boolean the assertions below are written against.
+  const [row] = await suite.db
+    .select({
+      name: printers.name,
+      host: printers.host,
+      local_key: printers.localKey,
+      ticket_scope: printers.ticketScope,
+      active: printers.active,
+    })
+    .from(printers)
+    .where(eq(printers.id, printerId));
+  return row!;
 }
 
 describe("createPrinter", () => {
@@ -285,7 +296,7 @@ describe("deactivatePrinter", () => {
     expect((await fullRow(id)).active).toBe(false);
     // The row still exists (deactivated, not deleted).
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from printers where id = ${id}`,
+      sql`select count(*) as n from printers where id = ${id}`,
     );
     expect(rows[0]!.n).toBe(1);
     expect(await codeOf(() => asTx(cfg, (tx) => deactivatePrinter(tx, cfg, randomUUID())))).toBe(

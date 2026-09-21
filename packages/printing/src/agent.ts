@@ -2,9 +2,9 @@
 // throws them — the reachability convention every code-throwing file in the tree follows, guarded
 // tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printAgents } from "@waitron/db";
+import { nowIso, printAgents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { verifySecret } from "@waitron/identity";
 
@@ -37,6 +37,14 @@ export interface PrintAgentConfig {
  * private, unexported const (the same reason `till-session.ts` re-declares it).
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * How stale a recorded sighting has to be before auth writes a fresh one.
+ *
+ * It was the SQL literal `interval '1 minute'`; it is a named millisecond count because the cutoff
+ * is now computed here and bound, not built in SQL — see the gate in `authenticateAgent`.
+ */
+const SIGHTING_INTERVAL_MS = 60_000;
 
 /**
  * The agent-auth CORE (§3a, Ruling 5). Resolves a presented bearer token STRING to its agent id, or
@@ -78,23 +86,33 @@ export async function authenticateAgent(
   const [row] = await tx
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
-    // `active = true` is the revocation filter: a revoked agent is simply not found. All bind as `$n`,
-    // never string-concatenated.
+    // `active = true` is the revocation filter: a revoked agent is simply not found. All bind as
+    // parameters, never string-concatenated.
     .where(and(eq(printAgents.id, agentId), eq(printAgents.active, true)));
   if (row === undefined) throw new AppError("agent.unauthorized", {});
   // Constant-time scrypt check (REUSED, never home-rolled): the secret is never compared with `===`.
   if (!verifySecret(secret, row.tokenHash)) throw new AppError("agent.unauthorized", {});
 
-  // Record the sighting, SKIPPING the write when `last_seen_at` is already within the last minute (the
-  // gate is pure SQL, so it costs no JS branch). Parameterised by Drizzle — `id` binds as `$n`; the
-  // interval is a constant literal, never user input.
+  // Record the sighting, SKIPPING the write when `last_seen_at` is already within the last
+  // SIGHTING_INTERVAL_MS (the gate stays in the WHERE clause, so it still costs no JS branch and no
+  // extra read). Both values bind — nothing is concatenated.
+  //
+  // `last_seen_at` is a text column, so `<` on it is a STRING comparison, and that is a correct
+  // time ordering only for the one spelling every writer of these columns uses: `toISOString()`,
+  // which is what `nowIso` returns and what `print_agents.enrolled_at` takes its own default from.
+  // The clock read once, so the stamp and the cutoff are the same moment. This is the same shape
+  // `apps/server/src/alert-sources.ts` already reads `last_seen_at` with.
+  const seenAt = nowIso();
+  const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
   await tx
     .update(printAgents)
-    .set({ lastSeenAt: sql`now()` })
+    .set({ lastSeenAt: seenAt })
     .where(
       and(
         eq(printAgents.id, agentId),
-        sql`(${printAgents.lastSeenAt} is null or ${printAgents.lastSeenAt} < now() - interval '1 minute')`,
+        // A never-seen agent has NULL here, and `<` is UNKNOWN for NULL, so the first sighting needs
+        // its own alternative or it would never be written.
+        or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
       ),
     );
   return { agentId };

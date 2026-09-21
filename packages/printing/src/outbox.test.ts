@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -25,9 +25,14 @@ afterEach(() => {
 
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
+  // Through the table definition rather than raw SQL: `locations.id` is supplied by
+  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
+  // `NOT NULL constraint failed: locations.id`.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
 /** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model, so `payload`

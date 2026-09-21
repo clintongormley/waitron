@@ -189,7 +189,7 @@ export interface PrinterRow {
  * screen decides what changes. `0` rows updated (an unknown id) → `printer.not_found`. The
  * transport-fields CHECK / local_key UNIQUE are the DB backstop, translated to
  * `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning, for the
- * update path). One tenant per database, so the id alone selects the row; all values bind as `$n`.
+ * update path). One tenant per database, so the id alone selects the row; all values bind as parameters.
  */
 export async function updatePrinter(
   tx: Transaction,
@@ -235,7 +235,7 @@ export async function updatePrinter(
  * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
  * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
  * (unknown id) → `printer.not_found`. One tenant per database, so the id alone selects the row;
- * values bind as `$n`.
+ * values bind as parameters.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops
