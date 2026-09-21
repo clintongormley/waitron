@@ -1,4 +1,4 @@
-import { LiveEvents, mountLiveApi } from "./live-api.js";
+import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -863,9 +863,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
   const { agentId, token } = await joinAndAccept(app, "Live agent");
   const printerId = await createPrinter(app, agentId, "Live printer");
   await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);
-  const unsubscribe = subscribeToChanges((event) => {
-    bus.publish(event);
-  });
+  const unsubscribe = subscribeToChanges(changeSubscriber(bus, noopLog));
   const url = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: printerId }]))}`;
   const response = await send(app, "GET", url, { cookie: managerCookie });
   const reader = response.body!.getReader();

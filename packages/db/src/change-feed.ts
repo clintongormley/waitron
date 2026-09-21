@@ -5,20 +5,18 @@ import { quoteLiteral, type ChangeSource } from "@waitron/shared";
 /**
  * Install as the table owner. Events identify changed resources; business values stay in the DB.
  *
- * The trigger writes its event into `change_log` in the caller's own transaction; `withTransaction`
- * takes the rows out again and hands them to this process's listeners once the commit has returned
- * (`./change-log.ts`). It does not signal out of the database, so a change is never seen by anyone
- * before the transaction that caused it has committed.
+ * The trigger writes its event into `change_log` inside the caller's own transaction and signals
+ * nothing out of the database. Who takes those rows out again, and when a listener may hear about
+ * them, is `withTransaction`'s half of this and is stated there (`./tenancy.ts`).
  *
- * `change_log` itself must never be one of `sources` — see `CORE_CHANGE_SOURCES` in
- * `./classification.ts`, which filters it out, and the test that pins that.
+ * `change_log` is never one of `sources`: `CORE_CHANGE_SOURCES` in `./classification.ts`.
  */
 export async function installChangeFeed(
   db: Database | Transaction,
   sources: readonly ChangeSource[],
 ): Promise<void> {
   await db.execute(sql`
-    create or replace function public.waitron_notify_change() returns trigger
+    create or replace function public.waitron_record_change() returns trigger
     language plpgsql as $function$
     declare
       changed_row jsonb;
@@ -63,7 +61,7 @@ export async function installChangeFeed(
     await db.execute(sql`
       create or replace trigger waitron_change
       after insert or update or delete on public.${sql.identifier(source.table)}
-      for each row execute function public.waitron_notify_change(${argumentsSql})
+      for each row execute function public.waitron_record_change(${argumentsSql})
     `);
     await db.execute(
       sql`alter table public.${sql.identifier(source.table)} enable always trigger waitron_change`,

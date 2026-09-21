@@ -1,8 +1,16 @@
 // Real PostgreSQL, not PGlite: the first case watches the change rows from a SECOND connection while
 // the writing transaction is still open, and PGlite serialises every query onto its one backend, so
-// there is no second session there to be kept in the dark (CLAUDE.md §4). The older reason —
+// there is no second session there to keep in the dark (CLAUDE.md §4). The older reason —
 // notifications crossing connections — is retired: the trigger writes a row into `change_log`
 // instead of signalling, and `withTransaction` delivers it in this process (`change-log.ts`).
+//
+// What the observer establishes about THIS code, rather than about PostgreSQL's visibility rules:
+// that the trigger writes its row INSIDE the transaction that caused the change, and not out of band
+// through some connection of its own. A session reading its own `change_log` sees the row either
+// way, so no single-session read separates the two; an out-of-band write would be visible to this
+// observer immediately, and what the first case asserts is that it sees nothing until the commit
+// returns — which is also what stops another transaction's drain taking the row early. MVCC is what
+// makes the observation possible; the trigger's placement is what is under test.
 //
 // Replica mode is NOT what keeps this suite on a container. Measured on PGlite 0.5.8 on 2026-09-21,
 // with `installChangeFeed` over `locations` and the update run under
@@ -41,10 +49,11 @@ describe("database change feed", () => {
   /**
    * What the change log holds, read on the given connection.
    *
-   * Sorted by their rendered JSON rather than read in table order: `change_log` carries no sequence
-   * column, because nothing downstream reads one (the dashboard's live API gathers a batch's
-   * identities into a map before acting on them). A test that asserted an order would be pinning
-   * something the design does not promise.
+   * Sorted by their rendered JSON rather than read in table order. Nothing downstream reads the
+   * order two changes arrive in: the dashboard's live API gathers a batch's identities into a
+   * `Map` and flushes the values (`apps/server/src/live-api.ts`, `const pending = new Map<…>`).
+   * What the assertions below rest on is the event COUNT and each event's contents; the sort
+   * leaves both alone.
    */
   async function changeRows(connection: pg.Client): Promise<unknown[]> {
     const { rows } = await connection.query<{ payload: unknown }>("select payload from change_log");

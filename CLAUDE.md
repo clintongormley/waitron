@@ -377,14 +377,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   the queueing that makes it work; no guard enforces it (receipt in
   [conventions-data.md](docs/developers/conventions-data.md)).
 - **A statement PostgreSQL REFUSES aborts the whole transaction, so catching its error and carrying
-  on in the same `tx` needs a SAVEPOINT** — a nested `tx.transaction(...)`, which drizzle emits as
-  SAVEPOINT / ROLLBACK TO. Every later statement otherwise fails `25P02`, `withTransaction`'s own
-  change-log drain included, so what used to commit silently as a rollback is now loud. Cost:
-  `enqueueSuccessor` (`packages/scheduler/src/store.ts`) swallowed a lost race's duplicate key and
-  threw away the run completion written beside it; nothing failed. Guard: the loser's second enqueue
-  in `packages/scheduler/src/store.concurrency.test.ts`. **A TEST catches such a refusal OUTSIDE the
-  transaction**, around the whole `withTransaction` — the production path can be right and the test
-  still wrong.
+  on in the same `tx` needs a SAVEPOINT** — a nested `tx.transaction(...)`. Cost: `enqueueSuccessor`
+  (`packages/scheduler/src/store.ts`) swallowed a lost race's duplicate key and threw away the run
+  completion written beside it; nothing failed. Guard: the loser's second enqueue in
+  `packages/scheduler/src/store.concurrency.test.ts`. **A TEST catches such a refusal OUTSIDE the
+  transaction**, around the whole `withTransaction` — and no guard enforces that half, so a third
+  test written the wrong way round is caught by nobody. Receipt for both:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
   [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)
@@ -402,7 +401,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   than every column in the tree. One scoped exception: `text` in
   `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the bytes the
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
-  IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it.
+  IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it,
+  and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `bigserial`,
+  met on the change-log table — is in no forbidden set and passes anywhere.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
   (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
   for a raw-SQL read of an AMOUNT, which casts the expression `::text`, never `::int` — a test

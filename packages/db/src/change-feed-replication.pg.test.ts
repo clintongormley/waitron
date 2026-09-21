@@ -53,9 +53,11 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
     await nodeB.run(
       `create subscription live_probe_subscription connection ${quoteLiteral(upstream.href)} publication live_probe_publication`,
     );
-    // Read on node B, where the apply worker runs. Sorted by their rendered JSON: `change_log`
-    // carries no sequence column, so the order two rows written by one statement come back in is
-    // not something this design promises.
+    // Read on node B, where the apply worker runs. Sorted by their rendered JSON: nothing
+    // downstream reads the order two changes arrive in — the dashboard's live API gathers a
+    // batch's identities into a `Map` and flushes the values (`apps/server/src/live-api.ts`,
+    // `const pending = new Map<…>`). The assertions rest on the event COUNT and each event's
+    // contents, not on their order.
     const changesOnB = async (): Promise<unknown[]> => {
       const rows = (await nodeB.query("select payload from change_log")) as { payload: unknown }[];
       return rows

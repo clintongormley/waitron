@@ -25,8 +25,8 @@ describe("the change log", () => {
   // PGlite rather than a container: nothing here crosses a connection any more. The change trigger
   // writes a row in the caller's own transaction and `withTransaction` reads it back on the same
   // connection, so the one thing real PostgreSQL was needed for — a notification travelling to a
-  // second backend — is gone. The grant case still bites, because `asAppUser` makes the session
-  // assume the non-owner role (CLAUDE.md §4).
+  // second backend — is gone. The application-role case still bites, because `asAppUser` makes the
+  // session assume the non-owner role (CLAUDE.md §4).
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS],
     setup: (db) => installChangeFeed(db, CORE_CHANGE_SOURCES),
@@ -67,6 +67,10 @@ describe("the change log", () => {
     expect(seen).toEqual([]);
   });
 
+  // The three letters themselves — SELECT, INSERT, DELETE and not UPDATE — are pinned once for
+  // every table in the workspace by `packages/fiscal-verifactu/src/privileges.expected.ts`
+  // (`change_log: "SID"`), read back from the live catalogue by its `privileges.test.ts`. This case
+  // exercises all three through the real path instead, under the non-owner role.
   it("lets the application role write a change-fed row and drain what the trigger wrote", async () => {
     const seen = collect();
     let id = "";
@@ -88,16 +92,5 @@ describe("the change log", () => {
     // `seen` is the control: the change WAS delivered, to the listener still registered.
     expect(seen).toHaveLength(1);
     expect(dropped).toEqual([]);
-  });
-
-  it("grants the application role SELECT, INSERT and DELETE on change_log, and not UPDATE", async () => {
-    const { rows } = await suite.db.execute<{ privs: string }>(sql`
-      select
-        case when has_table_privilege('app_user','change_log','SELECT') then 'S' else '' end ||
-        case when has_table_privilege('app_user','change_log','INSERT') then 'I' else '' end ||
-        case when has_table_privilege('app_user','change_log','UPDATE') then 'U' else '' end ||
-        case when has_table_privilege('app_user','change_log','DELETE') then 'D' else '' end
-        as privs`);
-    expect(rows[0]!.privs).toBe("SID");
   });
 });

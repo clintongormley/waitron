@@ -2451,6 +2451,18 @@ image constraints under *Detail → Box image*.
   agent. Low priority.
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
+- **`runAgentOnce` catches a database refusal and then writes again on the same transaction, with no
+  savepoint** (`packages/printing/src/runtime.ts`, the per-job loop; found by the review of
+  `feat/sqlite-slice1-change-log`, 2026-09-21). Its `try` wraps both the transport call and the
+  `reportPrintJob` write. If it is the WRITE that PostgreSQL refuses, the transaction is aborted and
+  the `catch`'s own `reportPrintJob` fails `25P02`, taking the whole batch down instead of marking
+  one job failed (`CLAUDE.md` §3). No caller in the tree reaches it today:
+  `apps/server/src/print-api.ts` calls the split `claimPrintJobs`/`reportPrintJob` directly, and
+  `runAgentOnce`'s only callers are that package's `runtime.test.ts`, `runtime.race.test.ts` and
+  `runtime.reclaim.test.ts` — a fact about today's tree, not a property of the API, since
+  `runAgentOnce` is exported from `packages/printing/src/index.ts`. It becomes real the moment a
+  local-mode agent host is wired up, which is the item above. **Next action:** a savepoint (a nested
+  `tx.transaction`) around the report, or move the report out of the `try`.
 
 ### B7. Provisioning and build debt
 
@@ -4251,6 +4263,28 @@ out. It lists FILES, not packages and not call sites.
 **And the house rule and its guard, which step 5 does not include, LANDED as #473 on 2026-09-20** —
 their own pull request, after the last conversion, as planned. With it the whole of task P2 is done.
 The entry further down carries what it found.
+
+**Task P3 — the change log replaces the database's notifications, on branch
+`feat/sqlite-slice1-change-log` (2026-09-21).** `LISTEN`/`NOTIFY` is gone. The change trigger writes
+a row into a `change_log` table inside whatever transaction caused the change, `withTransaction`
+takes those rows out again inside that same transaction, and the rows reach listeners in the same
+process once the commit has returned. `packages/db/src/change-listener.ts` and its suite are
+deleted.
+
+**Left open by P3, for task F1 to settle: the classification of `change_log` picks a database file,
+and the one word is doing two jobs that point in opposite directions.** The table is classified
+`local`. After the flip the class also chooses the FILE — `local` in `node.db`, `ledger` and
+`state` in `venue.db` (`CLAUDE.md` §3, [conventions-data.md](developers/conventions-data.md)) — but
+the triggers that write `change_log` sit on `venue.db` tables, and the drain is issued by whichever
+instance `withTransaction` was called on. So `local` puts the table on the far side of the split
+from nearly everything that writes it. `local` is nevertheless the right class for REPLICATION,
+where a receiving node's own apply worker must fill its OWN log, which
+`packages/db/src/change-feed-replication.pg.test.ts` pins. No guard can raise it either:
+`scripts/two-file-foreign-keys.test.ts` reads drizzle's snapshots for foreign keys, and this
+crossing lives in a trigger body. **Next action:** F1 either moves the
+table or states how the drain crosses the two files. Check one thing first, because it may decide
+the question outright — SQLite may not allow a trigger body to write a table in another attached
+database. Nobody has verified that either way; it is a question, not a fact.
 
 **Task P5 — money becomes whole cents — LANDED as #475 on 2026-09-21** (main `16f24070`). Every
 money column stopped being a two-place decimal and became an eight-byte whole number of cents. The

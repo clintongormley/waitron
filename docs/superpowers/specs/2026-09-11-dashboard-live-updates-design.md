@@ -3,16 +3,19 @@
 Implemented on `live-updates`, 2026-09-11; branch validation and review follow the
 [implementation plan](../plans/2026-09-11-dashboard-live-updates.md).
 
-**2026-09-21: how a change leaves the database has been replaced; everything above the database is
-unchanged.** The trigger no longer calls `NOTIFY`. It writes a row into a `change_log` table, and
-`withTransaction` takes those rows out inside the same transaction and hands them to subscribers in
-the same process once the commit has returned (`packages/db/src/change-log.ts`). The dedicated
-autocommit connection went with it, and so did its capped reconnect delay, its independent startup
-retry, and the refresh it broadcast on every successful connection, because an in-process feed has
-no connection to drop and therefore no changes to miss. `packages/db/src/change-listener.ts` and the
-`change-listener.test.ts` named in the validation list below were deleted in the same change. The
-trigger's payload, the server-sent event stream, the per-delivery session check and the
-256-identity reset hint all read as described below.
+**2026-09-21: how a change leaves the database has been replaced, and the reconnect machinery above
+it went with it.** The trigger no longer calls `NOTIFY`. It writes a row into a `change_log` table,
+and `withTransaction` takes those rows out inside the same transaction and hands them to subscribers
+in the same process once the commit has returned (`packages/db/src/change-log.ts`). An in-process
+feed has no connection to drop, so the dedicated autocommit connection went, and with it its capped
+reconnect delay, the server's independent startup retry loop (`apps/server/src/boot.ts`), the
+`reset()` method and the `reset` bus event on `LiveEvents`, and the `event: reset` frame a client
+used to receive every time the listener connected, the first time included
+(`apps/server/src/live-api.ts`). A `reset` frame still reaches a client, from a different producer:
+a stream holding more than 256 pending identities clears them and sends one. What still reads as described below is the trigger's payload, the
+server-sent event stream and its per-delivery session check, and the browser side in full.
+`packages/db/src/change-listener.ts` and its test were deleted in the same change, so the validation
+list further down names a test file that no longer exists, and reconnect cases that no longer run.
 
 When you leave a dashboard open, its displayed lists and reports follow changes made elsewhere.
 A completed print updates the printer's last-print time; a newly queued job updates its pending

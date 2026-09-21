@@ -98,7 +98,8 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
  * The tables whose row changes the dashboard is told about.
  *
  * `change_log` is filtered out because it is where the trigger PUTS its output: a change trigger on
- * it would insert a row for every row it writes, and that row would trigger another.
+ * it would insert a row for every row it writes, and that row would trigger another. Guard:
+ * `classification.test.ts`.
  */
 export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.filter(
   ({ table }) => table !== "change_log",

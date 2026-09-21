@@ -208,6 +208,10 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const { cookie, bus } = await fixture();
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["dining_tables"] }, () => {});
+  // KEEP THIS THE LAST TEST IN THE FILE while this call lives inside it: the triggers it installs
+  // stay on the suite's one database for everything that runs after, so a test appended below would
+  // silently write change rows — and pay for them — without asking. Hoisting the call into
+  // `fixture()` instead would do that to every test in the file.
   await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
   const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"dining_tables"}]')}`;

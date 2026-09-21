@@ -221,8 +221,11 @@ export interface StartedServer {
  * `close()` rejects; a signal-initiated shutdown then logs `server.shutdown_failed`, unless the
  * shutdown deadline has already exited the process. Setup's `stopWork` is a no-op;
  * adoption-pending's AWAITS the adoption worker — `runFinishAdoption` takes no abort signal, so there
- * is nothing to cancel; trading's stops the main loop, the live change listener, the outbound tunnel
- * and the backup sweep.
+ * is nothing to cancel; trading's stops the main loop, the outbound tunnel and the backup sweep, and
+ * closes the live event bus after dropping its change-feed subscription. That unsubscribe is itself
+ * synchronous — it returns nothing to await, the feed being in-process and holding no connection.
+ * The awaits later in trading's `stopWork` belong to the main loop, the tunnel worker and
+ * `backupSupervisor.stop()`, not to it.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;

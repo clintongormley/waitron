@@ -1,7 +1,10 @@
 # Keeping dashboard data current
 
 When you add a dashboard read, subscribe to the data it displays. You should not need to know which
-button, background worker or other client will change that data.
+button, background worker or other client will change that data. "Other client" carries one
+condition: a change reaches the dashboard only when the write went through `withTransaction` in this
+server process. What falls outside that, and what it costs, is in `workflow-guide.md` under _The
+development stack from a worktree_.
 
 Declare the API method's dependencies in `apps/dashboard/src/api/live-queries.ts`. Include every
 source of computed fields: a printer's pending count depends on print jobs, not just its printer
