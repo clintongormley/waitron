@@ -4318,13 +4318,24 @@ git commit -s -m "Define every table on SQLite, and regenerate the migrations as
 
 ### Step group 5 — the transaction helper, the claim, the errors
 
-- [ ] **Step 15: Point `withTransaction` at the write queue**
+- [x] **Step 15: Point `withTransaction` at the write queue**
 
 Its signature does not change. Its body takes the write lock, begins, runs the body, commits or rolls back, releases — and still drains the change log after the commit, as P3 established.
 
-- [ ] **Step 16: Remove the PostgreSQL-only SQL from `claimRows`**
+- [x] **Step 16: Remove the PostgreSQL-only SQL from `claimRows`**
 
 `ctid` and `for update skip locked` go; under the write queue the conditional update is the whole mechanism. P4a's two tests must pass unmodified.
+
+_Answered 2026-09-21, when the step ran: all three are kept._ `claimRows` keeps a conditional
+update that still does the claiming. `claimLockedRows` and `claimLock` become an ordinary ordered
+SELECT each — sound because the write queue admits one writer per file, which makes the CALLER's
+transaction boundary the whole of the claim, and both call sites already take one. They are kept
+rather than inlined so that sentence has one home instead of one per caller; `claimLock` is now an
+identity function, and that is the trade. Two things went with the lock: `claimLockedRows`'s `of`
+parameter, which named the one table a `FOR UPDATE` narrowed to, and `ClaimSpec`'s `join`, whose
+whole purpose was letting `returning` read a joined table — SQLite refuses that
+(`no such column: p.host`, measured on 3.53.4), so a caller reads a neighbour through a correlated
+subquery instead.
 
 _Dated note, 2026-09-21, after P4a and P4b: this step has more than one function to strip, and they
 do not all end the same way._ `packages/db/src/job-claim.ts` holds `claimRows`, which claims by
@@ -4337,16 +4348,59 @@ one writer at a time. That last sentence is a reading of this plan, not a line a
 decide it deliberately when the step runs. The suites that must pass unmodified are P4a's and P4b's
 together, including `packages/fiscal-verifactu`'s `drain.concurrency`.
 
-- [ ] **Step 17: Answer `constraintTarget` from SQLite's message**
+- [x] **Step 17: Answer `constraintTarget` from SQLite's message**
 
 `UNIQUE constraint failed: people.email` — the table and columns, parsed. `node:sqlite` reports the kind of constraint only as a number, so map them: 2067 unique, 1555 primary key, 1299 not null. P10's three tests must pass unmodified.
 
-- [ ] **Step 18: Run all three packages' tests, then commit**
+_Measured 2026-09-21, when the step ran, and one reading contradicts what this plan and §6.4 of the
+design both assume._ The design says SQLite "gives instead the table and column list". **It does
+for a unique index, a primary key and a NOT NULL, and for nothing else.** A foreign key's whole
+message is `FOREIGN KEY constraint failed` — no table, no column, no constraint name — in both
+directions (787 for a value naming no parent, 1811 for an `ON DELETE RESTRICT`, which SQLite
+implements with an internal trigger). A CHECK reports the constraint's NAME, or its expression when
+anonymous, which is not a key either. And a unique index over an EXPRESSION reports
+`UNIQUE constraint failed: index 'e_lower_uq'`.
+
+So `refusalOn(error, FOREIGN_KEY_VIOLATION, …)` can only ever be false, and the write paths that
+told one foreign key from another by its columns need a different mechanism — asking the database
+whether the parent row exists, rather than asking the refusal which parent was missing. Those
+callers are `apps/server/src/device.ts` (three bindings, three domain errors),
+`apps/server/src/tables.ts`, `packages/layouts/src/device-profile-store.ts` and
+`packages/layouts/src/canvas-store.ts`. **None of them is changed by this step** — they are outside
+`packages/db`, their suites are PGlite's, and the work belongs with step 25 and step 29. It is
+listed in `~/waitron-campaign/questions.md` as well, because the replacement is a product decision
+about what each refusal should say.
+
+One more difference the step had to absorb: PostgreSQL folded a primary-key collision into `23505`
+with every other unique index, and SQLite splits them. Each constant in `sql-state.ts` is therefore
+a LIST of result codes, and `UNIQUE_VIOLATION` holds both.
+
+- [x] **Step 18: Run all three packages' tests, then commit**
+
+_Corrected in place, 2026-09-21, when the step ran._ `pnpm --filter @waitron/db test:coverage`
+cannot pass here, and the reason is not coverage. `packages/db/vitest.config.ts` loaded
+`./src/testing/global-setup.ts`, which booted a real PostgreSQL container and applied the migration
+sets to it — and those sets are SQLite DDL from step 13 onwards, so it died with SQLSTATE `42601`
+before one test file loaded, taking every suite in the package with it. Measured by running one
+file with the line in place. **So this step deletes that `globalSetup` line** (the harness files it
+started still go in step 27) and its gate is the suites that can run, named one by one:
 
 ```bash
-pnpm --filter @waitron/db test:coverage
+pnpm --filter @waitron/store test:coverage
+pnpm --filter @waitron/db exec vitest run \
+  src/tenancy.write-lock.test.ts src/migrate.sqlite.test.ts \
+  src/job-claim.sqlite.test.ts src/constraint-target.sqlite.test.ts
+npx vitest run   # the root guards
+(cd packages/db && npx tsc --noEmit)   # no error outside a test file or src/testing/
 git commit -s -m "Run transactions, job claims and error matching on SQLite"
 ```
+
+The four new files exist because the suites that already cover these functions all take a PGlite
+database through `useVenueDb`, which step 24 converts. They are not duplicates to be deleted then:
+each drives a REAL SQLite refusal or transaction, which the converted files will not do twice —
+fold or delete deliberately when step 25 works through the list.
+
+The whole-package `test:coverage` run belongs to step 29, once the harness is gone.
 
 ### Step group 6 — append-only, and the archive
 

@@ -30,6 +30,7 @@
     "@electric-sql/pglite": "^0.5.8",
     "@waitron/membership": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0"

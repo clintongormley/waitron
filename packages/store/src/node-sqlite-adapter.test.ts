@@ -100,6 +100,20 @@ describe("the node:sqlite adapter", () => {
     ]);
   });
 
+  it("hands back a rows object for a statement written as raw SQL", () => {
+    const { db } = open();
+    db.insert(rows).values({ id: 1, name: "a" }).run();
+    // The shape every write path in `@waitron/db` reads: `execute` exists so that a caller
+    // written against `{ rows }` does not have to change when the engine does.
+    expect(db.execute(sql`select id, name from t`)).toEqual({ rows: [{ id: 1, name: "a" }] });
+  });
+
+  it("hands back no rows for a statement that returns none", () => {
+    const { db, raw } = open();
+    expect(db.execute(sql`insert into t (id, name) values (1, 'a')`)).toEqual({ rows: [] });
+    expect(rowCount(raw)).toBe(1);
+  });
+
   it("closes the database it was handed", () => {
     const { raw } = open();
     adaptNodeSqlite(raw).close();

@@ -116,6 +116,61 @@ describe("openVenueStore", () => {
     expect(() => store.node.run(sql`select 1`)).toThrow();
   });
 
+  it("gives the node file a write queue of its own", async () => {
+    const { store } = await open();
+    store.node.run(sql`create table t (id integer primary key, who text)`);
+
+    const write = (who: string, fail: boolean) =>
+      store.node.withWriteLock(async () => {
+        store.node.run(sql`insert into t (who) values (${who})`);
+        await new Promise((resolve) => setImmediate(resolve));
+        if (fail) throw new Error("deliberate");
+      });
+
+    await Promise.allSettled([write("A", true), write("B", false)]);
+
+    // The same reading the venue case takes, on the other file: the node connection needs its own
+    // queue, because two overlapping node writes share one connection exactly as two venue writes
+    // do. Sharing the venue's queue would serialise the two files against each other instead.
+    expect(store.node.all(sql`select who from t`)).toEqual([{ who: "B" }]);
+  });
+
+  it("lets a node write run while the venue lock is held", async () => {
+    const { store } = await open();
+    store.venue.run(sql`create table t (id integer primary key)`);
+    store.node.run(sql`create table t (id integer primary key)`);
+
+    let nodeWriteFinished = false;
+    await store.venue.withWriteLock(async () => {
+      await store.node.withWriteLock(async () => {
+        store.node.run(sql`insert into t (id) values (1)`);
+        nodeWriteFinished = true;
+      });
+    });
+
+    // One queue over both files would deadlock here: the inner call would wait for the outer one
+    // to release, which cannot happen until the inner one returns.
+    expect(nodeWriteFinished).toBe(true);
+    expect(store.node.all(sql`select id from t`)).toEqual([{ id: 1 }]);
+  });
+
+  it("closes one file through the handle that owns it", async () => {
+    const { store } = await open();
+    await store.node.close();
+    // The venue file is untouched, so a handle's `close` is that file's and not the store's.
+    expect(() => store.node.run(sql`select 1`)).toThrow();
+    expect(store.venue.all(sql`select 1 as one`)).toEqual([{ one: 1 }]);
+  });
+
+  it("closes the store after one handle has already been closed", async () => {
+    const { store } = await open();
+    await store.node.close();
+    // `node:sqlite` throws "database is not open" on a second close, so a store that closed its
+    // connections directly would fail its own teardown after a handle was closed.
+    await expect(store.close()).resolves.toBeUndefined();
+    opened.pop();
+  });
+
   it("serialises writes through the write queue", async () => {
     const { store } = await open();
     store.venue.run(sql`create table t (id integer primary key, who text)`);

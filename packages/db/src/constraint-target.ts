@@ -1,13 +1,12 @@
 import { MAX_CAUSE_DEPTH } from "@waitron/shared";
+import type { RefusalClass } from "./sql-state.js";
 
 /** The table and columns a database refusal named. */
 export interface ConstraintTarget {
   /** The relation the refused statement was writing. */
   readonly table: string;
   /**
-   * The key the refusal named, in the order the index or constraint declares it. An index over an
-   * expression reports the expression rather than a column — `lower(email)` for
-   * `persons_tenant_email_uq` — and a quoted identifier keeps its quotes.
+   * The key the refusal named, in the order the index or constraint declares it.
    */
   readonly columns: readonly string[];
 }
@@ -18,7 +17,7 @@ export interface ConstraintTarget {
  * The walk exists because the fields below are not on the error a caller catches: Drizzle wraps the
  * driver's error rather than re-exposing them. It cannot be a predicate over `@waitron/shared`'s
  * `firstCodeInCauseChain`, which hands its predicate a `code` and returns only that string, where
- * this file needs `table` and `detail` off a layer as well — and {@link refusalOn} needs all three
+ * this file needs the engine's `message` off a layer as well — and {@link refusalOn} needs both
  * off the SAME layer. It takes that module's BOUND rather than its own, which is the convention
  * `apps/server`'s `failureDetail` follows for the same reason.
  */
@@ -32,61 +31,63 @@ function* causeLayers(error: unknown): Generator<Record<string, unknown>> {
   }
 }
 
-const KEY_PREFIX = "Key (";
+/**
+ * The refusal classes whose message names a key, and the words that introduce it.
+ *
+ * SQLite writes `<CLASS> constraint failed: <tail>`, and only these two put `table.column` in the
+ * tail. A foreign key's message is `FOREIGN KEY constraint failed` and stops there; a CHECK's tail
+ * is the constraint's NAME when it has one and its expression when it does not — neither is a key.
+ * Measured 2026-09-21 on Node v26.7.0, one real refusal per case, all of them re-driven in
+ * `constraint-target.sqlite.test.ts`.
+ */
+const KEY_PREFIXES = ["UNIQUE constraint failed: ", "NOT NULL constraint failed: "] as const;
 
 /**
- * The key named in a refusal's `detail`: `Key (a, b)=(1, 2) already exists.` → `["a", "b"]`, or
- * `undefined` when `detail` names no key (a CHECK violation reports `Failing row contains (…)`).
+ * The key named in a refusal's message: `UNIQUE constraint failed: child.code, child.tag` →
+ * `{ table: "child", columns: ["code", "tag"] }`, or `undefined` when the message names no key.
  *
- * Hand-scanned rather than matched with a regular expression, because three of the four things that
- * delimit the list can also appear INSIDE an entry, and a pattern cannot tell the two apart:
- * a quoted identifier may contain a comma, a parenthesis or the `)=(` that ends the key; an
- * expression index reports its expression, so `replace(email, ','::text, ''::text)` brings nested
- * parentheses, commas and a SQL literal at once. Each of those is a case in this file's test,
- * driven through a real refusal on both drivers.
+ * Three shapes return `undefined`, and each is a real message rather than a defensive guess:
+ *  - a class that names no key at all (`FOREIGN KEY constraint failed`, `CHECK constraint failed:
+ *    child_amount_ck`);
+ *  - an index over an EXPRESSION, which SQLite reports as `UNIQUE constraint failed: index
+ *    'expr_lower_uq'` — the index's name, and no columns;
+ * The table comes from the FIRST entry and the rest are read as columns, because a unique index
+ * belongs to one table and SQLite repeats that table's name on every entry.
+ *
+ * **Where it is blind, stated because a reader would otherwise assume otherwise.** The separator
+ * is `, ` and the table/column split is a `.`, and SQLite quotes neither. A table or column whose
+ * own name contains a comma or a dot is therefore unreadable here — measured: a table created as
+ * `"odd,name"` reports `UNIQUE constraint failed: odd,name.a`, which parses as two entries. This
+ * repository has no such identifier (every table and column is lower-case and underscored, which
+ * `scripts/column-vocabulary.test.ts` and the generated migrations both hold), so the case is
+ * recorded rather than handled: handling it would need quoting the engine does not supply.
  */
-function keyColumns(detail: string): string[] | undefined {
-  if (!detail.startsWith(KEY_PREFIX)) return undefined;
+function keyColumns(message: string): ConstraintTarget | undefined {
+  const prefix = KEY_PREFIXES.find((candidate) => message.startsWith(candidate));
+  if (prefix === undefined) return undefined;
+  const entries = message.slice(prefix.length).split(", ");
   const columns: string[] = [];
-  let current = "";
-  let depth = 1; // the `(` of `Key (`
-  let inDoubleQuote = false;
-  let inSingleQuote = false;
-  for (let i = KEY_PREFIX.length; i < detail.length; i++) {
-    const char = detail[i]!;
-    if (inDoubleQuote || inSingleQuote) {
-      current += char;
-      // A doubled quote inside a quoted run closes then immediately reopens, which lands on the
-      // same state this flip reaches — so `"a""b"` and `'it''s'` need no case of their own.
-      if (inDoubleQuote && char === '"') inDoubleQuote = false;
-      else if (inSingleQuote && char === "'") inSingleQuote = false;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      inDoubleQuote = char === '"';
-      inSingleQuote = char === "'";
-      current += char;
-      continue;
-    }
-    if (char === "(") depth++;
-    if (char === ")") {
-      depth--;
-      if (depth === 0) {
-        if (!detail.startsWith("=(", i + 1)) return undefined;
-        columns.push(current);
-        // `Key ()=()` parses to one empty entry. PostgreSQL cannot write it, and every caller would
-        // answer `false` to it anyway, but returning it would have this function claim a key was
-        // named when none was.
-        return columns.some((column) => column === "") ? undefined : columns;
-      }
-    }
-    if (char === "," && depth === 1) {
-      columns.push(current);
-      current = "";
-      if (detail[i + 1] === " ") i++; // PostgreSQL separates entries with ", "
-      continue;
-    }
-    current += char;
+  let table = "";
+  for (const entry of entries) {
+    const dot = entry.indexOf(".");
+    if (dot <= 0) return undefined;
+    if (table === "") table = entry.slice(0, dot);
+    columns.push(entry.slice(dot + 1));
+  }
+  return { table, columns };
+}
+
+/**
+ * The extended result code the engine refused with, or `undefined` if nothing in the chain carries
+ * one.
+ *
+ * `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the discriminating
+ * value on `errcode`, so this reads `errcode`. Exported for `./unique-violation.ts`, which asks
+ * only which CLASS a refusal was.
+ */
+export function refusalCode(error: unknown): number | undefined {
+  for (const layer of causeLayers(error)) {
+    if (typeof layer.errcode === "number") return layer.errcode;
   }
   return undefined;
 }
@@ -95,41 +96,38 @@ function keyColumns(detail: string): string[] | undefined {
  * Which table and columns did this refusal name?
  *
  * Write paths used to ask which CONSTRAINT was violated, by name, so each translated only its own
- * refusal and re-threw the rest. SQLite does not report a constraint name — it reports the table and
- * column and nothing else, even when the constraint was explicitly named (design
- * `docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` §6.4) — so the question
- * has to change before the engine does. **This file is one of the bodies the storage switch
- * replaces**, the same role `./schema/columns.ts` holds for the column vocabulary: after the flip it
- * answers the same question from SQLite's message instead.
+ * refusal and re-threw the rest. SQLite does not report a constraint name for the classes that
+ * matter — it reports the table and column instead — so task P10 changed the question before the
+ * engine changed, and this body now answers it from SQLite's own words.
  *
- * Returns `undefined` when nothing in the cause chain names a key: a refusal that names no key at
- * all, an error from some other class entirely, or a value that is not an error. `undefined`
- * therefore means "this refusal named no key", never "no violation" — pair it with `isPgError`
- * (`./unique-violation.ts`), or use {@link refusalOn}, when the SQLSTATE matters.
+ * Returns `undefined` when nothing in the cause chain names a key: a refusal whose class names no
+ * key, an error from some other class entirely, or a value that is not an error. `undefined`
+ * therefore means "this refusal named no key", never "no violation" — pair it with
+ * {@link refusalCode}, or use {@link refusalOn}, when the class matters.
  *
- * What the two halves mean depends on the class, and each was measured on 2026-09-21 against PGlite
- * and a real PostgreSQL, through `describeEachTarget`, in `constraint-target.test.ts`:
- *  - unique and primary key — the table written, and the key that collided;
- *  - foreign key (`23503`) — the REFERENCING table, and its referencing column;
- *  - restrict (`23001`) — the REFERENCING table, and the REFERENCED table's key columns. The two
- *    halves come from opposite ends of the foreign key, which is PostgreSQL's reporting, not a
- *    choice made here.
+ * **What each class gives you, measured on 2026-09-21 against `node:sqlite` on Node v26.7.0 and
+ * driven again by every case in `constraint-target.sqlite.test.ts`:**
+ *  - unique index (2067) and primary key (1555) — the table written and the key that collided,
+ *    unless the index is over an EXPRESSION, which reports the index's name instead;
+ *  - not null (1299) — the table and the column;
+ *  - foreign key (787) and restrict (1811) — **nothing**. The whole message is
+ *    `FOREIGN KEY constraint failed`;
+ *  - check (275) — the constraint's name, or its expression when it is anonymous. Neither is a
+ *    key, so neither is returned.
  *
- * **It reads a MESSAGE, and a message has a language.** `.constraint`, which this replaced, was a
- * structured field; `detail` is rendered in the server's `lc_messages`, and the prefix this parser
- * anchors on is the English one. No production or deployment code sets `lc_messages` — only the
- * guard below does — and on the image
- * `deploy/compose.yml` runs the setting makes no difference: asked for a Spanish locale, the server
- * accepts the request and still answers in English. That is a property of the IMAGE, not of
- * PostgreSQL, so it is guarded rather than asserted — `constraint-target.test.ts` drives a refusal
- * under `lc_messages = 'es_ES.UTF-8'` and goes red the day an image with locale data is swapped in.
+ * **The gap that cost the most, stated here so nobody assumes otherwise.** On PostgreSQL a foreign
+ * key refusal named the referencing table and column, and several write paths used that to tell
+ * one foreign key from another — `apps/server/src/device.ts` maps three of them to three different
+ * domain errors. SQLite reports no such thing, so `refusalOn(error, FOREIGN_KEY_VIOLATION, …)` can
+ * only ever be false and those paths need a different mechanism: ask the database whether the
+ * parent row exists, rather than ask the refusal which parent was missing. The callers are outside
+ * this package and are not changed here; the storage swap's plan records the work.
  */
 export function constraintTarget(error: unknown): ConstraintTarget | undefined {
   for (const layer of causeLayers(error)) {
-    if (typeof layer.table === "string" && typeof layer.detail === "string") {
-      const columns = keyColumns(layer.detail);
-      if (columns !== undefined) return { table: layer.table, columns };
-    }
+    if (typeof layer.errcode !== "number" || typeof layer.message !== "string") continue;
+    const target = keyColumns(layer.message);
+    if (target !== undefined) return target;
   }
   return undefined;
 }
@@ -155,27 +153,34 @@ export function sameTarget(
 }
 
 /**
- * Is this refusal `sqlstate` on `expected` — the one question a write path translating a specific
- * refusal asks?
+ * Is this refusal of class `refusal` and on `expected` — the one question a write path translating
+ * a specific refusal asks?
  *
- * Both halves are needed and each rules out a different wrong answer: the SQLSTATE alone also accepts
+ * Both halves are needed and each rules out a different wrong answer: the class alone also accepts
  * a sibling constraint on the same table, and the target alone also accepts a refusal of another
- * class on those same columns.
+ * class on those same columns — a NOT NULL and a unique index on one column name exactly the same
+ * table and column, and only the class tells them apart.
  *
- * It matches them on ONE layer of the cause chain rather than searching for each separately. That is
- * what the drivers report — measured 2026-09-21, both of today's drivers put `code`, `table` and
- * `detail` on the same object — and it means a chain that happened to carry the SQLSTATE at one depth
- * and a key at another can never be read as a refusal that was never raised.
+ * `refusal` is a LIST because one class can arrive under more than one result code: SQLite reports
+ * a primary-key collision as 1555 and every other unique index as 2067, where PostgreSQL folded
+ * both into `23505` (`./sql-state.ts`).
+ *
+ * It matches class and key on ONE layer of the cause chain rather than searching for each
+ * separately, so a chain that happened to carry a result code at one depth and a key at another
+ * can never be read as a refusal that was never raised.
  *
  * A caller that must also translate a refusal it could NOT identify reaches for
  * {@link constraintTarget} and tests for `undefined` itself, so that the decision stays visible.
  */
-export function refusalOn(error: unknown, sqlstate: string, expected: ConstraintTarget): boolean {
+export function refusalOn(
+  error: unknown,
+  refusal: RefusalClass,
+  expected: ConstraintTarget,
+): boolean {
   for (const layer of causeLayers(error)) {
-    if (layer.code !== sqlstate) continue;
-    if (typeof layer.table !== "string" || typeof layer.detail !== "string") continue;
-    const columns = keyColumns(layer.detail);
-    if (columns !== undefined && sameTarget({ table: layer.table, columns }, expected)) return true;
+    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
+    if (typeof layer.message !== "string") continue;
+    if (sameTarget(keyColumns(layer.message), expected)) return true;
   }
   return false;
 }

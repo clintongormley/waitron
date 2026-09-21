@@ -455,12 +455,12 @@ function forwardableWhere(provider: string) {
  * passes partition the queue and never double-advance a row. State IS the queue (no outbox table).
  * Ordered by `created_at` for a stable pass.
  *
- * The claim is the row lock itself and stamps nothing: there is no claim column on `payments`, and
- * the caller advances each row through its own state-guarded update before the transaction ends.
- * `claimLock` is where this claim's lock clause is spelled, so the storage switch edits
- * `packages/db/src/job-claim.ts` rather than this call site. No caller in the tree spells one of
- * its own any more: the fiscal drain was the last, and plan task P4b moved it onto that module's
- * `claimLockedRows`.
+ * The claim is the transaction and stamps nothing: there is no claim column on `payments`, and the
+ * caller advances each row through its own state-guarded update before the transaction ends. It
+ * was the row lock `claimLock` added; on SQLite that clause does not exist and one writer holds
+ * the file at a time, so what partitions the queue is that the selection and the advances commit
+ * together. `claimLock` still names the selection a claim, and carries the reasoning in one place
+ * (`packages/db/src/job-claim.ts`).
  *
  * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
  * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so

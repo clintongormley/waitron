@@ -58,7 +58,7 @@ export async function writeNodeMembership(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  await db.transaction((tx) => writeNodeMembershipTx(tx, document));
+  await db.withWriteLock(async () => writeNodeMembershipTx(db, document));
 }
 
 /**
@@ -104,7 +104,7 @@ export async function persistNodeMembershipIfNewer(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<boolean> {
-  return db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, document));
+  return db.withWriteLock(async () => persistNodeMembershipIfNewerTx(db, document));
 }
 
 /** The term-guarded singleton upsert on a caller-provided transaction — the atomic monotonic backstop

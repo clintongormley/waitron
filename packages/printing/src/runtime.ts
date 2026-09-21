@@ -177,9 +177,15 @@ export async function claimPrintJobs(
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
     set: sql`status = 'printing', claimed_at = now(), claimed_by = ${agentId}`,
-    join: { from: sql`printers p`, on: sql`print_jobs.printer_id = p.id` },
+    // The printer's four columns come back through correlated subqueries rather than a joined
+    // table: SQLite refuses a RETURNING clause naming a column of the table an `UPDATE … FROM`
+    // joins (`no such column: p.host`, measured on SQLite 3.53.4). `claimRows`'s `returning`
+    // records the reading, and its `join` option is gone with it.
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
-                   p.transport, p.host, p.port, p.local_key`,
+      (select transport from printers where printers.id = print_jobs.printer_id) as transport,
+      (select host from printers where printers.id = print_jobs.printer_id) as host,
+      (select port from printers where printers.id = print_jobs.printer_id) as port,
+      (select local_key from printers where printers.id = print_jobs.printer_id) as local_key`,
   });
 }
 

@@ -4,6 +4,7 @@ import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core/dialect";
 import type { DrizzleConfig } from "drizzle-orm/utils";
+import type { SQLWrapper } from "drizzle-orm";
 
 /** The transaction modes SQLite names, which Drizzle selects by property name. */
 const BEHAVIOURS = ["deferred", "immediate", "exclusive"] as const;
@@ -76,9 +77,37 @@ export function adaptNodeSqlite(db: DatabaseSync) {
   return client;
 }
 
-/** The handle `drizzleNodeSqlite` hands back: Drizzle's synchronous SQLite database. */
+/**
+ * What a statement written as raw SQL hands back.
+ *
+ * `{ rows }` is the shape the tree's write paths already read, because it is what both PostgreSQL
+ * drivers' `execute()` returned. Keeping it means the engine change does not also rewrite every
+ * caller that reads `.rows`.
+ */
+export interface RawResult<TRow> {
+  rows: TRow[];
+}
+
+/**
+ * The handle `drizzleNodeSqlite` hands back: Drizzle's synchronous SQLite database, plus
+ * {@link RawResult}-shaped `execute`.
+ *
+ * Drizzle's SQLite database has no `execute` of its own — `run`, `all`, `get` and `values` are the
+ * whole surface (`drizzle-orm/sqlite-core/db.d.ts:247-250`, read against 0.45.2). `execute` is
+ * added here rather than at each call site so that the hundred-odd statements already written as
+ * `await handle.execute(sql`…`)` keep compiling and keep meaning the same thing.
+ *
+ * It returns its rows rather than a promise of them, because this engine is synchronous. A caller
+ * that `await`s it still reads the same value; nothing in this repository's lint configuration
+ * objects to awaiting a non-promise (`eslint.config.js` takes `tseslint.configs.recommended`,
+ * which is not type-aware, so `await-thenable` is not in force).
+ */
 export type NodeSqliteDatabase<TSchema extends Record<string, unknown> = Record<string, never>> =
-  BaseSQLiteDatabase<"sync", StatementResultingChanges, TSchema>;
+  BaseSQLiteDatabase<"sync", StatementResultingChanges, TSchema> & {
+    execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
+      query: SQLWrapper | string,
+    ): RawResult<TRow>;
+  };
 
 /**
  * Drizzle over `node:sqlite`.
@@ -101,5 +130,16 @@ export function drizzleNodeSqlite<TSchema extends Record<string, unknown>>(
     tableNamesMap: tables.tableNamesMap,
   };
   const session = new BetterSQLiteSession(adaptNodeSqlite(db), dialect, schema);
-  return new BaseSQLiteDatabase("sync", dialect, session, schema) as NodeSqliteDatabase<TSchema>;
+  const handle = new BaseSQLiteDatabase("sync", dialect, session, schema);
+  // `all` is what answers every statement kind on this driver, not only a selection: measured on
+  // node v26.7.0 against `node:sqlite`, `prepare(…).all()` returns `[]` for CREATE TABLE, for an
+  // INSERT without RETURNING and for a DELETE, and the rows for a SELECT, an INSERT … RETURNING
+  // and a PRAGMA. So one method covers what `execute()` covered on PostgreSQL.
+  return Object.assign(handle, {
+    execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
+      query: SQLWrapper | string,
+    ): RawResult<TRow> {
+      return { rows: handle.all<TRow>(query) };
+    },
+  }) as NodeSqliteDatabase<TSchema>;
 }

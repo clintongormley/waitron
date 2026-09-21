@@ -1,8 +1,6 @@
-import { migrate as migratePglite } from "drizzle-orm/pglite/migrator";
-import { migrate as migratePg } from "drizzle-orm/node-postgres/migrator";
-import type { PgliteDatabase } from "drizzle-orm/pglite";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { Database, Schema } from "./client.js";
+import { migrate as migrateSqlite } from "drizzle-orm/better-sqlite3/migrator";
+import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import type { Database } from "./client.js";
 
 export interface MigrationOptions {
   /** Absolute path to a drizzle-kit output folder containing meta/_journal.json. */
@@ -20,30 +18,24 @@ export interface MigrationOptions {
 /**
  * Applies one package's migrations.
  *
- * Drizzle ships a separate migrator per driver and no dialect-level one, so
- * this dispatches on the driver tag the client attached. That tag is the sole
- * reason `Database` carries `driver` at all: it confines driver knowledge to
- * this one function instead of leaking a union type through every consumer.
+ * `drizzle-orm/better-sqlite3/migrator` is taken for the engine rather than for that package: its
+ * whole body is `db.dialect.migrate(migrations, db.session, config)`, with no `better-sqlite3`
+ * import anywhere in it — unlike `drizzle-orm/better-sqlite3`'s index, whose first line imports the
+ * compiled module (`packages/store/src/node-sqlite-adapter.ts` records that reading). Drizzle
+ * publishes no migrator under a dialect name, so one of the driver modules has to be named.
  *
- * Ordering across packages is the caller's responsibility — nothing here
- * enforces that core migrations run before a module's.
+ * It is synchronous, like everything else on this engine. The `async` signature is kept because
+ * every caller awaits it and a caller has no reason to care.
+ *
+ * Ordering across packages is the caller's responsibility — nothing here enforces that core
+ * migrations run before a module's.
  */
 export async function runMigrations(db: Database, options: MigrationOptions): Promise<void> {
-  const config = {
+  // The migrator's parameter is Drizzle's own SQLite database. `Database` is that type plus this
+  // repository's two additions, so the cast narrows nothing away; it is here only because the
+  // migrator's declared parameter fixes the schema type parameter and ours is the schema barrel.
+  migrateSqlite(db as unknown as BaseSQLiteDatabase<"sync", unknown>, {
     migrationsFolder: options.migrationsFolder,
     migrationsTable: options.migrationsTable,
-    // Drizzle's own default is the "drizzle" schema, not "public" — undocumented
-    // in MigrationConfig's JSDoc, and easy to miss because it doesn't surface as
-    // an error: the journal table is created successfully, just outside the
-    // default search_path, so an unqualified lookup like `to_regclass` or a
-    // plain `select from "table"` reports it as absent. Hardcoded to "public"
-    // rather than exposed as a caller option, matching the one schema
-    // `drizzle.config.ts` already fixes for this project's generated migrations.
-    migrationsSchema: "public",
-  };
-  if (db.driver === "pglite") {
-    await migratePglite(db as unknown as PgliteDatabase<Schema>, config);
-    return;
-  }
-  await migratePg(db as unknown as NodePgDatabase<Schema>, config);
+  });
 }

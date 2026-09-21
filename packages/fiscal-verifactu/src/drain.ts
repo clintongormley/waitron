@@ -550,11 +550,13 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  // `of: "e"` locks the envío rows alone, and this join is why the helper takes that parameter at
-  // all: `app_user` may read `registros_facturacion` and never write it, so a lock this claim did
-  // not narrow would be refused `42501`. Held over these same two tables and this same join, both
-  // ways round, by `drain.test.ts`'s "refuses the same selection when the lock is not narrowed" —
-  // which runs a shorter select list and predicate, since the refusal turns on the join alone.
+  // The claim is this transaction, not anything in the statement. `claimLockedRows` no longer adds
+  // a lock clause — SQLite has none, and one writer holds the file at a time — so what keeps a
+  // second drain off these rows is that this selection and the stamps that follow it commit
+  // together inside one `withTransaction`. The helper's own paragraph in `@waitron/db` carries the
+  // reasoning. The `of: "e"` that narrowed the lock is gone with the lock: it existed because
+  // `app_user` may read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
+  // over this join was refused `42501`.
   const rows = await claimLockedRows<DueRow>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e
@@ -563,7 +565,6 @@ async function claimBatch(
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
       order by r.sif_id, r.secuencia
       limit ${maxPorEnvio}`,
-    of: "e",
   });
 
   const sendable: DueRow[] = [];

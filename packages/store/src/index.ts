@@ -2,6 +2,9 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
+
+export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
+export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 import { createWriteQueue } from "./write-queue.js";
 
 /** The two database files, named after what each holds. */
@@ -20,12 +23,29 @@ export interface VenueStoreConfig<
   nodeSchema: TNodeSchema;
 }
 
+/**
+ * One file's handle: Drizzle over that connection, plus the two things a caller needs that are
+ * properties of the FILE rather than of a query.
+ *
+ * `withWriteLock` is per file because the thing it protects is per file — one connection, which
+ * SQLite will not let two transactions share. One queue across both files would also be correct
+ * for safety and wrong for throughput: a node write (a session, a pairing code) would wait behind
+ * a venue transaction it can never conflict with, and a node write nested inside a venue
+ * transaction would deadlock outright.
+ */
+export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDatabase<TSchema> & {
+  /** Runs `body` as the only write transaction on this file at that moment. */
+  withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
+  /** Closes this file's connection. {@link VenueStore.close} closes both. */
+  close: () => Promise<void>;
+};
+
 export interface VenueStore<
   TVenueSchema extends Record<string, unknown>,
   TNodeSchema extends Record<string, unknown>,
 > {
-  venue: NodeSqliteDatabase<TVenueSchema>;
-  node: NodeSqliteDatabase<TNodeSchema>;
+  venue: StoreHandle<TVenueSchema>;
+  node: StoreHandle<TNodeSchema>;
   /** Runs `body` as the only write transaction on the venue file at that moment. */
   withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
   close: () => Promise<void>;
@@ -84,16 +104,32 @@ export async function openVenueStore<
   await mkdir(config.directory, { recursive: true });
   const venueConnection = openConnection(join(config.directory, VENUE_FILE));
   const nodeConnection = openConnection(join(config.directory, NODE_FILE));
-  // The lock is over the venue file, where every transactional business write lands. The node
-  // file's connection has no queue yet; the transaction helper that needs one is step group 5.
-  const writes = createWriteQueue(venueConnection);
+  const handle = <TSchema extends Record<string, unknown>>(
+    connection: DatabaseSync,
+    schema: TSchema,
+  ): StoreHandle<TSchema> => {
+    const writes = createWriteQueue(connection);
+    let closed = false;
+    return Object.assign(drizzleNodeSqlite(connection, { schema }), {
+      withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
+      // Idempotent: `node:sqlite` throws "database is not open" on a second close, and a caller
+      // that closed one file still has to be able to close the store.
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        connection.close();
+      },
+    });
+  };
+  const venue = handle(venueConnection, config.venueSchema);
+  const node = handle(nodeConnection, config.nodeSchema);
   return {
-    venue: drizzleNodeSqlite(venueConnection, { schema: config.venueSchema }),
-    node: drizzleNodeSqlite(nodeConnection, { schema: config.nodeSchema }),
-    withWriteLock: (body) => writes.run(body),
+    venue,
+    node,
+    withWriteLock: venue.withWriteLock,
     close: async () => {
-      venueConnection.close();
-      nodeConnection.close();
+      await venue.close();
+      await node.close();
     },
   };
 }

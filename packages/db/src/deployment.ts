@@ -99,7 +99,7 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * singleton row (stamp the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB,
  * which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
-  await db.transaction((tx) => setDeploymentModeTx(tx, mode));
+  await db.withWriteLock(async () => setDeploymentModeTx(db, mode));
 }
 
 /** Sets this database's role on a caller-provided transaction (see `setDeploymentMode` for the full
@@ -182,7 +182,7 @@ export async function readDeploymentAxes(
  * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
  * read-only mirror cannot hold singletons; a promotion flips the mode first (the promote action's job). */
 export async function setSingletonRole(db: Database, role: SingletonRole): Promise<void> {
-  await db.transaction((tx) => setSingletonRoleTx(tx, role));
+  await db.withWriteLock(async () => setSingletonRoleTx(db, role));
 }
 
 /** Sets the singleton-ownership role on a caller-provided transaction (see `setSingletonRole` for the

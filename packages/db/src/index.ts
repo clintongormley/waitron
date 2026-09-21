@@ -1,6 +1,6 @@
 // The public surface of @waitron/db. Re-exports only — no logic here.
-export { createPgliteDb, createPostgresDb } from "./client.js";
-export type { Database, Driver, Schema, Transaction } from "./client.js";
+export { openVenueDatabase } from "./client.js";
+export type { Database, Schema, Transaction, VenueDatabase } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 // Each shape a job claim takes, and the one file holding the engine-specific SQL they all rest on
@@ -151,6 +151,7 @@ export {
 export {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
+  NOT_NULL_VIOLATION,
   RESTRICT_VIOLATION,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";

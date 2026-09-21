@@ -52,10 +52,13 @@ export default defineConfig({
     // reach the shared container's boot — that is `globalSetup` below, which Vitest budgets
     // separately.
     hookTimeout: 120_000,
-    // Boots ONE shared container and migrates a `core` template through this package's own
-    // `runMigrationSets` path; `describeEachTarget` and the converted `useRealPostgres` suites clone
-    // it (~26ms) instead of booting per file/per test. See `src/testing/global-setup.ts`.
-    globalSetup: ["./src/testing/global-setup.ts"],
+    // NO global setup. It booted a PostgreSQL container and migrated a `core` template into it
+    // through `runMigrationSets`, and the migration sets are SQLite DDL from step 13 onwards — so
+    // it dies with SQLSTATE 42601 (`syntax error at or near "`"`) before the first test file
+    // loads, taking every suite in the package with it. Measured 2026-09-21 by running one file
+    // with the line in place. The harness files it started are deleted by the storage swap's step
+    // 27 (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step group 7); this
+    // line has to go first, because until it does no test in this package can run at all.
     // BOUNDED multi-fork — a cap, not this package's previous UNBOUNDED default and not `maxWorkers: 1`.
     // The shared container is ONE cluster on the default 100-connection budget (postgres.ts starts it
     // with no override) where the old per-file containers each had their own 100. `createPostgresDb`
