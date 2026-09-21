@@ -142,7 +142,7 @@ describe("rawThousandthsToDecimal", () => {
   });
 
   it("keeps a negative sum negative", () => {
-    // A rectificativa files a negative quantity — `sale_lines_quantity_ck` forbids only zero — so a
+    // A correction files a negative quantity — `sale_lines_quantity_ck` forbids only zero — so a
     // sum over a range that contains one can come back below zero.
     expect(rawThousandthsToDecimal("-1500")).toBe("-1.500");
   });
