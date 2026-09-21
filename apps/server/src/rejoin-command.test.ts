@@ -1,17 +1,19 @@
 import { mkdtempSync } from "node:fs";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import { openVenueDatabase, type Database } from "@waitron/db";
 import { describe, expect, it, vi } from "vitest";
 import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
 
-// The maintenance URL names a DIFFERENT db on the same server (the wipe cannot drop the db it is
-// connected to); `DATABASE_URL`'s path names the target the wipe recreates.
-const APP_URL = "postgres://app@localhost/app_db";
-const MAINTENANCE_URL = "postgres://admin:hunter2@localhost/postgres";
+// The venue directory the wipe empties and the re-migrate rebuilds. Named explicitly here rather
+// than left to the `<stateDir>/venue` default, so a case that asserts on the directory is asserting
+// on a path this file chose.
 const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
+const VENUE_DIR = join(STATE_DIR, "venue");
 
 const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE = "33333333-3333-4333-8333-333333333333";
@@ -19,25 +21,26 @@ const SERIES = "44444444-4444-4444-8444-444444444444";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base: Record<string, string | undefined> = {
-  DATABASE_URL: APP_URL,
-  WAITRON_MAINTENANCE_DATABASE_URL: MAINTENANCE_URL,
   WAITRON_STATE_DIR: STATE_DIR,
+  WAITRON_VENUE_DIR: VENUE_DIR,
   WAITRON_TILL_TILL_ID: TILL,
   WAITRON_TILL_NODE_ID: NODE,
   WAITRON_TILL_SERIES_ID: SERIES,
   WAITRON_TILL_LOCATION_ID: LOCATION,
 };
 
-// A minimal fake `Database`: `readNodeMembership` asks the catalogue whether `node_membership`
+type OpenedVenue = { db: Database; close(): Promise<void> };
+
+// A minimal fake venue handle: `readNodeMembership` asks the catalogue whether `node_membership`
 // exists and only then reads the value. Returning NO rows is the catalogue's answer for a table that
 // is not there, which is this suite's common path — no held document — and it is also why the fake
 // needs no query builder: the value read is never reached. `close` is a spy so the close can be
 // asserted.
-function fakeDb(execute?: Database["execute"]): Database {
+function fakeVenue(execute?: Database["execute"]): OpenedVenue {
   return {
-    execute: execute ?? (vi.fn(async () => ({ rows: [] })) as never),
+    db: { execute: execute ?? (vi.fn(async () => ({ rows: [] })) as never) } as unknown as Database,
     close: vi.fn(async () => {}),
-  } as unknown as Database;
+  };
 }
 
 const HAPPY_REJOIN = vi.fn(async (): Promise<RejoinResult> => ({
@@ -50,8 +53,8 @@ async function run(
   opts: {
     argv?: string[];
     rejoin?: (d: RejoinDeps) => Promise<RejoinResult>;
-    connect?: (url: string) => Promise<Database>;
-    migrate?: (connectionString: string) => Promise<void>;
+    openDb?: (directory: string) => Promise<OpenedVenue>;
+    migrate?: (venueDir: string) => Promise<void>;
   } = {},
 ): Promise<{ code: number; out: string[] }> {
   const out: string[] = [];
@@ -60,7 +63,7 @@ async function run(
     env: { ...base, ...over },
     out: (l) => out.push(l),
     rejoin: opts.rejoin ?? HAPPY_REJOIN,
-    connect: opts.connect ?? (async () => fakeDb()),
+    openDb: opts.openDb ?? (async () => fakeVenue()),
     migrate: opts.migrate ?? (async () => {}),
   });
   return { code, out };
@@ -79,24 +82,22 @@ describe("waitron-rejoin rejoin", () => {
     expect(out).toEqual([expect.stringMatching(/usage/i)]);
   });
 
-  it("refuses an empty DATABASE_URL (fail closed)", async () => {
-    const { code, out } = await run({ DATABASE_URL: "" });
-    expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/DATABASE_URL/)]);
-  });
-
-  it("refuses an empty WAITRON_MAINTENANCE_DATABASE_URL (fail closed)", async () => {
-    const { code, out } = await run({ WAITRON_MAINTENANCE_DATABASE_URL: "" });
-    expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/WAITRON_MAINTENANCE_DATABASE_URL/)]);
-  });
-
-  it("refuses (fail closed) when DATABASE_URL cannot be parsed as a standard URL", async () => {
-    const connect = vi.fn(async () => fakeDb());
-    const { code, out } = await run({ DATABASE_URL: "not a url" }, { connect });
-    expect(code).toBe(1);
-    expect(out.join("\n")).toMatch(/DATABASE_URL must be a standard libpq URL/);
-    expect(connect).not.toHaveBeenCalled();
+  it("takes <stateDir>/venue when WAITRON_VENUE_DIR is EMPTY, never the working directory", async () => {
+    const opened: string[] = [];
+    const { code } = await run(
+      { WAITRON_VENUE_DIR: "" },
+      {
+        // Its own stub rather than the shared one: `clearMocks` is off in this package's config,
+        // so a case that leaned on `HAPPY_REJOIN` would add to the call count another case asserts.
+        rejoin: async () => ({ wiped: true as const, carrierNodeId: "carrier-x" }),
+        openDb: async (directory) => {
+          opened.push(directory);
+          return fakeVenue();
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(opened).toEqual([join(STATE_DIR, "venue")]);
   });
 
   it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
@@ -127,7 +128,7 @@ describe("waitron-rejoin rejoin", () => {
     const { code, out } = await run({}, { rejoin });
     expect(code).toBe(0);
     expect(rejoin).toHaveBeenCalledOnce();
-    expect(out.join("\n")).toMatch(/wiped app_db/);
+    expect(out.join("\n")).toContain(`wiped ${VENUE_DIR}`);
     expect(out.join("\n")).toContain("carrier-result");
   });
 
@@ -142,37 +143,48 @@ describe("waitron-rejoin rejoin", () => {
     expect(received?.acceptLoss).toBe(true);
   });
 
-  it("drives the real wipe closure: drop+create on two handles then re-migrate, leaking no secret", async () => {
-    const connected: string[] = [];
-    const migrated: string[] = [];
-    const rejoin = async (d: RejoinDeps): Promise<RejoinResult> => {
-      await d.closePreWipe();
-      await d.wipeDatabase();
-      return { wiped: true as const, carrierNodeId: "carrier-result" };
-    };
-    const { code, out } = await run(
-      {},
-      {
-        connect: async (url) => {
-          connected.push(url);
-          return fakeDb();
+  // The real closure against a REAL venue directory, not a fake: the whole of what `wipeDatabase`
+  // does is filesystem work, so a mock standing in for it would assert that this function calls
+  // something rather than that the box is wiped.
+  it("drives the real wipe closure: both database files go, then the directory is re-migrated and trading.env cleared", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "rejoin-live-"));
+    const venueDir = join(stateDir, "venue");
+    try {
+      const live = await openVenueDatabase(venueDir);
+      live.venue.run(sql`create table venue_marker (v text)`);
+      live.node.run(sql`create table node_marker (v text)`);
+      await live.close();
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+
+      const migrated: string[] = [];
+      const rejoin = async (d: RejoinDeps): Promise<RejoinResult> => {
+        await d.closePreWipe();
+        await d.wipeDatabase();
+        return { wiped: true as const, carrierNodeId: "carrier-result" };
+      };
+      const { code } = await run(
+        { WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir },
+        {
+          openDb: async () => fakeVenue(),
+          migrate: async (directory) => {
+            migrated.push(directory);
+          },
+          rejoin,
         },
-        migrate: async (connectionString) => {
-          migrated.push(connectionString);
-        },
-        rejoin,
-      },
-    );
-    expect(code).toBe(0);
-    // The wipe opened the migrator-role DROP handle and the plain-admin CREATE handle.
-    expect(connected).toContain(MAINTENANCE_URL); // createAs (plain admin, has CREATEDB)
-    expect(connected.some((u) => u.includes("options=-c+role%3Dwaitron_migrator"))).toBe(true); // dropAs
-    // Re-migration targets the recreated db AS the migrator.
-    expect(migrated).toHaveLength(1);
-    expect(migrated[0]).toContain("app_db");
-    expect(migrated[0]).toContain("options=-c+role%3Dwaitron_migrator");
-    // No secret leaked to the terminal.
-    expect(out.join("\n")).not.toContain("hunter2");
+      );
+
+      expect(code).toBe(0);
+      // Both files and both sets of sidecars are gone — the venue's tables AND this node's own
+      // `local` ones, which is what `DROP DATABASE` took when the two lived in one database.
+      for (const name of ["venue.db", "venue.db-wal", "venue.db-shm", "node.db", "node.db-wal"]) {
+        await expect(stat(join(venueDir, name))).rejects.toMatchObject({ code: "ENOENT" });
+      }
+      // The re-migrate targets the directory just emptied, and the next boot is setup mode.
+      expect(migrated).toEqual([venueDir]);
+      await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 
   it("reports a rejoin.* code without echoing a raw message and returns 1", async () => {
@@ -201,7 +213,7 @@ describe("waitron-rejoin rejoin", () => {
     expect(out).toEqual(["rejoin failed"]);
   });
 
-  it("never echoes a raw error's .message — it can carry the admin password", async () => {
+  it("never echoes a raw error's .message — a box operator has no terminal to read around it", async () => {
     const leaked = "postgres://admin:S3CR3T-ADMIN-PASSWORD@db-host:5432/fresh";
     const { code, out } = await run(
       {},
@@ -218,43 +230,42 @@ describe("waitron-rejoin rejoin", () => {
     expect(out).toEqual(["rejoin failed"]);
   });
 
-  it("closes the pre-wipe pool when a guard rejects (no connection leak)", async () => {
-    const opened: Database[] = [];
-    const connect = async (): Promise<Database> => {
-      const db = fakeDb();
-      opened.push(db);
-      return db;
+  it("closes the pre-wipe handle when a guard rejects (no open file left behind)", async () => {
+    const opened: OpenedVenue[] = [];
+    const openDb = async (): Promise<OpenedVenue> => {
+      const venue = fakeVenue();
+      opened.push(venue);
+      return venue;
     };
     const { code } = await run(
       {},
       {
-        connect,
+        openDb,
         rejoin: async () => {
           throw new AppError("rejoin.not_fenced", {});
         },
       },
     );
     expect(code).toBe(1);
-    expect(opened).toHaveLength(1); // the app pool alone; the wipe's handles are never opened
-    for (const db of opened) expect(db.close).toHaveBeenCalledTimes(1);
+    expect(opened).toHaveLength(1);
+    for (const venue of opened) expect(venue.close).toHaveBeenCalledTimes(1);
   });
 
-  it("reports generically (never raw) when opening the app pool fails", async () => {
+  it("reports generically (never raw) when opening the venue fails", async () => {
     const { code, out } = await run(
       {},
       {
-        connect: async (url) => {
-          if (url === APP_URL) throw new Error(`connect ECONNREFUSED ${APP_URL}`);
-          return fakeDb();
+        openDb: async (directory) => {
+          throw new Error(`unable to open database file ${join(directory, "venue.db")}`);
         },
       },
     );
     expect(code).toBe(1);
     expect(out).toEqual(["rejoin failed"]);
-    expect(out.join("\n")).not.toContain("app_db");
+    expect(out.join("\n")).not.toContain("unable to open database file");
   });
 
-  it("reports generically and closes the pool when the membership read fails", async () => {
+  it("reports generically and closes the handle when the membership read fails", async () => {
     const close = vi.fn(async () => {});
     const throwingRead = vi.fn(async () => {
       throw new Error("relation node_membership read failed");
@@ -262,7 +273,7 @@ describe("waitron-rejoin rejoin", () => {
     const { code, out } = await run(
       {},
       {
-        connect: async () => ({ execute: throwingRead, close }) as unknown as Database,
+        openDb: async () => ({ db: { execute: throwingRead } as unknown as Database, close }),
       },
     );
     expect(code).toBe(1);
