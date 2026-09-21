@@ -4264,12 +4264,34 @@ out. It lists FILES, not packages and not call sites.
 their own pull request, after the last conversion, as planned. With it the whole of task P2 is done.
 The entry further down carries what it found.
 
-**Task P3 — the change log replaces the database's notifications, on branch
-`feat/sqlite-slice1-change-log` (2026-09-21).** `LISTEN`/`NOTIFY` is gone. The change trigger writes
-a row into a `change_log` table inside whatever transaction caused the change, `withTransaction`
-takes those rows out again inside that same transaction, and the rows reach listeners in the same
-process once the commit has returned. `packages/db/src/change-listener.ts` and its suite are
-deleted.
+**Task P3 — the change log replaces the database's notifications — LANDED as #477 on 2026-09-21**
+(main `e96afb96`). `LISTEN`/`NOTIFY` is gone. The change trigger writes a row into a `change_log`
+table inside whatever transaction caused the change, `withTransaction` takes those rows out again
+inside that same transaction, and the rows reach listeners in the same process once the commit has
+returned. `packages/db/src/change-listener.ts` and its suite are deleted, and so is the bus-level
+reset they drove — an in-process feed has no connection to drop, so there are no missed changes to
+recover from. The table has two columns rather than the plan's four, and the publisher is
+module-level rather than a factory; both deviations and their reasons are corrected in place in
+[the plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md).
+
+**Three things P3 found, each of which could recur.**
+
+1. **One extra statement per transaction turned a whole silent bug class loud.** PostgreSQL aborts a
+   transaction when it refuses a statement, so code that caught the refusal and carried on in the
+   same transaction was already discarding its work — the commit quietly became a rollback. The
+   drain now fails `25P02` instead. `enqueueSuccessor` (`packages/scheduler/src/store.ts`) had
+   exactly that shape and nothing had ever failed; it takes a savepoint now. The rule is `CLAUDE.md`
+   §3 and its receipt is in [conventions-data.md](developers/conventions-data.md).
+2. **The corrections needed two rounds, and the second round is where the falsehoods were.** The
+   first fix wave created five new false claims inside its own fixes — among them a guard named as
+   though it would catch something it cannot see, and a plan section rewritten to publish an
+   interface two thirds of which is private to its package. A third pass that read ONLY the
+   corrections found them. This is `CLAUDE.md` §1's own rule about corrections, paid again.
+3. **`scripts/column-vocabulary.test.ts` is weaker than it looked**, and in a second way that was
+   not written down: it derives its forbidden set from what `packages/db/src/schema/columns.ts`
+   itself imports, so a builder the vocabulary does NOT import — `bigserial`, which is what this
+   task met — is in no forbidden set and passes anywhere. The hedge is now on the `CLAUDE.md` line
+   that names the guard.
 
 **Left open by P3, for task F1 to settle: the classification of `change_log` picks a database file,
 and the one word is doing two jobs that point in opposite directions.** The table is classified
