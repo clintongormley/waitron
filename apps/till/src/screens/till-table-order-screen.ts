@@ -562,13 +562,13 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Emit the current round's picked lines — each with its course OVERRIDE when the waiter picked one
-   * (KDS-2 §5b) and its selected modifiers when the picker chose any (ordering modifiers, Task 9) — and
-   * clear the round bar for the next round. An unoverridden line OMITS `courseId`, so the server applies
-   * the product's default course (`<override> ?? product.course_id`); a plain line OMITS `options` (never
-   * `[]`), which the server reads as no modifiers. `options` carry only the `optionGroupItemId`s — the
-   * server re-resolves each option's price, VAT and name authoritatively. A HELD line (the waiter left its
-   * toggle ON, coursing editing A3) carries `hold: true`, inserting it without firing; an un-held line
-   * OMITS `hold` (never `false`), so the server fires it by the normal course rule. */
+   * (KDS-2 §5b) and the answers the picker collected — and clear the round bar for the next round. An
+   * unoverridden line OMITS `courseId`, so the server applies the product's default course
+   * (`<override> ?? product.course_id`); a line that answered nothing carries neither `extras` nor
+   * `options`. The answers name lists, products and labels by id alone — the server re-resolves every
+   * price, VAT class and name. A HELD line (the waiter left its toggle ON, coursing editing A3) carries
+   * `hold: true`, inserting it without firing; an un-held line OMITS `hold` (never `false`), so the
+   * line fires by the normal course rule. */
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {
       const roundLine: RoundLine = {

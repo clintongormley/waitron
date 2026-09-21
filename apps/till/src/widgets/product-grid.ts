@@ -17,10 +17,10 @@ import type { WorkingOrderStore } from "../state/working-order.js";
  * or total widgets.
  *
  * Tapping is driven by the selected unit:
- *  - a whole, non-hardware tile with NO modifier groups rings up one straight away —
- *    `store.addProduct(product, "1")`, byte-identical to before (the common tap);
- *  - a whole, non-hardware tile with option groups (ordering modifiers, Task 10) opens the
- *    modifier picker instead, and rings the dish with the chosen options once the diner confirms;
+ *  - a whole, non-hardware tile that offers nothing rings up one straight away —
+ *    `store.addProduct(product, "1")`, the common tap;
+ *  - a whole, non-hardware tile that offers an extras or options list, or a variant, opens the
+ *    modifier picker instead, and rings the dish with the answers once the operator confirms;
  *  - a fractional or hardware-mapped tile needs quantity entry, so it BROADCASTS the pick
  *    (`emit("product-selected", …)`) for the keypad. It does not touch the basket itself.
  */
@@ -75,11 +75,10 @@ export class TillProductGrid extends LitElement {
     return `${price}/${unitName(product)}`;
   }
 
+  /** Whether tapping this tile has anything to ask: a variant to choose, or a list to answer. */
   #hasModifiers(product: TillProduct): boolean {
     if ((product.variants ?? []).some((variant) => variant.available)) return true;
-    if (product.modifiers !== undefined)
-      return product.modifiers.some((modifier) => modifier.available);
-    return (product.optionGroups ?? []).some((group) => group.items.length > 0);
+    return (product.offeredModifiers ?? []).length > 0;
   }
 
   /**
@@ -98,24 +97,11 @@ export class TillProductGrid extends LitElement {
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
-    // Forward the picker's per-line note (order-line customisation) through the ONE `toWireLineExtras`
-    // mapping (`detail` satisfies its minimal `{ note? }` shape), the key present only when the picker
-    // set it. The result may be an empty `{}`, which `addProduct` treats exactly like `undefined`, so a
-    // note-free confirm leaves the line byte-identical.
-    this.store.addProduct(
-      detail.product,
-      "1",
-      detail.options.length > 0 ? detail.options : undefined,
-      {
-        ...toWireLineExtras(detail),
-        ...(detail.modifierSelections === undefined
-          ? {}
-          : {
-              modifierSelections: detail.modifierSelections,
-              modifierSnapshots: detail.modifierSnapshots,
-            }),
-      },
-    );
+    // The detail IS the line's selection (it extends `LineSelection`), so it is handed over whole;
+    // the store attaches only the parts that name something. The per-line note goes through the ONE
+    // `toWireLineExtras` mapping (`detail` satisfies its minimal `{ note? }` shape), the key present
+    // only when the picker set it, so a note-free confirm leaves the line byte-identical.
+    this.store.addProduct(detail.product, "1", detail, toWireLineExtras(detail));
     this.pickerProduct = undefined;
   }
 

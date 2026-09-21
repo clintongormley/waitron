@@ -1,25 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
-import type { DietDerivation, DietOverride, TillOptionItem, TillProduct } from "../api/client.js";
+import type { DietDerivation, DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
 
-/** A minimal option item. A line selection no longer changes the line's diet/allergens — each dish
- *  shows its OWN figures — so the item carries only the fields the shape needs. */
-function item(id: string): TillOptionItem {
+/** One offered product. A pick no longer changes the line's diet/allergens — each dish shows its OWN
+ *  figures — so the item carries only the fields the shape needs, with its three names DIFFERENT. */
+function item(productId: string): OfferedExtraItem {
   return {
-    id,
-    name: { en: id },
-    priceDelta: "0.00",
-    vatClass: null,
+    productId,
+    name: productId,
+    customerName: { en: `${productId} for the customer` },
+    kitchenName: `${productId} KDS`,
+    price: "0.00",
+    vatClass: "general",
     maxQuantity: 1,
+    preselected: false,
     addAllergens: null,
+    suitableFor: [],
   };
 }
 
-/** A product with one option group of `items`, a diet derivation and an optional override. */
+/** A product offering one extras list of `items`, a diet derivation and an optional override. */
 function product(
   derivation: DietDerivation | null,
-  items: TillOptionItem[],
+  items: OfferedExtraItem[],
   override?: DietOverride | null,
 ): TillProduct {
   return {
@@ -33,25 +37,36 @@ function product(
     allergens: null,
     dietDerivation: derivation,
     ...(override === undefined ? {} : { dietOverride: override }),
-    optionGroups: [
-      { id: "g", name: { en: "g" }, minSelect: 0, maxSelect: 9, required: false, items },
+    offeredModifiers: [
+      {
+        kind: "extras",
+        id: "list",
+        name: "Extras",
+        customerName: { en: "Extras for the customer" },
+        kitchenName: "Extras KDS",
+        minPicks: 0,
+        maxPicks: null,
+        items,
+      },
     ],
   };
 }
 
-/** Rung-up line: the product plus the selected option ids. Selections no longer change the line's
- *  diet/allergens — each dish shows its OWN figures — so these tests pin exactly that. */
-function line(prod: TillProduct, ...selectedItemIds: string[]): OrderLine {
+/** Rung-up line: the product plus the products picked off its list. Picks no longer change the
+ *  line's diet/allergens — each dish shows its OWN figures — so these tests pin exactly that. */
+function line(prod: TillProduct, ...pickedProductIds: string[]): OrderLine {
   return {
     product: prod,
     quantity: "1",
-    ...(selectedItemIds.length === 0
+    ...(pickedProductIds.length === 0
       ? {}
       : {
-          options: selectedItemIds.map((id) => ({
-            optionGroupItemId: id,
-            name: { en: id },
-            priceDelta: "0.00",
+          extras: pickedProductIds.map((productId) => ({
+            listId: "list",
+            productId,
+            name: productId,
+            price: "0.00",
+            quantity: 1,
           })),
         }),
   };
@@ -63,25 +78,18 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
     // must NOT change the DISH's own declared claims — its own meat is shown separately (Task 4).
     const prod = product(null, []);
     prod.dietaryDeclarations = ["vegan", "halal"];
-    prod.modifiers = [
+    prod.offeredModifiers = [
       {
-        id: "extras",
-        name: { en: "Extras" },
-        type: "extras",
-        available: true,
-        required: false,
-        maxTotalQuantity: null,
-        choices: [
-          {
-            ...item("bacon"),
-            suitableFor: ["halal"],
-            available: true,
-            preselected: false,
-          },
-        ],
+        kind: "extras",
+        id: "list",
+        name: "Extras",
+        customerName: { en: "Extras for the customer" },
+        kitchenName: "Extras KDS",
+        minPicks: 0,
+        maxPicks: null,
+        items: [{ ...item("bacon"), suitableFor: ["halal"] }],
       },
     ];
-    delete prod.optionGroups;
     const own = { vegan: "yes", vegetarian: "yes", halal: "yes" };
     expect(asServedDiet(line(prod))).toMatchObject(own);
     expect(asServedDiet(line(prod, "bacon"))).toMatchObject(own);
@@ -139,7 +147,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
     expect(asServed.contains).toEqual([]);
   });
 
-  it("a line with no optionGroups at all still derives the dish's own diet", () => {
+  it("a line whose dish offers nothing at all still derives the dish's own diet", () => {
     const prod: TillProduct = {
       id: "dish",
       name: "dish",
@@ -158,50 +166,36 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
 it("shows the dish's own allergens, ignoring a selected extra that used to add one", () => {
   const prod = product({ origins: ["plant"], pending: false }, []);
   prod.allergens = { gluten: { presence: "contains" } };
-  prod.modifiers = [
+  prod.offeredModifiers = [
     {
-      id: "extras",
-      name: { en: "Extras" },
-      type: "extras",
-      available: true,
-      required: false,
-      maxTotalQuantity: null,
-      choices: [
-        {
-          ...item("cheese"),
-          addAllergens: { milk: { presence: "contains" } },
-          available: true,
-          preselected: false,
-        },
-      ],
+      kind: "extras",
+      id: "list",
+      name: "Extras",
+      customerName: { en: "Extras for the customer" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: null,
+      items: [{ ...item("cheese"), addAllergens: { milk: { presence: "contains" } } }],
     },
   ];
-  delete prod.optionGroups;
   expect(Object.keys(asServedAllergens(line(prod, "cheese")).allergens).sort()).toEqual(["gluten"]);
 });
 
 it("the dish's own allergens and diet ignore a canonical extras selection", () => {
   const prod = product({ origins: ["plant"], pending: false }, []);
   prod.allergens = {};
-  prod.modifiers = [
+  prod.offeredModifiers = [
     {
-      id: "extras",
-      name: { en: "Extras" },
-      type: "extras",
-      available: true,
-      required: false,
-      maxTotalQuantity: null,
-      choices: [
-        {
-          ...item("bacon"),
-          addAllergens: { milk: { presence: "contains" } },
-          available: true,
-          preselected: false,
-        },
-      ],
+      kind: "extras",
+      id: "list",
+      name: "Extras",
+      customerName: { en: "Extras for the customer" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: null,
+      items: [{ ...item("bacon"), addAllergens: { milk: { presence: "contains" } } }],
     },
   ];
-  delete prod.optionGroups;
   const selected = line(prod, "bacon");
   // The dish is plant-only and reviewed-with-no-allergens; the selected bacon extra's meat and milk are
   // shown separately (Task 4), never folded into the dish's own figures.
@@ -210,49 +204,50 @@ it("the dish's own allergens and diet ignore a canonical extras selection", () =
   expect(asServedAllergens(selected).allergens).toEqual({});
 });
 
-it.each(["submitted", "saved"] as const)(
-  "the dish's own allergens and diet ignore a canonical nonprice option (%s)",
+it.each(["answered here", "frozen by the server"] as const)(
+  "the dish's own allergens and diet ignore an options answer (%s)",
   (source) => {
     const prod = product({ origins: ["plant", "dairy"], pending: false }, []);
     prod.allergens = { milk: { presence: "contains" } };
-    prod.modifiers = [
+    prod.offeredModifiers = [
       {
-        id: "milk",
-        name: { en: "Milk" },
-        type: "options",
-        available: true,
-        defaultChoiceId: null,
-        choices: [
+        kind: "options",
+        id: "list-milk",
+        name: "Leche",
+        customerName: { en: "Milk for the customer" },
+        kitchenName: "Leche KDS",
+        defaultLabelId: null,
+        labels: [
           {
-            id: "oat",
-            name: { en: "Oat" },
+            id: "label-oat",
+            name: "Avena",
+            customerName: { en: "Oat for the customer" },
+            kitchenName: "Avena KDS",
             available: true,
           },
         ],
       },
     ];
-    delete prod.optionGroups;
     const selected: OrderLine = {
       product: prod,
       quantity: "1",
-      ...(source === "submitted"
-        ? {
-            modifierSelections: [{ modifierId: "milk", type: "options" as const, choiceId: "oat" }],
-          }
+      ...(source === "answered here"
+        ? { options: [{ listId: "list-milk", labelId: "label-oat" }] }
         : {
-            modifierSnapshots: [
+            optionSnapshots: [
               {
-                modifierId: "milk",
-                name: { en: "Milk" },
-                type: "options" as const,
-                choiceId: "oat",
-                choiceName: { en: "Oat" },
+                listName: { en: "Leche" },
+                listCustomerName: { en: "Milk for the customer" },
+                listKitchenName: "Leche KDS",
+                labelName: { en: "Avena" },
+                labelCustomerName: { en: "Oat for the customer" },
+                labelKitchenName: "Avena KDS",
               },
             ],
           }),
     };
-    // The oat option used to strip milk/dairy from the fold; now the dish keeps its OWN milk allergen and
-    // its OWN {plant,dairy} diet (vegetarian, not vegan), and the option is shown separately (Task 4).
+    // The oat answer used to strip milk/dairy from the fold; now the dish keeps its OWN milk allergen
+    // and its OWN {plant,dairy} diet (vegetarian, not vegan), and the answer is shown on its own row.
     expect(asServedAllergens(selected)).toEqual({
       allergens: { milk: { presence: "contains" } },
       pending: false,

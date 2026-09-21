@@ -598,7 +598,7 @@ export class TillTenderPay extends LitElement {
     this.selected = undefined;
     this.entry = "";
     this.view = "idle";
-    if (product.modifiers?.some((modifier) => modifier.available)) {
+    if ((product.offeredModifiers ?? []).length > 0) {
       this.modifierDraft = { product, quantity };
     } else {
       this.store.addProduct(product, quantity);
@@ -628,12 +628,9 @@ export class TillTenderPay extends LitElement {
               if (!this.modifierDraft) return;
               const quantity = this.modifierDraft.quantity;
               this.modifierDraft = undefined;
-              this.store.addProduct(
-                event.detail.product,
-                quantity,
-                event.detail.options.length ? event.detail.options : undefined,
-                event.detail,
-              );
+              // The detail IS the selection (it extends `LineSelection`); the store attaches only
+              // the parts that name something, and reads the note off the same object.
+              this.store.addProduct(event.detail.product, quantity, event.detail, event.detail);
             }}
             @wt-modifier-cancel=${(event: Event) => {
               event.stopPropagation();

@@ -4,289 +4,131 @@ import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
 import { TillModifierPicker } from "./modifier-picker.js";
-import type { TillProduct } from "../api/client.js";
+import type { OfferedModifier, TillProduct } from "../api/client.js";
 
-// A plain product with NO option groups — the common tap, which must ring up straight away.
-const cafe: TillProduct = {
-  id: "cafe",
-  name: "Café",
-  customerName: { es: "Café para el cliente" },
-  pricingUnit: "each",
-  unitPrice: "1.50",
-  vatClass: "general",
+/**
+ * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
+ * three names (staff / customer / kitchen), so a surface reading the wrong one fails rather than
+ * passing on a shared string (CLAUDE.md §4). The picker is a staff surface: it reads the plain
+ * staff name everywhere (spec §10).
+ */
+function offeredItem(
+  productId: string,
+  staff: string,
+  price: string,
+  maxQuantity = 1,
+  preselected = false,
+) {
+  return {
+    productId,
+    name: staff,
+    customerName: { es: `${staff} carta`, en: `${staff} menu` },
+    kitchenName: `${staff} KDS`,
+    price,
+    vatClass: "general" as const,
+    maxQuantity,
+    preselected,
+    addAllergens: null,
+    suitableFor: [],
+  };
+}
+
+/** "Punto": one options list, two labels, "Al punto" preselected by the offer. */
+const cookedList: OfferedModifier = {
+  kind: "options",
+  id: "list-cooked",
+  name: "Punto",
+  customerName: { es: "Punto carta" },
+  kitchenName: "Punto KDS",
+  defaultLabelId: "label-medium",
+  labels: [
+    {
+      id: "label-rare",
+      name: "Poco hecha",
+      customerName: { es: "Poco hecha carta" },
+      kitchenName: "Poco hecha KDS",
+      available: true,
+    },
+    {
+      id: "label-medium",
+      name: "Al punto",
+      customerName: { es: "Al punto carta" },
+      kitchenName: "Al punto KDS",
+      available: true,
+    },
+  ],
+};
+
+/** "Extras": optional, at most two picks in total; cheese may be taken three times. */
+const extrasList: OfferedModifier = {
+  kind: "extras",
+  id: "list-extras",
+  name: "Extras",
+  customerName: { es: "Extras carta" },
+  kitchenName: "Extras KDS",
+  minPicks: 0,
+  maxPicks: 2,
+  items: [offeredItem("p-bacon", "Bacon", "1.50"), offeredItem("p-cheese", "Queso", "1.00", 3)],
+};
+
+/** "Pan": exactly one pick required — the "choose your bread" case (spec §3). */
+const breadList: OfferedModifier = {
+  kind: "extras",
+  id: "list-bread",
+  name: "Pan",
+  customerName: { es: "Pan carta" },
+  kitchenName: "Pan KDS",
+  minPicks: 1,
+  maxPicks: 1,
+  items: [offeredItem("p-white", "Blanco", "0.00"), offeredItem("p-rye", "Centeno", "0.50")],
+};
+
+const base = {
+  pricingUnit: "each" as const,
+  vatClass: "general" as const,
   category: null,
   allergens: null,
+};
+
+// A plain product with nothing offered — the common tap, which must ring up straight away.
+const cafe: TillProduct = {
+  ...base,
+  id: "cafe",
+  name: "Café",
+  customerName: { es: "Café carta" },
+  unitPrice: "1.50",
 };
 
 // A weight product — the kg-keypad path, which the picker must never intercept.
 const jamon: TillProduct = {
+  ...base,
   id: "jamon",
   name: "Jamón",
-  customerName: { es: "Jamón para el cliente" },
+  customerName: { es: "Jamón carta" },
   pricingUnit: "weight",
-  unitPrice: "10.00",
   vatClass: "reduced",
-  category: null,
-  allergens: null,
+  unitPrice: "10.00",
 };
 
-// A burger with two groups: a REQUIRED single-select "doneness" (radios) and an optional multi-select
-// "extras" bounded at maxSelect 2 (checkboxes).
+// A burger offering its lists in this order: extras, then the options list. The picker must draw
+// them in exactly that order — it is the product's own attachment order and nothing re-sorts it.
 const burger: TillProduct = {
+  ...base,
   id: "burger",
   name: "Burger",
-  customerName: { en: "Burger for the customer", es: "Hamburguesa para el cliente" },
-  pricingUnit: "each",
+  customerName: { es: "Burger carta" },
   unitPrice: "8.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  optionGroups: [
-    {
-      id: "g-doneness",
-      name: { en: "Doneness", es: "Punto" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-      items: [
-        {
-          id: "i-rare",
-          name: { en: "Rare", es: "Poco hecha" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        {
-          id: "i-medium",
-          name: { en: "Medium", es: "Al punto" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-    {
-      id: "g-extras",
-      name: { en: "Extras", es: "Extras" },
-      minSelect: 0,
-      maxSelect: 2,
-      required: false,
-      items: [
-        {
-          id: "i-cheese",
-          name: { en: "Cheese", es: "Queso" },
-          priceDelta: "1.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        {
-          id: "i-bacon",
-          name: { en: "Bacon", es: "Bacon" },
-          priceDelta: "1.50",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        {
-          id: "i-egg",
-          name: { en: "Egg", es: "Huevo" },
-          priceDelta: "0.75",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
+  offeredModifiers: [extrasList, cookedList],
 };
 
-// A coffee with an OPTIONAL multi-select "extras" group (maxSelect 3) mixing per-option-quantity items:
-// "extra shot" is takeable up to twice (maxQuantity 2 → stepper), "syrup" up to five times (maxQuantity 5,
-// but the group cap of 3 bites first → stepper), and "oat milk" once (maxQuantity 1 → plain checkbox).
-const coffee: TillProduct = {
-  id: "coffee",
-  name: "Coffee",
-  customerName: { en: "Coffee for the customer", es: "Café para el cliente" },
-  pricingUnit: "each",
-  unitPrice: "2.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  optionGroups: [
-    {
-      id: "g-extras",
-      name: { en: "Extras", es: "Extras" },
-      minSelect: 0,
-      maxSelect: 3,
-      required: false,
-      items: [
-        {
-          id: "i-shot",
-          name: { en: "Extra shot", es: "Café extra" },
-          priceDelta: "0.60",
-          vatClass: null,
-          maxQuantity: 2,
-          addAllergens: null,
-        },
-        {
-          id: "i-syrup",
-          name: { en: "Syrup", es: "Sirope" },
-          priceDelta: "0.40",
-          vatClass: null,
-          maxQuantity: 5,
-          addAllergens: null,
-        },
-        {
-          id: "i-oat",
-          name: { en: "Oat milk", es: "Leche de avena" },
-          priceDelta: "0.50",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
-};
-
-// A drink whose ONLY group is SINGLE-select (maxSelect 1) yet carries an item authored with maxQuantity > 1.
-// A single-select group caps the group sum at 1, so a quantity > 1 is impossible there — the picker must
-// render RADIOS, never a stepper, regardless of the item's maxQuantity.
-const sizedDrink: TillProduct = {
-  id: "sized",
-  name: "Sized drink",
-  customerName: { en: "Sized drink for the customer", es: "Bebida para el cliente" },
-  pricingUnit: "each",
-  unitPrice: "3.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  optionGroups: [
-    {
-      id: "g-size",
-      name: { en: "Size", es: "Tamaño" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-      items: [
-        {
-          id: "i-small",
-          name: { en: "Small", es: "Pequeña" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 3,
-          addAllergens: null,
-        },
-        {
-          id: "i-large",
-          name: { en: "Large", es: "Grande" },
-          priceDelta: "0.50",
-          vatClass: null,
-          maxQuantity: 3,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
-};
-
-// A soup with a REQUIRED-but-EMPTY group (every item inactive → items: []) alongside a real optional
-// group. The empty group must be skipped by the picker and must NOT block "Add" (the Task 3 carry).
-const soup: TillProduct = {
-  id: "soup",
-  name: "Soup",
-  customerName: { en: "Soup for the customer", es: "Sopa para el cliente" },
-  pricingUnit: "each",
+// A dish whose one list REQUIRES a pick.
+const sandwich: TillProduct = {
+  ...base,
+  id: "sandwich",
+  name: "Bocadillo",
+  customerName: { es: "Bocadillo carta" },
   unitPrice: "5.00",
-  vatClass: "reduced",
-  category: null,
-  allergens: null,
-  optionGroups: [
-    {
-      id: "g-empty",
-      name: { en: "Garnish", es: "Guarnición" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-      items: [],
-    },
-    {
-      id: "g-bread",
-      name: { en: "Bread", es: "Pan" },
-      minSelect: 0,
-      maxSelect: 1,
-      required: false,
-      items: [
-        {
-          id: "i-white",
-          name: { en: "White", es: "Blanco" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
-};
-
-// A product whose ONLY groups are empty (misconfigured) — nothing to pick, so ordering must not be
-// wedged behind a pointless dialog: it rings up straight away.
-const brokenProduct: TillProduct = {
-  id: "broken",
-  name: "Broken",
-  customerName: { en: "Broken for the customer", es: "Roto para el cliente" },
-  pricingUnit: "each",
-  unitPrice: "3.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  optionGroups: [
-    {
-      id: "g-none",
-      name: { en: "None", es: "Nada" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-      items: [],
-    },
-  ],
-};
-
-// A dish carrying one optional group so the picker opens. Leaving the optional side blank keeps "Add"
-// enabled, so a case can confirm Add's own behaviour without ticking a side.
-const steak: TillProduct = {
-  id: "steak",
-  name: "Steak",
-  customerName: { en: "Steak for the customer", es: "Filete para el cliente" },
-  pricingUnit: "each",
-  unitPrice: "18.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
-  optionGroups: [
-    {
-      id: "g-side",
-      name: { en: "Side", es: "Guarnición" },
-      minSelect: 0,
-      maxSelect: 1,
-      required: false,
-      items: [
-        {
-          id: "i-fries",
-          name: { en: "Fries", es: "Patatas" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
+  offeredModifiers: [breadList],
 };
 
 afterEach(() => {
@@ -314,31 +156,44 @@ function addButton(picker: TillModifierPicker): HTMLElement & { disabled: boolea
   return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".confirm")!;
 }
 
-/** The `+` step button for an item, or null when the item has no stepper (plain checkbox/radio). */
+/** An extras item's checkbox, or null when the item is drawn as a stepper instead. */
+function pickBox(
+  picker: TillModifierPicker,
+  listId: string,
+  productId: string,
+): HTMLInputElement | null {
+  return picker.shadowRoot!.querySelector<HTMLInputElement>(`#pick-${listId}-${productId}`);
+}
+
+/** A label's radio inside an options list. */
+function labelRadio(picker: TillModifierPicker, listId: string, labelId: string): HTMLInputElement {
+  return picker.shadowRoot!.querySelector<HTMLInputElement>(`#label-${listId}-${labelId}`)!;
+}
+
 function incButton(
   picker: TillModifierPicker,
-  itemId: string,
+  listId: string,
+  productId: string,
 ): (HTMLElement & { disabled: boolean }) | null {
   return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    `[data-test="opt-${itemId}-inc"]`,
+    `[data-test="pick-${listId}-${productId}-inc"]`,
   );
 }
 
-/** The `−` step button for an item, or null when the item has no stepper. */
 function decButton(
   picker: TillModifierPicker,
-  itemId: string,
+  listId: string,
+  productId: string,
 ): (HTMLElement & { disabled: boolean }) | null {
   return picker.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    `[data-test="opt-${itemId}-dec"]`,
+    `[data-test="pick-${listId}-${productId}-dec"]`,
   );
 }
 
-/** The count readout inside an item's stepper. */
-function stepCount(picker: TillModifierPicker, itemId: string): string | undefined {
+function stepCount(picker: TillModifierPicker, listId: string, productId: string): string {
   return picker
-    .shadowRoot!.querySelector<HTMLElement>(`[data-test="opt-${itemId}-count"]`)
-    ?.textContent?.trim();
+    .shadowRoot!.querySelector<HTMLElement>(`[data-test="pick-${listId}-${productId}-count"]`)!
+    .textContent!.trim();
 }
 
 /** Open the picker over a product via the grid, returning the mounted picker. */
@@ -359,8 +214,7 @@ describe("till-modifier-picker", () => {
     expect(customElements.get("till-modifier-picker")).toBe(TillModifierPicker);
   });
 
-  // Pinned test 1 — regression guard: a product with no groups rings instantly, no picker.
-  it("rings up a product with no option groups straight away, opening no picker", async () => {
+  it("rings up a product that offers nothing straight away, opening no picker", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
       products: [cafe],
@@ -377,229 +231,252 @@ describe("till-modifier-picker", () => {
     const seen: TillProduct[] = [];
     store.on("product-selected", (p) => seen.push(p as TillProduct));
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [jamon],
+      products: [{ ...jamon, offeredModifiers: [extrasList] }],
       store,
     });
     tapTile(el, "Jamón");
     await el.updateComplete;
-    expect(seen).toEqual([jamon]);
+    expect(seen).toHaveLength(1);
     expect(store.lines).toHaveLength(0);
     expect(pickerOf(el)).toBeNull();
   });
 
-  it("requires an available variant, lists its STAFF name and rings its menu price", async () => {
-    const store = new WorkingOrderStore();
-    const variantProduct: TillProduct = {
-      ...cafe,
-      menuItemId: "offer-coffee",
-      variants: [
+  it("draws the dish's lists in the order they are offered, by their STAFF names", async () => {
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    const legends = [...picker.shadowRoot!.querySelectorAll("legend")].map((l) =>
+      l.textContent!.trim(),
+    );
+    expect(legends).toEqual(["Extras", "Punto *"]);
+    // The staff wording, never the diner's or the cook's.
+    expect(picker.shadowRoot!.textContent).toContain("Bacon");
+    expect(picker.shadowRoot!.textContent).not.toContain("Bacon carta");
+    expect(picker.shadowRoot!.textContent).not.toContain("Bacon KDS");
+    expect(picker.shadowRoot!.textContent).not.toContain("Punto carta");
+  });
+
+  it("prices each offered item at the price the offer resolved", async () => {
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.50"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.00"));
+  });
+
+  it("gives a once-only item a checkbox and a repeatable item a stepper", async () => {
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    expect(pickBox(picker, "list-extras", "p-bacon")!.type).toBe("checkbox");
+    expect(incButton(picker, "list-extras", "p-bacon")).toBeNull();
+    expect(pickBox(picker, "list-extras", "p-cheese")).toBeNull();
+    expect(incButton(picker, "list-extras", "p-cheese")).not.toBeNull();
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("0");
+    expect(decButton(picker, "list-extras", "p-cheese")!.disabled).toBe(true);
+  });
+
+  it("blocks Add until a list with minPicks 1 has a pick, and marks it required", async () => {
+    const { picker } = await openPicker(sandwich, "Bocadillo", new WorkingOrderStore());
+    expect(picker.shadowRoot!.querySelector("legend")!.textContent!.trim()).toBe("Pan *");
+    expect(addButton(picker).disabled).toBe(true);
+    pickBox(picker, "list-bread", "p-white")!.click();
+    await picker.updateComplete;
+    expect(addButton(picker).disabled).toBe(false);
+  });
+
+  it("caps a list at maxPicks on the summed count", async () => {
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("2");
+    // Two of the list's allowance of two are taken: its own `+` and the untaken box both close.
+    expect(incButton(picker, "list-extras", "p-cheese")!.disabled).toBe(true);
+    expect(pickBox(picker, "list-extras", "p-bacon")!.disabled).toBe(true);
+    // A click on a disabled `wt-button` still reaches the handler (the host takes it), so the cap
+    // has to hold in the step itself, not only in Add's guard.
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("2");
+  });
+
+  it("caps one item at its own maxQuantity below the list's allowance", async () => {
+    const roomy: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...extrasList, maxPicks: null }],
+    };
+    const { picker } = await openPicker(roomy, "Burger", new WorkingOrderStore());
+    for (let i = 0; i < 3; i += 1) incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("3");
+    expect(incButton(picker, "list-extras", "p-cheese")!.disabled).toBe(true);
+    // An uncapped list leaves every other item takeable.
+    expect(pickBox(picker, "list-extras", "p-bacon")!.disabled).toBe(false);
+  });
+
+  it("starts a preselected item picked once", async () => {
+    const preselected: TillProduct = {
+      ...burger,
+      offeredModifiers: [
         {
-          id: "single",
-          name: "Single",
-          customerName: { en: "Single cup", es: "Taza sencilla" },
-          kitchenName: "SGL",
-          unitPrice: "1.75",
-          available: true,
-        },
-        {
-          id: "double",
-          name: "Double",
-          customerName: { en: "Double cup", es: "Taza doble" },
-          kitchenName: "DBL",
-          unitPrice: "2.60",
-          available: false,
+          ...extrasList,
+          items: [
+            offeredItem("p-bacon", "Bacon", "1.50", 1, true),
+            offeredItem("p-cheese", "Queso", "1.00", 3, true),
+          ],
         },
       ],
     };
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [variantProduct],
-      store,
-    });
-    tapTile(el, "Café");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    await picker.updateComplete;
-    expect(addButton(picker).disabled).toBe(true);
-    // The unavailable variant is absent under EITHER name, and the available one is offered by its
-    // staff name, never its customer translation.
-    expect(picker.shadowRoot!.textContent).not.toContain("Double");
-    expect(picker.shadowRoot!.textContent).not.toContain("Taza doble");
-    expect(picker.shadowRoot!.textContent).toContain("Single");
-    expect(picker.shadowRoot!.textContent).not.toContain("Taza sencilla");
-    picker.shadowRoot!.querySelector<HTMLInputElement>('[value="single"]')!.click();
-    await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.75"));
-    addButton(picker).click();
-    await el.updateComplete;
-    // The variant's three names ride ALONGSIDE the product's — nothing is folded into the product's
-    // own name, so each surface can join the one it shows.
-    expect(store.lines[0]!.product).toMatchObject({
-      name: "Café",
-      variantId: "single",
-      variantName: "Single",
-      variantCustomerName: { en: "Single cup", es: "Taza sencilla" },
-      variantKitchenName: "SGL",
-      unitPrice: "1.75",
-    });
+    const { picker } = await openPicker(preselected, "Burger", new WorkingOrderStore());
+    expect(pickBox(picker, "list-extras", "p-bacon")!.checked).toBe(true);
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("1");
   });
 
-  it("rings up a product whose only groups are empty straight away (no wedged dialog)", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [brokenProduct],
-      store,
-    });
-    tapTile(el, "Broken");
-    await el.updateComplete;
-    expect(store.lines).toEqual([{ product: brokenProduct, quantity: "1" }]);
-    expect(pickerOf(el)).toBeNull();
+  it("preselects an options list's default label and requires exactly one", async () => {
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    expect(labelRadio(picker, "list-cooked", "label-medium").checked).toBe(true);
+    expect(labelRadio(picker, "list-cooked", "label-rare").checked).toBe(false);
+    expect(addButton(picker).disabled).toBe(false);
+    labelRadio(picker, "list-cooked", "label-rare").click();
+    await picker.updateComplete;
+    expect(labelRadio(picker, "list-cooked", "label-rare").checked).toBe(true);
+    expect(labelRadio(picker, "list-cooked", "label-medium").checked).toBe(false);
   });
 
-  // Pinned test 2 — a product WITH groups opens the picker; required blocks Add; maxSelect disables
-  // remaining; the running price sums dish + deltas.
-  it("opens the picker; a required group blocks Add; maxSelect disables the rest; price sums deltas", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [burger],
-      store,
-    });
-    tapTile(el, "Burger");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    expect(picker).not.toBeNull();
-    await picker.updateComplete;
-
-    // Single-select group renders radios, multi renders checkboxes.
-    const radios = picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]');
-    const checkboxes =
-      picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-    expect(radios).toHaveLength(2); // rare, medium
-    expect(checkboxes).toHaveLength(3); // cheese, bacon, egg
-
-    // Required doneness not yet chosen → Add is disabled, and the running price is the bare dish.
+  it("blocks Add while an options list with no default is unanswered", async () => {
+    const undecided: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...cookedList, defaultLabelId: null }],
+    };
+    const { picker } = await openPicker(undecided, "Burger", new WorkingOrderStore());
     expect(addButton(picker).disabled).toBe(true);
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00"));
-
-    // Choose a doneness → required satisfied → Add enabled.
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
+    labelRadio(picker, "list-cooked", "label-rare").click();
     await picker.updateComplete;
     expect(addButton(picker).disabled).toBe(false);
-
-    // Pick both extras (maxSelect 2) → the third extra's checkbox disables.
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-bacon")!.click();
-    await picker.updateComplete;
-    expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-egg")!.disabled).toBe(true);
-    // Already-selected extras stay enabled so the diner can undo them.
-    expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.disabled).toBe(
-      false,
-    );
-
-    // Running price = dish 8.00 + cheese 1.00 + bacon 1.50 = 10.50.
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("10.50"));
   });
 
-  // Pinned test 3 — on confirm the picker's parent grid rings the product with the chosen options.
-  it("rings the product with the selected options on Add, then closes", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [burger],
-      store,
-    });
-    const push = vi.spyOn(history, "pushState");
-    const replace = vi.spyOn(history, "replaceState");
-    tapTile(el, "Burger");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    await picker.updateComplete;
+  it("says so, and blocks Add, when an options list offers no label at all", async () => {
+    const empty: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...cookedList, defaultLabelId: null, labels: [] }],
+    };
+    const { picker } = await openPicker(empty, "Burger", new WorkingOrderStore());
+    expect(addButton(picker).disabled).toBe(true);
+    expect(picker.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain("Punto");
+  });
 
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-medium")!.click();
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
+  it("sums the dish and every pick into the running price", async () => {
+    const roomy: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...extrasList, maxPicks: null }, cookedList],
+    };
+    const { picker } = await openPicker(roomy, "Burger", new WorkingOrderStore());
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00"));
+    pickBox(picker, "list-extras", "p-bacon")!.click();
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50"));
+    // A pick taken twice is priced twice; the options answer above it adds nothing.
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("11.50"));
+  });
+
+  it("rings the dish with its picks and its answers on Add, then closes", async () => {
+    const store = new WorkingOrderStore();
+    const push = vi.spyOn(history, "pushState");
+    // An uncapped list, so three picks in total are allowed and the emitted order can be read.
+    const roomy: TillProduct = {
+      ...burger,
+      offeredModifiers: [{ ...extrasList, maxPicks: null }, cookedList],
+    };
+    const { el, picker } = await openPicker(roomy, "Burger", store);
+    pickBox(picker, "list-extras", "p-bacon")!.click();
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    labelRadio(picker, "list-cooked", "label-rare").click();
     await picker.updateComplete;
     addButton(picker).click();
     await el.updateComplete;
 
-    expect(store.lines).toHaveLength(1);
     const line = store.lines[0]!;
-    expect(line.product).toBe(burger);
-    expect(line.quantity).toBe("1");
-    expect(line.options).toEqual([
-      { optionGroupItemId: "i-medium", name: { en: "Medium", es: "Al punto" }, priceDelta: "0.00" },
-      { optionGroupItemId: "i-cheese", name: { en: "Cheese", es: "Queso" }, priceDelta: "1.00" },
+    expect(line.product).toBe(roomy);
+    expect(line.extras).toEqual([
+      { listId: "list-extras", productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 1 },
+      { listId: "list-extras", productId: "p-cheese", name: "Queso", price: "1.00", quantity: 2 },
     ]);
-    // The picker tears down after confirming.
+    expect(line.options).toEqual([{ listId: "list-cooked", labelId: "label-rare" }]);
+    // The answer freezes six names and no ids, exactly as the server freezes it.
+    expect(line.optionSnapshots).toEqual([
+      {
+        listName: { es: "Punto" },
+        listCustomerName: { es: "Punto carta" },
+        listKitchenName: "Punto KDS",
+        labelName: { es: "Poco hecha" },
+        labelCustomerName: { es: "Poco hecha carta" },
+        labelKitchenName: "Poco hecha KDS",
+      },
+    ]);
     expect(pickerOf(el)).toBeNull();
     expect(push).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
   });
 
-  // Pinned test 4 — the empty-group carry: a group with items: [] is not rendered and does not block Add.
-  it("skips an empty group and never lets it block Add", async () => {
+  it("leaves a list the operator answered nothing on off the line entirely", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [soup],
-      store,
-    });
-    tapTile(el, "Soup");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    expect(picker).not.toBeNull();
-    await picker.updateComplete;
-
-    // The empty (required) group is not rendered at all…
-    expect(picker.shadowRoot!.textContent).not.toContain("Garnish");
-    // …the real optional group is…
-    expect(picker.shadowRoot!.textContent).toContain("Bread");
-    // …and Add is enabled despite the empty group being `required` (it imposes no constraint).
-    expect(addButton(picker).disabled).toBe(false);
-
+    const optional: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+    const { el, picker } = await openPicker(optional, "Burger", store);
     addButton(picker).click();
     await el.updateComplete;
-    // No option chosen (the optional group was left blank) → the line carries no options key.
-    expect(store.lines).toEqual([{ product: soup, quantity: "1" }]);
+    expect(store.lines).toEqual([{ product: optional, quantity: "1" }]);
   });
 
-  it("unticking a chosen extra removes it from the running price and the emitted options", async () => {
+  it("unticking a pick removes it from the running price and from the line", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [burger],
-      store,
-    });
-    tapTile(el, "Burger");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
+    const { el, picker } = await openPicker(burger, "Burger", store);
+    pickBox(picker, "list-extras", "p-bacon")!.click();
     await picker.updateComplete;
-
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
-    // Tick cheese, then untick it — the running price returns to the bare dish.
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
-    await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.00"));
-    picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50"));
+    pickBox(picker, "list-extras", "p-bacon")!.click();
     await picker.updateComplete;
     expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00"));
-
     addButton(picker).click();
     await el.updateComplete;
-    // Only the doneness radio survives — the unticked extra is gone.
-    expect(store.lines[0]!.options).toEqual([
-      { optionGroupItemId: "i-rare", name: { en: "Rare", es: "Poco hecha" }, priceDelta: "0.00" },
+    expect(store.lines[0]!.extras).toBeUndefined();
+  });
+
+  it("steps a pick back to zero and deselects it", async () => {
+    const store = new WorkingOrderStore();
+    const { el, picker } = await openPicker(burger, "Burger", store);
+    incButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    decButton(picker, "list-extras", "p-cheese")!.click();
+    await picker.updateComplete;
+    expect(stepCount(picker, "list-extras", "p-cheese")).toBe("0");
+    addButton(picker).click();
+    await el.updateComplete;
+    expect(store.lines[0]!.extras).toBeUndefined();
+  });
+
+  it("counts the same product picked off two lists separately", async () => {
+    const store = new WorkingOrderStore();
+    const twice: TillProduct = {
+      ...burger,
+      offeredModifiers: [
+        extrasList,
+        { ...breadList, minPicks: 0, items: [offeredItem("p-bacon", "Bacon", "2.00")] },
+      ],
+    };
+    const { el, picker } = await openPicker(twice, "Burger", store);
+    pickBox(picker, "list-extras", "p-bacon")!.click();
+    pickBox(picker, "list-bread", "p-bacon")!.click();
+    await picker.updateComplete;
+    addButton(picker).click();
+    await el.updateComplete;
+    expect(store.lines[0]!.extras).toEqual([
+      { listId: "list-extras", productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 1 },
+      { listId: "list-bread", productId: "p-bacon", name: "Bacon", price: "2.00", quantity: 1 },
     ]);
   });
 
-  it("refuses to confirm while a required group is unsatisfied (the guard)", async () => {
+  it("refuses to confirm while a required list is unsatisfied (the guard)", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [burger],
-      store,
-    });
-    tapTile(el, "Burger");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    await picker.updateComplete;
-
-    // Force-click Add past its disabled state (required doneness not chosen): nothing rings, and the
-    // picker stays open. Proven by removing the `#allSatisfied` guard in `#confirm` — this then rings.
+    const { el, picker } = await openPicker(sandwich, "Bocadillo", store);
+    // Force-click Add past its disabled state: nothing rings and the picker stays open.
     addButton(picker).click();
     await el.updateComplete;
     expect(store.lines).toHaveLength(0);
@@ -608,129 +485,149 @@ describe("till-modifier-picker", () => {
 
   it("closes without ringing when cancelled", async () => {
     const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-      products: [burger],
-      store,
-    });
-    tapTile(el, "Burger");
-    await el.updateComplete;
-    const picker = pickerOf(el)!;
-    await picker.updateComplete;
-
+    const { el, picker } = await openPicker(burger, "Burger", store);
     picker.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
     await el.updateComplete;
     expect(pickerOf(el)).toBeNull();
     expect(store.lines).toHaveLength(0);
   });
 
-  describe("per-option quantity (steppers)", () => {
-    it("renders a stepper for a multi-select item with maxQuantity > 1, a plain checkbox otherwise", async () => {
-      const store = new WorkingOrderStore();
-      const { picker } = await openPicker(coffee, "Coffee", store);
-
-      // The maxQuantity>1 items in a multi-select group get a stepper…
-      expect(incButton(picker, "i-shot")).not.toBeNull();
-      expect(decButton(picker, "i-shot")).not.toBeNull();
-      expect(incButton(picker, "i-syrup")).not.toBeNull();
-      // …while the maxQuantity===1 item stays a plain checkbox (no stepper).
-      expect(incButton(picker, "i-oat")).toBeNull();
-      expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.type).toBe(
-        "checkbox",
-      );
-      // Nothing selected yet → the count reads 0 and `−` is disabled.
-      expect(stepCount(picker, "i-shot")).toBe("0");
-      expect(decButton(picker, "i-shot")!.disabled).toBe(true);
-    });
-
-    it("stepping to 2 emits the option with quantity: 2 and reflects the ×2 in the running price", async () => {
-      const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(coffee, "Coffee", store);
-
-      incButton(picker, "i-shot")!.click();
-      await picker.updateComplete;
-      expect(stepCount(picker, "i-shot")).toBe("1");
-      incButton(picker, "i-shot")!.click();
-      await picker.updateComplete;
-      expect(stepCount(picker, "i-shot")).toBe("2");
-      // At the item's own maxQuantity (2), `+` disables.
-      expect(incButton(picker, "i-shot")!.disabled).toBe(true);
-
-      // Running price = dish 2.00 + shot 0.60 × 2 = 3.20.
-      expect(picker.shadowRoot!.textContent).toContain(formatMoney("3.20"));
-
-      addButton(picker).click();
-      await el.updateComplete;
-      expect(store.lines[0]!.options).toEqual([
-        {
-          optionGroupItemId: "i-shot",
-          name: { en: "Extra shot", es: "Café extra" },
-          priceDelta: "0.60",
-          quantity: 2,
+  describe("reopening a line's answers", () => {
+    it("seeds the picker from the line's own answers, not from the offer's defaults", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        initialSelections: {
+          extras: [
+            {
+              listId: "list-extras",
+              productId: "p-cheese",
+              name: "Queso",
+              price: "1.00",
+              quantity: 2,
+            },
+          ],
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
         },
-      ]);
+      });
+      expect(stepCount(el, "list-extras", "p-cheese")).toBe("2");
+      expect(pickBox(el, "list-extras", "p-bacon")!.checked).toBe(false);
+      expect(labelRadio(el, "list-cooked", "label-rare").checked).toBe(true);
+      expect(labelRadio(el, "list-cooked", "label-medium").checked).toBe(false);
     });
 
-    it("a maxQuantity===1 checkbox confirms with NO quantity field (byte-identical wire)", async () => {
-      const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(coffee, "Coffee", store);
+    it("does not re-apply a default over a draft that deliberately picked nothing", async () => {
+      const preselected: TillProduct = {
+        ...burger,
+        offeredModifiers: [
+          { ...extrasList, items: [offeredItem("p-bacon", "Bacon", "1.50", 1, true)] },
+        ],
+      };
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: preselected,
+        initialSelections: { extras: [] },
+      });
+      expect(pickBox(el, "list-extras", "p-bacon")!.checked).toBe(false);
+    });
 
-      picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.click();
-      await picker.updateComplete;
-      addButton(picker).click();
+    it("seeds once: a re-set product does not reset what the operator has already picked", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+      });
+      incButton(el, "list-extras", "p-cheese")!.click();
       await el.updateComplete;
-      // toEqual pins the ABSENCE of a `quantity` key on a plain single-choice option.
-      expect(store.lines[0]!.options).toEqual([
-        {
-          optionGroupItemId: "i-oat",
-          name: { en: "Oat milk", es: "Leche de avena" },
-          priceDelta: "0.50",
+      expect(stepCount(el, "list-extras", "p-cheese")).toBe("1");
+      el.product = structuredClone(burger);
+      await el.updateComplete;
+      expect(stepCount(el, "list-extras", "p-cheese")).toBe("1");
+    });
+
+    it("does not answer a changed options list with its new default over a stale answer", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: { ...burger, offeredModifiers: [cookedList] },
+      });
+      expect(addButton(el).disabled).toBe(false);
+      el.product = {
+        ...burger,
+        offeredModifiers: [
+          {
+            ...cookedList,
+            defaultLabelId: "label-other",
+            labels: [
+              {
+                id: "label-other",
+                name: "Muy hecha",
+                customerName: { es: "Muy hecha carta" },
+                kitchenName: "Muy hecha KDS",
+                available: true,
+              },
+            ],
+          },
+        ],
+      };
+      await el.updateComplete;
+      expect(addButton(el).disabled).toBe(true);
+      expect(labelRadio(el, "list-cooked", "label-other").checked).toBe(false);
+    });
+
+    it("blocks Add when a seeded pick is no longer offered, rather than dropping it silently", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: burger,
+        initialSelections: {
+          extras: [
+            { listId: "list-extras", productId: "p-gone", name: "Ido", price: "1.00", quantity: 1 },
+          ],
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
         },
-      ]);
+      });
+      expect(addButton(el).disabled).toBe(true);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
     });
+  });
 
-    it("stepping back to 0 deselects the option entirely", async () => {
+  describe("variants", () => {
+    it("requires an available variant, lists its STAFF name and rings its menu price", async () => {
       const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(coffee, "Coffee", store);
-
-      incButton(picker, "i-shot")!.click();
+      const variantProduct: TillProduct = {
+        ...cafe,
+        menuItemId: "offer-coffee",
+        variants: [
+          {
+            id: "single",
+            name: "Single",
+            customerName: { en: "Single cup", es: "Taza sencilla" },
+            kitchenName: "SGL",
+            unitPrice: "1.75",
+            available: true,
+          },
+          {
+            id: "double",
+            name: "Double",
+            customerName: { en: "Double cup", es: "Taza doble" },
+            kitchenName: "DBL",
+            unitPrice: "2.60",
+            available: false,
+          },
+        ],
+      };
+      const { el, picker } = await openPicker(variantProduct, "Café", store);
+      expect(addButton(picker).disabled).toBe(true);
+      expect(picker.shadowRoot!.textContent).not.toContain("Double");
+      expect(picker.shadowRoot!.textContent).not.toContain("Taza doble");
+      expect(picker.shadowRoot!.textContent).toContain("Single");
+      expect(picker.shadowRoot!.textContent).not.toContain("Taza sencilla");
+      picker.shadowRoot!.querySelector<HTMLInputElement>('[value="single"]')!.click();
       await picker.updateComplete;
-      decButton(picker, "i-shot")!.click();
-      await picker.updateComplete;
-      expect(stepCount(picker, "i-shot")).toBe("0");
-      expect(decButton(picker, "i-shot")!.disabled).toBe(true);
-
+      expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.75"));
       addButton(picker).click();
       await el.updateComplete;
-      // Nothing selected → no options key at all (the empty-selection collapse).
-      expect(store.lines).toEqual([{ product: coffee, quantity: "1" }]);
-    });
-
-    it("caps the group at maxSelect on the SUMMED quantity — stepping past the allowance is prevented", async () => {
-      const store = new WorkingOrderStore();
-      const { picker } = await openPicker(coffee, "Coffee", store);
-
-      // Step syrup (item maxQuantity 5) up to the GROUP cap of 3.
-      incButton(picker, "i-syrup")!.click();
-      incButton(picker, "i-syrup")!.click();
-      incButton(picker, "i-syrup")!.click();
-      await picker.updateComplete;
-      expect(stepCount(picker, "i-syrup")).toBe("3");
-      // The group sum is now at maxSelect 3, so syrup's `+` disables despite its item cap of 5…
-      expect(incButton(picker, "i-syrup")!.disabled).toBe(true);
-      // …the OTHER stepper's `+` disables too (no allowance left)…
-      expect(incButton(picker, "i-shot")!.disabled).toBe(true);
-      // …and the plain checkbox in the same group disables while unchecked.
-      expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-oat")!.disabled).toBe(true);
-    });
-
-    it("never renders a stepper in a single-select group, even when the item's maxQuantity > 1", async () => {
-      const store = new WorkingOrderStore();
-      const { picker } = await openPicker(sizedDrink, "Sized drink", store);
-
-      expect(incButton(picker, "i-small")).toBeNull();
-      expect(incButton(picker, "i-large")).toBeNull();
-      const radios = picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]');
-      expect(radios).toHaveLength(2);
+      expect(store.lines[0]!.product).toMatchObject({
+        name: "Café",
+        variantId: "single",
+        variantName: "Single",
+        variantCustomerName: { en: "Single cup", es: "Taza sencilla" },
+        variantKitchenName: "SGL",
+        unitPrice: "1.75",
+      });
     });
   });
 
@@ -740,47 +637,35 @@ describe("till-modifier-picker", () => {
       return picker.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
     }
 
-    it("shows a note textarea for EVERY product the picker opens over", async () => {
-      const burgerPicker = await openPicker(burger, "Burger", new WorkingOrderStore());
-      expect(noteBox(burgerPicker.picker)).not.toBeNull();
-      expect(noteBox(burgerPicker.picker)!.maxLength).toBe(200);
-      const steakPicker = await openPicker(steak, "Steak", new WorkingOrderStore());
-      expect(noteBox(steakPicker.picker)).not.toBeNull();
+    it("shows a note textarea for every product the picker opens over", async () => {
+      const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+      expect(noteBox(picker)).not.toBeNull();
+      expect(noteBox(picker)!.maxLength).toBe(200);
     });
 
     it("carries the typed note on Add (through to the rung line)", async () => {
       const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(steak, "Steak", store);
-
+      const { el, picker } = await openPicker(burger, "Burger", store);
       const note = noteBox(picker)!;
       note.value = "well seasoned, no butter";
       note.dispatchEvent(new Event("input"));
       await picker.updateComplete;
-
       addButton(picker).click();
       await el.updateComplete;
       expect(store.lines[0]!.note).toBe("well seasoned, no butter");
     });
 
-    it("omits the note when it is left blank (byte-identical line)", async () => {
-      const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(steak, "Steak", store);
-      addButton(picker).click();
-      await el.updateComplete;
-      // No note typed, no side ticked → a plain line with no extra keys.
-      expect(store.lines).toEqual([{ product: steak, quantity: "1" }]);
-    });
-
     it("folds a whitespace-only note to nothing (not chosen)", async () => {
       const store = new WorkingOrderStore();
-      const { el, picker } = await openPicker(steak, "Steak", store);
+      const optional: TillProduct = { ...burger, offeredModifiers: [extrasList] };
+      const { el, picker } = await openPicker(optional, "Burger", store);
       const note = noteBox(picker)!;
       note.value = "   ";
       note.dispatchEvent(new Event("input"));
       await picker.updateComplete;
       addButton(picker).click();
       await el.updateComplete;
-      expect(store.lines).toEqual([{ product: steak, quantity: "1" }]);
+      expect(store.lines).toEqual([{ product: optional, quantity: "1" }]);
     });
   });
 });

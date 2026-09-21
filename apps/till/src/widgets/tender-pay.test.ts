@@ -168,14 +168,22 @@ describe("till-tender-pay", () => {
     expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("gates the cash tender against the options-aware total, not the dish-only price", async () => {
-    // A café ×2 (3.00) with a +0.50/dish oat-milk option → options-aware total (1.50 + 0.50) × 2 = 4.00.
+  it("gates the cash tender against the extras-aware total, not the dish-only price", async () => {
+    // A café ×2 (3.00) with a +0.50/dish oat-milk pick → extras-aware total (1.50 + 0.50) × 2 = 4.00.
     // The Confirm gate reads `store.total`, so it must demand 4.00, not the dish-only 3.00 `priceBasket`
     // would report — otherwise a short 3.00 tender would settle a 4.00 order.
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2", [
-      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
-    ]);
+    store.addProduct(cafe, "2", {
+      extras: [
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+    });
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
@@ -183,7 +191,7 @@ describe("till-tender-pay", () => {
     await type(el, "3"); // 3.00 covers the dish-only price but is SHORT of the 4.00 total
     expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(true);
     await press(el, "backspace");
-    await type(el, "4"); // exactly the options-aware total
+    await type(el, "4"); // exactly the extras-aware total
     expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
   });
 
@@ -1138,28 +1146,32 @@ describe("till-tender-pay", () => {
   });
 });
 
-it("collects fractional quantity before required modifiers and prices extras per fractional unit", async () => {
+it("collects a fractional quantity before the picker, and prices each pick per fractional unit", async () => {
   const store = new WorkingOrderStore();
+  const cheese = {
+    productId: "p-cheese",
+    name: "Queso",
+    customerName: { es: "Queso carta" },
+    kitchenName: "Queso KDS",
+    price: "1.00",
+    vatClass: "general" as const,
+    maxQuantity: 3,
+    preselected: true,
+    addAllergens: null,
+    suitableFor: [],
+  };
   const product: TillProduct = {
     ...jamon,
-    modifiers: [
+    offeredModifiers: [
       {
-        id: "extras",
-        name: { es: "Extras" },
-        type: "extras",
-        available: true,
-        required: true,
-        maxTotalQuantity: null,
-        choices: [
-          {
-            id: "cheese",
-            name: { es: "Queso" },
-            priceDelta: "1.00",
-            available: true,
-            maxQuantity: 3,
-            preselected: true,
-          },
-        ],
+        kind: "extras",
+        id: "list-extras",
+        name: "Extras",
+        customerName: { es: "Extras carta" },
+        kitchenName: "Extras KDS",
+        minPicks: 1,
+        maxPicks: null,
+        items: [cheese],
       },
     ],
   };
@@ -1174,17 +1186,20 @@ it("collects fractional quantity before required modifiers and prices extras per
       "till-modifier-picker",
     )!;
   await picker.updateComplete;
-  // Cheese seeds at 1 (preselected); bump it to 2 so the fractional-unit pricing has a quantity.
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-cheese-inc"]')!.click();
+  // Cheese seeds at 1 (preselected); bump it to 2 so the fractional-unit pricing has a count.
+  picker
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-cheese-inc"]')!
+    .click();
   await picker.updateComplete;
   expect(store.lines).toHaveLength(0);
+  // dish 10.00 × 0.125 = 1.25; pick 1.00 × (0.125 × 2) = 0.25 → 1.50.
   expect(picker.shadowRoot!.querySelector(".running-amount")!.textContent).toBe(
     formatMoney("1.50"),
   );
   picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
   expect(store.lines[0]?.quantity).toBe("0.125");
-  expect(store.lines[0]?.modifierSelections).toEqual([
-    { modifierId: "extras", type: "extras", choices: [{ choiceId: "cheese", quantity: 2 }] },
+  expect(store.lines[0]?.extras).toEqual([
+    { listId: "list-extras", productId: "p-cheese", name: "Queso", price: "1.00", quantity: 2 },
   ]);
   expect(store.total).toBe("1.50");
 });

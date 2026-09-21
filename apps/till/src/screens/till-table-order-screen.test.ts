@@ -412,38 +412,21 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("send-round threads a line's selected modifier options as bare optionGroupItemIds (ordering modifiers)", async () => {
+  it("send-round threads a line's picks as one entry per list, naming products and counts alone", async () => {
     const { el } = await mount();
-    // Seed the round store with a modifier-carrying line (the picker, Task 10, is what will produce these
-    // through the UI); only the `optionGroupItemId`s reach the wire — never the display name/priceDelta.
-    grid(el).store.addProduct(cafe, "1", [
-      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
-    ]);
-    await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([
-      { productId: "cafe", quantity: "1", options: [{ optionGroupItemId: "opt-oat" }] },
-    ]);
-  });
-
-  it("send-round forwards a per-option quantity > 1 and OMITS it at 1 (per-option quantity, feature A)", async () => {
-    const { el } = await mount();
-    grid(el).store.addProduct(cafe, "1", [
-      {
-        optionGroupItemId: "opt-shot",
-        name: { es: "Extra chupito" },
-        priceDelta: "0.50",
-        quantity: 2,
-      },
-      {
-        optionGroupItemId: "opt-oat",
-        name: { es: "Leche de avena" },
-        priceDelta: "0.50",
-        quantity: 1,
-      },
-    ]);
+    // Seed the round store with a line carrying a pick (through the UI the picker produces these);
+    // only the list, the product and the count reach the wire — never the display name or price.
+    grid(el).store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+    });
     await el.updateComplete;
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
@@ -452,10 +435,45 @@ describe("till-table-order-screen", () => {
       {
         productId: "cafe",
         quantity: "1",
-        options: [
-          { optionGroupItemId: "opt-shot", quantity: 2 },
-          { optionGroupItemId: "opt-oat" }, // quantity 1 → omitted
+        extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
+      },
+    ]);
+  });
+
+  it("send-round carries each pick's own per-dish count, and groups two lists separately", async () => {
+    const { el } = await mount();
+    grid(el).store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-extras",
+          productId: "p-shot",
+          name: "Extra chupito",
+          price: "0.50",
+          quantity: 2,
+        },
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+      options: [{ listId: "list-cooked", labelId: "label-medium" }],
+    });
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      {
+        productId: "cafe",
+        quantity: "1",
+        extras: [
+          { listId: "list-extras", picks: [{ productId: "p-shot", quantity: 2 }] },
+          { listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] },
         ],
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
       },
     ]);
   });
@@ -1281,30 +1299,6 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector(".pending-line .name")!.textContent).toContain("Cerveza");
     });
   });
-});
-
-it("sends explicit modifier answers in table rounds without sending local charge previews", async () => {
-  const { el } = await mount();
-  const modifierSelections = [
-    {
-      modifierId: "extras",
-      type: "extras" as const,
-      choices: [{ choiceId: "cheese", quantity: 2 }],
-    },
-  ];
-  grid(el).store.addProduct(
-    cafe,
-    "1",
-    [{ optionGroupItemId: "cheese", name: { es: "Queso" }, priceDelta: "1.00", quantity: 2 }],
-    { modifierSelections },
-  );
-  await el.updateComplete;
-  let captured: CustomEvent | undefined;
-  el.addEventListener("send-round", (event) => (captured = event as CustomEvent));
-  el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-  expect(captured!.detail.lines).toEqual([
-    { productId: "cafe", quantity: "1", modifierSelections },
-  ]);
 });
 
 it("shows a retained table line's recorded name and modifier answer after live names change", async () => {

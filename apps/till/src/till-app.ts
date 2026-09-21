@@ -12,6 +12,7 @@ import { TillApi, isNetworkFailure } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
+import { deriveExtraSelections } from "./state/held-extras.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
@@ -1337,10 +1338,9 @@ export class TillApp extends LitElement {
 
   /** Maps the current basket to the {@link SaleLine} shape every server call takes (`parkOrder`,
    * `updateWorkingOrder`, `placeOrder`, `recordSale`, `pay`) — never a price, since the server always
-   * re-prices. A line with selected modifiers (ordering modifiers, Task 9) carries its `options` as the
-   * bare `optionGroupItemId`s the server re-resolves; a plain line OMITS `options` (never `[]`) so a
-   * no-modifier sale is byte-identical to before. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty`,
-   * `#onConfirmPayment` and `#onCollectCard`. */
+   * re-prices. A line that answered its dish's lists carries `extras` and `options` as the wire names
+   * them, built by `toWireModifiers`; a line that answered nothing carries neither key. Shared by
+   * `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty`, `#onConfirmPayment` and `#onCollectCard`. */
   #currentSaleLines(): SaleLine[] {
     return this.#store.lines.map((line) => {
       const saleLine: SaleLine = {
@@ -1685,28 +1685,40 @@ export class TillApp extends LitElement {
       const lines: OrderLine[] = [];
       let droppedAProduct = false;
       for (const line of order.lines) {
+        // The stored snapshot is what the line was written with, so it keeps the names and the price
+        // the order holds. The dish's OFFERED lists are not in it — the snapshot carries none — so
+        // they come from today's live offer, which is what an edit has to answer against and what an
+        // extra's declarations are read from at display time (spec §3.4).
+        const live = this.products.find((candidate) =>
+          line.menuItemId === undefined
+            ? candidate.id === line.productId
+            : candidate.menuItemId === line.menuItemId,
+        );
+        const stored = line.product;
         const product =
-          line.product ??
-          this.products.find((candidate) =>
-            line.menuItemId === undefined
-              ? candidate.id === line.productId
-              : candidate.menuItemId === line.menuItemId,
-          );
+          stored === undefined
+            ? live
+            : {
+                ...stored,
+                ...(live === undefined ? {} : { offeredModifiers: live.offeredModifiers }),
+              };
         if (product === undefined) {
           // A legacy product-only line no longer resolves; contextual lines carry their own snapshot.
           droppedAProduct = true;
           continue;
         }
+        // A child line names no list, so the list a pick belongs to is re-derived from the offer; a
+        // pick nothing offers any more cannot be re-sent at all and leaves the basket, which the
+        // same notice as a dropped line reports.
+        const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
+        if (picks.dropped.length > 0) droppedAProduct = true;
         lines.push({
           product,
           quantity: displayQuantity(product, line.quantity),
           ...(line.workingOrderLineId === undefined
             ? {}
             : { workingOrderLineId: line.workingOrderLineId }),
-          ...(line.options === undefined ? {} : { options: line.options }),
-          ...(line.modifierSelections === undefined
-            ? {}
-            : { modifierSelections: line.modifierSelections }),
+          ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
           ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
         });
