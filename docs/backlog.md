@@ -3334,7 +3334,7 @@ dashboard at all. Nobody has decided whether the form should be relaxed or the c
 become its own document type; this records the gap, it does not resolve it.
 
 **A negative price WAS stored by the product writes, and answered as a SERVER fault by the menu-item
-writes — FIXED 2026-09-21, task N4 (found 2026-09-21, task N1).** A negative CATALOGUE price is never valid
+writes — FIXED on #487 (2026-09-21, task N4; found 2026-09-21, task N1).** A negative CATALOGUE price is never valid
 (owner ruling 2026-09-21) — scoped to the catalogue, because a corrective invoice's sale total and
 its line TOTALS are deliberately negative (`packages/core/src/record-correction.ts`; that model
 negates the QUANTITY, and the unit price in its own fixture stays positive).
