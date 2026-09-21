@@ -1203,3 +1203,48 @@ it("collects a fractional quantity before the picker, and prices each pick per f
   ]);
   expect(store.total).toBe("1.50");
 });
+
+it("asks for the variant of a weighed dish whose only question is one", async () => {
+  // The picker's `detail.product` is the variant-resolved one, and this path hands it straight to
+  // `addProduct`, so ringing the dish up without asking would file it at the base product's price.
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...jamon,
+    variants: [
+      { id: "v-iberico", name: "Ibérico", unitPrice: "30.00", available: true },
+      { id: "v-serrano", name: "Serrano", unitPrice: "10.00", available: true },
+    ],
+  };
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+  store.emit("product-selected", product);
+  await el.updateComplete;
+  await type(el, "0.250");
+  click(el, ".add");
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    );
+  expect(picker).not.toBeNull();
+  expect(store.lines).toHaveLength(0); // nothing rung up until the variant is chosen
+  await picker!.updateComplete;
+  picker!.shadowRoot!.querySelector<HTMLInputElement>('input[value="v-iberico"]')!.click();
+  await picker!.updateComplete;
+  picker!.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  expect(store.lines[0]?.product.variantId).toBe("v-iberico");
+  expect(store.lines[0]?.product.unitPrice).toBe("30.00");
+  expect(store.lines[0]?.quantity).toBe("0.250");
+});
+
+it("rings a weighed dish up unasked when it offers neither a variant nor a list", async () => {
+  // The control for the case above: nothing to ask, so the keypad's Add is still one tap.
+  const store = new WorkingOrderStore();
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+  store.emit("product-selected", jamon);
+  await el.updateComplete;
+  await type(el, "0.250");
+  click(el, ".add");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+  expect(store.lines).toHaveLength(1);
+});

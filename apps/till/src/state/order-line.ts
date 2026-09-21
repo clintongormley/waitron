@@ -9,7 +9,7 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import type { SaleLine } from "../api/client.js";
+import type { SaleLine, TillProduct } from "../api/client.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { unitName } from "../widgets/product-name.js";
 
@@ -76,6 +76,23 @@ export function dishGross(line: OrderLine): Decimal {
  */
 export function extraGross(line: OrderLine, extra: SelectedExtra): Decimal {
   return grossOf(extra.price, combinedPickQuantity(line, extra));
+}
+
+/**
+ * Whether tapping this product has anything to ask before it can be rung up: an available variant to
+ * choose, or an offered list to answer.
+ *
+ * The two surfaces that ADD a line both read this — the product grid's tap and tender-pay's weighed
+ * quantity — because both hand the picker's own `detail.product` to `addProduct`, so a variant the
+ * dialog resolved reaches the line. The basket's Edit button deliberately asks a NARROWER question
+ * (offered lists alone): `setLineModifiers` replaces a line's answers and never its product, so a
+ * variant cannot be changed from there and a dialog offering one would discard the change.
+ */
+export function needsModifierPicker(
+  product: Pick<TillProduct, "variants" | "offeredModifiers">,
+): boolean {
+  if ((product.variants ?? []).some((variant) => variant.available)) return true;
+  return (product.offeredModifiers ?? []).length > 0;
 }
 
 /** How much of a line, followed by the selected unit's localized short label (its abbreviation). */

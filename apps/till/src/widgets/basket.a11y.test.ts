@@ -53,7 +53,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       unitPrice: "18.00",
     };
     const store = new WorkingOrderStore();
-    store.addProduct(steak, "1", undefined, { note: "no butter" });
+    store.addProduct(steak, "1", { note: "no butter" });
     const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
     // Open the inline editor so the note textarea and its sub-row are in the tree when scanned.
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();

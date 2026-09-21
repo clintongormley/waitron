@@ -9,8 +9,10 @@ Use the reusable definition for configuration and explicit selections for each o
 > `packages/shared/src/modifier-snapshots.ts` now records it as dead, and Task 13 of
 > `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` deletes it. Checked by grepping
 > the tree: the only thing importing it is that package's own barrel
-> (`packages/shared/src/index.ts`), and `apps/till` declares a separate `ModifierSnapshot` of its
-> own in `apps/till/src/api/client.ts` rather than using this one. An order or sale line's frozen
+> (`packages/shared/src/index.ts`). `apps/till` declared a separate `ModifierSnapshot` of its own in
+> `apps/till/src/api/client.ts` until 2026-09-21, when Task 12 rewrote the till's wire types over
+> extras and options and deleted it; no TypeScript file outside `packages/shared` names the type
+> today. An order or sale line's frozen
 > answers are `OptionSnapshot`s (`packages/shared/src/option-selection.ts`), and an extras pick is
 > its own line.
 

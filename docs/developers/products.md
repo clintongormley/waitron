@@ -85,10 +85,12 @@ rule is spelled out away from `product-presentation.ts`. A list and a label carr
 there is no whole `customerPresentationText` to call, only the same
 `nonBlankTranslations(…) ?? <the staff name>` fold written out again. Checked by following every
 use of `nonBlankTranslations` in the tree: the other callers use it to normalise a map on a write
-path and none of them falls back to a staff name. It is recorded in `docs/backlog.md` as something
-to move into `packages/catalogue` when the till needs the same two labels for its own settled
-ticket, because the till cannot import from `apps/server` and would otherwise write it a third
-time.
+path and none of them falls back to a staff name. The move `docs/backlog.md` asked for has happened.
+These builders lived in `apps/server` until Task 12 (2026-09-21) and went into `packages/catalogue`
+there, because the till had to show the same labels on its own settled ticket and a browser cannot
+import from `apps/server`. A third builder for the till's own staff wording
+(`staffOptionSnapshotLabels`) sits beside them, and the till reaches all three through
+`apps/till/src/widgets/option-snapshot.ts`.
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT

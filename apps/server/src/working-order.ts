@@ -134,10 +134,18 @@ export type LineExtras = { note?: string; variantId?: string };
  * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
  * resolution (perf)" in `apps/server/src/working-order.test.ts`.
  *
- * The two list maps are `resolveAttachedModifiers`'s own (packages/catalogue), shared with the two
- * sell-side reads a till draws its picker from (`listAvailableProducts` and `listMenuOffers`, via
- * `readOfferedModifiers`). One body, deliberately: what the till is OFFERED has to be exactly the
- * set the validators below answer, or a required list the picker never drew refuses the order.
+ * The LIST maps come from one body — `resolveAttachedModifiers` (packages/catalogue) — which is the
+ * body the two sell-side reads a till draws its picker from call as well (`listAvailableProducts`
+ * and `listMenuOffers`, through `readOfferedModifiers`). Deliberate: what the till is OFFERED has
+ * to be the set the validators below answer, or a required list the picker never drew refuses the
+ * order.
+ *
+ * The product facts are NOT shared, and two bodies read the `products` rows: this file's
+ * {@link resolveBasketModifiers} and `readExtraProducts` (offered-modifiers.ts). Neither shape can
+ * be had from the other — this one resolves customer text under the order's `defaultLanguage`,
+ * which no sell-side caller supplies, and that one expands dietary declarations through
+ * `validateDietaryDeclarations`, which throws `diet.declaration_invalid`. Sharing only the SELECT
+ * would put two jsonb columns this path discards on the order path.
  */
 interface BasketModifiers extends AttachedModifiers {
   /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child. */
@@ -2046,19 +2054,22 @@ export async function readTabLines(
   // from reading the inserts, not a case any test here reaches.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
   // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
-  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads.
-  return rows.map(({ variantName, id, parentLineId, ...row }) => {
-    // `id` is destructured only to keep the row id OFF the wire: it feeds `lineNoById` above, and the
-    // tab screen addresses a line by `lineNo` (the void-binding idiom this file already uses for a
-    // deliberately-unused parameter, e.g. `assertTabOpen`'s `void cfg`).
-    void id;
-    return {
-      ...row,
-      unitPriceGross: centsToDecimal(row.unitPriceGross),
-      parentLineNo: parentLineId === null ? null : (lineNoById.get(parentLineId) ?? null),
-      name: staffPresentationName({ name: row.name, variantName }),
-    };
-  });
+  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads. The row
+  // id and `parent_line_id` are named nowhere below because neither belongs on this wire: they feed
+  // `lineNoById` above, and the tab screen addresses a line by `lineNo`.
+  return rows.map((row) => ({
+    lineNo: row.lineNo,
+    name: staffPresentationName({ name: row.name, variantName: row.variantName }),
+    optionSnapshots: row.optionSnapshots,
+    productId: row.productId,
+    parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
+    quantity: row.quantity,
+    unitPriceGross: centsToDecimal(row.unitPriceGross),
+    servedAt: row.servedAt,
+    courseId: row.courseId,
+    firedAt: row.firedAt,
+    state: row.state,
+  }));
 }
 
 /**

@@ -114,4 +114,6 @@ cooked.
 The coffee also still carries three of the older modifiers — one of each of the retired text, extras
 and options types — because the demo seed has not been rewritten
 (`apps/server/scripts/demo-seed/seed-options.ts`). They are in the database, but no dashboard screen
-shows them any more, so they will not appear on the coffee's **Modifiers** section.
+shows them any more, so they will not appear on the coffee's **Modifiers** section, and since
+2026-09-21 the till does not offer them either: it builds a dish's questions from that dish's extras
+and options lists alone.

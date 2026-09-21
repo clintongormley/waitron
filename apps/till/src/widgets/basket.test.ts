@@ -11,7 +11,7 @@ import type { SelectedExtra } from "../state/working-order.js";
 
 /**
  * One product an extras list offers. Its three names are DIFFERENT texts, so a surface reading the
- * customer or kitchen wording where it should read the staff name fails (CLAUDE.md §4).
+ * customer or kitchen wording where it should read the staff name fails (CLAUDE.md §3).
  */
 function offeredItem(
   productId: string,
@@ -782,7 +782,7 @@ describe("till-basket", () => {
 
   it("renders the line's set note as an indented sub-row (at a glance)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(steak, "1", undefined, { note: "no butter" });
+    store.addProduct(steak, "1", { note: "no butter" });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const sub = el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`);
     expect(sub).not.toBeNull();
@@ -875,7 +875,7 @@ describe("till-basket", () => {
   });
 });
 
-/** One options list on offer, three DIFFERENT texts per name and per label (CLAUDE.md §4). */
+/** One options list on offer, three DIFFERENT texts per name and per label (CLAUDE.md §3). */
 const cutList: OfferedModifier = {
   kind: "options",
   id: "list-cut",
@@ -935,6 +935,22 @@ it("keeps each line's own answer through a quantity edit, and shows it in STAFF 
   ).toEqual(["Cortar: Fino", "Cortar: Grueso"]);
 });
 
+it("offers no Edit on a line whose only question was its variant", async () => {
+  // The basket's Edit reaches a line's ANSWERS only — `setLineModifiers` never replaces the line's
+  // product — so a variant-only dish has nothing to edit here, unlike the two surfaces that ADD a
+  // line, which hand the picker's variant-resolved product to `addProduct`.
+  const store = new WorkingOrderStore();
+  const product: TillProduct = {
+    ...cafe,
+    variants: [{ id: "v-large", name: "Grande", unitPrice: "2.00", available: true }],
+    variantId: "v-large",
+    variantName: "Grande",
+  };
+  store.addProduct(product, "1");
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(el.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+});
+
 it("reopens the picker on one line's answer and changes only that line", async () => {
   const store = new WorkingOrderStore();
   const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
@@ -966,9 +982,29 @@ it("reopens the picker on one line's answer and changes only that line", async (
   ).toEqual(["Cortar: Grueso", "Cortar: Fino"]);
 });
 
+it("hands the open picker ONE seed object, not a fresh one per basket render", async () => {
+  // Lit's reactive-property `hasChanged` is an identity check, so a seed rebuilt inside `render()`
+  // would re-render the open dialog on every basket render — note keystrokes included.
+  const store = new WorkingOrderStore();
+  const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
+  store.addProduct(product, "1", answered("label-fino", "Fino"));
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    )!;
+  const seed = picker.initialSelections;
+  expect(seed).toBeDefined();
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(picker.initialSelections).toBe(seed);
+});
+
 it("shows a retrieved line's frozen options answers in the STAFF wording", async () => {
   // Three different texts per name, so the assertion fails if the basket reads the kitchen or the
-  // customer side by mistake (CLAUDE.md §4).
+  // customer side by mistake (CLAUDE.md §3).
   const store = new WorkingOrderStore();
   store.loadFrom("wo-1", [
     {

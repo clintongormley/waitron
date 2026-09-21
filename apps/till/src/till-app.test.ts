@@ -2056,7 +2056,7 @@ describe("till-app", () => {
 
   // A held line's extras come back as VALUES — the child line holds no list id — so the till finds
   // the list from the dish's LIVE offer before the line can be re-sent. The three names of the list
-  // and of the picked product differ, so reading the wrong one fails (CLAUDE.md §4).
+  // and of the picked product differ, so reading the wrong one fails (CLAUDE.md §3).
   const milkList = {
     kind: "extras" as const,
     id: "list-milk",
@@ -2227,7 +2227,7 @@ describe("till-app", () => {
   // A frozen answer carries six names and no ids (spec §2.3), so a retrieved line re-derives the
   // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
   // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
-  // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §4).
+  // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
   const puntoList = {
     kind: "options" as const,
     id: "list-punto",

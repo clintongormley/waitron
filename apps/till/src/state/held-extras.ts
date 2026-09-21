@@ -31,19 +31,23 @@ export function deriveExtraSelections(
   offered: readonly OfferedModifier[],
   heldExtras: readonly HeldExtra[] | undefined,
 ): { extras: SelectedExtra[]; dropped: HeldExtra[] } {
+  // Each picked product's list, resolved once for the whole line rather than re-scanned per pick.
+  // Written only when the product is unseen, which is what makes "the first offering list wins"
+  // above a stated rule rather than a property of whichever scan runs.
+  const listOfProduct = new Map<string, OfferedModifier>();
+  for (const entry of offered) {
+    if (entry.kind !== "extras") continue;
+    for (const item of entry.items) {
+      if (!listOfProduct.has(item.productId)) listOfProduct.set(item.productId, entry);
+    }
+  }
   const extras: SelectedExtra[] = [];
   const dropped: HeldExtra[] = [];
   for (const held of heldExtras ?? []) {
     // Lower-cased for the reason the two contracts lower-case an answer: the stored rows come back
     // from their `uuid` columns lower-cased, so an id in any other case has to be folded first.
     const productId = held.productId?.toLowerCase() ?? null;
-    const list =
-      productId === null
-        ? undefined
-        : offered.find(
-            (entry) =>
-              entry.kind === "extras" && entry.items.some((item) => item.productId === productId),
-          );
+    const list = productId === null ? undefined : listOfProduct.get(productId);
     if (list === undefined || productId === null) {
       dropped.push(held);
       continue;

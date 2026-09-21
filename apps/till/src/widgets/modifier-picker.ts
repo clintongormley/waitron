@@ -16,10 +16,11 @@ import type {
   TillProduct,
 } from "../api/client.js";
 
-/** What a confirmed pick carries: the dish as chosen, the answers to its lists, and the line note. */
+/** What a confirmed pick carries: the dish as chosen, plus everything `LineSelection` holds — the
+ *  answers to its lists and the line note. It IS a `LineSelection`, so a confirm reaches
+ *  `addProduct`/`setLineModifiers` as one argument. */
 export interface ModifierConfirmDetail extends LineSelection {
   product: TillProduct;
-  note?: string;
 }
 
 /**
@@ -238,13 +239,26 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
-  get #allSatisfied(): boolean {
+  /** Every extras list's pick count, keyed by list id, in one pass over the picks. */
+  #listTotals(): Map<string, number> {
+    const totals = new Map<string, number>();
+    for (const entry of this.#offered) {
+      if (entry.kind === "extras") totals.set(entry.id, this.#listTotal(entry));
+    }
+    return totals;
+  }
+
+  /**
+   * Whether Add may be enabled. Takes the stale picks and the per-list counts rather than deriving
+   * them, so one render computes each once and shares it with {@link #renderExtras}.
+   */
+  #satisfied(stale: readonly SelectedExtra[], totals: ReadonlyMap<string, number>): boolean {
     if (this.#variants.length > 0 && this.variantId === "") return false;
-    if (this.#stalePicks().length > 0) return false;
+    if (stale.length > 0) return false;
     return this.#offered.every((entry) => {
       if (entry.kind === "options")
         return entry.labels.some((label) => label.id === this.answers[entry.id]);
-      const total = this.#listTotal(entry);
+      const total = totals.get(entry.id) ?? 0;
       return (
         total >= entry.minPicks &&
         (entry.maxPicks === null || total <= entry.maxPicks) &&
@@ -336,7 +350,7 @@ export class TillModifierPicker extends LitElement {
 
   /**
    * Step one item's count, held inside BOTH bounds: the item's own `maxQuantity` and what is left of
-   * the list's `maxPicks`. Clamping here and not only in {@link #allSatisfied} matters because a
+   * the list's `maxPicks`. Clamping here and not only in {@link #satisfied} matters because a
    * click on a disabled `wt-button` still reaches this handler — the host takes the click, the
    * disabled inner `<button>` never sees it — so without the clamp a forced tap would show a count
    * the list does not allow.
@@ -351,7 +365,8 @@ export class TillModifierPicker extends LitElement {
   }
 
   #confirm(e?: Event): void {
-    if (!this.#allSatisfied) return;
+    // A single click, so recomputing both is cheaper than holding them across renders.
+    if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     e?.stopPropagation();
     const extras = this.#selectedExtras();
     const options = this.#selectedOptions();
@@ -382,6 +397,7 @@ export class TillModifierPicker extends LitElement {
 
   override render() {
     const stale = this.#stalePicks();
+    const totals = this.#listTotals();
     // wt-MODAL, not wt-dialog: the body scrolls inside the frame and the footer keeps its own row, so
     // Add and Cancel stay on screen however many lists a dish offers. The design system draws that
     // line — wt-modal for an add or edit form, wt-dialog for a compact confirmation
@@ -416,7 +432,9 @@ export class TillModifierPicker extends LitElement {
             </fieldset>`
       }
       ${this.#offered.map((entry) =>
-        entry.kind === "extras" ? this.#renderExtras(entry) : this.#renderOptions(entry),
+        entry.kind === "extras"
+          ? this.#renderExtras(entry, totals.get(entry.id) ?? 0)
+          : this.#renderOptions(entry),
       )}
       ${stale.map(
         (extra) =>
@@ -450,7 +468,7 @@ export class TillModifierPicker extends LitElement {
         slot="footer"
         class="confirm"
         variant="primary"
-        ?disabled=${!this.#allSatisfied}
+        ?disabled=${!this.#satisfied(stale, totals)}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
@@ -458,9 +476,9 @@ export class TillModifierPicker extends LitElement {
     </wt-modal>`;
   }
 
-  /** One extras list: its items at their resolved prices, bounded by the list's own allowance. */
-  #renderExtras(list: OfferedExtrasList) {
-    const total = this.#listTotal(list);
+  /** One extras list: its items at their resolved prices, bounded by the list's own allowance.
+   *  `total` is this list's pick count, computed once per render by {@link #listTotals}. */
+  #renderExtras(list: OfferedExtrasList, total: number) {
     const atListMax = list.maxPicks !== null && total >= list.maxPicks;
     return html`
       <fieldset class="group">
@@ -490,7 +508,7 @@ export class TillModifierPicker extends LitElement {
         <input
           id="pick-${list.id}-${item.productId}"
           type="checkbox"
-          name=${list.id}
+          name=${`extras-${list.id}`}
           .checked=${checked}
           ?disabled=${!checked && atListMax}
           @change=${(e: Event) => {

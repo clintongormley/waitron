@@ -4,7 +4,7 @@ import type { OfferedModifier } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** One offered options list. Its three names, and each label's three, DIFFER, so a match made on the
- *  wrong one of the six fails (CLAUDE.md §4). */
+ *  wrong one of the six fails (CLAUDE.md §3). */
 function list(id: string, staff: string, labels: [string, string][]): OfferedModifier {
   return {
     kind: "options",
@@ -103,6 +103,37 @@ describe("deriveOptionSelections", () => {
     );
     expect(result.options).toEqual([
       { listId: "list-punto", labelId: "label-medium" },
+      { listId: "list-punto-2", labelId: "label-medium-2" },
+    ]);
+    expect(result.unanswered).toEqual([]);
+  });
+
+  it("moves an answer off one list so a narrower one sharing its name can be answered too", () => {
+    // Both lists are called "Punto". The first offers "Al punto" and "Poco hecho"; the second offers
+    // "Al punto" alone. Taking the answers in arrival order leaves the second list with nothing,
+    // although giving "Poco hecho" to the first satisfies both.
+    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
+    const result = deriveOptionSelections(
+      [punto, narrow],
+      [frozen("Punto", "Al punto"), frozen("Punto", "Poco hecho")],
+    );
+    expect(result.options).toEqual([
+      { listId: "list-punto", labelId: "label-rare" },
+      { listId: "list-punto-2", labelId: "label-medium-2" },
+    ]);
+    expect(result.unanswered).toEqual([]);
+  });
+
+  it("answers the same two lists when arrival order needs no move (control)", () => {
+    // The same dish and the same two answers, arriving the other way round — the order in which
+    // taking each answer as it comes already satisfies both. It must keep working.
+    const narrow = list("list-punto-2", "Punto", [["label-medium-2", "Al punto"]]);
+    const result = deriveOptionSelections(
+      [punto, narrow],
+      [frozen("Punto", "Poco hecho"), frozen("Punto", "Al punto")],
+    );
+    expect(result.options).toEqual([
+      { listId: "list-punto", labelId: "label-rare" },
       { listId: "list-punto-2", labelId: "label-medium-2" },
     ]);
     expect(result.unanswered).toEqual([]);

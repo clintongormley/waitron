@@ -13,7 +13,7 @@ import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type { LineSelection, OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { lineProductName, productUnit } from "./product-name.js";
 
 /**
@@ -204,13 +204,36 @@ export class TillBasket extends LitElement {
    * can carry allergy info) would reattach to whatever line slid into the edited line's old slot. */
   @state() private editingIndex: number | null = null;
 
+  /** The line whose modifier picker is open, or `null` when none is. Assigned only through
+   * {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
+   * {@link #modifierSelection} in step with it. */
+  @state() private modifierLine: OrderLine | null = null;
+
+  /**
+   * The seed handed to the open picker, built ONCE when it opens rather than per render. Lit's
+   * default `hasChanged` is an identity check, so a fresh object literal in `render()` would set the
+   * property on every basket render — including the ones a note keystroke causes — and re-render the
+   * dialog each time. Non-null exactly while {@link modifierLine} is.
+   */
+  #modifierSelection: LineSelection | null = null;
+
   /** The `store.id` last seen by {@link #onStoreChanged}, used to detect a whole-basket swap. `clear`
    * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
    * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
    * first change fires (the initial render already starts with no editor open). */
-  @state() private modifierLine: OrderLine | null = null;
-
   #lastStoreId?: string;
+
+  /** Open the picker on `line`, freezing the selection it is seeded with. */
+  #openModifierPicker(line: OrderLine): void {
+    this.modifierLine = line;
+    this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
+  }
+
+  /** Close the picker, dropping the seed with it. */
+  #closeModifierPicker(): void {
+    this.modifierLine = null;
+    this.#modifierSelection = null;
+  }
 
   constructor() {
     super();
@@ -245,10 +268,10 @@ export class TillBasket extends LitElement {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
       this.editingIndex = null;
-      this.modifierLine = null;
+      this.#closeModifierPicker();
     }
     if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
-      this.modifierLine = null;
+      this.#closeModifierPicker();
     this.requestUpdate();
   }
 
@@ -349,14 +372,15 @@ export class TillBasket extends LitElement {
             </wt-button>
           </div>
           ${
+            // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
+            // answers and never its product, so a variant is not editable from the basket and a
+            // variant-only dish has nothing here to edit.
             line.product.offeredModifiers?.length
               ? html`<wt-button
                   class="edit-modifiers"
                   size="sm"
                   variant="ghost"
-                  @click=${() => {
-                    this.modifierLine = line;
-                  }}
+                  @click=${() => this.#openModifierPicker(line)}
                   >${t("modifier.edit")}</wt-button
                 >`
               : nothing
@@ -384,24 +408,21 @@ export class TillBasket extends LitElement {
         `,
       )}
       ${
-        this.modifierLine
+        this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
               .product=${this.modifierLine.product}
               .quantity=${this.modifierLine.quantity}
-              .initialSelections=${{
-                extras: this.modifierLine.extras ?? [],
-                options: this.modifierLine.options ?? [],
-              }}
+              .initialSelections=${this.#modifierSelection}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                 event.stopPropagation();
                 if (!this.modifierLine) return;
                 const index = this.store.lines.indexOf(this.modifierLine);
-                this.modifierLine = null;
+                this.#closeModifierPicker();
                 this.store.setLineModifiers(index, event.detail);
               }}
               @wt-modifier-cancel=${(event: Event) => {
                 event.stopPropagation();
-                this.modifierLine = null;
+                this.#closeModifierPicker();
               }}
             ></till-modifier-picker>`
           : nothing
@@ -504,7 +525,7 @@ export class TillBasket extends LitElement {
 
   /**
    * The line's as-served allergen row, or `nothing` for the noise-free common case: a plain line with
-   * picks AND no declared allergens on the dish renders nothing at all. When it DOES render, the
+   * NO picks AND no declared allergens on the dish renders nothing at all. When it DOES render, the
    * chips are the folded `asServedAllergens` set (localised via the till's allergen-name i18n) and the
    * "not fully reviewed" note appears whenever the fold is pending (the dish's own allergens unreviewed
    * — the Cautious policy, since a removed-but-unknown base can't be proven allergen-free). A reviewed

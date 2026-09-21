@@ -61,16 +61,16 @@ describe("WorkingOrderStore", () => {
     expect(s.total).toBe("1.50");
   });
 
-  it("attaches a per-line note passed as extras", () => {
+  it("attaches a per-line note carried on the selection", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "no mayo" });
+    s.addProduct(cafe, "1", { note: "no mayo" });
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "no mayo" });
   });
 
-  it("omits the note key when extras are absent or empty", () => {
+  it("omits the note key when the selection is absent or names nothing", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1");
-    s.addProduct(cafe, "1", undefined, {});
+    s.addProduct(cafe, "1", {});
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
     expect(s.lines[1]).toEqual({ product: cafe, quantity: "1" });
   });
@@ -182,7 +182,7 @@ describe("WorkingOrderStore", () => {
 
   it("setLineExtras touches only the keys the caller names, leaving an unnamed note alone", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "keep me" });
+    s.addProduct(cafe, "1", { note: "keep me" });
     // An extras object that does not name `note` must not wipe the stored one: the update is keyed on
     // the PRESENCE of the key, not on its value, so an absent key is "unchanged", never "clear it".
     s.setLineExtras(0, {});
@@ -191,7 +191,7 @@ describe("WorkingOrderStore", () => {
 
   it("setLineExtras trims a whitespace-only note away (omission discipline)", () => {
     const s = new WorkingOrderStore();
-    s.addProduct(cafe, "1", undefined, { note: "old note" });
+    s.addProduct(cafe, "1", { note: "old note" });
     s.setLineExtras(0, { note: "   " });
     // The key is gone — a plain line, byte-identical to a note-free add.
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });

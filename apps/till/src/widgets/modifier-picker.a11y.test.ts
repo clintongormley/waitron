@@ -5,7 +5,7 @@ import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
 import type { OfferedModifier, TillProduct } from "../api/client.js";
 
-/** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §4). */
+/** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
   return {
     productId,

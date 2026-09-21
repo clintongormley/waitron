@@ -935,7 +935,7 @@ describe("till-expo-screen", () => {
 
 it("shows a dish's frozen options answers in the KITCHEN's wording", async () => {
   // Three different texts per name, so the assertion fails if the pass reads the staff or the
-  // customer side by mistake (CLAUDE.md §4).
+  // customer side by mistake (CLAUDE.md §3).
   const first = threeCourseOrder.courses[0]!;
   const order: ExpoOrder = {
     ...threeCourseOrder,

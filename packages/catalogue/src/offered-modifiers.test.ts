@@ -36,7 +36,7 @@ const WELL = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 /**
  * Every name below is DIFFERENT text from its two siblings — staff, customer-facing and kitchen —
  * so a read that takes the wrong one of a trio fails rather than passing on a shared string
- * (CLAUDE.md §4). The same goes for the unit prices: each product's own price is unlike every list
+ * (CLAUDE.md §3). The same goes for the unit prices: each product's own price is unlike every list
  * item's, so an item paired with the wrong product's row shows up as the wrong money.
  */
 const products = {
@@ -185,9 +185,10 @@ describe("what a product offers", () => {
       return attach(tx, ["options", "extras"]);
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     expect(offered.get(ids.burger)!.map((entry) => [entry.kind, entry.id])).toEqual([
       ["options", seeded.optionsId],
@@ -201,9 +202,10 @@ describe("what a product offers", () => {
       return attach(tx, ["extras", "options"]);
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     expect(offered.get(ids.burger)!.map((entry) => [entry.kind, entry.id])).toEqual([
       ["extras", seeded.extrasId],
@@ -217,9 +219,10 @@ describe("what a product offers", () => {
       return attach(tx, ["options", "extras"]);
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     expect(offered.get(ids.burger)![0]).toEqual({
       kind: "options",
@@ -253,9 +256,10 @@ describe("what a product offers", () => {
       return attach(tx, ["extras", "options"]);
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     expect(offered.get(ids.burger)![0]).toEqual({
       kind: "extras",
@@ -316,9 +320,10 @@ describe("what a product offers", () => {
       await updateExtraList(tx, seeded.extrasId, { ...toppings(), active: false }, "en");
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     expect(offered.get(ids.burger)).toEqual([]);
   });
@@ -334,9 +339,10 @@ describe("what a product offers", () => {
     });
     await fx.db.execute(sql`update option_labels set available = false where id = ${RARE}`);
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: null }]);
+    });
 
     const list = offered.get(ids.burger)![0]!;
     expect(list).toMatchObject({ id: seeded.optionsId, defaultLabelId: null });
@@ -360,9 +366,10 @@ describe("what a menu offer publishes", () => {
       ]);
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
+    });
 
     const list = offered.get(offerId)![1]!;
     expect(
@@ -388,9 +395,10 @@ describe("what a menu offer publishes", () => {
       return { ...attached, secondId: second.id };
     });
 
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]),
-    );
+    const offered = await run(async (tx) => {
+      await asAppUser(tx);
+      return readOfferedModifiers(tx, [{ productId: ids.burger, menuItemId: offerId }]);
+    });
 
     expect(offered.get(offerId)!.map((entry) => [entry.kind, entry.id])).toEqual([
       ["options", seeded.optionsId],
@@ -465,13 +473,14 @@ describe("one shared resolution for a set of dishes", () => {
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
 
     // Three dishes, the first twice, so a read that moved inside a per-dish loop would count 3.
-    await run((tx) =>
-      resolveAttachedModifiers(tx, [
+    await run(async (tx) => {
+      await asAppUser(tx);
+      return resolveAttachedModifiers(tx, [
         { productId: ids.burger, menuItemId: null },
         { productId: ids.burger, menuItemId: null },
         { productId: ids.olives, menuItemId: null },
-      ]),
-    );
+      ]);
+    });
 
     expect(productExtras).toHaveBeenCalledTimes(1);
     expect(optionLists).toHaveBeenCalledTimes(1);
@@ -496,12 +505,13 @@ describe("one shared resolution for a set of dishes", () => {
     const attachments = vi.spyOn(productModifiers, "readProductModifiers");
     const optionLists = vi.spyOn(optionsModule, "readOptionListsByIds");
 
-    await run((tx) =>
-      resolveAttachedModifiers(tx, [
+    await run(async (tx) => {
+      await asAppUser(tx);
+      return resolveAttachedModifiers(tx, [
         { productId: ids.burger, menuItemId: offerId },
         { productId: ids.burger, menuItemId: offerId },
-      ]),
-    );
+      ]);
+    });
 
     expect(menuExtras).toHaveBeenCalledTimes(1);
     expect(attachments).toHaveBeenCalledTimes(1);

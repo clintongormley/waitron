@@ -52,8 +52,10 @@ export interface SelectedExtra {
   productId: string;
   /** The picked product's STAFF name — what the basket shows under its dish. */
   name: string;
-  /** GROSS (VAT-inclusive) resolved unit price, a `numeric(12,2)` literal ("0.50", "0.00" for a free
-   * pick). {@link lineGross} prices it at `price × (dishQuantity × quantity)`. */
+  /** GROSS (VAT-inclusive) resolved unit price as a two-place decimal STRING ("0.50", "0.00" for a
+   * free pick) — the shape the offer sends, not the shape the column holds: a money column counts
+   * whole cents (`money`, `packages/db/src/schema/columns.ts`) and the row converts on the way out.
+   * {@link lineGross} prices it at `price × (dishQuantity × quantity)`. */
   price: string;
   /** How many of this product the dish takes, per dish. The server multiplies by the dish count. */
   quantity: number;
@@ -69,6 +71,11 @@ export interface LineSelection {
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
+  /** The line's free-text kitchen instruction (order-line customisation), absent when it has none.
+   * Read by {@link WorkingOrderStore.addProduct} alone — {@link WorkingOrderStore.setLineModifiers}
+   * replaces a line's ANSWERS and leaves its note to {@link WorkingOrderStore.setLineExtras}, which
+   * is the basket's own note editor. */
+  note?: string;
 }
 
 /** One rung-up basket line: a product and its decimal-string quantity. */
@@ -309,24 +316,17 @@ export class WorkingOrderStore {
 
   /**
    * Append a line and notify. The server revalidates `quantity` against the selected unit.
-   * `selection` holds the picker's answers; each of its keys attaches ONLY when it names something,
-   * so the common one-tap add carries no answer keys at all and stays byte-identical to before.
-   *
-   * `extras` here is the order-line customisation — the per-line `note` — and not an extras pick;
-   * the two words collide and the picker's picks arrive in `selection`. The picker already trims a
-   * whitespace-only note to nothing before calling.
+   * `selection` is the whole of what a picker confirm decided — its answers AND the line's note —
+   * so a confirm is ONE argument. Each of its keys attaches ONLY when it names something, so the
+   * common one-tap add carries no keys at all and stays byte-identical to a bare add. The picker
+   * already trims a whitespace-only note to nothing before calling.
    */
-  addProduct(
-    product: TillProduct,
-    quantity: string,
-    selection?: LineSelection,
-    extras?: { note?: string },
-  ): void {
+  addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
     applySelection(line, selection);
-    if (extras?.note !== undefined) {
-      line.note = extras.note;
+    if (selection?.note !== undefined) {
+      line.note = selection.note;
     }
     this.#lines.push(line);
     this.#invalidatePricing();
@@ -336,8 +336,9 @@ export class WorkingOrderStore {
 
   /**
    * Replace the answers on the line at `index` — the basket's re-open-the-picker path. The whole
-   * selection is replaced, so an answer the operator cleared leaves no key behind. Out-of-range
-   * indices are a no-op, like {@link removeLine}.
+   * selection is replaced, so an answer the operator cleared leaves no key behind. The line's NOTE is
+   * not among them: {@link setLineExtras} owns it, and the basket's own editor is the only thing that
+   * sets it. Out-of-range indices are a no-op, like {@link removeLine}.
    */
   setLineModifiers(index: number, selection: LineSelection): void {
     const line = this.#lines[index];

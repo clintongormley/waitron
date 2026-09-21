@@ -28,15 +28,23 @@ export interface ModifierHolder {
  * answer, or a required list the till never drew refuses the order.
  */
 export interface AttachedModifiers {
-  /** Each product's ordered attachment list, keyed as `readProductModifiers` keys it — by the
-   * LOWER-CASED product id. This is the walk order a till draws in (spec §5). */
-  attachments: ReadonlyMap<string, ProductModifierRef[]>;
   /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
    * the offer when there is one and held by the product when there is not (spec §3.2). */
   extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
   /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
    * and a menu offer neither republishes nor narrows one (spec §3.1). */
   optionsByProduct: ReadonlyMap<string, OptionList[]>;
+}
+
+/**
+ * {@link AttachedModifiers} plus the attachment walk that produced it — each product's ordered
+ * attachment list, keyed as `readProductModifiers` keys it, by the LOWER-CASED product id.
+ *
+ * Not published: the walk is how {@link readOfferedModifiers} interleaves a dish's extras and
+ * options into the one order a till draws (spec §5), and that is the only thing that reads it.
+ */
+interface WalkedAttachments extends AttachedModifiers {
+  attachments: ReadonlyMap<string, ProductModifierRef[]>;
 }
 
 /**
@@ -52,6 +60,15 @@ export async function resolveAttachedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
 ): Promise<AttachedModifiers> {
+  const { extrasByHolder, optionsByProduct } = await walkAttachedModifiers(tx, dishes);
+  return { extrasByHolder, optionsByProduct };
+}
+
+/** {@link resolveAttachedModifiers}'s body, keeping the walk it read on the way. */
+async function walkAttachedModifiers(
+  tx: Transaction,
+  dishes: readonly ModifierHolder[],
+): Promise<WalkedAttachments> {
   const productIds = [...new Set(dishes.map((dish) => dish.productId))];
   const menuItemIds = [
     ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [] : [dish.menuItemId]))),
@@ -102,14 +119,17 @@ export async function resolveAttachedModifiers(
 }
 
 /** The `products` columns an offered extras item borrows — everything its own row deliberately does
- * not duplicate (spec §3.1). */
-type ExtraProductFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
+ * not duplicate (spec §3.1). Named apart from `ExtraProductFacts`
+ * (apps/server/src/modifier-selection.ts), which is the ORDER path's different shape of the same
+ * row: that one carries customer text already resolved to one language, this one carries the raw
+ * map plus the allergens and dietary labels a picker draws. */
+type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
 /** One query for every product any offered list names, and none at all when no list names one. */
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],
-): Promise<Map<string, ExtraProductFacts>> {
+): Promise<Map<string, OfferedExtraItemFacts>> {
   if (productIds.length === 0) return new Map();
   const rows = await tx
     .select({
@@ -165,17 +185,15 @@ type WalkedList =
  * validator would still accept a pick of it — and it is the same read-committed race that file
  * documents, not a state the `ON DELETE RESTRICT` key allows at any one instant.
  *
- * A bounded number of queries whatever the number of dishes: {@link resolveAttachedModifiers}'s,
- * plus one for the products the offered items name.
+ * A bounded number of queries whatever the number of dishes: {@link walkAttachedModifiers}'s — the
+ * same set {@link resolveAttachedModifiers} issues — plus one for the products the offered items
+ * name.
  */
 export async function readOfferedModifiers(
   tx: Transaction,
   dishes: readonly ModifierHolder[],
 ): Promise<Map<string, OfferedModifier[]>> {
-  const { attachments, extrasByHolder, optionsByProduct } = await resolveAttachedModifiers(
-    tx,
-    dishes,
-  );
+  const { attachments, extrasByHolder, optionsByProduct } = await walkAttachedModifiers(tx, dishes);
 
   const walked = new Map<string, WalkedList[]>();
   for (const dish of dishes) {

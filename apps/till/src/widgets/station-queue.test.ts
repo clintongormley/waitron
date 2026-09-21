@@ -1084,7 +1084,7 @@ it("shows saved nonprice modifier answers in the kitchen without HTML interpreta
 
 it("shows a dish's frozen options answers in the KITCHEN's wording", async () => {
   // Three different texts per name, so the assertion fails if the rail reads the staff or the
-  // customer side by mistake (CLAUDE.md §4).
+  // customer side by mistake (CLAUDE.md §3).
   const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
     groups: [
       {

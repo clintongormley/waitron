@@ -1549,9 +1549,12 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           catalogueId: aguaProduct.catalogueId,
           catalogueName: "Carta",
           // Ordering modifiers (Task 3): the `AvailableProduct` shape carries attached option groups;
-          // these seeded products have none, so an empty array.
+          // these seeded products have none, so an empty array. `offeredModifiers` is the extras and
+          // options walk the till draws from (`readOfferedModifiers`), empty here for the same
+          // reason — these products attach nothing.
           optionGroups: [],
           modifiers: [],
+          offeredModifiers: [],
         },
         {
           id: cervezaProduct.id,
@@ -1573,6 +1576,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           catalogueName: "Happy Hour",
           optionGroups: [],
           modifiers: [],
+          offeredModifiers: [],
         },
       ],
     });

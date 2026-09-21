@@ -587,7 +587,7 @@ it("resolves a filed line's unit abbreviation from a BARE content-language key",
 
 it("shows a dish's frozen options answers in the DINER's wording", async () => {
   // Three different texts per name, so the assertion fails if the receipt reads the staff or the
-  // kitchen side by mistake (CLAUDE.md §4).
+  // kitchen side by mistake (CLAUDE.md §3).
   const { el } = await mount({
     lines: [
       {

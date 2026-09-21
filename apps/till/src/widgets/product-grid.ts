@@ -7,7 +7,7 @@ import { productName, productUnit, unitName } from "./product-name.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct } from "../api/client.js";
-import { toWireLineExtras } from "../state/order-line.js";
+import { needsModifierPicker } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -75,12 +75,6 @@ export class TillProductGrid extends LitElement {
     return `${price}/${unitName(product)}`;
   }
 
-  /** Whether tapping this tile has anything to ask: a variant to choose, or a list to answer. */
-  #hasModifiers(product: TillProduct): boolean {
-    if ((product.variants ?? []).some((variant) => variant.available)) return true;
-    return (product.offeredModifiers ?? []).length > 0;
-  }
-
   /**
    * Ring up a whole, non-hardware pick, or open its modifier picker when it carries options;
    * broadcast any fractional or hardware-mapped pick for quantity entry.
@@ -89,7 +83,7 @@ export class TillProductGrid extends LitElement {
     const unit = productUnit(product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
       this.store.emit("product-selected", product);
-    } else if (this.#hasModifiers(product)) {
+    } else if (needsModifierPicker(product)) {
       this.pickerProduct = product;
     } else {
       this.store.addProduct(product, "1");
@@ -97,11 +91,10 @@ export class TillProductGrid extends LitElement {
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
-    // The detail IS the line's selection (it extends `LineSelection`), so it is handed over whole;
-    // the store attaches only the parts that name something. The per-line note goes through the ONE
-    // `toWireLineExtras` mapping (`detail` satisfies its minimal `{ note? }` shape), the key present
-    // only when the picker set it, so a note-free confirm leaves the line byte-identical.
-    this.store.addProduct(detail.product, "1", detail, toWireLineExtras(detail));
+    // The detail IS the line's selection (it extends `LineSelection`, note included), so it is handed
+    // over whole; the store attaches only the keys that name something, so a note-free confirm leaves
+    // the line byte-identical to a one-tap add.
+    this.store.addProduct(detail.product, "1", detail);
     this.pickerProduct = undefined;
   }
 

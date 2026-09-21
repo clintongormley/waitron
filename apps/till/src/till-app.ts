@@ -1691,16 +1691,27 @@ export class TillApp extends LitElement {
       const lines: OrderLine[] = [];
       let droppedAProduct = false;
       let mustChooseAgain = false;
+      // The live catalogue, indexed once instead of scanned per line: every line needs today's
+      // offer, and a zone's product list is as long as its menu. First entry wins under either key,
+      // which is what a linear scan did.
+      const liveByProduct = new Map<string, TillProduct>();
+      const liveByMenuItem = new Map<string, TillProduct>();
+      for (const candidate of this.products) {
+        if (!liveByProduct.has(candidate.id)) liveByProduct.set(candidate.id, candidate);
+        if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
+          liveByMenuItem.set(candidate.menuItemId, candidate);
+      }
       for (const line of order.lines) {
         // The stored snapshot is what the line was written with, so it keeps the names and the price
         // the order holds. The dish's OFFERED lists are not in it — the snapshot carries none — so
         // they come from today's live offer, which is what an edit has to answer against and what an
         // extra's declarations are read from at display time (spec §3.4).
-        const live = this.products.find((candidate) =>
+        const live =
           line.menuItemId === undefined
-            ? candidate.id === line.productId
-            : candidate.menuItemId === line.menuItemId,
-        );
+            ? line.productId === undefined
+              ? undefined
+              : liveByProduct.get(line.productId)
+            : liveByMenuItem.get(line.menuItemId);
         const stored = line.product;
         const product =
           stored === undefined

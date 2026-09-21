@@ -1378,7 +1378,7 @@ it("shows a retained table line's recorded name and modifier answer after live n
 
 it("shows a tab line's frozen options answers in the STAFF wording", async () => {
   // Three different texts per name, so the assertion fails if the tab reads the kitchen or the
-  // customer side by mistake (CLAUDE.md §4).
+  // customer side by mistake (CLAUDE.md §3).
   const { el } = await mount({
     lines: [
       {

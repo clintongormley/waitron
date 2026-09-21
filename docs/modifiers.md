@@ -86,9 +86,20 @@ Each extra picked becomes its own indented line under the dish in the basket, wi
 and its own allergens and dietary labels — never folded into the dish's. An options answer costs
 nothing and rides along as wording on the dish's line.
 
-An order stores the wording that was chosen and not a link back to the list, so when a parked order
-is fetched back the till matches that wording against the dish's lists to work out what was picked.
-It is the STAFF name it matches on, so changing a customer-facing or kitchen name while an order is
-parked costs nothing. Change the staff name of a list or a label, or turn a label off, and the match
-fails: the till will not guess, and asks the operator to open that line and choose again before the
+An order stores the answers it was given and not a link back to the list they came from, so a parked
+order has to be matched up with the dish's lists again before it can be changed. An options answer
+is stored as wording, all three names of the list and all three of the chosen label, and the till
+matches on the staff name of each. An extra is stored as the product that was picked, so the till
+finds its list by that product instead.
+
+Change the staff name of a list or a label, or turn a label off, and an options answer no longer
+matches. The till will not guess: it asks the operator to open that line and choose again before the
 order can be sent.
+
+Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
+it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
+different one, so the next change made to that parked order, even a change of quantity, rebuilds the
+whole order from today's catalogue. Every line on it is then charged at today's prices instead of
+the prices it was parked at. Do your renaming between services rather than while orders are parked.
+An extras list is the exception, because an extra is matched by its product: renaming an extras
+list, or the product on it, leaves a parked order alone.

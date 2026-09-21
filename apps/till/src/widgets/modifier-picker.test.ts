@@ -10,7 +10,7 @@ import type { OfferedModifier, TillProduct } from "../api/client.js";
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
  * three names (staff / customer / kitchen), so a surface reading the wrong one fails rather than
- * passing on a shared string (CLAUDE.md §4). The picker is a staff surface: it reads the plain
+ * passing on a shared string (CLAUDE.md §3). The picker is a staff surface: it reads the plain
  * staff name everywhere (spec §10).
  */
 function offeredItem(
@@ -244,6 +244,15 @@ describe("till-modifier-picker", () => {
     expect(seen).toHaveLength(1);
     expect(store.lines).toHaveLength(0);
     expect(pickerOf(el)).toBeNull();
+  });
+
+  it("gives every input a semantic name, never the bare list id", async () => {
+    // docs/developers/conventions-ui.md and CLAUDE.md §3: an input's `name` is semantic, never a
+    // generated widget id — and a list id is a uuid. Burger draws one extras checkbox (its second
+    // item is a stepper, which has no input) and one radio per options label.
+    const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
+    const names = [...picker.shadowRoot!.querySelectorAll("input")].map((input) => input.name);
+    expect(names).toEqual(["extras-list-extras", "options-list-cooked", "options-list-cooked"]);
   });
 
   it("draws the dish's lists in the order they are offered, by their STAFF names", async () => {
