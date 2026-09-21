@@ -158,7 +158,7 @@ declare module "@waitron/shared" {
      * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
      * `sale_settlements` `UNIQUE (sale_id)` violation (`sale_settlements_sale_key`,
      * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`
-     * post-settlement trigger (SQLSTATE `WT002`, detected via a local predicate) when it inserts a
+     * post-settlement trigger (SQLSTATE `WT002`, detected via `isPgError`) when it inserts a
      * tender after the winner has committed. A constraint, not a prior SELECT, is the control for
      * the concurrent paths: two settlements both pass the check-then-insert and only one wins. The
      * UNIQUE case mirrors how `sale.already_voided` translates `sale_voids_sale_id_key` in

@@ -5,24 +5,22 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import {
-  constraintTarget,
+  FOREIGN_KEY_VIOLATION,
   diningTables,
   floorTableShape,
   floorZones,
-  isPgError,
   isUniqueViolation,
-  sameTarget,
+  refusalOn,
   tableServiceStatuses,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
-const FOREIGN_KEY_VIOLATION = "23503";
 /**
- * The table and column a refusal on `dining_tables_zone_fk` names. The constraint is
- * `FOREIGN KEY ("zone_id") REFERENCES "floor_zones" ("id")`, declared in migration 0034 (which
- * re-declared it after the tenant column went). A 23503 names the REFERENCING side — the table
- * written and the column that held the unmatched value — so this is `dining_tables.zone_id`, not
+ * The table and column a refusal on `dining_tables_zone_fk` names —
+ * `FOREIGN KEY ("zone_id") REFERENCES "floor_zones" ("id")`, re-declared on its remaining column
+ * after the tenant column went at migration `0034` line 44, in `packages/db/drizzle/`. The
+ * REFERENCING side, per `constraintTarget`'s contract, so `dining_tables.zone_id` and never
  * `floor_zones.id`.
  */
 const ZONE_FK: ConstraintTarget = { table: "dining_tables", columns: ["zone_id"] };
@@ -54,18 +52,18 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
- * naming no `floor_zones` row at all? Both halves come from `@waitron/db`, each walking the cause
- * chain Drizzle wraps a failed query in: `isPgError` for the SQLSTATE, `constraintTarget` for the
- * table and columns.
+ * naming no `floor_zones` row at all?
  *
  * It matches on {@link ZONE_FK}'s table and column as well as the 23503, so the sibling
  * `dining_tables_location_fk` / `dining_tables_status_fk` violations — 23503s on the same table,
  * differing only in the column — are deliberately NOT matched: a bad location or status is not a
- * zone fault and stays a raw driver error. A 23503 naming no key at all is not attributed here
- * either. Exported for the crafted-error unit tests.
+ * zone fault and stays a raw driver error. A 23503 naming no key at all is re-thrown raw by
+ * DECISION, not omission — more than one FK reaches this catch, so an unidentified refusal names no
+ * single candidate (`device.ts`'s `createRegister` translates its unidentified 23505 for the
+ * opposite reason). Exported for the crafted-error unit tests.
  */
 export function isZoneFkViolation(error: unknown): boolean {
-  return isPgError(error, FOREIGN_KEY_VIOLATION) && sameTarget(constraintTarget(error), ZONE_FK);
+  return refusalOn(error, FOREIGN_KEY_VIOLATION, ZONE_FK);
 }
 
 /** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer

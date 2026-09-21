@@ -1,7 +1,14 @@
 // Side-effect import registers this package's sale.* codes (mirrors record-sale.ts).
 import "./errors.js";
 import { eq, sql } from "drizzle-orm";
-import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
+import {
+  isPgError,
+  isUniqueViolation,
+  saleSettlements,
+  saleVoids,
+  sales,
+  tenders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -20,6 +27,17 @@ export interface SettleSaleInput {
   saleId: SaleId;
   tenders: RecordSaleTender[];
 }
+
+/**
+ * SQLSTATE raised by the `tenders_reject_post_settlement` trigger
+ * (`packages/db/drizzle/0001_db_baseline_sql.sql` line 270) when a tender INSERT lands after the
+ * sale is already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
+ *
+ * It stays here rather than in `@waitron/db`'s `sqlstate.ts`, whose members are codes PostgreSQL
+ * itself defines: this one is raised by a `RAISE ... USING ERRCODE` in our own trigger, and this is
+ * the only file that reads it.
+ */
+const POST_SETTLEMENT_VIOLATION = "WT002";
 
 /**
  * The deferred half of the sale write path, and the single implementation of
@@ -144,7 +162,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       // settled" — translate it to the same code the `sale_settlements` UNIQUE path maps to below,
       // so a retry/idempotency caller keying on `sale.already_settled` recognises the loser
       // whichever insert it reached.
-      if (isPostSettlementViolation(error)) {
+      if (isPgError(error, POST_SETTLEMENT_VIOLATION)) {
         throw new AppError("sale.already_settled", { saleId: input.saleId });
       }
       throw error;
@@ -162,37 +180,4 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     }
     throw error;
   }
-}
-
-// SQLSTATE raised by the `tenders_reject_post_settlement` trigger
-// (`packages/db/drizzle/0001_db_baseline_sql.sql`) when a tender INSERT lands after the sale is
-// already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
-const POST_SETTLEMENT_VIOLATION = "WT002";
-
-/**
- * Is this (or anything it wraps) the `tenders_reject_post_settlement` guard (SQLSTATE WT002)?
- *
- * Walks the cause chain for the same reason `@waitron/db`'s `isUniqueViolation` does — Drizzle wraps
- * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, the real SQLSTATE
- * living on `.cause.code` (node-postgres), or nested one level deeper under PGlite. Stops at a fixed
- * depth so a self-referential `cause` cannot spin forever. A local predicate rather than a shared
- * helper because `@waitron/db` exports only the 23505-specific `isUniqueViolation`, and this is the
- * one place that needs WT002 — mirrors that predicate's shape rather than reaching for the test-only
- * `pgErrorCode`.
- */
-function isPostSettlementViolation(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; current != null && depth < 5; depth++) {
-    if (
-      typeof current === "object" &&
-      "code" in current &&
-      (current as { code?: unknown }).code === POST_SETTLEMENT_VIOLATION
-    ) {
-      return true;
-    }
-    const next = (current as { cause?: unknown }).cause;
-    if (next === current) return false;
-    current = next;
-  }
-  return false;
 }

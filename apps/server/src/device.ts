@@ -3,7 +3,14 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { constraintTarget, isPgError, isUniqueViolation, sameTarget, tills } from "@waitron/db";
+import {
+  FOREIGN_KEY_VIOLATION,
+  constraintTarget,
+  isUniqueViolation,
+  refusalOn,
+  sameTarget,
+  tills,
+} from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
@@ -26,28 +33,26 @@ import type { TillConfig } from "./till-config.js";
  * in device-session.ts and the FENCED/ALLOWED table atop till-api.ts. */
 export type { DeviceKind };
 
-/** The pg SQLSTATE for a foreign-key violation, as `@waitron/printing`'s `printers.ts` and
- * `tables.ts`'s `isZoneFkViolation` name it. */
-const FOREIGN_KEY_VIOLATION = "23503";
-
 /**
  * Each device binding FK, as the table and column a refusal on it names, beside the input FIELD it
  * guards. A 23503 on one of these means a device write (`assign-device-profile` or the hardware
  * PATCH) named a binding no row matches — the FK makes that check atomic with the write (no
  * read-then-write race), so the routes translate it here rather than pre-checking. Existence is all
- * it can check: every profile and printer in the database belongs to the one taxpayer.
- *  - `devices_device_profile_fk` — a reassign to an unknown profile (`deviceProfileId`);
- *  - `devices_receipt_printer_fk` — a hardware PATCH naming an unknown printer (`receiptPrinterId`).
- * Both are declared in migration 0034, which is also where each lost the tenant column it used to
- * carry. Only `devices` carries a binding FK: a join request names none, so nothing at knock time can
- * trip one.
+ * it can check: every profile and printer in the database belongs to the one taxpayer. Each was
+ * re-declared on its remaining column after the tenant column went:
+ *  - `devices_device_profile_fk` — a reassign to an unknown profile (`deviceProfileId`), migration
+ *    `0034` line 32, in `packages/db/drizzle/`;
+ *  - `devices_receipt_printer_fk` — a hardware PATCH naming an unknown printer (`receiptPrinterId`),
+ *    migration `0034` line 28, in `packages/db/drizzle/`.
+ * Only `devices` carries a binding FK: a join request names none, so nothing at knock time can trip
+ * one.
  *
- * A 23503 names the REFERENCING side — the table written and the column that held the unmatched
- * value — so these are `devices` columns, not `device_profiles.id` or `printers.id`. Measured
- * against the real migrated schema: an insert naming an absent profile reports `23503` with
- * `{devices, [device_profile_id]}`, while DELETING a referenced `device_profiles` row reports
- * `23001` with `{devices, [id]}` — a different SQLSTATE and a different key, so neither half of this
- * check claims it.
+ * Both are the REFERENCING side, per `constraintTarget`'s contract — `devices` columns, not
+ * `device_profiles.id` or `printers.id`. Measured against the real migrated schema: an insert naming
+ * an absent profile reports `23503` with `{devices, [device_profile_id]}` (`device-api.pg.test.ts`),
+ * while DELETING a referenced `device_profiles` row reports `23001` with `{devices, [id]}`
+ * (`packages/layouts/src/device-profile-store.pg.test.ts`) — a different SQLSTATE and a different
+ * key, so neither half of this check claims it.
  */
 const BINDING_FK_FIELDS: readonly {
   readonly target: ConstraintTarget;
@@ -60,8 +65,7 @@ const BINDING_FK_FIELDS: readonly {
 /**
  * If `error` (or anything it wraps) is a 23503 naming one of the device binding FKs' table and
  * column, the input FIELD that key guards (`deviceProfileId`/`receiptPrinterId`); otherwise
- * `undefined`. Both halves come from `@waitron/db`, each walking the cause chain Drizzle wraps a
- * failed query in: `isPgError` for the SQLSTATE, `constraintTarget` for the table and columns.
+ * `undefined`.
  *
  * It keys on the TARGET as well as the 23503, so a 23503 on a different key of `devices` (the
  * station, register or location FKs), on the same column name of another table, or one naming no key
@@ -70,16 +74,16 @@ const BINDING_FK_FIELDS: readonly {
  * package barrel (this is an application, not a library).
  */
 export function bindingFkField(error: unknown): "deviceProfileId" | "receiptPrinterId" | undefined {
-  if (!isPgError(error, FOREIGN_KEY_VIOLATION)) return undefined;
-  const target = constraintTarget(error);
-  return BINDING_FK_FIELDS.find((binding) => sameTarget(target, binding.target))?.field;
+  return BINDING_FK_FIELDS.find((binding) =>
+    refusalOn(error, FOREIGN_KEY_VIOLATION, binding.target),
+  )?.field;
 }
 
 /** The UNIQUE index that makes a duplicate register name at one venue unrepresentable, as the table
- * and columns a refusal on it names: `tills_tenant_location_name_key`, which since migration 0034
- * covers `(location_id, name)` and no longer the tenant column its name still carries.
- * {@link createRegister} keys its 23505 translation on this target so an unrelated unique violation
- * is rethrown raw, not mislabelled. */
+ * and columns a refusal on it names: `tills_tenant_location_name_key`, re-created over
+ * `(location_id, name)` — no longer the tenant column its name still carries — at migration `0034`
+ * line 144, in `packages/db/drizzle/`. {@link createRegister} keys its 23505 translation on this
+ * target so an unrelated unique violation is rethrown raw, not mislabelled. */
 const TILL_NAME_UNIQUE: ConstraintTarget = { table: "tills", columns: ["location_id", "name"] };
 
 /**

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
-import { constraintTarget, sameTarget } from "./constraint-target.js";
+import { constraintTarget, refusalOn, sameTarget } from "./constraint-target.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "./sqlstate.js";
 import { describeEachTarget } from "./testing/harness.js";
 
 /**
@@ -9,8 +10,9 @@ import { describeEachTarget } from "./testing/harness.js";
  * (`table`, `detail`) are populated by the DRIVER, so a crafted error would only prove the parser
  * reads the craft. It runs against both targets for the same reason — PGlite is not node-postgres,
  * and the whole point of this helper is what each of them reports. The crafted-error cases at the
- * bottom are the exception, and deliberately so: a cause chain deeper than the walk's bound, and a
- * self-referential one, are shapes no database can be made to produce.
+ * bottom are the exception, for shapes no database can be made to produce — a cause chain deeper
+ * than the walk's bound, a self-referential one, and a SQLSTATE and a key arriving on two different
+ * layers. The rest of that block crafts because its subject is the walk, not the parse.
  */
 describeEachTarget("constraintTarget", (target) => {
   let db: Database;
@@ -67,6 +69,45 @@ describeEachTarget("constraintTarget", (target) => {
     expect(constraintTarget(error)).toEqual({ table: "probe_q", columns: ['"My Col"', "b"] });
   });
 
+  // A quoted identifier may contain the separator the column list uses. Splitting on every comma
+  // would report two columns where the index declares one, and no caller could ever match it.
+  it("keeps a comma that is inside a quoted identifier", async () => {
+    const error = await violate([
+      `create table probe_comma ("a, b" int, c int, constraint probe_comma_uq unique ("a, b", c))`,
+      `insert into probe_comma values (1, 2)`,
+      `insert into probe_comma values (1, 2)`,
+    ]);
+    expect(constraintTarget(error)).toEqual({ table: "probe_comma", columns: ['"a, b"', "c"] });
+  });
+
+  // An index over an expression is reported as that expression, and an expression may take several
+  // arguments — so the same comma problem arrives without any quoting at all.
+  it("keeps the commas inside a multi-argument expression", async () => {
+    const error = await violate([
+      `create table probe_args (id int primary key, email text)`,
+      `create unique index probe_args_uq on probe_args (replace(email, 'x'::text, 'y'::text))`,
+      `insert into probe_args values (1, 'axb')`,
+      `insert into probe_args values (2, 'ayb')`,
+    ]);
+    expect(constraintTarget(error)).toEqual({
+      table: "probe_args",
+      columns: ["replace(email, 'x'::text, 'y'::text)"],
+    });
+  });
+
+  // `)=(` is what separates the key from the value, and a quoted identifier may contain it.
+  it("does not mistake a quoted identifier for the key-value boundary", async () => {
+    const error = await violate([
+      `create table probe_boundary ("a)=(b" int, constraint probe_boundary_uq unique ("a)=(b"))`,
+      `insert into probe_boundary values (1)`,
+      `insert into probe_boundary values (1)`,
+    ]);
+    expect(constraintTarget(error)).toEqual({
+      table: "probe_boundary",
+      columns: ['"a)=(b"'],
+    });
+  });
+
   it("names the referencing table and column of a foreign-key violation", async () => {
     const error = await violate([
       `create table probe_parent (id int primary key)`,
@@ -93,11 +134,64 @@ describeEachTarget("constraintTarget", (target) => {
     expect(constraintTarget(error)).toEqual({ table: "probe_rc", columns: ["id"] });
   });
 
+  // A SQL literal inside an expression can hold a parenthesis, so the scanner has to know it is
+  // inside one. The alternative counts that `)` against the nesting depth and stops early.
+  it("keeps a parenthesis that is inside a SQL literal", async () => {
+    const error = await violate([
+      `create table probe_lit (id int primary key, email text)`,
+      `create unique index probe_lit_uq on probe_lit (replace(email, ')'::text, 'z'::text))`,
+      `insert into probe_lit values (1, 'a)b')`,
+      `insert into probe_lit values (2, 'azb')`,
+    ]);
+    const target = constraintTarget(error);
+    expect(target?.table).toBe("probe_lit");
+    expect(target?.columns).toHaveLength(1);
+    expect(target?.columns[0]).toContain("replace(email,");
+  });
+
+  it("asks refusalOn both questions at once", async () => {
+    const error = await violate([
+      `create table probe_both (a int, b int, constraint probe_both_uq unique (a, b))`,
+      `insert into probe_both values (1, 2)`,
+      `insert into probe_both values (1, 2)`,
+    ]);
+    expect(refusalOn(error, UNIQUE_VIOLATION, { table: "probe_both", columns: ["a", "b"] })).toBe(
+      true,
+    );
+    // Right key, wrong class.
+    expect(
+      refusalOn(error, FOREIGN_KEY_VIOLATION, { table: "probe_both", columns: ["a", "b"] }),
+    ).toBe(false);
+    // Right class, wrong key — a sibling constraint on the same table is exactly what the target
+    // half exists to rule out.
+    expect(refusalOn(error, UNIQUE_VIOLATION, { table: "probe_both", columns: ["a"] })).toBe(false);
+  });
+
+  // `detail` is a MESSAGE, and a message has a language — which `.constraint`, the structured field
+  // this parser replaced, did not. So the English prefix the parser anchors on is a dependency, and
+  // this is the guard on it rather than a sentence claiming it is safe. Measured 2026-09-21 on the
+  // image the suites and `deploy/compose.yml` both run: `set lc_messages` to a Spanish locale is
+  // ACCEPTED and the refusal comes back in English anyway. Swap in an image that carries locale
+  // data and this test is what says so. PGlite has no session locale to set, hence postgres only.
+  it.runIf(target.name === "postgres")("still reads a refusal asked for in Spanish", async () => {
+    const error = await violate([
+      `set lc_messages = 'es_ES.UTF-8'`,
+      `create table probe_locale (email text, constraint probe_locale_uq unique (email))`,
+      `insert into probe_locale values ('a@x')`,
+      `insert into probe_locale values ('a@x')`,
+    ]);
+    expect(constraintTarget(error)).toEqual({ table: "probe_locale", columns: ["email"] });
+  });
+
   it("returns undefined for a CHECK violation, which names no key", async () => {
     const error = await violate([
       `create table probe_chk (n int, constraint probe_chk_pos check (n > 0))`,
       `insert into probe_chk values (-1)`,
     ]);
+    // The `detail` has to be PRESENT for this case to test anything: without the first assertion a
+    // refusal carrying no `detail` at all would satisfy the second, and the two situations the
+    // parser must tell apart would look alike.
+    expect((error as { cause?: { detail?: string } }).cause?.detail).toMatch(/^Failing row/);
     expect(constraintTarget(error)).toBeUndefined();
   });
 
@@ -124,6 +218,20 @@ describe("constraintTarget's cause walk", () => {
       columns: ["email"],
     });
     expect(constraintTarget(wrapped(5, violation))).toBeUndefined();
+  });
+
+  // No database can produce this: the SQLSTATE on one layer and the key on another. It is the one
+  // shape that separates refusalOn's same-layer rule from asking the two questions separately.
+  it("refusalOn does not join a code on one layer to a key on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("code only"), {
+        code: "23505",
+        cause: violation,
+      }),
+    });
+    expect(refusalOn(split, "23505", { table: "people", columns: ["email"] })).toBe(false);
+    // …while the two questions asked separately DO join them, which is the difference.
+    expect(sameTarget(constraintTarget(split), { table: "people", columns: ["email"] })).toBe(true);
   });
 
   it("does not spin on a self-referential cause", () => {

@@ -1,6 +1,13 @@
 import "./errors.js";
-import { canvases, constraintTarget, isPgError, isUniqueViolation, sameTarget } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import {
+  RESTRICT_VIOLATION,
+  canvases,
+  constraintTarget,
+  isUniqueViolation,
+  refusalOn,
+  sameTarget,
+} from "@waitron/db";
+import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { asc, eq, sql } from "drizzle-orm";
@@ -29,19 +36,21 @@ import { validateCanvas } from "./validate-canvas.js";
  * `packages/db/src/schema/canvases.ts`).
  */
 
-/** SQLSTATE 23001, restrict_violation: a delete refused by an ON DELETE RESTRICT foreign key. */
-const RESTRICT_VIOLATION = "23001";
-
 /** `canvases_tenant_name_key`: UNIQUE (name) on canvases,
  * migration `0033` line 229, in `packages/db/drizzle/`. */
-const CANVAS_NAME = { table: "canvases", columns: ["name"] } as const;
+const CANVAS_NAME: ConstraintTarget = { table: "canvases", columns: ["name"] };
 
 /** What a delete refused by `device_profiles_canvas_fk` reports — device_profiles.canvas_id →
- * canvases.id ON DELETE RESTRICT, migration `0034` line 36, in `packages/db/drizzle/`. The
- * REFERENCING table paired with the REFERENCED table's key columns, which is how PostgreSQL reports
- * a restrict_violation (measured 2026-09-21; the refusal itself is driven in
- * `canvas-store.pg.test.ts`). Not the same target as that FK's 23503, which names `canvas_id`. */
-const CANVAS_REFERENCED_BY_PROFILE = { table: "device_profiles", columns: ["id"] } as const;
+ * canvases.id ON DELETE RESTRICT, migration `0034` line 36, in `packages/db/drizzle/`; driven in
+ * `canvas-store.pg.test.ts`. Not the same target as that FK's 23503, which names `canvas_id`.
+ * A target names no constraint, so it tells this key apart from a sibling only while there is none:
+ * that migration leaves it the only foreign key out of `device_profiles`, and a second RESTRICT key
+ * out of that table to a parent keyed on `id` would report exactly this pair. Call scope is what
+ * keeps the match right meanwhile — see `translateWriteError`. */
+const CANVAS_REFERENCED_BY_PROFILE: ConstraintTarget = {
+  table: "device_profiles",
+  columns: ["id"],
+};
 
 /**
  * Translate the two driver refusals the canvas write/delete paths care about into their domain
@@ -57,12 +66,12 @@ const CANVAS_REFERENCED_BY_PROFILE = { table: "device_profiles", columns: ["id"]
  *   - a delete refused because a device profile still references the canvas (SQLSTATE 23001 on
  *     {@link CANVAS_REFERENCED_BY_PROFILE}) → `canvas.in_use`, a clean 409 rather than a raw 500. A
  *     restrict_violation from any other foreign key is re-thrown untouched.
- * The SQLSTATE and the target are separate questions: `isUniqueViolation`/`isPgError` say which
- * class of refusal this is, `constraintTarget` says which table and columns it named. Both walk the
- * cause chain rather than reading a top-level `.code`, because the driver wraps every failure in
- * Drizzle's `DrizzleQueryError`.
+ * The 23505 branch stays on `constraintTarget`/`sameTarget` because it also translates a refusal
+ * whose key could not be identified, which `refusalOn` cannot express.
+ * Nothing outside this file calls it — exported for the unit test, NOT from the package barrel — so
+ * the only refusals it ever sees are the ones this store's own statements raise.
  * Pinned by crafted-error unit tests in `canvas-store.test.ts` and end to end in
- * `canvas-store.pg.test.ts`. Exported for the unit test, NOT from the package barrel.
+ * `canvas-store.pg.test.ts`.
  */
 export function translateWriteError(err: unknown): never {
   if (isUniqueViolation(err)) {
@@ -71,10 +80,7 @@ export function translateWriteError(err: unknown): never {
       throw new AppError("canvas.name_taken", {});
     }
   }
-  if (
-    isPgError(err, RESTRICT_VIOLATION) &&
-    sameTarget(constraintTarget(err), CANVAS_REFERENCED_BY_PROFILE)
-  ) {
+  if (refusalOn(err, RESTRICT_VIOLATION, CANVAS_REFERENCED_BY_PROFILE)) {
     throw new AppError("canvas.in_use", {});
   }
   throw err;

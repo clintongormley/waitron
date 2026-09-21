@@ -489,8 +489,8 @@ describe("settleSale — error propagation", () => {
     // The tenders insert's OTHER failure path, mirroring the settlement-insert rethrow above. Only
     // the post-settlement guard's WT002 means "already settled"; ANY other failure on the tenders
     // insert (a transport error, a future constraint) must reach the caller as-is rather than be
-    // mislabelled `sale.already_settled`. This also exercises `isPostSettlementViolation` walking a
-    // non-matching error's cause chain to the end and returning false. Tenders are present so the
+    // mislabelled `sale.already_settled`. This also exercises `isPgError` walking a non-matching
+    // error's cause chain to the end and returning false. Tenders are present so the
     // tenders INSERT is the one reached; a WT002-free `.code` so the predicate declines it.
     let selects = 0;
     const fakeTx = {

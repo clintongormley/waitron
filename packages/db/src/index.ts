@@ -137,7 +137,18 @@ export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTransaction } from "./tenancy.js";
 export { isPgError, isUniqueViolation } from "./unique-violation.js";
-export { constraintTarget, sameTarget, type ConstraintTarget } from "./constraint-target.js";
+export {
+  constraintTarget,
+  refusalOn,
+  sameTarget,
+  type ConstraintTarget,
+} from "./constraint-target.js";
+export {
+  CHECK_VIOLATION,
+  FOREIGN_KEY_VIOLATION,
+  RESTRICT_VIOLATION,
+  UNIQUE_VIOLATION,
+} from "./sqlstate.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**

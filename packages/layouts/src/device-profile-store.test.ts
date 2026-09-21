@@ -78,8 +78,10 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. It is the only FK
-  // that references a profile, so it is the only target this branch has to recognise.
+  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. The target is
+  // `{devices, [id]}`, which every RESTRICT key out of `devices` reports — a refused till or printer
+  // delete included — so what keeps those out of this branch is call scope, not this assertion. See
+  // `PROFILE_REFERENCED_BY_DEVICE` in the store.
   it("translates a 23001 reported against devices (id) to device_profile.in_use", () => {
     let thrown: unknown;
     try {

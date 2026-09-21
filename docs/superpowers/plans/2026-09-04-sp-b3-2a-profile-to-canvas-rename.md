@@ -1,5 +1,15 @@
 # SP-B3.2 Phase A — `profile → canvas` rename — Implementation Plan
 
+> **Dated pointer, 2026-09-21.** This document describes `apps/server/src/device.ts`'s
+> `bindingFkField` — the helper that turns a foreign-key refusal into the name of the input field
+> that caused it — as it worked then: a lookup on the NAME of the violated constraint, through a map
+> called `BINDING_FK_FIELD`. Task P10 of the SQLite storage switch re-keyed that lookup, because
+> SQLite reports no constraint name, only the table and the column. The map is now
+> `BINDING_FK_FIELDS`, each entry holding a table and a column list, and `bindingFkField` matches an
+> error against one with `refusalOn` from `packages/db/src/constraint-target.ts`. The constraint
+> names below are still the database's; it is the translation that stopped reading them. Everything
+> below is left as it was written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rename the display-layout concept from **layout profile** to **canvas** across every package, behaviour-preserving, so the B3.2 editor (Phase B) is built on final names. Reserve "profile" for the future device profile.

@@ -1,6 +1,12 @@
 import "./errors.js";
 import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
-import { constraintTarget, isUniqueViolation, sameTarget } from "@waitron/db";
+import {
+  UNIQUE_VIOLATION,
+  constraintTarget,
+  isUniqueViolation,
+  refusalOn,
+  sameTarget,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
@@ -25,19 +31,17 @@ export { MIN_PIN_LENGTH } from "./verify-pin.js";
 
 /**
  * Translate the ONE driver error the email write paths care about — a collision on the login-email
- * index — into the domain `person.email_taken`, and re-throw anything else untouched. The duplicate
- * surfaces as SQLSTATE 23505 wrapped in Drizzle's `DrizzleQueryError`, so detection goes through
- * `@waitron/db`'s `isUniqueViolation` (a cause-chain walk), not a top-level `.code` read.
+ * index — into the domain `person.email_taken`, and re-throw anything else untouched.
  *
- * It matches on the TABLE AND COLUMNS the refusal named, not merely on 23505: a unique violation on
- * a different `persons` key — the `id` PK, or any index added later — is re-thrown untouched, never
- * mislabelled `person.email_taken` (which would also break the `{ email }` param contract when
+ * `refusalOn` asks for the SQLSTATE and the key together, which is what keeps a unique violation on
+ * a different `persons` key — the `id` PK, or any index added later — re-thrown untouched rather
+ * than mislabelled `person.email_taken` (which would also break the `{ email }` param contract when
  * `email` is null). `email` is normalized before it reaches here, so the error carries the value
  * that actually collided. Exported for the crafted-error unit test in staff.test.ts, NOT from the
  * package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
-  if (isUniqueViolation(err) && sameTarget(constraintTarget(err), PERSONS_EMAIL)) {
+  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
     throw new AppError("person.email_taken", { email });
   }
   throw err;
@@ -398,6 +402,10 @@ export async function invitePerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (error) {
+    // The NEGATION, which `refusalOn` cannot express, so this stays on the primitives. A 23505
+    // whose key this cannot identify takes this branch deliberately: the insert leaves
+    // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
+    // index is the only other key it can collide on.
     if (isUniqueViolation(error) && !sameTarget(constraintTarget(error), PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }
@@ -441,6 +449,10 @@ export async function createPerson(
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (err) {
+    // The NEGATION, which `refusalOn` cannot express, so this stays on the primitives. A 23505
+    // whose key this cannot identify takes this branch deliberately: the insert leaves
+    // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
+    // index is the only other key it can collide on.
     if (isUniqueViolation(err) && !sameTarget(constraintTarget(err), PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }

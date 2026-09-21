@@ -352,12 +352,10 @@ describe("zone CRUD", () => {
 
 // The check createTable/updateTable use to tell the zone FK apart from the sibling location/status
 // FKs. Crafted-error unit tests (no DB) pin every branch — the real-DB tests above already prove the
-// true path (a bad zoneId → zone.not_found) and the location-FK false path.
-//
-// The two fields a crafted error must carry are the two `constraintTarget` reads: `table`, and the
-// `Key (…)=(…)` clause of `detail`. That is the shape node-postgres and PGlite both put on a real
-// 23503 — measured in packages/db/src/constraint-target.test.ts, which drives real refusals through
-// both targets.
+// true path (a bad zoneId → zone.not_found) and the location-FK false path. A crafted error carries
+// the three fields `refusalOn` reads off one layer — `code`, `table` and `detail`'s `Key (…)=(…)`
+// clause; that this is the real drivers' shape is pinned in
+// packages/db/src/constraint-target.test.ts.
 describe("isZoneFkViolation", () => {
   const fk = (code: string, table: string, column: string): Record<string, unknown> => ({
     code,

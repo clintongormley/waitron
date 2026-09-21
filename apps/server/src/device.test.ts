@@ -13,10 +13,9 @@ describe("bindingFkField", () => {
   // NON-matches (another column of the same table, the same column on another table, a different
   // SQLSTATE, a refusal naming no key).
   //
-  // The two fields a crafted error must carry are the two `constraintTarget` reads: `table`, and the
-  // `Key (…)=(…)` clause of `detail`. That is the shape node-postgres and PGlite both put on a real
-  // 23503 — measured in packages/db/src/constraint-target.test.ts, which drives real refusals through
-  // both targets.
+  // A crafted error carries the three fields `refusalOn` reads off one layer — `code`, `table` and
+  // `detail`'s `Key (…)=(…)` clause. That this is the real drivers' shape is pinned in
+  // packages/db/src/constraint-target.test.ts.
   const fk = (table: string, column: string): Error =>
     Object.assign(new Error("fk"), {
       code: "23503",

@@ -8,13 +8,7 @@ import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type { Decimal, NodeId, TillId } from "@waitron/shared";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
-import {
-  constraintTarget,
-  dailyCloseChain,
-  dailyCloses,
-  isUniqueViolation,
-  sameTarget,
-} from "@waitron/db";
+import { UNIQUE_VIOLATION, dailyCloseChain, dailyCloses, refusalOn } from "@waitron/db";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import type {
@@ -326,16 +320,14 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
  * Is this (or anything it wraps) a unique violation on the business-day key — a second close of the
  * same (node, business day)?
  *
- * BOTH halves are required, and each rules out a different wrong answer. The SQLSTATE alone would
- * also accept the sibling `daily_closes_sequence_key` — same table, same first column, differing
- * only in the second — and an impossible-under-the-lock sequence collision must stay raw, because
- * reporting it as "already closed" would hide a single-writer bug for a day that is NOT closed. The
- * target alone would accept a refusal of any class on those columns, a foreign-key violation among
- * them.
+ * Why the question needs both the SQLSTATE and the key is `refusalOn`'s own doc
+ * (`packages/db/src/constraint-target.ts`). What is specific to this caller: the sibling the
+ * SQLSTATE alone would let through is `daily_closes_sequence_key`, and a sequence collision is
+ * impossible under the single-writer lock, so reporting one as "already closed" would hide a
+ * single-writer bug for a day that is NOT closed.
  *
- * Both helpers walk the error's `cause` chain, so a refusal Drizzle has wrapped is still found.
  * Exported for the crafted-error unit tests, not from the barrel.
  */
 export function isBusinessDayConflict(error: unknown): boolean {
-  return isUniqueViolation(error) && sameTarget(constraintTarget(error), BUSINESS_DAY_KEY);
+  return refusalOn(error, UNIQUE_VIOLATION, BUSINESS_DAY_KEY);
 }
