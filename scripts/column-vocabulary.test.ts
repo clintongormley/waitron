@@ -265,6 +265,22 @@ describe("the column vocabulary is the only place the engine's column and table 
     expect(engineNames().has("numeric")).toBe(true);
   });
 
+  it("rejects a decimal column written the way the retired ones were", () => {
+    // The case above can only go red if the `RETIRED` literal itself goes, because it asks
+    // `engineNames()` for the very name that constant puts there. This one runs a real IMPORT of
+    // `numeric` — the builder the quantity column used until task P6 — through the same function
+    // the tree-wide check at the top of this block uses, so it is the case that goes red if
+    // `numeric` ever becomes legal again in a table file. It is the import line that is checked:
+    // `offendingImports` never looks at the declaration below it, which is there to show what the
+    // import was for.
+    const fixture = [
+      `import { numeric } from "drizzle-orm/pg-core";`,
+      `export const qty = numeric("qty", { precision: 12, scale: 3 });`,
+    ].join("\n");
+    const file = "packages/x/src/schema/x.ts";
+    expect(offendingImports(file, fixture, engineNames())).toEqual([`${file} imports numeric`]);
+  });
+
   it("the one allowance is still earned", () => {
     // An allowance for something a file no longer does is an allowance nobody will notice covering
     // the next offender. If this fails, delete the entry rather than the assertion.

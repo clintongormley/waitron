@@ -10,8 +10,14 @@ import type { Decimal } from "./money.js";
 // `Decimal`, exactly as it is for an amount. The reason this is a second file rather than more
 // exports in `./cents.ts` is the reason the scales are separate at all: one conversion covering
 // all three would take a quantity and a rate and give the same answer for the same literal, and
-// reading 0.005 kg at the money scale leaves nothing. The last case in `scales.test.ts` is that
-// pair of readings side by side.
+// that answer would be wrong for the QUANTITY. A rate and an amount happen to share a scale —
+// `RATE_SCALE` and `MONEY_SCALE` are both 2 — so one conversion would in fact serve both; a
+// quantity carries a third place, and there the answers part. 0.005 kg is 5 thousandths and reads
+// as 1 at the money scale, because `decimalToCents` rounds that third place half away from zero
+// rather than dropping it. So the shared conversion would not refuse anything and would not empty
+// the line: it would return a number five times too small (measured, and pinned by the 0.005
+// cases in `scales.test.ts`). The names are separate anyway, because a rate and an amount sharing
+// a scale today is a coincidence of this tax regime, not a property to build on.
 //
 // `./money.ts` is where the rounding happens — `toScale`, in BigInt, half away from zero, which
 // is the rule the decimal columns applied on the way in. Nothing here rounds a float;
@@ -96,17 +102,38 @@ export function basisPointsToDecimal(count: number): Decimal {
   return scaledLiteral(count, RATE_SCALE);
 }
 
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the exact shape
-// both engines render for an integer, or a scale-0 `numeric`, cast to text, and nothing else. The
-// `numeric` half is not a corner case: a raw read of one of these columns is usually an AGGREGATE,
-// and `sum(...)` over a `bigint` or an `integer` is a `numeric`. The reasoning, the driver
-// measurements and the reason the cast is `::text` and not `::int` are written out once, on
-// `rawCentsToDecimal` in `./cents.ts`; everything there applies here unchanged.
+// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the shape both
+// engines render for an integer, or a scale-0 `numeric`, cast to text. Not ONLY that shape: it
+// also admits "-0". Measured 2026-09-21 on the development container: PostgreSQL 18.6 renders
+// `'-0'::bigint::text` and `'-0'::numeric::text` as "0", so nothing on that side produces the
+// string — and a caller that hands it over anyway is read here as zero, which is what the engine
+// reads it as too, so admitting it costs nothing (pinned in `scales.test.ts`).
+// The `numeric` half is not a corner case, because one of the two raw reads in the tree is an
+// AGGREGATE. Measured 2026-09-21 against the development container `waitron-db-1`, where
+// `show server_version` reports 18.6, with `pg_typeof`: `sum(...)` over a `bigint` is a `numeric`,
+// and over an `integer` or a `smallint` it is a `bigint`. So the summed quantity in
+// `packages/reporting/src/top-sellers.ts` arrives as a `numeric`; the one rate read,
+// `packages/reporting/src/input-vat.ts`, is the bare `integer` column, and a summed rate would
+// arrive as a `bigint`. The `::text` cast is what makes all three the same string. The reasoning, the driver measurements and the reason the cast is `::text` and not
+// `::int` are written out once, on `rawCentsToDecimal` in `./cents.ts`; everything there applies
+// here unchanged.
 const RAW_COUNT_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
-function rawCount(value: string, scale: number, maxIntegerDigits: number): number {
+/**
+ * `malformed` is the caller's own scale code, as `rawCentsToDecimal` refuses in money's own words:
+ * a caller reading a quantity and a rate in one row can then tell which of the two was malformed.
+ * The OVERFLOW refusal below is deliberately not per-scale — `shared.decimal_overflow` names the
+ * concept for every scale, and is what the typed `decimalToThousandths` throws for the same
+ * condition.
+ */
+function rawCount(
+  value: string,
+  scale: number,
+  maxIntegerDigits: number,
+  malformed: "shared.invalid_thousandths" | "shared.invalid_basis_points",
+): number {
   if (typeof value !== "string" || !RAW_COUNT_PATTERN.test(value)) {
-    throw new AppError("shared.invalid_decimal", { value: String(value) });
+    throw new AppError(malformed, { value: String(value) });
   }
   const negative = value.startsWith("-");
   const magnitude = BigInt(negative ? value.slice(1) : value);
@@ -124,13 +151,14 @@ function rawCount(value: string, scale: number, maxIntegerDigits: number): numbe
  * from the engine to the reader; it did not disappear.
  */
 export function rawThousandthsToDecimal(value: string): Decimal {
-  return scaledLiteral(
-    rawCount(value, QUANTITY_SCALE, MAX_QUANTITY_INTEGER_DIGITS),
-    QUANTITY_SCALE,
+  return thousandthsToDecimal(
+    rawCount(value, QUANTITY_SCALE, MAX_QUANTITY_INTEGER_DIGITS, "shared.invalid_thousandths"),
   );
 }
 
 /** The rate for a count of basis points read by RAW SQL, where the count arrives as TEXT. */
 export function rawBasisPointsToDecimal(value: string): Decimal {
-  return scaledLiteral(rawCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS), RATE_SCALE);
+  return basisPointsToDecimal(
+    rawCount(value, RATE_SCALE, MAX_RATE_INTEGER_DIGITS, "shared.invalid_basis_points"),
+  );
 }

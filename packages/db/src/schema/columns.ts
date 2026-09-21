@@ -88,10 +88,12 @@ export const money = (name: string) => bigint(name, { mode: "number" });
  * A quantity, counted in whole thousandths: 1.5 kg is the number 1500, and 5 grams is 5.
  *
  * An integer for the same reason `money` above is one, and a SEPARATE scale for a reason of its
- * own: a quantity carries three decimal places, so reading one at the money scale turns 0.005 kg
- * into nothing. The conversions are named after the scale — `decimalToThousandths` and
- * `thousandthsToDecimal` in `@waitron/shared`'s scales module — so a call site cannot reach for
- * the money pair by autocomplete.
+ * own: a quantity carries three decimal places, so reading one at the money scale gives a
+ * different number rather than an obviously wrong one — 0.005 kg is 5 thousandths and 1 cent,
+ * because the money conversion ROUNDS that third place rather than dropping it (pinned by the
+ * 0.005 cases in `packages/shared/src/scales.test.ts`). The conversions are named after the scale
+ * — `decimalToThousandths` and `thousandthsToDecimal` in `@waitron/shared`'s scales module — so a
+ * call site cannot reach for the money pair by autocomplete.
  *
  * EIGHT bytes, and unlike `rate` below that is not arbitrary. The decimal column this replaces was
  * `numeric(12, 3)`, whose widest value is 999999999.999 — 999999999999 thousandths, past the
@@ -101,8 +103,9 @@ export const money = (name: string) => bigint(name, { mode: "number" });
  *
  * This emits the same SQL type as `money` and `bigCount`, so picking the wrong one of the three is
  * invisible to the generated schema and to any migration diff — the same trap `ts`/`tsString`
- * carries, and the reason those three are asserted together in `columns.test.ts`. What separates
- * them is what a caller does with the number, which nothing checks.
+ * carries. `columns.test.ts` pins all three: their SQL type in one case together, and their READ
+ * MODE in a case each, which is the only part a test can separate. What it cannot separate is the
+ * three from each other — that is what a caller does with the number, and nothing checks it.
  */
 export const quantity = (name: string) => bigint(name, { mode: "number" });
 

@@ -1,8 +1,7 @@
-import { AppError } from "@waitron/shared";
+import { AppError, MAX_QUANTITY_INTEGER_DIGITS } from "@waitron/shared";
 import "./errors.js";
 
 export const MAX_UNIT_PRECISION = 3;
-const MAX_QUANTITY_INTEGER_DIGITS = 9;
 const QUANTITY_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
 export function validateUnitPrecision(precision: number): number {

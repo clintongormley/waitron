@@ -451,6 +451,15 @@ describe("the newest helpers differ in ways their SQL type cannot show", () => {
     expect(c.amount.mapFromDriverValue("1234")).toBe(1234);
   });
 
+  it("gives quantity the number reading, so a count of thousandths arrives as a number", () => {
+    // The third column of the same SQL type, and the one a mode swap would hurt most quietly: a
+    // caller handed a JavaScript `bigint` here cannot pass it to `thousandthsToDecimal` in
+    // `@waitron/shared`, which takes a number. The SQL-type case above cannot see the swap —
+    // rebuilt as `{ mode: "bigint" }` every assertion in this file but this one still passes.
+    expect(c.qty.columnType).toBe("PgBigInt53");
+    expect(c.qty.mapFromDriverValue("1500")).toBe(1500);
+  });
+
   it("gives bigCount the number reading, not the bigint one", () => {
     // `{ mode: "number" }` and `{ mode: "bigint" }` both emit `bigint`: the ts/tsString trap again.
     expect(c.big.columnType).toBe("PgBigInt53");
