@@ -4743,21 +4743,57 @@ out to contain no SQL — only a comment describing the claim.
    check the corrections — among them a sentence claiming a mechanism was "measured" when only its
    consequence was, and a receipt re-attributed to a code shape it had not been taken against. Budget
    for the third round.
-4. **Still open after P4a.** **Task P4b** moves the fiscal drain
-   (`packages/fiscal-verifactu/src/drain.ts`) onto the same FILE, but not onto the same function:
-   `claimRows` stamps every row the window it locked selected, and the drain stamps only the part of
-   that window whose `entorno` agrees with the host's, so it would stamp rows it is about to refuse.
-   The branch in flight adds a lock-only sibling instead, `claimLockedRows` — raw SQL in, nothing
-   stamped, and the lock narrowed to the one table it names, because `app_user` holds
-   `select, insert` alone on `registros_facturacion` and PostgreSQL refuses an unnarrowed lock over
-   that join. The `for update of e skip locked` the drain used to spell itself is spelled there now.
-   The task is autonomous by the owner's 2026-09-20 decision, and its `drain.concurrency` suite must
-   pass unedited. Two things P4a chose not to do, each deliberate and each stated in #481: the
-   holder/waiter scaffold is still hand-written in every real-PostgreSQL
-   contention suite in the tree, because sharing it means editing
-   `packages/db/src/testing/lifecycle.ts` and reaching all of them; and running the negative control
-   for the lock clause takes minutes rather than seconds, because the blocked claim's holder is still
-   parked when the per-test reset comes round and the reset then waits on its row locks.
+4. **Two things P4a chose not to do,** each deliberate and each stated in #481: the holder/waiter
+   scaffold is still hand-written in every real-PostgreSQL contention suite in the tree, because
+   sharing it means editing `packages/db/src/testing/lifecycle.ts` and reaching all of them; and
+   running the negative control for the lock clause takes minutes rather than seconds, because the
+   blocked claim's holder is still parked when the per-test reset comes round and the reset then
+   waits on its row locks.
+
+**Task P4b — the fiscal drain claims by locking, not by stamping — LANDED as #483 on 2026-09-21**
+(main `9bf10a7a`). The drain that files sales with AEAT no longer spells
+`for update of e skip locked` itself; the clause moved to `packages/db/src/job-claim.ts` with the
+other two claims, so task F1 edits that module rather than each caller.
+
+**It could not use `claimRows`, and the next reader should not try.** That helper stamps every row
+the window it locked selected. The drain locks a window and then stamps only part of it, because it
+reads each record's own `entorno` first and leaves a record whose environment disagrees with the
+host's `pendiente` and untouched for a later pass. `drain.test.ts`'s "halts a chain behind a refused
+predecessor" asserts that directly — all three rows keep `intentos` at 0 — and the run-it seat
+confirmed the consequence by making the claim stamp its whole window and watching that case return
+`[1,1,1]`. So the branch added a third helper beside the other two, `claimLockedRows`: raw SQL in,
+nothing stamped, and the lock narrowed to the one table the caller names.
+
+**What P4b found, and what it leaves.**
+
+1. **The narrowing is a privilege fact, and it is now a test rather than a sentence.** `app_user` is
+   revoked from `registros_facturacion` and re-granted `select, insert` alone, and PostgreSQL wants
+   an update-shaped privilege on every table a `FOR UPDATE` locks — so a lock the claim did not
+   narrow is refused `42501` before reading anything. `drain.test.ts`'s "refuses the same selection
+   when the lock is not narrowed" runs the drain's two tables both ways round and asserts `42501`
+   for one and success for the other. It lives on PGlite, measured: PGlite gives the same two
+   answers as the real server once the session has assumed the role, so a grant case needs no
+   container (`CLAUDE.md` §4).
+2. **A receipt can be rewritten into one that cannot discriminate, and it looks like an improvement.**
+   A correction round replaced a direct measurement with "drop the `of` and the concurrency suite
+   drains 0 records instead of 5". That suite reports a failed pass for EVERY way of breaking the
+   claim, because `drain()` swallows the throw — so 0 is what you see whatever went wrong. `CLAUDE.md`
+   §1's "a measurement taken where both answers look alike measures nothing", arrived at by fixing a
+   finding rather than by writing new code.
+3. **The cost was paid a FOURTH time, and the fourth round was the one that earned its keep.** Three
+   reviewers found no correctness bug in the code. A reader checking only their corrections found two
+   real defects inside those corrections, one of which would have misled the F1 implementer: a
+   comment asserting the drain's claim predicate does NOT exclude the state it stamps, when it does.
+   A third round on top of THAT found five more, including the same enumeration being wrong a second
+   time. The lesson is narrower than "review more": an enumeration or a count inside a correction is
+   where these live, and the fix is to stop enumerating, which is what that comment now says.
+4. **Still open.** Task F1 — the flip itself — is lane A's, and with P4b landed every prepare task
+   is done. Step 16 of that task now has three functions to strip rather than one, and they do not
+   all end the same way: `claimRows` keeps a conditional update that still claims, while `claimLock`
+   and `claimLockedRows` have nothing of the claim left and become ordinary ordered SELECTs. That
+   this is sound rests on the write queue admitting one writer at a time, which is a reading of the
+   plan rather than a line in it — the drain's call site and both helpers say so, and the plan
+   carries a dated note asking for the decision to be made deliberately when the step runs.
 
 **Task P10 — a refusal is matched by its table and columns, not the constraint's name — LANDED as
 #482 on 2026-09-21** (main `50ac0ea8`). PostgreSQL reports the NAME of the rule a write broke;
