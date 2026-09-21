@@ -3111,7 +3111,7 @@ async function modifierOfferFixture() {
 
     // What the ORDER path answers: an extras list the offer republishes at its own price, and an
     // options list the product carries. The cheese's three names carry DIFFERENT text, so a line
-    // freezing the wrong one of them fails (CLAUDE.md §4), and its own 9.00 unit price is the price
+    // freezing the wrong one of them fails (CLAUDE.md §3), and its own 9.00 unit price is the price
     // a child line would show if the offer's 0.35 were never read.
     const cheese = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,

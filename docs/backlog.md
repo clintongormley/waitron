@@ -939,42 +939,69 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   share the name `ExtraProductFacts`. Revisit if a third caller appears, or if the order path ever
   needs an extra's allergens.
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
-  nothing cleans the publication up.** The two sides read different sets: the picker's source
-  (`readOfferedModifiers`) walks the product's `product_modifiers` attachments and offers only lists
-  found there, while the order path (`apps/server/src/working-order.ts:436,3185`) consumes
-  `extrasByHolder`/`optionsByProduct` straight, with no attachment intersection. Publishing is
-  guarded at write time — `assertProductCarries` (`packages/catalogue/src/extras.ts:475`) refuses to
-  publish a list the product does not carry — but DETACHING is not: `writeProductModifiers`
-  (`packages/catalogue/src/product-modifiers.ts:242`) deletes and re-inserts the product's attachment
-  rows and never touches `menu_item_extra_lists`. So publish a list on a menu offer, then detach it
-  from the product, and the publication survives. If that list has `minPicks >= 1`, the picker never
-  asks for it and `validateExtraSelections` (`packages/catalogue/src/extra-contract.ts:290`) refuses
-  the order with `extras.limit_exceeded` — the dish cannot be rung up at all.
-  **This was established by READING the call chain, not by running it**, and the reachability of the
-  authoring sequence was not tested either. The experiment that would settle it: publish a list on a
-  menu item, detach it from the product, then ring the dish up on the till. It was left here rather
-  than fixed because the defect is in the AUTHORING path (Task 6's code, and the order path's
-  non-intersection is Task 7's), not in the till surfaces this task owns — widening a till branch
-  into the catalogue's write path is the blast radius the campaign's rules forbid. What Task 12
-  changed is only that the divergence is now VISIBLE: before it, the till drew the legacy
-  attachments and could not answer one of these lists at all.
-- **Reopening the picker on a line that has VARIANTS loses the variant, and says it saved.** Found
-  while fixing something else on this task and MEASURED with a throwaway browser test rather than
-  reasoned about: reopen the picker on a basket line whose dish has variants and no variant radio is
-  selected, because `willUpdate` seeds the picks and the answers from `initialSelections` and never
-  seeds `variantId`. Save is shut until the operator picks one — and when they do, `setLineModifiers`
-  (`apps/till/src/state/working-order.ts`) discards it, because it reapplies `extras`, `options` and
-  `optionSnapshots` and never touches `line.product`. The probe returned
-  `{ checkedVariant: 0, saveDisabled: true, variantIdAfterSave: "v-large", unitPriceAfterSave: "1.50" }`
-  after "Pequeño" was chosen and saved, with the dialog closing as though it had worked.
-  **PRE-EXISTING, checked rather than assumed:** `git show ef1f6b91:apps/till/src/widgets/modifier-picker.ts`
-  and the same for `basket.ts` show the shape on `main` too. Left unfixed on purpose — it needs a
-  decision first about whether a basket edit may change a variant AT ALL. If the answer is no, the
-  cheaper fix is to stop offering the variant control on a reopened line; if yes, `setLineModifiers`
-  has to carry the product. Task 12 did close the neighbouring gap: a dish whose only question is its
-  variant now opens the picker from the tender-pay quantity path as well as from the grid
-  (`needsModifierPicker`, `apps/till/src/state/order-line.ts`), where before it rang straight up at
-  the base product's price.
+  nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
+  that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
+  picker's source (`readOfferedModifiers`) keeps only the lists the product's `product_modifiers`
+  attachments name, while `readMenuExtras` (`packages/catalogue/src/extra-projection.ts:131`)
+  reads `menu_item_extra_lists` and nothing else, and the order path
+  (`apps/server/src/working-order.ts:436,3185`) consumes `extrasByHolder`/`optionsByProduct`
+  straight — so the detached list reaches it. **Not true of the other two reads, checked rather
+  than generalised:** `optionsByProduct` is BUILT from the attachments
+  (`packages/catalogue/src/offered-modifiers.ts:109`), and the PRODUCT-side extras read is handed
+  them and keeps only what they carry (`readProductExtras`,
+  `packages/catalogue/src/extra-projection.ts:229`), so a detached options list — or a detached
+  extras list on a plain product line — disappears from the order path too, and nothing then
+  demands it: both validators walk only the lists they are handed (`validateOptionSelections`,
+  `packages/catalogue/src/option-contract.ts:168`; `validateExtraSelections`,
+  `packages/catalogue/src/extra-contract.ts:241`). Publishing is guarded at write time —
+  `assertProductCarries` (`packages/catalogue/src/extras.ts:475`) refuses to publish a list the
+  product does not carry — but DETACHING is not: `writeProductModifiers`
+  (`packages/catalogue/src/product-modifiers.ts:242`) deletes and re-inserts the product's
+  attachment rows and never touches `menu_item_extra_lists`. So publish a list on a menu offer,
+  then detach it from the product, and the publication survives. If that list has `minPicks >= 1`,
+  the picker never asks for it and `validateExtraSelections`
+  (`packages/catalogue/src/extra-contract.ts:290`) refuses the order with `extras.limit_exceeded`
+  — the dish cannot be rung up at all. **This was established by READING the call chain, not by
+  running it**, and the reachability of the authoring sequence was not tested either. The
+  experiment that would settle it: publish a list on a menu item, detach it from the product, then
+  ring the dish up on the till. It was left here rather than fixed because the defect is in the
+  AUTHORING path (Task 6's code, and the order path's non-intersection is Task 7's), not in the
+  till surfaces this task owns — widening a till branch into the catalogue's write path is the
+  blast radius the campaign's rules forbid. What Task 12 changed is only that the divergence is
+  now VISIBLE: before it, the till drew the legacy attachments and could not answer one of these
+  lists at all.
+- **Reopening the picker on a line whose dish has VARIANTS *and* at least one offered list loses
+  the variant, and says it saved.** Both halves of that precondition are needed: the basket draws
+  its Edit button only when the line's product carries an offered list
+  (`apps/till/src/widgets/basket.ts`), pinned by "offers no Edit on a line whose only question was
+  its variant" (`apps/till/src/widgets/basket.test.ts`), so a variant-ONLY dish cannot reach this
+  at all. A dish with both passes that gate. Found while fixing something else on this task and
+  MEASURED with a throwaway browser test rather than reasoned about: reopen the picker on such a
+  line and no variant radio is selected, because `willUpdate` seeds the picks and the answers from
+  `initialSelections` and never seeds `variantId`. Save is shut until the operator picks one — and
+  when they do, `setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it, because
+  it reapplies `extras`, `options` and `optionSnapshots` and never touches `line.product`. The
+  probe returned `{ checkedVariant: 0, saveDisabled: true, variantIdAfterSave: "v-large",
+  unitPriceAfterSave: "1.50" }` after "Pequeño" was chosen and saved, with the dialog closing as
+  though it had worked. **PRE-EXISTING, checked rather than assumed:** `git show
+  ef1f6b91:apps/till/src/widgets/modifier-picker.ts` and the same for `basket.ts` show the shape
+  on `main` too. Left unfixed on purpose — it needs a decision first about whether a basket edit
+  may change a variant AT ALL. If the answer is no, the cheaper fix is to stop offering the
+  variant control on a reopened line; if yes, `setLineModifiers` has to carry the product. Task 12
+  did close the neighbouring gap: a dish whose only question is its variant now opens the picker
+  from the tender-pay quantity path as well as from the grid (`needsModifierPicker`,
+  `apps/till/src/state/order-line.ts`), where before it rang straight up at the base product's
+  price.
+- **Every input the modifier picker draws still carries a GENERATED id as its `name`.** An extras
+  checkbox group is named `extras-${list.id}` and an options radio group `options-${list.id}`
+  (`apps/till/src/widgets/modifier-picker.ts`), and a list id is a uuid — so a kind in front of one
+  is still the generated widget id `docs/developers/conventions-ui.md` refuses, and CLAUDE.md §3
+  with it. What Task 12 changed is only that the two kinds now spell it the SAME way; the extras
+  checkbox carried a bare list id before, where its options sibling was already prefixed. Left
+  because the offered-list wire carries no stable per-list name to use instead: an offered list
+  arrives with its uuid `id` and its three display names and nothing else
+  (`OfferedExtrasList`/`OfferedOptionsList`, `packages/catalogue/src/menu-types.ts`), and a display
+  name is renameable and not unique, so closing this means adding something to that wire.
 
 What the order path (the plan's Task 7) left behind:
 

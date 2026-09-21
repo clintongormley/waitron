@@ -134,11 +134,13 @@ export type LineExtras = { note?: string; variantId?: string };
  * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
  * resolution (perf)" in `apps/server/src/working-order.test.ts`.
  *
- * The LIST maps come from one body — `resolveAttachedModifiers` (packages/catalogue) — which is the
- * body the two sell-side reads a till draws its picker from call as well (`listAvailableProducts`
- * and `listMenuOffers`, through `readOfferedModifiers`). Deliberate: what the till is OFFERED has
- * to be the set the validators below answer, or a required list the picker never drew refuses the
- * order.
+ * The LIST maps come from one body — `walkAttachedModifiers`
+ * (`packages/catalogue/src/offered-modifiers.ts`). This path reaches it through
+ * `resolveAttachedModifiers`, which is a wrapper over it and has no other caller in product code;
+ * the two sell-side reads a till draws its picker from reach the SAME body through
+ * `readOfferedModifiers` (`listAvailableProducts` and `listMenuOffers`), not through the wrapper.
+ * Deliberate: what the till is OFFERED has to be the set the validators below answer, or a required
+ * list the picker never drew refuses the order.
  *
  * The product facts are NOT shared, and two bodies read the `products` rows: this file's
  * {@link resolveBasketModifiers} and `readExtraProducts` (offered-modifiers.ts). Neither shape can
@@ -2054,9 +2056,10 @@ export async function readTabLines(
   // from reading the inserts, not a case any test here reaches.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
   // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
-  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads. The row
-  // id and `parent_line_id` are named nowhere below because neither belongs on this wire: they feed
-  // `lineNoById` above, and the tab screen addresses a line by `lineNo`.
+  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads. Neither
+  // row id belongs on this wire: `id` appears nowhere below, being only the KEY of `lineNoById`
+  // above, and `parent_line_id` is read once and only to look its parent's `lineNo` up in that map,
+  // because the tab screen addresses a line by `lineNo`.
   return rows.map((row) => ({
     lineNo: row.lineNo,
     name: staffPresentationName({ name: row.name, variantName: row.variantName }),

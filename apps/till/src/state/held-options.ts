@@ -17,15 +17,23 @@ function staffName(names: Record<string, string>): string {
  * Give as many lists as possible one of the answers they can take, and say which.
  *
  * `candidates[i]` maps the index of each answer list `i` could take onto the label id that answer
- * would name. The walk is the textbook augmenting-path one: each list claims a free answer, and when
- * every answer it can take is held it asks a holder to move to one of ITS other candidates, no
- * answer being revisited twice within one list's walk. That bound — one pass per list, and within
- * it each answer considered at most once — is what makes the search complete without being able to
- * loop; a dish carries a handful of lists, so its cost is not worth a cleverer shape.
+ * would name. The walk is the textbook augmenting-path one: each list tries its candidates in the
+ * map's own order and takes the first one it can get — either free, or held by a list the same rule
+ * can push onto one of ITS other candidates — with no answer revisited twice within one list's
+ * walk. There is no free-answer-first phase: a held FIRST candidate sends the walk straight into
+ * its holder even when a later candidate is sitting free. That bound — one pass per list, and
+ * within it each answer considered at most once — is what makes the search complete without being
+ * able to loop; a dish carries a handful of lists, so its cost is not worth a cleverer shape.
  *
- * Returns, per list index, the index of the answer it was given, or `undefined` for a list no
- * assignment could reach. It maximises how many lists are answered; among assignments of the same
- * size it promises nothing about WHICH list gets which of two interchangeable answers.
+ * Returns, per list index, the index of the answer it was given, or `undefined` for a list THIS
+ * assignment left out — which is not the same as a list no assignment could have answered. Two
+ * lists whose only candidate is the same answer can each be answered, just not both, so whichever
+ * of them loses comes back `undefined` while an assignment giving IT that answer exists. What the
+ * augmenting search buys is the SIZE: it answers as many lists as it can, which is why an answer
+ * moves aside for a narrower list instead of being kept by the first list that fitted ("moves an
+ * answer off one list so a narrower one sharing its name can be answered too",
+ * `./held-options.test.ts`). Among assignments of the same size it promises nothing about WHICH
+ * list gets which of two interchangeable answers.
  */
 function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (number | undefined)[] {
   const holderOf: (number | undefined)[] = [];
@@ -60,8 +68,11 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
  * one of its labels by ID (`validateOptionSelections`, `packages/catalogue/src/option-contract.ts`).
  * The ids are re-derived here by matching the STAFF name of the list and of the chosen label — the
  * pair the basket itself shows. The other four names are left to the server's own comparison
- * (`sameOptionSelections`, `apps/server/src/modifier-selection.ts`), which re-prices the line when
- * any of the six has moved.
+ * (`sameOptionSelections`, `apps/server/src/modifier-selection.ts`). Any of the six having moved
+ * costs the WHOLE ORDER, not the one line: the preserve test is all-or-nothing
+ * (`preservesEveryLine`, `apps/server/src/working-order.ts`), so a single line that does not match
+ * sends the request down the replacement path, which re-prices every line at today's offers and
+ * deletes and re-inserts them all under new ids.
  *
  * Re-sending nothing is not a smaller failure than re-sending something: every ACTIVE list the dish
  * carries must be answered, and one left out refuses the WHOLE edit with `options.label_required`

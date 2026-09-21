@@ -247,14 +247,18 @@ gives up the price lock a quantity-only edit exists to keep; or let the child ca
 off, which is what §3.5 rules out when it says an open order's child points at the product and not
 the list. Recorded in `docs/backlog.md` as an owner decision rather than guessed at here.
 
-An OPTIONS list RENAMED between the two sends does make the two sides differ, and the line is
-replaced and re-priced. That is a decision, not an omission: an options answer freezes six names and
-no ids, so the wording is the only evidence the line carries about what was chosen, and a rename
-cannot be told from a different answer. Giving the comparison an id to use would mean putting one on
-the line, which §2.3 of the design rules out. Pinned by "re-prices a held line when the options list
-it answered was renamed between the two sends" (`apps/server/src/working-order.test.ts`). An EXTRAS
-list is different: its children are compared by the picked product's id, so renaming the list — or
-the product — disturbs nothing and the line is preserved.
+An OPTIONS list RENAMED between the two sends does make the two sides differ, and the WHOLE ORDER is
+replaced and re-priced — not just the line that answered it. The preserve test is all-or-nothing
+(`preservesEveryLine`, `apps/server/src/working-order.ts`), so one line that does not match sends
+the request down the replacement path, which prices every line at today's offers and then deletes
+and re-inserts them all under new ids. That is a decision, not an omission: an options answer
+freezes six names and no ids, so the wording is the only evidence the line carries about what was
+chosen, and a rename cannot be told from a different answer. Giving the comparison an id to use
+would mean putting one on the line, which §2.3 of the design rules out. Pinned by "re-prices a held
+line when the options list it answered was renamed between the two sends"
+(`apps/server/src/working-order.test.ts`). An EXTRAS list is different: its children are compared by
+the picked product's id, so renaming the list — or the product — disturbs nothing and the line is
+preserved.
 
 The till is on this wire as of 2026-09-21. It sends one `options` entry per answered list and one
 `extras` entry per list picked from, reads a line's frozen answers back as `optionSnapshots` on all
@@ -267,9 +271,10 @@ answer's STAFF names back against the dish's live offer and rebuilds the `{ list
 which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
 `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
 the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
-the server re-prices the line as it does for any other changed wording. What it will not do is
-guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till tells
-the operator to open the line and choose again rather than substituting the list's own default.
+the server then re-prices the whole order as it does for any other changed wording. What it will not
+do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
+tells the operator to open the line and choose again rather than substituting the list's own
+default.
 
 ## What a till is offered
 

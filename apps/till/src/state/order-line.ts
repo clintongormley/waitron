@@ -84,9 +84,15 @@ export function extraGross(line: OrderLine, extra: SelectedExtra): Decimal {
  *
  * The two surfaces that ADD a line both read this — the product grid's tap and tender-pay's weighed
  * quantity — because both hand the picker's own `detail.product` to `addProduct`, so a variant the
- * dialog resolved reaches the line. The basket's Edit button deliberately asks a NARROWER question
- * (offered lists alone): `setLineModifiers` replaces a line's answers and never its product, so a
- * variant cannot be changed from there and a dialog offering one would discard the change.
+ * dialog resolved reaches the line. The basket's Edit button does NOT read this: it gates on the
+ * offered lists alone, because `setLineModifiers` replaces a line's answers and never its product.
+ * What that narrower gate buys is ONE case: a dish whose only question is its variant gets no Edit
+ * button at all, rather than a dialog whose save would carry nothing (`basket.ts`; `basket.test.ts`,
+ * "offers no Edit on a line whose only question was its variant"). It does NOT cover the MIXED case
+ * — a dish carrying variants AND at least one offered list passes that gate, the dialog then draws
+ * the variant fieldset and refuses Save until one is picked, and `setLineModifiers` then never
+ * carries that pick onto the line. Open, with the measurement, in `docs/backlog.md` — Task 12, the
+ * entry beginning "Reopening the picker".
  */
 export function needsModifierPicker(
   product: Pick<TillProduct, "variants" | "offeredModifiers">,

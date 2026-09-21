@@ -239,7 +239,7 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
-  /** Every extras list's pick count, keyed by list id, in one pass over the picks. */
+  /** Every extras list's pick count, keyed by list id, in one pass over the offered lists. */
   #listTotals(): Map<string, number> {
     const totals = new Map<string, number>();
     for (const entry of this.#offered) {

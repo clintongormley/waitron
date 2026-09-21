@@ -373,8 +373,11 @@ export class TillBasket extends LitElement {
           </div>
           ${
             // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
-            // answers and never its product, so a variant is not editable from the basket and a
-            // variant-only dish has nothing here to edit.
+            // answers and never its product, so a dish whose only question is its variant gets no
+            // Edit button rather than a dialog whose save would carry nothing ("offers no Edit on a
+            // line whose only question was its variant", basket.test.ts). This gate does not reach
+            // the MIXED case — variants AND an offered list — which still opens the dialog, re-asks
+            // the variant and discards it; open in `docs/backlog.md`, Task 12.
             line.product.offeredModifiers?.length
               ? html`<wt-button
                   class="edit-modifiers"

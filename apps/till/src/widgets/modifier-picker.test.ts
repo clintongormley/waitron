@@ -246,10 +246,14 @@ describe("till-modifier-picker", () => {
     expect(pickerOf(el)).toBeNull();
   });
 
-  it("gives every input a semantic name, never the bare list id", async () => {
-    // docs/developers/conventions-ui.md and CLAUDE.md §3: an input's `name` is semantic, never a
-    // generated widget id — and a list id is a uuid. Burger draws one extras checkbox (its second
-    // item is a stepper, which has no input) and one radio per options label.
+  it("names each extras checkbox group by KIND and list, as the options radios already were", async () => {
+    // Each group's `name` carries its kind in front of its list id — `extras-${list.id}` and
+    // `options-${list.id}` (modifier-picker.ts) — where the extras checkbox used to carry the bare
+    // list id and its options sibling was already prefixed. That is the whole of what changed here.
+    // It does NOT make these names semantic: a list id is a generated uuid, and a kind in front of
+    // one is still a generated widget id, which is what docs/developers/conventions-ui.md refuses.
+    // Recorded as still open in `docs/backlog.md`, Task 12. Burger draws one extras checkbox (its
+    // second item is a stepper, which has no input) and one radio per options label.
     const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
     const names = [...picker.shadowRoot!.querySelectorAll("input")].map((input) => input.name);
     expect(names).toEqual(["extras-list-extras", "options-list-cooked", "options-list-cooked"]);

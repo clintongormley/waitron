@@ -831,7 +831,7 @@ describe("ordering extras and options — parent + child lines", () => {
           vatClass,
         });
       // The three names carry DIFFERENT text, so a surface reading the wrong one of them fails
-      // (CLAUDE.md §4).
+      // (CLAUDE.md §3).
       const extraProduct = (name: string, vatClass: "general" | "reduced") =>
         createProduct(tx, {
           catalogueId: cat.id,
@@ -890,7 +890,7 @@ describe("ordering extras and options — parent + child lines", () => {
         tx,
         {
           // Six DIFFERENT strings across the list's and the labels' three names, so a surface that
-          // prints or files the wrong one of them cannot match (CLAUDE.md §4).
+          // prints or files the wrong one of them cannot match (CLAUDE.md §3).
           name: "Tamaño staff",
           customerName: { [defaultLanguage]: "Tamaño customer" },
           kitchenName: "Tamaño kitchen",

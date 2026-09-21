@@ -9,7 +9,7 @@ import {
 
 // Every name in these fixtures reads differently from every other name in them, so an assertion
 // cannot pass by reading the wrong one of a list's, a label's or a product's three names
-// (CLAUDE.md §4).
+// (CLAUDE.md §3).
 const mediumRare: OptionLabel = {
   id: "label-medium-rare",
   name: "Medium rare staff",

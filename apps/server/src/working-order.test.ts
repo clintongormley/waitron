@@ -260,7 +260,7 @@ async function attachModifierList(
 
 /**
  * An extras list offering ONE product, attached to `dishId`. Its three names all differ, and so do
- * the offered product's, so a surface reading the wrong one of the six fails (CLAUDE.md §4).
+ * the offered product's, so a surface reading the wrong one of the six fails (CLAUDE.md §3).
  *
  * `price` is the list item's own — `null` makes it borrow the offered product's `unitPrice`, which is
  * deliberately different, so a child priced at `unitPrice` when a `price` was given means the offer
@@ -1965,19 +1965,27 @@ describe("basket-wide modifier resolution (perf)", () => {
   afterEach(() => vi.restoreAllMocks());
 
   // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line.
-  // Each basket below is three lines — the same dish twice, then a second dish — so a resolver that
-  // moved inside the loop would resolve three times instead of once. Behaviour alone cannot tell
-  // the two apart (the same order comes out either way), so the resolver is spied on. Proven by
-  // mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the line loop
-  // takes every case here from 1 to 3.
+  // The two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see
+  // that: a resolver moved inside the loop resolves three times instead of once. Behaviour alone
+  // cannot tell the two apart (the same order comes out either way), so the resolver is spied on.
+  // Proven by mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the
+  // line loop takes those two from 1 to 3 ("expected resolveAttachedModifiers to be called 1
+  // times, but got 3 times").
+  // The MIDDLE case is not one of them and does not cover the line loop at all: its basket is a
+  // SINGLE line, so it reads 1 either way, and it passed under that same mutation. What it pins is
+  // a different thing — that a preserve check which cannot hold does not resolve the catalogue a
+  // SECOND time on top of `priceOrderLines`.
   //
-  // What is spied on is `resolveAttachedModifiers`, the one body this basket and the two reads a
-  // till sells from share (packages/catalogue/src/offered-modifiers.ts). The four readers it calls
-  // are no longer reachable from here: it calls them through its own relative imports, which are
-  // different namespace objects from the `@waitron/catalogue` index these spies replace bindings
-  // on. Which reader each side of a basket reaches, and that the attachments map is handed on
-  // rather than read twice, moved with the code — "one shared resolution for a set of dishes"
-  // (packages/catalogue/src/offered-modifiers.test.ts).
+  // What is spied on is `resolveAttachedModifiers` — the ORDER path's own way into the shared walk,
+  // and the only caller of it in product code (`resolveBasketModifiers`, working-order.ts). It is
+  // NOT what the two reads a till sells from call: those reach the shared body,
+  // `walkAttachedModifiers`, through `readOfferedModifiers`, so nothing counted here says anything
+  // about what a till is offered (packages/catalogue/src/offered-modifiers.ts). The readers that
+  // body calls are not reachable from here either: it calls them through its own relative imports,
+  // which are different namespace objects from the `@waitron/catalogue` index these spies replace
+  // bindings on. Which reader each side of a basket reaches, and that the attachments map is handed
+  // on rather than read twice, is covered where the walk lives — "one shared resolution for a set
+  // of dishes" (packages/catalogue/src/offered-modifiers.test.ts).
 
   it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
@@ -5184,7 +5192,7 @@ it("does not let an omitted payload waive a required extras list the menu offer 
  * `option_snapshots`, and its EXTRAS picks become child lines carrying the picked PRODUCT.
  *
  * Every name in the fixture carries its own text, so a read of the wrong one of the six fails
- * (CLAUDE.md §4).
+ * (CLAUDE.md §3).
  */
 describe("order path — extras and options", () => {
   interface Seeded {

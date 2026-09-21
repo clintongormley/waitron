@@ -9,9 +9,12 @@
 // the LEGACY `optionGroups` are checked, to show the new list was added beside them.
 // The field a till actually draws is `offeredModifiers`, which `listAvailableProducts` also carries
 // (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`); the screen that draws it
-// is `apps/till/src/widgets/modifier-picker.ts`, which renders one widget per entry of that field,
-// reached from `apps/till/src/widgets/product-grid.ts`, which opens the picker from the same field.
-// Neither is exercised from here.
+// is `apps/till/src/widgets/modifier-picker.ts`, which draws one group per entry of that field.
+// THREE doors open that screen, and only one of them turns on `offeredModifiers` alone:
+// `apps/till/src/widgets/product-grid.ts` and `apps/till/src/widgets/tender-pay.ts` both gate on
+// `needsModifierPicker` (`apps/till/src/state/order-line.ts`), which answers true on an available
+// variant BEFORE it looks at `offeredModifiers`, and `apps/till/src/widgets/basket.ts` has its own
+// narrower gate on the offered lists. None of the three is exercised from here.
 //
 // Real Postgres, not PGlite, and NOT because of the grants. The reason first given here — that
 // PGlite cannot check them — is false, and CLAUDE.md §4 says so plainly: grants ARE enforced once
