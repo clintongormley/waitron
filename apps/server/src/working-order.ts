@@ -1960,6 +1960,13 @@ export interface TabLine {
   // and the diner is charged for (spec §3.4). Every `insert(workingOrderLines)` in this file sets
   // it.
   productId: string | null;
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else null on a top-level
+   * dish — the ONE field on this wire that tells the two apart. `productId` cannot: a child carries the
+   * PICKED product (see the note above it, spec §3.4). Named by LINE NUMBER, not by row id, so a screen
+   * groups a child under the dish it already has in hand — the same shape the settled-sale wire's
+   * `TillSaleLine.parentLineNo` uses (`apps/server/src/till-sale.ts`). {@link readTabLines} resolves it
+   * from the stored `parent_line_id` over the rows it has already read, so it costs no extra query. */
+  parentLineNo: number | null;
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
@@ -2016,6 +2023,8 @@ export async function readTabLines(
       variantName: workingOrderLines.variantName,
       optionSnapshots: workingOrderLines.optionSnapshots,
       productId: workingOrderLines.productId,
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       servedAt: workingOrderLines.servedAt,
@@ -2027,13 +2036,29 @@ export async function readTabLines(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  // Resolve each child extras line's `parent_line_id` (a row id) to its parent's `line_no` over the
+  // rows ALREADY read — this query selects every line of the tab, so the parent of any child is in
+  // hand and no per-line lookup is needed (CLAUDE.md §3). The stored `line_no` is what this read
+  // returns as `lineNo`, so the two spaces are the same one here — UNLIKE `readLockedLines`, which
+  // renumbers into compacted array positions and must resolve into THAT space instead.
+  // `?? null` covers a parent this read did not see. `parent_line_id` references a line of the SAME
+  // working order and this read takes the whole order, so no such row is expected — an expectation
+  // from reading the inserts, not a case any test here reaches.
+  const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
   // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
   // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads.
-  return rows.map(({ variantName, ...row }) => ({
-    ...row,
-    unitPriceGross: centsToDecimal(row.unitPriceGross),
-    name: staffPresentationName({ name: row.name, variantName }),
-  }));
+  return rows.map(({ variantName, id, parentLineId, ...row }) => {
+    // `id` is destructured only to keep the row id OFF the wire: it feeds `lineNoById` above, and the
+    // tab screen addresses a line by `lineNo` (the void-binding idiom this file already uses for a
+    // deliberately-unused parameter, e.g. `assertTabOpen`'s `void cfg`).
+    void id;
+    return {
+      ...row,
+      unitPriceGross: centsToDecimal(row.unitPriceGross),
+      parentLineNo: parentLineId === null ? null : (lineNoById.get(parentLineId) ?? null),
+      name: staffPresentationName({ name: row.name, variantName }),
+    };
+  });
 }
 
 /**
@@ -2754,7 +2779,9 @@ export interface HeldOrder {
   orderNumber: number;
   label: string | null;
   /**
-   * Parent and child rows in `line_no` order. Contextual parent rows carry their stored offer and
+   * PARENT rows only, in `line_no` order — {@link getHeldOrder} filters `parent_line_id IS NULL` and
+   * nests each dish's child extras lines under it as the `extras` array below, so this list needs no child
+   * marker of its own. Contextual parent rows carry their stored offer and
    * display snapshot so retrieval does not depend on the offer still being active. Product-only rows
    * remain readable while older order paths are migrated to menu-item identity.
    */
