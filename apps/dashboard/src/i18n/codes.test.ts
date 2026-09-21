@@ -150,11 +150,34 @@ it("has a sentence for each staff self-service code (my-schedule portal)", () =>
   }
 });
 
+it("has a sentence for each gate and request-screen code the management routes answer", () => {
+  // The codes every management surface can be answered with, whatever screen the operator is on: the
+  // session gate (`management_session.*`), the two authorization refusals, and the two request screens
+  // every route runs before its own work. The per-screen cases below say these "are covered above" and
+  // point here, so this is the case that makes that sentence true. Proven by deletion: drop any of
+  // these from CODE_MESSAGES and codeMessage returns its language's generic → red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  const GENERIC_EN = "Something went wrong, try again";
+  for (const code of [
+    "management_session.required",
+    "management_session.expired",
+    "person.suspended",
+    "authorization.not_permitted",
+    "management.request_invalid",
+    "shared.invalid_id",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
+
 it("has a sentence for each printing code (Impresoras screen)", () => {
   // Every code the Impresoras surface (apps/server/src/print-api.ts) can reject with must map to real
   // copy, never the raw wire code and never the GENERIC fallback — so the banner reads as an actionable
   // message. `management.request_invalid` / `shared.invalid_id` (body/id screens) and
-  // `management_session.*` / `authorization.not_permitted` (the gate) are already covered above. Proven
+  // `management_session.*` / `authorization.not_permitted` (the gate) are asserted by the gate case
+  // directly above, so this case lists only what is particular to this screen. Proven
   // by deletion: drop any of these from CODE_MESSAGES and codeMessage returns GENERIC_ES → red.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of ["printer.invalid_config", "printer.not_found", "agent.not_found"]) {
@@ -163,11 +186,34 @@ it("has a sentence for each printing code (Impresoras screen)", () => {
   }
 });
 
+it("has a sentence for each purchase-invoice code (Compras screen)", () => {
+  // Every code the purchase-invoice routes (apps/server/src/purchasing-api.ts) can reject with must map
+  // to real copy: the Compras screen renders ONE banner, `codeMessage(this.errorKey)`, so an unmapped
+  // code reaches the operator as the GENERIC fallback and tells them nothing about which amount is
+  // wrong. `management.request_invalid` / `shared.invalid_id` and the gate codes are asserted by the
+  // gate case above. Proven by deletion: drop any of these from CODE_MESSAGES and codeMessage returns
+  // its language's generic → red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  const GENERIC_EN = "Something went wrong, try again";
+  for (const code of [
+    "purchase.not_found",
+    "purchase.duplicate",
+    "purchase.invalid",
+    "shared.invalid_decimal",
+    "shared.decimal_overflow",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+  }
+});
+
 it("has a sentence for a missing catalogue", () => {
   // The location↔menu writes (apps/server/src/catalogue-api.ts) reject with `catalogue.not_found` when
   // a catalogueId names no catalogue the tenant can see. The catalogue management surfaces render
   // codeMessage(errorKey), so it must map to real copy, never the raw wire code and never the GENERIC
-  // fallback. `management.request_invalid` / `shared.invalid_id` and the gate codes are covered above.
+  // fallback. `management.request_invalid` / `shared.invalid_id` and the gate codes are asserted by the
+  // gate case above.
   // Each language is compared against ITS OWN generic (the "es" copy against GENERIC_ES, the "en" copy
   // against GENERIC_EN) — comparing the English result against the Spanish generic would never catch an
   // English regression to the English fallback. Proven by deletion: drop `catalogue.not_found` from

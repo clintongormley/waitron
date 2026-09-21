@@ -41,18 +41,19 @@ function blankLine(): LineDraft {
 }
 
 /**
- * A well-formed non-negative decimal literal: one or more digits, an optional fractional part, and a
- * leading-dot form (`.5`) allowed. Browser-local by design — the dashboard never imports `@waitron/shared`
- * at runtime. Deliberately looser than `@waitron/shared`'s `decimal()` (it also accepts leading zeros),
- * whose refusal these routes never get: `purchasing-api.ts` casts each amount `as Decimal` without
- * screening it, and the op converts it at the row (`packages/purchasing/src/operations.ts:158`). So
- * what this pattern rejects is what the server mishandles, measured in `packages/shared` on the
- * conversion helpers themselves: `121,00` and letters throw a bare `SyntaxError` ("Cannot convert
- * 121,00 to a BigInt") out of `compareDecimal`/`decimalToCents`/`decimalToBasisPoints`, which `run`
- * answers as an opaque 500; an empty or whitespace value throws nothing at all — all three helpers
- * read it as ZERO, so the invoice would be STORED with a zero amount.
+ * A well-formed NON-NEGATIVE decimal literal: `0`, or a digit string with no leading zero, each with
+ * an optional fractional part. Browser-local by design — the dashboard never imports
+ * `@waitron/shared` at runtime — but written to accept exactly the literals that package's
+ * `decimal()` accepts (`packages/shared/src/money.ts:19`), which `purchasing-api.ts` screens every
+ * amount through, apart from the SIGN: `decimal()` also accepts a leading minus, and this pattern
+ * does not. Two consequences, both worth knowing before anyone relaxes it. A malformed shape — a
+ * blank, a comma-decimal, `.5`, `01.00` — is refused on both sides, so here it only saves the round
+ * trip: the server answers `shared.invalid_decimal` -> 400. A NEGATIVE is refused only here:
+ * measured 2026-09-21 through the real route, a POST carrying `total: "-121.00"` answered 201 and
+ * the row read back `-121.00`. The op checks the proportion and each line's base, tax and rate, so
+ * the header's gross total is the one amount nothing on the server screens for sign.
  */
-const DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
 /**
  * True when `value` is a well-formed non-negative decimal literal within [min, max] — the form's amount
@@ -87,10 +88,12 @@ function inRange(value: string, min: number, max: number): boolean {
  * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
  * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
  * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
- * That last check is the only thing standing between a blank desglose line and a stored zero, and
- * between a Spanish `121,00` and an opaque 500 — see `DECIMAL` above for what each one does on the
- * server, and why no server-side format check catches either today. A failing check blocks confirm
- * and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
+ * `purchasing-api.ts` screens every amount through `decimal()` and answers `shared.invalid_decimal`
+ * -> 400, so on a malformed SHAPE this check buys latency and wording rather than correctness. On
+ * the SIGN it is the only check there is: `decimal()` accepts a leading minus and no server-side
+ * screen or column constraint refuses a negative gross total, so `inRange(this.total, 0, Infinity)`
+ * below is what refuses one (see `DECIMAL` above for the measurement). A failing check blocks
+ * confirm and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
  * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
  */
 @customElement("dashboard-purchase-form")

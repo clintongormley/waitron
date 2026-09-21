@@ -3250,23 +3250,85 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**A blank amount posted at the purchase-invoice routes is stored as a zero — OPEN (found
-2026-09-21, task P6).** Nothing on the path screens these strings through `@waitron/shared`'s
-`decimal()`. `apps/server/src/purchasing-api.ts` takes each amount through `requireString`, which
-checks `typeof` and nothing else, and then casts it `as Decimal`. Measured in `packages/shared` on
-2026-09-21: `compareDecimal`, `decimalToCents` and `decimalToBasisPoints` all return **0** for `""`
-and for `"  "`, and all three throw a bare `SyntaxError` ("Cannot convert 121,00 to a BigInt") for a
-Spanish comma-decimal or letters. So `validateLines` compares a blank against zero, passes it, and
-the row is stored with zeros; a comma-decimal becomes an opaque 500 the route cannot classify. These
-rows are the deductible (IVA soportado) side of modelo 303, so the quiet case is a wrong return with
-nothing red. The only thing refusing a blank today is the dashboard's own `DECIMAL` regex in
-`apps/dashboard/src/widgets/purchase-form.ts`; a direct POST walks past it. **The fix is one line
-deep:** `decimal(...)` in place of each `as Decimal` cast, with `shared.invalid_decimal` mapped to a
-400 — write the failing test first (a POST with `base: ""` must not store a row).
-`apps/server/src/catalogue-api.ts`'s `unitPrice` takes the same unscreened posture and deserves the
-same pass. Not fixed in P6 because it is outside that task's plan, and the loud half was already
-gone before it: #475 made `base`/`tax`/`total` count cents, and P6 widened the silence to `rate` and
-`deductible_proportion`.
+**A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED 2026-09-21 (PR
+pending).** `apps/server/src/purchasing-api.ts` took each amount through `requireString`, which
+checks `typeof` and nothing else, and then cast it `as Decimal`. Measured in `packages/shared` on
+2026-09-21: `compareDecimal`, `decimalToCents` and `decimalToBasisPoints` all returned **0** for
+`""` and for `"  "`, and all three threw a bare `SyntaxError` ("Cannot convert 121,00 to a BigInt")
+for a Spanish comma-decimal or letters. So `validateLines` compared a blank against zero, passed it,
+and the row was stored with zeros; a comma-decimal became an opaque 500 the route could not
+classify. These rows are the deductible (IVA soportado) side of modelo 303, so the quiet case was a
+wrong return with nothing red. Every amount — the header's `total` and `deductibleProportion`, and
+each line's `rate`/`base`/`tax`, on both POST and PATCH — now goes through `decimal()`, and
+`shared.invalid_decimal` is in the route's `STATUS` map as a 400. Reproduced first: before the fix a
+POST carrying `base: ""` answered **201** and stored the row. Task P6 left it alone because it was
+outside that task's plan. How the blank went quiet, read back with `git show`: before #475
+(`16f24070`) the raw decimal string went straight into a `numeric` column, so PostgreSQL refused a
+blank outright; #475 put `decimalToCents` in front of `base`, `tax` and `total`, and that returns 0
+for a blank, so the refusal became a silent zero; P6 (#479) did the same for `rate` and
+`deductible_proportion`. The comma-decimal was never quiet. After #475 it is the opaque 500 this
+entry already describes, because `decimalToCents("121,00")` throws a bare `SyntaxError` (run
+2026-09-21). Before #475 it never reached JavaScript: the literal went straight into a
+`numeric(12, 2)` column, which PostgreSQL refuses as a driver error — a 500 at this route's boundary
+as well. That earlier half is read from `git show 16f24070^`, not run against a pre-#475 tree.
+
+The same pass checked `catalogue-api.ts`, because an earlier wording of this entry said its
+`unitPrice` "takes the same unscreened posture and deserves the same pass". The POSTURE was right
+and the CONSEQUENCE wrong: the catalogue boundary screens are typeof-only too, but the ops behind
+them refuse a malformed literal, so no catalogue price write ever had the hole this entry describes.
+Measured 2026-09-21 by driving each route end to end in `apps/server`'s own PGlite harness with a
+blank, a whitespace, a `1,00` and a letters value: `POST`/`PATCH /management-api/products` answer
+400 `shared.invalid_decimal`; `POST .../product-editor` answers 400 `product.invalid` naming
+`unitPrice` (and `variants.0.unitPrice` for a variant); `POST .../items` answers 400
+`shared.invalid_decimal` for `grossPrice`; and `PUT .../items/:id/variants` answers 400
+`product.variant_invalid` naming `unitPrice`. The ops screen the literal at
+`packages/catalogue/src/operations.ts:355`, `:391`, `:737` and `:898`, at
+`packages/catalogue/src/product-editor-input.ts:74` and at `packages/catalogue/src/variants.ts:34`.
+**Those four values prove less than they look:** blank, whitespace, `1,00` and letters are all
+refused by BOTH `decimal()` and `isProductPrice`, so no case in that set could tell the two screens
+apart — CLAUDE.md §1's class-representative rule, where the representative has to be a value the two
+sides could treat differently. A negative can tell them apart, and does: the next entry.
+
+**A negative gross total is accepted and stored on the purchase-invoice routes — OPEN (found
+2026-09-21, task N1).** Measured through the real route in `apps/server`'s PGlite harness: a POST to
+`/management-api/purchase-invoices` carrying `total: "-121.00"` answered **201**, and the list
+route read the row back with `total` `-121.00`. `validateProportion` and `validateLines` in
+`packages/purchasing/src/operations.ts` check the deductible proportion 0–100 and, per line, base ≥
+0, tax ≥ 0 and rate 0–100 — neither looks at the header `total` — and
+`packages/db/src/schema/purchase-invoices.ts` carries check constraints for `deductible_proportion`
+and the line `rate` and none for `total`. The dashboard form's `inRange(this.total, 0, Infinity)`
+(`apps/dashboard/src/widgets/purchase-form.ts`) is the only thing refusing one, so a direct POST
+walks past it. **Next action:** decide whether a negative total is ever legitimate — a supplier
+credit note is the case to settle first — before adding a `negative_total` reason beside
+`negative_base`/`negative_tax`.
+
+**A negative price is stored by the product writes, and answered as a SERVER fault by the menu-item
+writes — OPEN (found 2026-09-21, task N1).** Four catalogue writes convert a price with a bare
+`decimal()`, whose pattern allows a leading minus (`packages/shared/src/money.ts:19`):
+`createProduct` (`packages/catalogue/src/operations.ts:737`), `updateProduct` (`:898`),
+`createMenuItem` (`:355`) and `updateMenuItem` (`:391`). What happens after that differs, measured
+2026-09-21 by driving each of those routes end to end in `apps/server`'s PGlite harness.
+
+**The stored half.** `POST /management-api/products` carrying `unitPrice: "-1.00"` answered **201**,
+and `PATCH /management-api/products/:id` carrying the same value answered **204**; reading the
+column back gave `-100` cents. `packages/db/src/schema/catalogue.ts` declares `unit_price` with no
+non-negative check, so nothing refuses a negative product price at any layer.
+
+**The 500 half — a different defect.** `POST /management-api/catalogues/:id/items` and `PATCH
+/management-api/catalogues/:id/items/:itemId` carrying `grossPrice: "-1.00"` both answered **500
+`server.internal`**. The value IS refused there, but by the database check
+`menu_items_gross_price_ck` (`packages/catalogue/src/schema/menu.ts:78`), and the route cannot
+classify a driver error — so a bad value the client sent is reported to it as a fault in the box.
+Nothing is stored wrong; what is wrong is who the answer blames, and it needs its own fix.
+
+`isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) is the screen that refuses a
+leading minus, and none of those four writes goes through it. Inside `packages/catalogue` it is
+imported by `product-editor-input.ts`, `variants.ts` and `extra-contract.ts` alone, which covers the
+product editor, the menu-variant route and extras; three dashboard widgets import it as well, for
+the same check in the browser. **Next action:** screen the price inside `createProduct`,
+`updateProduct`, `createMenuItem` and `updateMenuItem`, or add a non-negative check to
+`products.unit_price` — and either way give the two menu-item routes a 400 that names the field
+instead of a 500.
 
 **The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
 2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
@@ -4985,17 +5047,18 @@ double", which is false for a tenth of all rate values and for every one this co
 (`25.00` becomes `25`, `12.50` becomes `12.5`); the example the sentence chose, `999.99`, is in the
 90% that DO round-trip, which is CLAUDE.md §1's class-representative rule exactly.
 
-**Left open by #479, each with its next action.** Both are in _Track C — smaller items_ above, in
-full: a blank amount posted at `/management-api/purchase-invoices` is stored as a zero on the
-deductible side of modelo 303 (next action: `decimal(...)` in place of each `as Decimal` cast in
-`purchasing-api.ts`, failing test first; `catalogue-api.ts`'s `unitPrice` takes the same posture),
-and `bench/pglite-throughput` calls itself a faithful shape match while three landed storage
-decisions behind. Two more are in _B9_: the english-only guard blaming the wrong lines when a
-comment holds a glob path, and the absence of a schema-conformance guard for any MODULE migration
-set. Not taken, with the reason recorded: merging the private codecs of `cents.ts` and `scales.ts`
-(it embeds a decision — the digit-count bound is tighter than `Number.isSafeInteger`, so the merge
-would tighten money's raw bound), a shared constant for the six `10000` literals (four are SQL
-check constraints), and unifying the two optional-conversion shapes in `purchasing/operations.ts`.
+**Found by #479 — one since fixed, one still open.** Both are in _Track C — smaller items_ above, in
+full: a blank amount posted at `/management-api/purchase-invoices` was stored as a zero on the
+deductible side of modelo 303 (FIXED 2026-09-21 — `decimal()` in place of each `as Decimal` cast in
+`purchasing-api.ts`; the same entry records that `catalogue-api.ts`'s `unitPrice` was measured and
+does not share the hole), and `bench/pglite-throughput` calls itself a faithful shape match while
+three landed storage decisions behind. Two more are in _B9_: the english-only guard blaming the
+wrong lines when a comment holds a glob path, and the absence of a schema-conformance guard for any
+MODULE migration set. Not taken, with the reason recorded: merging the private codecs of `cents.ts`
+and `scales.ts` (it embeds a decision — the digit-count bound is tighter than
+`Number.isSafeInteger`, so the merge would tighten money's raw bound), a shared constant for the six
+`10000` literals (four are SQL check constraints), and unifying the two optional-conversion shapes
+in `purchasing/operations.ts`.
 
 **Task P5 — money becomes whole cents — LANDED as #475 on 2026-09-21** (main `16f24070`). Every
 money column stopped being a two-place decimal and became an eight-byte whole number of cents. The
