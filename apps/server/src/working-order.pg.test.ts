@@ -611,7 +611,8 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe(parkedTotal);
     expect(res.tender).toEqual({ method: "cash", change: "1.50" });
     // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
-    // sent none). The stored numeric(_,3) quantities ("1.000") print trailing-zero-trimmed ("1").
+    // sent none). A stored quantity reads back at three places ("1.000") and prints
+    // trailing-zero-trimmed ("1").
     expect(res.lines).toEqual([
       {
         descriptions: { [LOCALE]: "Café" },

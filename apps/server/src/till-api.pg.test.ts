@@ -638,11 +638,14 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       unit_name: Record<string, string>;
       unit_precision: number;
     }>(sql`
-      select quantity, unit_name, unit_precision from sale_lines
-      where quantity = 0.200`);
+      -- sale_lines.quantity counts whole THOUSANDTHS, so the weighed 0.200 kg line is the row
+      -- where the column holds 200 -- an unquoted 0.200 here would compare an integer column with
+      -- a numeric and match nothing. Read as text: this asserts the stored COUNT, not an amount.
+      select quantity::text as quantity, unit_name, unit_precision from sale_lines
+      where quantity = 200`);
     expect(snapshottedLine.rows).toEqual([
       {
-        quantity: "0.200",
+        quantity: "200",
         unit_name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
         unit_precision: 3,
       },
@@ -2322,25 +2325,28 @@ it("files an extras pick and an options answer through cash checkout and reprint
   ]);
   const stored = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
+    // `quantity` and `vat_rate` are whole numbers at their own scales — thousandths and basis
+    // points — read as text so the assertion pins the stored counts.
     const rows = await tx.execute<{
       quantity: string;
       vat_rate: string;
       unit_name: Record<string, string> | null;
       unit_precision: number | null;
-    }>(sql`select quantity,vat_rate,unit_name,unit_precision from sale_lines  order by line_no`);
+    }>(sql`select quantity::text as quantity, vat_rate::text as vat_rate, unit_name, unit_precision
+             from sale_lines order by line_no`);
     const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };
   });
   expect(stored.rows).toEqual([
     {
-      quantity: "2.000",
-      vat_rate: "21.00",
+      quantity: "2000",
+      vat_rate: "2100",
       unit_name: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unit_precision: 0,
     },
     {
-      quantity: "4.000",
-      vat_rate: "10.00",
+      quantity: "4000",
+      vat_rate: "1000",
       unit_name: null,
       unit_precision: null,
     },

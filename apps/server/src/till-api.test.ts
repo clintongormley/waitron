@@ -1914,7 +1914,8 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     );
 
     // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.
-    // `quantity` reads back at the column's numeric(_, 3) scale ("2.000", not the sent "2").
+    // `quantity` reads back at the three places `thousandthsToDecimal` always renders ("2.000",
+    // not the sent "2") — the scale is the converter's now, not the column's.
     const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
     expect(got.status).toBe(200);
     expect(await got.json()).toMatchObject({

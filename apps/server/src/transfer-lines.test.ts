@@ -19,6 +19,7 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
   type ExtraSelection,
 } from "@waitron/shared";
@@ -168,10 +169,11 @@ async function linesOf(tabId: string): Promise<
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  // The two money columns store a count of whole cents; the helper hands back the AMOUNTS, so its
-  // callers' assertions read the same decimal literals they always did.
+  // Three scaled-integer columns; the helper hands back the DECIMAL LITERALS, each at its own
+  // scale, so its callers' assertions read the same strings they always did.
   return rows.map((row) => ({
     ...row,
+    quantity: thousandthsToDecimal(row.quantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     lineTotal: centsToDecimal(row.lineTotal),
   }));

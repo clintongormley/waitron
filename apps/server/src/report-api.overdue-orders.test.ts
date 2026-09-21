@@ -44,8 +44,11 @@ async function seedFiredOrder(
       working_order_id, line_no, product_id, name, descriptions, quantity,
       unit_price, unit_price_gross, vat_rate, line_total
     ) values (
-      ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, '1.000',
-      100, 100, '10.00', 100
+      -- A quantity is a count of whole thousandths and a rate a count of whole basis points, so
+      -- this line is one unit at 10 per cent: a bare 1 and a bare 10 would be accepted in silence
+      -- and mean a thousandth of a unit at a tenth of a percent. The money columns are cents.
+      ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, 1000,
+      100, 100, 1000, 100
     ) returning id`);
   await db.execute(sql`
     insert into ticket_items (node_id, working_order_id, working_order_line_id, station_id, queued_at, fired_at)

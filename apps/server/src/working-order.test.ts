@@ -669,19 +669,48 @@ describe("parkOrder", () => {
     // The line carries its product FK + quantity AND the full display snapshot priceBasket produced:
     // 1.50 gross each × 2 = 3.00 gross. `line_total` on this DRAFT is the GROSS 3.00 (the
     // customer-facing total the held list shows), NOT the net base 2.48 the FILED sale line carries;
-    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. numeric(12,3) reads "2" back as
-    // "2.000". The two money columns are read straight off the row, so they are counts of whole
-    // cents: 300 is that gross 3.00 and 124 the net unit 1.24.
+    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. Every one of these four columns is
+    // read straight off the row, so each is the whole number its own scale stores: 300 is that
+    // gross 3.00 in cents and 124 the net unit 1.24, 2000 is two units in thousandths, and 2100 is
+    // the 21% rate in basis points.
     expect(lines[0]).toMatchObject({
       productId: cafeId,
       lineNo: 1,
-      quantity: "2.000",
+      quantity: 2000,
       descriptions: { [LOCALE]: "Café" },
       unitPrice: 124,
-      vatRate: "21.00",
+      vatRate: 2100,
       lineTotal: 300,
       category: "Bebidas",
     });
+  });
+
+  it("stores a quantity as whole thousandths and a rate as whole basis points", async () => {
+    // The two scaled-integer columns on `working_order_lines`, pinned as COUNTS. Nothing else does:
+    // every other assertion in this file reads a quantity or a rate back through a converter, so a
+    // conversion applied at the wrong scale on BOTH sides would round-trip and pass. The quantity
+    // carries three decimal places on purpose — 1.500 is the one figure that separates thousandths
+    // (1500) from cents (150) and from a bare unit count (1 or 2).
+    const { cfg, cafeId, kgUnitId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      // Café is priced `each` by default, and `assertQuantityPrecision` refuses a fractional
+      // quantity on it; the kg unit's precision of 3 is what admits 1.500.
+      await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1.500" }],
+    });
+
+    // Read as TEXT rather than through drizzle, so what is asserted is the number the column holds
+    // and not a driver's or an engine's rendering of it.
+    const stored = await db.execute<{ quantity: string; vat_rate: string }>(sql`
+      select quantity::text as quantity, vat_rate::text as vat_rate
+      from working_order_lines where working_order_id = ${id}`);
+    // 1.500 kg is 1500 thousandths, and the general 21.00% rate is 2100 basis points.
+    expect(stored.rows).toEqual([{ quantity: "1500", vat_rate: "2100" }]);
   });
 
   it("parks a multi-line order without a label, snapshotting a category-less line as null", async () => {
@@ -710,7 +739,8 @@ describe("parkOrder", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({ lineNo: 1, productId: cafeId, category: "Bebidas" });
-    expect(lines[1]).toMatchObject({ lineNo: 2, productId: aguaId, quantity: "3.000" });
+    // `quantity` is read straight off the column, so 3000 is three units as a count of thousandths.
+    expect(lines[1]).toMatchObject({ lineNo: 2, productId: aguaId, quantity: 3000 });
     // The category-less product's line snapshots NULL, the other branch of `?? null`.
     expect(lines[1]!.category).toBeNull();
   });
@@ -808,7 +838,8 @@ describe("parkOrder", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(woLines).toHaveLength(1);
-    expect(woLines[0]).toMatchObject({ productId: cafeId, quantity: "1.000" });
+    // Straight off the column: 1000 is the original one unit, as a count of thousandths.
+    expect(woLines[0]).toMatchObject({ productId: cafeId, quantity: 1000 });
   });
 
   it("re-throws when the colliding id is no longer an open order", async () => {
@@ -1213,12 +1244,14 @@ describe("getHeldOrder", () => {
       unit_name: Record<string, string>;
       unit_precision: number;
     }>(sql`
-      select quantity, line_total::int as line_total, unit_name, unit_precision
+      select quantity::text as quantity, line_total::int as line_total, unit_name, unit_precision
       from working_order_lines
       where working_order_id = ${id}`);
+    // `quantity` counts whole THOUSANDTHS, so 375 grams is stored as 375 — read as text so the
+    // assertion pins the stored count rather than a driver's rendering of an eight-byte integer.
     expect(stored.rows).toEqual([
       {
-        quantity: "0.375",
+        quantity: "375",
         line_total: 450,
         unit_name: { [LOCALE]: "kg" },
         unit_precision: 3,
@@ -1359,7 +1392,8 @@ describe("getHeldOrder", () => {
     });
 
     const order = await getHeldOrder({ db }, cfg, id);
-    // Saved selections and quantities return in lineNo order; numeric(12,3) retains three decimals.
+    // Saved selections and quantities return in lineNo order; a quantity reads back at the three
+    // places `thousandthsToDecimal` renders.
     expect(order).toEqual({
       id,
       orderNumber: 1,
@@ -1467,22 +1501,23 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       line_total: number;
     }>(sql`
-      select id, parent_line_id, quantity, unit_price_gross::int as unit_price_gross,
+      select id, parent_line_id, quantity::text as quantity, unit_price_gross::int as unit_price_gross,
              line_total::int as line_total
       from working_order_lines
       where working_order_id = ${id} order by line_no`);
+    // The quantities are counts of whole thousandths: three dishes and their six picks.
     expect(after.rows).toEqual([
       {
         id: before.rows[0]!.id,
         parent_line_id: null,
-        quantity: "3.000",
+        quantity: "3000",
         unit_price_gross: 325,
         line_total: 975,
       },
       {
         id: before.rows[1]!.id,
         parent_line_id: before.rows[0]!.id,
-        quantity: "6.000",
+        quantity: "6000",
         unit_price_gross: 75,
         line_total: 450,
       },
@@ -1520,14 +1555,15 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       line_total: number;
     }>(sql`
-      select id, quantity, unit_price_gross::int as unit_price_gross,
+      select id, quantity::text as quantity, unit_price_gross::int as unit_price_gross,
              line_total::int as line_total
       from working_order_lines
       where working_order_id = ${id}`);
+    // Two units, as a count of whole thousandths.
     expect(after.rows).toEqual([
       {
         id: lineId,
-        quantity: "2.000",
+        quantity: "2000",
         unit_price_gross: 325,
         line_total: 650,
       },
@@ -1552,12 +1588,13 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       menu_item_id: string;
     }>(sql`
-      select l.quantity, l.unit_price_gross::int as unit_price_gross, c.menu_item_id
+      select l.quantity::text as quantity, l.unit_price_gross::int as unit_price_gross, c.menu_item_id
       from working_order_lines l
       join working_line_contexts c on c.working_order_line_id = l.id
       where l.working_order_id = ${id}`);
+    // Two units, as a count of whole thousandths.
     expect(line.rows).toEqual([
-      { quantity: "2.000", unit_price_gross: 325, menu_item_id: premiumCafeOfferId },
+      { quantity: "2000", unit_price_gross: 325, menu_item_id: premiumCafeOfferId },
     ]);
   });
 
@@ -2608,8 +2645,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(2);
-      // Items in line_no order, each carrying the line's snapshotted kitchen name + quantity
-      // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
+      // Items in line_no order, each carrying the line's snapshotted kitchen name + quantity (the
+      // stored count read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
       // Neither product carries a kitchen name of its own, so each falls back to its staff name.
       expect(group!.items[0]).toMatchObject({
         name: "Café",
@@ -4036,7 +4073,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       expect(course.items.every((i) => i.state === "queued")).toBe(true);
       expect(course.items.every((i) => i.firedAt !== null)).toBe(true);
       expect(course.items.every((i) => i.awayAt === null)).toBe(true);
-      // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the numeric text.
+      // The display snapshot rides through: `name` is the resolved kitchen label, `qty` the
+      // quantity as a three-place decimal string.
       const soupItem = course.items.find((i) => i.stationName === "Cocina")!;
       // The fixture seeds no kitchen name, so the label is the product's staff name (`P-<uuid>`),
       // a plain string rather than a locale map.
@@ -4568,13 +4606,14 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
-      // ONE parent + ONE child at quantity 2 (dish ×1 × pick ×2), 0.50 × 2 = 1.00 gross — read
-      // straight off the column, so 100 is that gross as a count of whole cents.
+      // ONE parent + ONE child at quantity 2 (dish ×1 × pick ×2), 0.50 × 2 = 1.00 gross. Both
+      // columns are read straight off the row, so 100 is that gross in cents and 2000 the two
+      // picks in thousandths.
       expect(lines).toHaveLength(2);
       expect(lines[0]!.parentLineId).toBeNull();
       expect(lines.filter((l) => l.parentLineId !== null)).toHaveLength(1);
       expect(lines[1]!.productId).toBe(bacon.productId);
-      expect(lines[1]!.quantity).toBe("2.000");
+      expect(lines[1]!.quantity).toBe(2000);
       expect(lines[1]!.lineTotal).toBe(100);
     });
   });
@@ -4680,13 +4719,15 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
       expect(lines[0]).toMatchObject({
         productId: cafeId,
         parentLineId: null,
-        quantity: "3.000",
+        // Three units, as a count of thousandths off the column.
+        quantity: 3000,
       });
       // Child row: combined 3 × 2 = 6, per-unit gross the offer's 0.50, total 0.50 × 6 = 3.00 —
-      // read straight off the columns, so 50 and 300 are those amounts as counts of whole cents.
+      // read straight off the columns, so 50 and 300 are those amounts as counts of whole cents,
+      // and 6000 is the six picks in thousandths.
       expect(lines[1]!.parentLineId).toBe(lines[0]!.id);
       expect(lines[1]!.productId).toBe(shot.productId);
-      expect(lines[1]!.quantity).toBe("6.000");
+      expect(lines[1]!.quantity).toBe(6000);
       expect(lines[1]!.unitPriceGross).toBe(50);
       expect(lines[1]!.lineTotal).toBe(300);
     });
@@ -4893,9 +4934,10 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo);
       expect(lines).toHaveLength(2);
-      // Child combined = dish ×2 × pick ×1 = 2; 0.50 × 2 = 1.00, stored as 100 whole cents.
+      // Child combined = dish ×2 × pick ×1 = 2; 0.50 × 2 = 1.00. Off the row: 100 whole cents,
+      // and 2000 thousandths for the two.
       expect(lines[1]!.productId).toBe(shot.productId);
-      expect(lines[1]!.quantity).toBe("2.000");
+      expect(lines[1]!.quantity).toBe(2000);
       expect(lines[1]!.lineTotal).toBe(100);
     });
   });
@@ -5111,7 +5153,8 @@ describe("frozen answers through a fractional quantity edit", () => {
         .orderBy(workingOrderLines.lineNo);
       expect(updated).toHaveLength(1);
       expect(updated[0]).toMatchObject({
-        quantity: "1.000",
+        // Off the column: 1000 is the edited one unit, as a count of thousandths.
+        quantity: 1000,
         unitPriceGross: lockedGross,
         // One unit of the locked gross, so the total is that gross unchanged.
         lineTotal: lockedGross,
@@ -5347,7 +5390,8 @@ describe("order path — extras and options", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
     const [dish, child] = lines;
-    expect(dish!.vatRate).toBe("10.00");
+    // `vat_rate` is read straight off the column, so 1000 is the dish's 10% in basis points.
+    expect(dish!.vatRate).toBe(1000);
     expect(child!.parentLineId).toBe(
       (
         await db
@@ -5370,11 +5414,12 @@ describe("order path — extras and options", () => {
     expect(child!.descriptions).toEqual({ [LOCALE]: "Vino customer" });
     expect(child!.kitchenName).toBe("Vino kitchen");
     // The extra PRODUCT's own VAT, never the 10% dish's (spec §3.3, decision 9).
-    expect(child!.vatRate).toBe("21.00");
-    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. Both money columns
-    // are read straight off the row: 450 is that 4.50 and 900 the 9.00 total, in whole cents.
+    expect(child!.vatRate).toBe(2100);
+    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. All three columns are
+    // read straight off the row, each at its own scale: 450 is that 4.50 and 900 the 9.00 total in
+    // whole cents, and 2000 is the two picks in thousandths.
     expect(child!.unitPriceGross).toBe(450);
-    expect(child!.quantity).toBe("2.000");
+    expect(child!.quantity).toBe(2000);
     expect(child!.lineTotal).toBe(900);
   });
 
@@ -5484,7 +5529,8 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after).toHaveLength(1);
     expect(after[0]).toMatchObject({
       id: before[0]!.id,
-      quantity: "2.000",
+      // Two units, as a count of thousandths off the column.
+      quantity: 2000,
       // The offer's 3.25 at park time, not the 99.00 it now costs, and twice it for the total —
       // both read straight off the row, so 325 and 650 are those amounts in whole cents.
       unitPriceGross: 325,
@@ -5547,10 +5593,11 @@ describe("what a held-order edit preserves and what it replaces", () => {
       after.map((line) => [line.id, line.quantity, line.unitPriceGross, line.lineTotal]),
     ).toEqual([
       // The dish at its own 1.50, twice; bacon at 1.00 for two dishes of one pick; milk at 0.30 for
-      // two dishes of three picks — the money columns read straight off the row, in whole cents.
-      [before[0]!.id, "2.000", 150, 300],
-      [before[1]!.id, "2.000", 100, 200],
-      [before[2]!.id, "6.000", 30, 180],
+      // two dishes of three picks. Every column is read straight off the row, each at its own
+      // scale: the money in whole cents, the quantities in whole thousandths.
+      [before[0]!.id, 2000, 150, 300],
+      [before[1]!.id, 2000, 100, 200],
+      [before[2]!.id, 6000, 30, 180],
     ]);
   });
 

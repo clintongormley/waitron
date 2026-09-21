@@ -11,12 +11,15 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
+  basisPointsToDecimal,
   centsToDecimal,
   classifyBand,
   compareDecimal,
   type Decimal,
   decimal,
+  decimalToBasisPoints,
   decimalToCents,
+  decimalToThousandths,
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
@@ -24,6 +27,7 @@ import {
   type SaleId,
   type StationThresholds,
   subtractDecimal,
+  thousandthsToDecimal,
   type TillId,
   type TimingBand,
   toScale,
@@ -578,10 +582,12 @@ async function priceOrderLines(
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
-      quantity: line.quantity,
-      // This object is the `working_order_lines` insert, so it is where the pricer's decimal amounts
-      // become the count of whole cents the three money columns store. `quantity` and `vatRate` are
-      // not money columns — they keep their own scales and stay decimal strings.
+      // This object is the `working_order_lines` insert, so it is where the pricer's decimal
+      // literals become the whole numbers those columns store — each at its own scale, which is why
+      // there are three converters and not one: an amount counts cents, `quantity` counts
+      // thousandths (0.005 kg is 5) and `vatRate` counts basis points (21.00% is 2100). The
+      // `priced` result this reads is untouched: the walk-up path files from it in decimal.
+      quantity: decimalToThousandths(decimal(line.quantity)),
       unitPrice: decimalToCents(decimal(line.unitPrice)),
       // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
       // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
@@ -593,7 +599,7 @@ async function priceOrderLines(
       // option's gross unit is its `price_delta`, re-priced from THIS locked column on retrieve exactly
       // as the dish is. This is a durable lock, not a display cache.
       unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
-      vatRate: line.vatRate,
+      vatRate: decimalToBasisPoints(decimal(line.vatRate)),
       // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
       // `working_order_lines` is the counter's mutable display, and every other total the operator/
       // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
@@ -703,11 +709,12 @@ export async function readLockedLines(
   // order and this batch is the whole order, so the map is total.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    // `unit_price_gross` stores a count of whole cents; this mapping is where it becomes the amount
-    // the pricer and everything above it work in. `quantity` and `vatRate` are not money columns.
+    // The three scaled-integer columns become the decimal literals the pricer and everything above
+    // it work in, here at the row — each read by its own scale's converter, because a count of
+    // thousandths and a count of cents are different numbers for the same literal.
     grossUnitPrice: centsToDecimal(line.grossUnitPrice),
-    quantity: line.quantity,
-    vatRate: line.vatRate,
+    quantity: thousandthsToDecimal(line.quantity),
+    vatRate: basisPointsToDecimal(line.vatRate),
     name: line.name,
     descriptions: line.descriptions,
     // The dish's frozen answers to its options lists, carried from the stored row onto the filed
@@ -1954,8 +1961,8 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
  *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
  *  frozen staff `name` as well as the `productId`: {@link readTabLines} joins the line's product and
  *  variant labels into it, so the screen has no catalogue lookup left to do for a name.
- *  `quantity` is numeric(_,3) text; `unitPriceGross` is a two-place decimal string, converted from the
- *  count of cents the column stores by the mapping in {@link readTabLines}. */
+ *  `quantity` is a three-place decimal string and `unitPriceGross` a two-place one, each converted
+ *  from the whole number its column stores by the mapping in {@link readTabLines}. */
 export interface TabLine {
   /** The line's frozen STAFF label — `working_order_lines.name` joined to `variant_name` with " · ".
    * A table tab's line list is what a waiter reads while serving, so it carries the same name the
@@ -2056,17 +2063,18 @@ export async function readTabLines(
   // from reading the inserts, not a case any test here reaches.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
   // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
-  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads. Neither
-  // row id belongs on this wire: `id` appears nowhere below, being only the KEY of `lineNoById`
-  // above, and `parent_line_id` is read once and only to look its parent's `lineNo` up in that map,
-  // because the tab screen addresses a line by `lineNo`.
+  // the two stored counts become the decimal strings every consumer of `TabLine` reads — cents for
+  // the amount, thousandths for the quantity. Neither row id belongs on this wire: `id` appears
+  // nowhere below, being only the KEY of `lineNoById` above, and `parent_line_id` is read once and
+  // only to look its parent's `lineNo` up in that map, because the tab screen addresses a line by
+  // `lineNo`.
   return rows.map((row) => ({
     lineNo: row.lineNo,
     name: staffPresentationName({ name: row.name, variantName: row.variantName }),
     optionSnapshots: row.optionSnapshots,
     productId: row.productId,
     parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
-    quantity: row.quantity,
+    quantity: thousandthsToDecimal(row.quantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     servedAt: row.servedAt,
     courseId: row.courseId,
@@ -2328,10 +2336,11 @@ export async function mergeTabs(
  * {@link transferLines}' split path so a split line's `working_order_lines.line_total` is byte-identical
  * to an add-time line's — the identical helper composition, over the line's OWN locked
  * `working_order_lines.unit_price_gross`, never a catalogue re-read. This works in amounts, not in
- * the cents the column stores: the caller converts the stored count at the row on the way in, and
- * converts the result back on the way into the write. `quantity` arrives as `numeric`-as-text (a
- * transfer or remainder quantity); `decimal()` validates each argument into the branded-`Decimal`
- * helpers, and accepts an already-branded `Decimal` unchanged.
+ * the counts the two columns store: the caller converts each stored count at the row on the way
+ * in, and converts the result back on the way into the write. `quantity` arrives as a decimal
+ * string — a caller's requested transfer, or a remainder or a converted stored count; `decimal()`
+ * validates each argument into the branded-`Decimal` helpers, and accepts an already-branded
+ * `Decimal` unchanged.
  */
 function grossLineTotal(grossUnit: string, quantity: string): Decimal {
   return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
@@ -2446,14 +2455,16 @@ async function carveOffLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
-  // The two money columns store a count of whole cents; they become amounts here, at the row, and
-  // the split's insert below converts them back. The round trip is exact — a stored count is an
-  // integer and `centsToDecimal` always renders two places — so a copied-through unit price is
-  // byte-identical to the one add-time locked.
+  // The four scaled-integer columns become decimal literals here, at the row, and the split's
+  // insert below converts each back at its own scale. The round trip is exact — a stored count is
+  // an integer and every `…ToDecimal` renders its scale's fixed number of places — so a
+  // copied-through unit price, quantity or rate is byte-identical to the one add-time locked.
   const sourceLines = sourceRows.map((l) => ({
     ...l,
+    quantity: thousandthsToDecimal(l.quantity),
     unitPrice: centsToDecimal(l.unitPrice),
     unitPriceGross: centsToDecimal(l.unitPriceGross),
+    vatRate: basisPointsToDecimal(l.vatRate),
   }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
   // The `line_no`s of each dish's child modifier lines, keyed by the PARENT's `line_no` — so a
@@ -2556,7 +2567,7 @@ async function carveOffLines(
       await tx
         .update(workingOrderLines)
         .set({
-          quantity: remaining,
+          quantity: decimalToThousandths(remaining),
           lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, remaining)),
         })
         .where(
@@ -2579,10 +2590,13 @@ async function carveOffLines(
         name: line.name,
         descriptions: line.descriptions,
         optionSnapshots: line.optionSnapshots ?? [],
-        quantity,
+        // `quantity` is the caller's requested split, already validated as a decimal literal above;
+        // the other three were converted out of their columns at the source read and go back in at
+        // their own scales.
+        quantity: decimalToThousandths(decimal(quantity)),
         unitPrice: decimalToCents(line.unitPrice),
         unitPriceGross: decimalToCents(line.unitPriceGross),
-        vatRate: line.vatRate,
+        vatRate: decimalToBasisPoints(line.vatRate),
         lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, quantity)),
         category: line.category,
         unitName: line.unitName,
@@ -2940,10 +2954,12 @@ export async function getHeldOrder(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // `unit_price_gross` stores a count of whole cents; it becomes the amount the retrieved order
-    // carries here, at the row, so nothing below this line handles a count.
+    // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
+    // become decimal literals here, at the row, so nothing below this line handles a count — the
+    // `HeldOrder` this builds carries the same decimal strings the till has always received.
     const lineRows = storedLines.map((line) => ({
       ...line,
+      quantity: thousandthsToDecimal(line.quantity),
       unitPriceGross: centsToDecimal(line.unitPriceGross),
     }));
 
@@ -3100,10 +3116,13 @@ export async function updateHeldOrder(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // `unit_price_gross` stores a count of whole cents; it becomes the locked amount here, at the
-    // row, and the quantity-only updates below convert each recomputed total back.
+    // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
+    // become decimal literals here, at the row, so the comparison against the request's quantities
+    // and `matchExtraChildren` below both work in the decimal strings the request carries. The
+    // quantity-only updates convert each new quantity and recomputed total back.
     const storedRows = storedLineRows.map((line) => ({
       ...line,
+      quantity: thousandthsToDecimal(line.quantity),
       unitPriceGross: centsToDecimal(line.unitPriceGross),
     }));
     type StoredLine = (typeof storedRows)[number];
@@ -3218,7 +3237,7 @@ export async function updateHeldOrder(
         await tx
           .update(workingOrderLines)
           .set({
-            quantity: requested.quantity,
+            quantity: decimalToThousandths(decimal(requested.quantity)),
             lineTotal: decimalToCents(grossLineTotal(stored.unitPriceGross, requested.quantity)),
           })
           .where(
@@ -3235,7 +3254,7 @@ export async function updateHeldOrder(
           await tx
             .update(workingOrderLines)
             .set({
-              quantity: childQuantity,
+              quantity: decimalToThousandths(childQuantity),
               lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, childQuantity)),
             })
             .where(
@@ -3709,7 +3728,8 @@ export async function advanceTicket(
 /** One ticket item on a station's queue — its id (the bump target for {@link advanceTicketItem}), the
  *  line it was fired from, its current kitchen state, and the DISPLAY fields a cook reads: the line's
  *  snapshotted `descriptions` (locale → text, the dish name — so the kitchen shows "2× Paella", not a
- *  bare line number) and its `quantity` (numeric(12,3) as text, e.g. "2.000"). Both are carried from
+ *  bare line number) and its `quantity` (a three-place decimal string, e.g. "2.000", converted from
+ *  the count of thousandths the column stores). Both are carried from
  *  the joined `working_order_lines` row; the description is the SNAPSHOT frozen at fire, never a live
  *  catalogue lookup. */
 /** The course a queue item was fired for (KDS-2) — its snapshotted `course_id` joined to the LIVE
@@ -4031,7 +4051,9 @@ export async function listStationQueue(
       // name, joined — the same resolver the printed kitchen ticket uses.
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
-      quantity: row.quantity,
+      // `working_order_lines.quantity` stores a count of whole thousandths; this row is where it
+      // becomes the decimal string the KDS renders, so nothing downstream handles a count.
+      quantity: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
@@ -4357,7 +4379,9 @@ export async function listExpoQueue(
       // queue and the printed ticket resolve them.
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
-      qty: row.quantity,
+      // As in `listStationQueue`: the stored count of thousandths becomes the decimal string the
+      // pass renders, here at the row.
+      qty: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
       stationName: row.stationName,

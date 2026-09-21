@@ -5,7 +5,12 @@ import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { decimal, decimalToCents } from "@waitron/shared";
+import {
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+  decimalToThousandths,
+} from "@waitron/shared";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -49,8 +54,9 @@ async function seedTodaySale(db: Database): Promise<void> {
   // The SEED constants above are the AMOUNTS the route's response carries, and the assertions read
   // them unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price`
   // and `sale_lines.line_total` all store a count of whole cents, so each is converted here, on the
-  // way into the row. `vat_breakdown` is jsonb, not a money column, and keeps its decimal literals;
-  // so do `quantity` and `vat_rate`.
+  // way into the row. `vat_breakdown` is jsonb, not a scaled-integer column, and keeps its decimal
+  // literals; `sale_lines.quantity` and `sale_lines.vat_rate` are whole numbers at their OWN
+  // scales — thousandths and basis points — so each is converted by its own function.
   const cents = (value: string): number => decimalToCents(decimal(value));
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
@@ -71,7 +77,8 @@ async function seedTodaySale(db: Database): Promise<void> {
       (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
     values (${saleId}, 1, ${SEED.name},
             ${JSON.stringify(SEED.descriptions)}::jsonb,
-            ${SEED.lineQuantity}, ${cents("3.50")}, '21.00', ${cents(SEED.lineTotal)})`);
+            ${decimalToThousandths(decimal(SEED.lineQuantity))}, ${cents("3.50")},
+            ${decimalToBasisPoints(decimal("21.00"))}, ${cents(SEED.lineTotal)})`);
 }
 
 /** Seed dining tables at the node's location: one ACTIVE + OPEN (tab_id → a working order), one ACTIVE

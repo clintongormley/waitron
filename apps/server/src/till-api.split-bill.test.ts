@@ -247,19 +247,22 @@ describe("POST /api/tabs/:id/split", () => {
 
     // The minted check is a NEW open working order carrying the carved-off quantity, with NO table
     // pointing at it (a table-LESS payment unit); the origin tab keeps the remainder.
+    // `working_order_lines.quantity` is a count of whole THOUSANDTHS, read as text so the assertion
+    // is about the stored number and not about which engine renders an eight-byte integer as what.
     const check = await suite.db.execute<{ status: string; quantity: string }>(sql`
-      select wo.status, wol.quantity
+      select wo.status, wol.quantity::text as quantity
       from working_orders wo join working_order_lines wol on wol.working_order_id = wo.id
       where wo.id = ${body.checkId}`);
-    expect(check.rows).toEqual([{ status: "open", quantity: "1.000" }]);
+    expect(check.rows).toEqual([{ status: "open", quantity: "1000" }]);
     const anchored = await suite.db.execute<{ count: number }>(
       sql`select count(*)::int as count from dining_tables where tab_id = ${body.checkId}`,
     );
     expect(anchored.rows[0]!.count).toBe(0);
     const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
-    expect(origin.rows).toEqual([{ quantity: "2.000" }]); // 3 − 1 = 2 remain on the origin tab
+    // 3 − 1 = 2 units remain on the origin tab, stored as 2000 thousandths
+    expect(origin.rows).toEqual([{ quantity: "2000" }]);
   });
 
   it("409 tab.not_open when the tab is not open", async () => {
@@ -421,9 +424,9 @@ describe("POST /api/tabs/:id/unjoin", () => {
     );
     expect(anchored.rows[0]!.tab_id).toBe(body.tabId);
     const moved = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity from working_order_lines where working_order_id = ${body.tabId}`,
+      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${body.tabId}`,
     );
-    expect(moved.rows).toEqual([{ quantity: "2.000" }]);
+    expect(moved.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
     const origin = await suite.db.execute<{ count: number }>(
       sql`select count(*)::int as count from working_order_lines where working_order_id = ${tabA}`,
     );
@@ -446,9 +449,9 @@ describe("POST /api/tabs/:id/unjoin", () => {
     );
     expect(freed.rows[0]!.tab_id).toBeNull();
     const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
-    expect(origin.rows).toEqual([{ quantity: "2.000" }]);
+    expect(origin.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
   });
 
   it("400 management.request_invalid when transfers is present but not an array", async () => {
