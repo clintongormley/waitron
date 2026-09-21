@@ -13,7 +13,12 @@
     // anyway so a future base-config change, or a cleanup pass like the one that removed this flag
     // from apps/server in the same branch (where nothing imports JSON), cannot silently break it.
     "resolveJsonModule": true,
-    "types": ["vitest/globals"]
+    // `node` is named here rather than left to the automatic inclusion `types` switches off. It
+    // used to arrive by accident: `@types/pg` imports from `events` and `stream`, which pulled
+    // `@types/node` into the program, and dropping the `pg` dependency took it away — every
+    // `node:fs`/`node:path`/`node:sqlite` import in this package and in everything it reaches
+    // failed with `TS2591` at once.
+    "types": ["node", "vitest/globals"]
   },
   "include": ["src", "test"]
 }

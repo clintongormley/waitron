@@ -18,13 +18,10 @@
   "dependencies": {
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.23.0"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.0.0",
-    "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"

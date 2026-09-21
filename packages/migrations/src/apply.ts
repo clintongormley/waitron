@@ -1,64 +1,105 @@
 import { readFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { Client } from "pg";
-import { createPostgresDb, runMigrations, type Database, type MigrationOptions } from "@waitron/db";
+import { DatabaseSync } from "node:sqlite";
+import {
+  openVenueDatabase,
+  runMigrations,
+  type Database,
+  type MigrationOptions,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { appliedSchemaVersion } from "./schema-version.js";
 import "./errors.js";
 
 /**
- * A fixed key, not `hashtext` of a string: an advisory lock is only a lock if every host computes
- * the same number, and a hash function's stability across Postgres versions is not something to
- * lean on for that.
+ * The file two migrating processes queue on, beside the two database files it protects.
+ *
+ * **Why a lock is still needed, measured rather than assumed.** Two Node processes were run
+ * against one venue directory, each opening it with `openVenueDatabase` and applying the first
+ * three manifest sets, released from a shared start instant. Fifteen races on a virgin directory,
+ * 2026-09-21, Node v26.7.0: thirteen ended with both processes reporting success and exactly one
+ * journal row per set, and two ended with one process throwing "table `locations` already exists"
+ * / "table `content_languages` already exists" — errcode 1, raised inside drizzle's own migration
+ * transaction. SQLite's file locking and `packages/store`'s 5s busy timeout serialise the WRITES,
+ * and that is not enough: drizzle reads the journal to decide what is pending
+ * (`drizzle-orm@0.45.2/sqlite-core/dialect.js:654`) OUTSIDE the transaction it then writes in, so
+ * the loser plans from a snapshot the winner is about to invalidate, waits out the write lock, and
+ * replays what the winner already applied. Forty races through this function WITH the lock, same
+ * day, same machine: no failure and no extra journal row.
+ *
+ * **The lock is taken before the venue file is opened**, because two migrators collide there too:
+ * in an earlier run of the same probe, which did not yet retry the open, 3 of 8 races ended with
+ * one process refused `database is locked` (errcode 5) by `openVenueStore`'s
+ * `pragma journal_mode = wal` — before any statement of ours had run at all.
+ *
+ * **Why a SQLite file rather than an exclusively-created lock file.** Measured the same day: a
+ * second PROCESS is refused `begin immediate` with errcode 5 while this one holds it, and acquires
+ * it once released — a waiter given a 10s busy timeout acquired 697ms into a 600ms hold. A holder
+ * killed with SIGKILL releases it, and so does closing the connection with the transaction still
+ * open. An `open(..., "wx")` lock file would survive the crash and wedge every later boot.
  */
-const MIGRATION_LOCK_KEY = 8_474_103;
+const LOCK_FILE = "migrations.lock";
 
 /**
- * Applies every set in order, serialised across processes.
+ * How long a second migrator waits before SQLite refuses it with `database is locked`.
  *
- * The lock is held on a DEDICATED `pg.Client`, separate from the connection the migrations
- * themselves run over: `pg_advisory_lock` is session-scoped, and a pool may hand two statements to
- * two different backends — which would take the lock on one connection and release it on another,
- * locking nothing and leaking a lock. `pg_advisory_xact_lock` is not available either, because
- * Drizzle's migrator opens its own transactions and cannot run inside ours.
+ * `pg_advisory_lock` waited forever; a busy timeout is the nearest this engine offers, so the
+ * number is a bound on the longest migration a box can run rather than a preference. Two minutes
+ * against the 40ms or so three sets took against a virgin directory when the race above was
+ * measured — the full manifest has not been timed, so the headroom is the point, not the ratio.
+ */
+const LOCK_WAIT_MS = 120_000;
+
+/**
+ * Applies every set in order to the venue file under `directory`.
  *
- * `connectionString` is whatever the caller passes — for `apps/server`, that's
- * `config.migrationsDatabaseUrl` (`apps/server/src/config.ts`), not necessarily the pool the rest of
- * the host runs its duties over: a deployment may run migrations under a privileged role while
- * `DATABASE_URL` stays the least-privileged one spec §10 requires, and those can be two different
- * roles entirely. That is why this function opens and closes its OWN `Database` here
- * rather than accepting the caller's long-lived pool as a parameter — migrating over a caller-
- * supplied pool opened from a DIFFERENT connection string would migrate under the wrong role
- * whenever the two happen to differ, silently correct only when they happen to be equal. Both the
- * lock and the migration work run over the SAME connection string, which is the one property that
- * actually matters: the lock's session-scoping exists to serialise whoever is about to run the
- * migrations, not whoever happens to hold the long-lived pool.
+ * **A directory, not a connection string.** The engine is a file now, so there is no role to
+ * migrate under and no second connection string to keep in step with the one the host serves
+ * requests over — both of which the PostgreSQL body existed to reconcile.
+ *
+ * **Every set goes to the VENUE handle, and the node file stays empty**, for the reason
+ * `packages/db/src/testing/venue-db.ts` states on `useVenueDb`.
+ *
+ * Nothing here installs the append-only triggers. That is a separate decision about a fiscal
+ * invariant (CLAUDE.md §5) and this function is only the seam it would sit behind.
  */
 export async function applyMigrations(
-  connectionString: string,
+  directory: string,
   options: readonly MigrationOptions[],
 ): Promise<void> {
-  const lock = new Client({ connectionString });
-  await lock.connect();
+  // Before the venue file is opened, not after: two migrators also collide on the OPEN, where
+  // `pragma journal_mode = wal` is refused `database is locked` (errcode 5).
+  await mkdir(directory, { recursive: true });
+  const lock = new DatabaseSync(join(directory, LOCK_FILE));
   try {
-    await lock.query("select pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
-    try {
-      const migrationDb = await createPostgresDb(connectionString);
-      try {
-        // Ordering is the runtime's responsibility and nothing enforces it — core carries `tenants`,
-        // which every other set has a foreign key to. The manifest states that order out loud.
-        for (const set of options) {
-          await runMigrations(migrationDb, set);
-          await assertSetApplied(migrationDb, set);
-        }
-      } finally {
-        await migrationDb.close();
-      }
-    } finally {
-      await lock.query("select pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+    // The timeout is set FIRST, because a statement issued before it has none and fails at once.
+    lock.exec(`pragma busy_timeout = ${LOCK_WAIT_MS}`);
+    lock.exec("begin immediate");
+    await migrateEverySet(directory, options);
+  } finally {
+    // No commit: nothing was written, and closing releases the lock. Measured on Node v26.7.0 —
+    // with the transaction left open, `close()` frees it for the next acquirer, and so does
+    // SIGKILL of the holding process. That is the whole reason the lock is a SQLite file rather
+    // than an exclusively-created lock FILE, which a crash would leave behind forever.
+    lock.close();
+  }
+}
+
+async function migrateEverySet(
+  directory: string,
+  options: readonly MigrationOptions[],
+): Promise<void> {
+  const store = await openVenueDatabase(directory);
+  try {
+    // Ordering is the runtime's responsibility and nothing enforces it — core carries `tenants`,
+    // which every other set has a foreign key to. The manifest states that order out loud.
+    for (const set of options) {
+      await runMigrations(store.venue, set);
+      await assertSetApplied(store.venue, set);
     }
   } finally {
-    await lock.end();
+    await store.close();
   }
 }
 
@@ -66,7 +107,8 @@ export async function applyMigrations(
  * Refuses a set that reported success with fewer migrations applied than its folder ships.
  *
  * Drizzle decides what to apply from `max(created_at)` alone — never a journal index
- * (`drizzle-orm@0.45.2/pg-core/dialect.js:56-62`) — so a migration whose `when` sits below a value
+ * (`drizzle-orm@0.45.2/sqlite-core/dialect.js:654-660`, the same arithmetic the PostgreSQL
+ * dialect carried) — so a migration whose `when` sits below a value
  * the database already recorded is skipped, and nothing is raised. Counting the journal is the only
  * way to notice; a host that boots on a half-migrated schema fails later, somewhere unrelated.
  *
