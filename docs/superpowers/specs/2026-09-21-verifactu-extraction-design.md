@@ -198,6 +198,11 @@ one-call "build an alta record from a plain input" and a "submit these records" 
 
 - **Additive, never a rewrite.** It only *composes* existing, tested functions; it introduces no new
   specification logic, and every granular export stays public. No behavioural change (§8).
+- **Same package, zero new dependency (confirmed 2026-09-21).** Because it only composes existing
+  exports it adds no runtime dependency, so it ships inside `@waitron/verifactu` itself — a `./facade`
+  subpath keeps the granular kernel as the default surface, though a root export is equally fine since
+  the choice costs nothing. This is unlike the QR renderer (§2.10), whose only reason to be separate
+  was a dependency it turns out not to need.
 - **Covered by the library's own tests.** Waitron will keep consuming the granular kernel, not the
   facade, so the facade would otherwise be untested surface. It must carry its own tests to hold the
   coverage/mutation bars.
@@ -222,35 +227,27 @@ printers often render the payload through a native QR command with no image at a
 addition, the library can also render the payload into an actual image so a simple consumer gets one in
 one call.
 
-- **Kept off the core entry.** It is exposed as a separate export subpath (e.g.
-  `@waitron/verifactu/qr-image`), so the root `.` entry keeps its single runtime dependency
-  (`fast-xml-parser`). The QR-rendering library is brought as an **optional/peer dependency** behind
-  that subpath — a user who renders themselves, or via a printer command, never has to install it. The
-  exact arrangement (regular vs optional-peer dependency) is settled in the plan; the goal is that the
-  base install stays dependency-light.
-- **Renders at AEAT's error-correction level M**, defaulting to an **SVG string** (print- and
-  web-friendly, no canvas or native dependency); optionally also expose the raw module matrix for
-  callers doing custom or thermal rendering.
-- **Correctness is encode-correctness, not print-correctness.** The one fiscally-relevant property is
-  that the image encodes the exact payload at a scannable level, so a **render→decode round-trip test**
-  asserts the rendered QR decodes back to the exact `buildQrPayload` string (the library carries it,
-  under the coverage bars). Physical print size (AEAT's millimetre range) and the quiet-zone margin
-  stay the caller's responsibility — documented, not enforced, because the library cannot control
-  millimetres.
-- **Library choice is a spike item** (criteria: permissive licence, SVG and matrix output, level M, no
-  native/canvas requirement). `qrcode` — already used in `apps/server` — is the natural candidate.
+- **Decision (2026-09-21, refined — supersedes the "separate package/subpath" framing below):
+  document it, do not ship it.** Rendering the payload is about five lines —
+  `qrcode-generator(0, "M").addData(buildQrPayload(record, env))`, then `.make()` and
+  `.createSvgTag()` — and the only fiscally-meaningful choice is the error-correction level (**M**).
+  That does not earn a package, a subpath, or an optional/peer dependency; it earns a **README recipe**.
+  `buildQrPayload` (the AEAT verification-URL logic) stays in core; image rendering is the caller's
+  one-liner, exactly as `apps/till/src/qr.ts` already does it. So §2.10 becomes documentation, not
+  shipped code, and the core keeps its single runtime dependency with nothing optional to reason about.
+- **Recommended encoder in the recipe: `qrcode-generator`.** It is isomorphic (Node and browser), has
+  **zero runtime dependencies**, and emits both an SVG string and the raw module matrix (via
+  `getModuleCount()`/`isDark()`) for callers doing custom or thermal rendering. Preferred over
+  `qrcode`, whose tree drags `yargs` (a CLI framework), `pngjs` and `dijkstrajs` — none of which a
+  renderer needs. Measured 2026-09-21: `qrcode@1.5.4` declares those three dependencies;
+  `qrcode-generator@2.0.4` declares none.
+- **The one property the recipe must state:** the rendered QR must decode back to the exact
+  `buildQrPayload` string at a scannable error-correction level, so the README example carries a
+  render→decode check. Physical print size (AEAT's millimetre range) and the quiet-zone margin stay the
+  caller's responsibility — documented, not enforced, because a library cannot control millimetres.
 
-> **Dependency-weight note (2026-09-21):** `qrcode@1.5.4` (135 KB) pulls in `yargs` (a full CLI-arg
-> framework), `pngjs` and `dijkstrajs` transitively — `yargs` only because `qrcode` ships a CLI bin we
-> would never use. That reinforces the "keep it off the core `.` entry" decision above, and adds a
-> criterion to the spike: prefer a renderer with a lean transitive tree (e.g. `qrcode-generator`, which
-> emits SVG without a CLI dependency), or bring `qrcode` strictly as an **optional/peer** dependency
-> behind the `./qr-image` subpath. Either way the base install stays single-dependency. This is a
-> **separate optional package/subpath, like the facade (§2.9)** — the owner confirmed that shape on
-> 2026-09-21.
-
-Like the facade (§2.9), this is additive ergonomics off the critical path, and can land in `0.1.0` or a
-fast-follow.
+Like the facade (§2.9), this is additive ergonomics off the critical path — but it lands as
+documentation, not shipped code.
 
 ### 2.11 NIF/NIE/CIF check-digit validation (a small pure rule)
 

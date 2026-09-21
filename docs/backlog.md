@@ -3261,10 +3261,23 @@ still names the in-repo `packages/verifactu` when it states the provenance rules
 `@waitron/verifactu`; first-aeat-contact is a dated historical event and can stay as written (it was
 true then) — decide per file. Lightweight docs change, no PR ceremony. Separately, the library's own
 follow-ups live on the OSS repo, not here: the differential-test spike against `inoguerols/verifactu`,
-the convenience facade, the optional QR-image package (the `qrcode` renderer drags `yargs` in, so it
-stays a separate optional subpath), and porting NIF/NIE/CIF check-digit validation into `validate()`
-(our `validate()` only length-checks today) — spec §2.8–2.11 of
-`docs/superpowers/specs/2026-09-21-verifactu-extraction-design.md`.
+the convenience facade, a documented QR-image recipe (rendering the payload is ~five lines of
+`qrcode-generator`, so it ships as a README recipe, not a package), and porting NIF/NIE/CIF
+check-digit validation into `validate()` (our `validate()` only length-checks today) — spec §2.8–2.11
+of `docs/superpowers/specs/2026-09-21-verifactu-extraction-design.md`.
+
+**Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
+`qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses
+`qrcode-generator` (`qr.ts`). The server's three call sites use only `.create()` (the module matrix)
+and `.toString({ type: "svg" })` — no PNG — so `qrcode`'s `pngjs` is never exercised and its `yargs`
+(a full CLI-arg framework, pulled only because `qrcode` ships a CLI bin) is pure dead weight in the
+dependency tree. `qrcode-generator` is isomorphic, **zero-dependency**, and covers both the matrix
+(`getModuleCount()`/`isDark()`) and the SVG case (the till already renders SVG at level M with it).
+Switch the three server sites over and drop `qrcode`. **The gate before landing:**
+`print-job-preview.ts` reconstructs a QR from stored raw `latin1` bytes through `qrcode`'s byte-mode
+segment API; `qrcode-generator` has a `'Byte'` mode, but this path must produce a byte-identical,
+still-scannable QR — these are fiscal receipt QRs AEAT's own app must verify — so it needs a
+render→decode check and a real scan, not just a green typecheck.
 
 **A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED on #485
 (2026-09-21).** `apps/server/src/purchasing-api.ts` took each amount through `requireString`, which
