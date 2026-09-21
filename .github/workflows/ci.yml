@@ -675,10 +675,12 @@ jobs:
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
   # contention artifact a runner it has to itself does not have — and each shard has a runner to itself.
   #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy: apps/server's global-setup
-  # (src/testing/global-setup.ts) boots a shared Postgres container its real-PG suites clone from via
-  # useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail loudly instead of skipping those
-  # suites. `test-server-merge` below is the coverage gate.
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, so a runner without Docker
+  # fails loudly instead of skipping the suites that need a container. What still needs one here is
+  # three test files that start a container themselves — src/instance-bootstrap.pg.test.ts,
+  # scripts/dev-onboard.test.ts and scripts/dev-setup.test.ts (grepped on this tree for the container
+  # helpers). The storage switch is removing that need; whoever removes the last one removes this too.
+  # `test-server-merge` below is the coverage gate.
   test-server:
     timeout-minutes: 15
     needs: changes

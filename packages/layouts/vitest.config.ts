@@ -5,39 +5,24 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // globalSetup boots ONE shared Postgres container and migrates the `core_identity` template each
-    // real-PG suite (canvas-store.pg.test.ts, device-profile-store.pg.test.ts, theme-store.test.ts,
-    // receipt-store.test.ts) clones (~26ms each) instead of each file booting and migrating its own
-    // (~1.5s). See
-    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails the
-    // whole package (that file's header explains the broadening).
-    globalSetup: ["./src/testing/global-setup.ts"],
-    // This package has NO PGlite suites — its four DB-backed files each clone the shared container's migrated
-    // `core_identity` template in a ~26ms beforeAll (the container boot / image pull moved to
-    // globalSetup, which vitest does NOT bound by hookTimeout). So hookTimeout is just a harmless
-    // ceiling far above that clone, not a budget for any WASM boot; errors.test.ts and validate.test.ts
-    // are hermetic unit tests. testTimeout covers the several DB round-trips a single `it` makes, well
-    // under 30s.
+    // A hook given its OWN timeout overrides `hookTimeout` rather than narrowing it, so this bounds
+    // only hooks written without one — `useVenueDb`'s afterEach reset and afterAll close
+    // (`packages/db/src/testing/venue-db.ts:176` and `:183`) and any untimed hook a test file writes.
+    // It does not bound that helper's setup, which carries its own 60s budget (`venue-db.ts:174`).
+    // testTimeout covers the several database round-trips a single `it` makes; errors.test.ts and
+    // validate.test.ts are hermetic unit tests that need neither bound.
     testTimeout: 30_000,
     hookTimeout: 60_000,
-    // NO `maxWorkers`: this package stays MULTI-FORK, deliberately. It is not held to `maxWorkers: 1` for
-    // the @vitest/coverage-v8 branch-merge artifact (unlike scheduler/credentials/workforce-es):
-    // layouts had no `maxWorkers` before this branch, so it has been multi-fork on `main` all along
-    // and passes the unfiltered `main` merge's `pnpm -r` coverage that way — this batch changes where
-    // the DB comes from, not how coverage merges across forks, so it neither introduces nor worsens the
-    // artifact (an isolated `test:coverage` here proves nothing about the concurrent case, per
-    // CLAUDE.md §2; the pre-existing main history is the evidence). It needs no `maxWorkers` connection
-    // cap either: the few real-PG files here each open a small number of connections to their own
-    // cloned template, far under the shared cluster's ~100-connection budget.
+    // NO `maxWorkers`: this package runs MULTI-FORK deliberately. It is not pinned to one worker for
+    // the @vitest/coverage-v8 cross-fork branch-merge artifact the way packages/scheduler and
+    // packages/credentials are — layouts has been multi-fork all along.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
-      // reason packages/catalogue's own vitest.config.ts excludes its identical barrel. src/testing/**
-      // is the shared-container globalSetup — test-only plumbing that runs before every worker and
-      // reads 0%, so it must not be measured (mirrors the other rollout packages' exclusion).
-      exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/testing/**"],
+      // reason packages/catalogue's own vitest.config.ts excludes its identical barrel.
+      exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },
