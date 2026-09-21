@@ -61,6 +61,60 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  it("a line with picks, an answer and the Modifiers control has no violations", async () => {
+    const bacon = {
+      productId: "p-bacon",
+      name: "Bacon",
+      customerName: { es: "Bacon carta" },
+      kitchenName: "Bacon KDS",
+      price: "1.50",
+      vatClass: "general" as const,
+      maxQuantity: 3,
+      preselected: false,
+      addAllergens: { milk: { presence: "contains" as const } },
+      suitableFor: ["halal"],
+    };
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa carta" },
+      unitPrice: "10.00",
+      allergens: { gluten: { presence: "contains" } },
+      offeredModifiers: [
+        {
+          kind: "extras",
+          id: "list-extras",
+          name: "Extras",
+          customerName: { es: "Extras carta" },
+          kitchenName: "Extras KDS",
+          minPicks: 0,
+          maxPicks: null,
+          items: [bacon],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", {
+      extras: [
+        { listId: "list-extras", productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 2 },
+      ],
+      options: [{ listId: "list-cut", labelId: "label-fino" }],
+      optionSnapshots: [
+        {
+          listName: { es: "Cortar" },
+          listCustomerName: { es: "Cortar carta" },
+          listKitchenName: "Cortar KDS",
+          labelName: { es: "Fino" },
+          labelCustomerName: { es: "Fino carta" },
+          labelKitchenName: "Fino KDS",
+        },
+      ],
+    });
+    const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
+
   it("a basket with diet & contains badges (dietary-classification, Task 7) has no violations", async () => {
     const store = new WorkingOrderStore();
     const salad: TillProduct = {
