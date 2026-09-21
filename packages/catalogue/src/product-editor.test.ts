@@ -1,6 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createCatalogue, listProducts } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -66,8 +66,11 @@ it("reads a product with no unit as unitId null", async () => {
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, input, "en"),
   );
+  // `execute` is synchronous on this engine and hands back rows rather than a promise of them
+  // (`packages/store/src/node-sqlite-adapter.ts`), so the value is wrapped for a caller whose
+  // parameter is typed as a promise.
   await withTransaction(fx.db, (tx) =>
-    tx.execute(sql`delete from product_units where product_id = ${saved.id}`),
+    Promise.resolve(tx.execute(sql`delete from product_units where product_id = ${saved.id}`)),
   );
   const value = await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id));
   expect(value.unitId).toBeNull();
@@ -144,10 +147,16 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
   const staleRecipe = { allergens: { milk: { presence: "contains" } }, source: "old" };
   const staleDiet = { origins: ["dairy"], pending: false };
   await withTransaction(fx.db, async (tx) => {
-    await tx.execute(sql`update products set
-      recipe_derivation = ${JSON.stringify(staleRecipe)}::jsonb,
-      diet_derivation = ${JSON.stringify(staleDiet)}::jsonb
-      where id = ${saved.id}`);
+    // Through the table on both sides: a `json()` column stores JSON TEXT, so the write needs the
+    // column's own mapping in place of the `::jsonb` casts, and the read needs it to hand back a
+    // parsed value rather than the stored string.
+    await tx
+      .update(products)
+      .set({
+        recipeDerivation: staleRecipe as never,
+        dietDerivation: staleDiet as never,
+      })
+      .where(eq(products.id, saved.id));
     await saveProductEditor(
       tx,
       saved.id,
@@ -156,13 +165,15 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
       "en",
     );
   });
-  const rows = await fx.db.execute<{
-    recipe_derivation: unknown;
-    diet_derivation: unknown;
-    dietary_declarations: string[];
-  }>(sql`select recipe_derivation, diet_derivation, dietary_declarations from products
-    where id = ${saved.id}`);
-  expect(rows.rows[0]).toEqual({
+  const rows = await fx.db
+    .select({
+      recipe_derivation: products.recipeDerivation,
+      diet_derivation: products.dietDerivation,
+      dietary_declarations: products.dietaryDeclarations,
+    })
+    .from(products)
+    .where(eq(products.id, saved.id));
+  expect(rows[0]).toEqual({
     recipe_derivation: staleRecipe,
     diet_derivation: staleDiet,
     dietary_declarations: ["halal", "kosher"],

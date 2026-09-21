@@ -385,8 +385,8 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
   });
 });
 
-// Pure arithmetic — no DB or concurrency involved, so these are plain unit tests (no
-// PGlite/Testcontainers): `priceLockedLines` reprices from the STORED gross unit exactly as
+// Pure arithmetic — no database involved, so these are plain unit tests: `priceLockedLines`
+// reprices from the STORED gross unit exactly as
 // `priceBasket` prices from the live catalogue, and both funnel through the same `priceRows`
 // core.
 describe("priceLockedLines — files a locked line to the walk-up VAT breakdown", () => {

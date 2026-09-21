@@ -11,19 +11,22 @@ import { contentLanguages } from "./schema/menu.js";
 import "./errors.js";
 
 /**
- * Validate several translated maps against the venue's content languages in one pass, taking the
- * advisory lock and reading the configuration ONCE however many maps are handed in — the lock is
- * what makes every later read redundant, because the configuration cannot change while it is held.
- * Returns the INDEX of the first map with no text in the default language, with that language, or
- * null when every map is satisfied — so a caller with several fields can name which one is missing.
- * A key that is not a language code, or a value that is not text, is still refused outright.
+ * Validate several translated maps against the venue's content languages in one pass, reading the
+ * configuration ONCE however many maps are handed in. Returns the INDEX of the first map with no
+ * text in the default language, with that language, or null when every map is satisfied — so a
+ * caller with several fields can name which one is missing. A key that is not a language code, or a
+ * value that is not text, is still refused outright.
+ *
+ * The single read is safe because nothing else can write the configuration while this transaction
+ * runs: `withTransaction` (`packages/db/src/tenancy.ts`) opens its body inside the venue file's
+ * write queue, which admits one write transaction at a time
+ * (`packages/store/src/write-queue.ts`). That is what an advisory lock taken here used to arrange.
  */
 export async function findContentTranslationGap(
   tx: Transaction,
   maps: readonly Readonly<Record<string, string>>[],
   fallbackLanguage: string,
 ): Promise<{ index: number; language: string } | null> {
-  await lockContentLanguages(tx);
   for (const map of maps)
     for (const [language, value] of Object.entries(map)) {
       contentLanguageCode(language);
@@ -46,11 +49,6 @@ export async function validateContentTranslations(
   if (gap) throw new AppError("content.translation_required", { language: gap.language });
 }
 
-/** Configuration edits and content validation serialize so a new default cannot invalidate a save. */
-async function lockContentLanguages(tx: Transaction): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"content-languages"}, 0))`);
-}
-
 export async function listContentTranslationGaps(
   tx: Transaction,
   language: string,
@@ -64,27 +62,34 @@ export async function listContentTranslationGaps(
   // group because it holds no name at all: its columns are id, list_id, product_id, sort,
   // max_quantity, preselected and price (drizzle/0000_catalogue_baseline.sql), so there is no map
   // here for this report to read.
+  // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
+  // drizzle column mapping runs over the result, and `json()` columns are plain `text` here
+  // (`packages/db/src/schema/columns.ts`). It is parsed below rather than compared as text.
   const result = await tx.execute<{
     kind: string;
     id: string;
-    translations: Record<string, string>;
+    translations: string;
   }>(sql`
     select 'product' as kind, id, customer_name as translations from products
-      where customer_name is not null and customer_name <> '{}'::jsonb
+      where customer_name is not null and customer_name <> '{}'
     union all select 'category' as kind, id, name as translations from categories
     union all select 'unit' as kind, id, name as translations from units
     union all select 'variant' as kind, id, customer_name as translations from product_variants
-      where customer_name is not null and customer_name <> '{}'::jsonb
+      where customer_name is not null and customer_name <> '{}'
     union all select 'section' as kind, id, name as translations from menu_sections
     union all select 'option_list' as kind, id, customer_name as translations from option_lists
-      where customer_name is not null and customer_name <> '{}'::jsonb
+      where customer_name is not null and customer_name <> '{}'
     union all select 'option_label' as kind, id, customer_name as translations from option_labels
-      where customer_name is not null and customer_name <> '{}'::jsonb
+      where customer_name is not null and customer_name <> '{}'
     union all select 'extra_list' as kind, id, customer_name as translations from extra_lists
-      where customer_name is not null and customer_name <> '{}'::jsonb
+      where customer_name is not null and customer_name <> '{}'
   `);
   return result.rows
-    .filter((row) => resolveContentText(row.translations, code, code) === "")
+    .filter(
+      (row) =>
+        resolveContentText(JSON.parse(row.translations) as Record<string, string>, code, code) ===
+        "",
+    )
     .map(({ kind, id }) => ({ kind, id }));
 }
 
@@ -125,7 +130,6 @@ export async function writeContentLanguages(
   ) {
     throw new AppError("content.languages_invalid", {});
   }
-  await lockContentLanguages(tx);
   const previous = await readContentLanguages(tx, fallbackLanguage);
   if (previous.defaultLanguage !== defaultLanguage) {
     const gaps = [

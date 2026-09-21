@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  asAppUser,
   captureError,
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
-  pgErrorCode,
+  isPgError,
+  newId,
   pgErrorMessage,
+  refusalOn,
+  RESTRICT_VIOLATION,
+  UNIQUE_VIOLATION,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -25,16 +29,14 @@ import {
 } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 
-// An extras list names products, and nothing here turns on who connected or on two writers racing,
-// so PGlite is the lighter target that still runs the real migrations — including the grants
-// walkthrough at the foot of this file, which assumes app_user with `asAppUser` and is enforced from
-// there (CLAUDE.md §4). What needs a container is the concurrent save, and that lives in
-// extras.pg.test.ts.
+// One SQLite file with the real migrations applied. The grants walkthrough this file used to end
+// with is gone with the grants themselves, and the concurrent-save cases live in
+// extras.concurrency.test.ts.
 // Only the tenant row is seeded outside each test's own setup: with no `content_languages` row,
 // `readContentLanguages` falls back to the language passed in
 // (packages/catalogue/src/content-languages.ts), and `useVenueDb` empties every data table after
-// each test on its own (packages/db/src/testing/lifecycle.ts:148-151), which is why the three
-// products below are re-made per test.
+// each test on its own (packages/db/src/testing/venue-db.ts), which is why the three products
+// below are re-made per test.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -142,9 +144,13 @@ describe("extra list CRUD", () => {
     await fx.db.execute(sql`
       insert into extra_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
+    // Each row carries its own `id`: the column's value comes from the table's `$defaultFn`, which
+    // drizzle runs per insert and a raw statement never reaches (`NOT NULL constraint failed:
+    // extra_list_items.id` without it). The list rows above already name theirs.
     await fx.db.execute(sql`
-      insert into extra_list_items (list_id, product_id, sort) values
-        (${second}, ${breads.focaccia}, 1), (${second}, ${breads.sourdough}, 0)`);
+      insert into extra_list_items (id, list_id, product_id, sort) values
+        (${newId()}, ${second}, ${breads.focaccia}, 1),
+        (${newId()}, ${second}, ${breads.sourdough}, 0)`);
 
     const lists = await run((tx) => listExtraLists(tx));
 
@@ -289,7 +295,7 @@ describe("extra list CRUD", () => {
     expect(updated.items[1]!.price).toBe("0.00");
     expect(updated.items[1]!.id).not.toBe(dropped.id);
     const left = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from extra_list_items where id = ${dropped.id}`,
+      sql`select count(*) as count from extra_list_items where id = ${dropped.id}`,
     );
     expect(left.rows[0]!.count).toBe(0);
   });
@@ -349,14 +355,14 @@ describe("extra list CRUD", () => {
   it("deletes the list's items with it", async () => {
     const created = await run((tx) => createExtraList(tx, breadList(), "en"));
     const before = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from extra_list_items where list_id = ${created.id}`,
+      sql`select count(*) as count from extra_list_items where list_id = ${created.id}`,
     );
     expect(before.rows[0]!.count).toBe(3); // the delete below has something to clear
 
     await run((tx) => deleteExtraList(tx, created.id));
 
     const after = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from extra_list_items where list_id = ${created.id}`,
+      sql`select count(*) as count from extra_list_items where list_id = ${created.id}`,
     );
     expect(after.rows[0]!.count).toBe(0);
     expect(await run((tx) => listExtraLists(tx))).toEqual([]);
@@ -545,14 +551,20 @@ describe("what the database refuses under an extras list", () => {
     // stopped being ON DELETE RESTRICT, or a different row refusing first, fails here rather than
     // passing.
     const error = await captureError(() =>
-      fx.db.execute(sql`delete from products where id = ${breads.rye}`),
+      Promise.resolve(fx.db.execute(sql`delete from products where id = ${breads.rye}`)),
     );
 
-    // `23001 restrict_violation`, not the `23503 foreign_key_violation` a NO ACTION key raises:
-    // measured here, PostgreSQL uses the RESTRICT code for a RESTRICT key. Printed by this very
-    // test before the expectation was corrected — it read `expected '23001' to be '23503'`.
-    expect(pgErrorCode(error)).toBe("23001");
-    expect(pgErrorMessage(error)).toContain("extra_list_items_product_fk");
+    // `RESTRICT_VIOLATION` (1811), not `FOREIGN_KEY_VIOLATION` (787): SQLite implements
+    // `ON DELETE RESTRICT` with an internal trigger, so a RESTRICT refusal arrives under the
+    // TRIGGER reason and is a different class from a write naming a missing parent
+    // (`packages/db/src/sql-state.ts`). That is the same distinction PostgreSQL drew with `23001`
+    // against `23503`.
+    //
+    // The constraint NAME half of this assertion is gone with no replacement: SQLite's whole
+    // message here is `FOREIGN KEY constraint failed`, naming neither the key nor the column
+    // (`packages/db/src/constraint-target.ts`). The class is what is left, and it still separates
+    // a RESTRICT key from a NO ACTION one, which is what this case is about.
+    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
   });
 
   it("refuses an item priced below zero", async () => {
@@ -565,13 +577,16 @@ describe("what the database refuses under an extras list", () => {
     // shape `product_variants.unit_price` and `menu_item_variants.unit_price` already carry
     // (schema/variants.ts). An item's price becomes a sale line and so reaches a fiscal record.
     const error = await captureError(() =>
-      fx.db.execute(
-        sql`insert into extra_list_items (list_id, product_id, price)
-            values (${created.id}, ${breads.sourdough}, -100)`,
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into extra_list_items (id, list_id, product_id, price)
+            values (${newId()}, ${created.id}, ${breads.sourdough}, -100)`,
+        ),
       ),
     );
 
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    // A CHECK is the one class SQLite names, so this half is unchanged.
     expect(pgErrorMessage(error)).toContain("extra_list_items_price_ck");
   });
 
@@ -582,82 +597,21 @@ describe("what the database refuses under an extras list", () => {
     // index is what enforces the same rule in the database, reached here by a direct insert that
     // goes through no contract at all.
     const error = await captureError(() =>
-      fx.db.execute(
-        sql`insert into extra_list_items (list_id, product_id) values (${created.id}, ${breads.rye})`,
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into extra_list_items (id, list_id, product_id) values (${newId()}, ${created.id}, ${breads.rye})`,
+        ),
       ),
     );
 
-    expect(pgErrorCode(error)).toBe("23505"); // unique_violation
-    expect(pgErrorMessage(error)).toContain("extra_list_items_list_product_uq");
-  });
-});
-
-/**
- * The walkthrough that answers to the extra_lists grants in drizzle/0001_catalogue_baseline_sql.sql.
- * Every test above runs on
- * PGlite's superuser connection, which is handed every privilege and so exercises no grant at all;
- * `asAppUser` makes the session assume the application role and PGlite enforces the two tables'
- * grants from there — a container adds nothing (CLAUDE.md §4).
- *
- * Seen red rather than assumed: with `DELETE` removed from the grant in that migration, this
- * walkthrough failed with `42501 permission denied for table extra_list_items`; with the grant put
- * back it passed again.
- */
-describe("extra list CRUD as the non-superuser application role", () => {
-  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
-    withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
-
-  it("creates, reads, edits and deletes a list under the application role's grants", async () => {
-    await app(async (tx) => {
-      const role = await tx.execute<{ role: string; superuser: boolean }>(
-        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
-      );
-      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-
-      const created = await createExtraList(tx, breadList(), "en");
-      expect(created.name).toBe("Bread");
-      expect(created.customerName).toEqual({ en: "Choose your bread" });
-      expect(created.items.map((item) => item.productId)).toEqual([
-        breads.focaccia,
-        breads.sourdough,
-        breads.rye,
-      ]);
-      expect(await getExtraList(tx, created.id)).toEqual(created);
-
-      // What reaches `extra_list_items`' own DELETE grant is a SAVE, not the list delete:
-      // `writeItems` clears every one of the list's items before inserting the body's, on a create
-      // as well as an update, so the statement runs even when it matches nothing. Measured, with
-      // `DELETE` removed from the grant in 0005_extra_lists_grants.sql: this test failed inside
-      // `createExtraList` at
-      // `delete from "extra_list_items" where "extra_list_items"."list_id" = $1`, with
-      // `42501 permission denied for table extra_list_items`.
-      const updated = await updateExtraList(
-        tx,
-        created.id,
-        {
-          name: "Bread basket",
-          customerName: { en: "Pick a bread" },
-          kitchenName: "BSK",
-          minPicks: 1,
-          maxPicks: 2,
-          items: [{ id: created.items[0]!.id, productId: breads.focaccia, price: "0.50" }],
-        },
-        "en",
-      );
-      expect(updated.name).toBe("Bread basket");
-      expect(updated.customerName).toEqual({ en: "Pick a bread" });
-      expect(updated.kitchenName).toBe("BSK");
-      expect([updated.minPicks, updated.maxPicks]).toEqual([1, 2]);
-      expect(updated.items.map((item) => [item.productId, item.price])).toEqual([
-        [breads.focaccia, "0.50"],
-      ]);
-
-      await deleteExtraList(tx, created.id);
-      expect(await listExtraLists(tx)).toEqual([]);
-    });
+    // SQLite names the KEY that collided rather than the index, so `refusalOn` asks the question
+    // the index name used to answer (`packages/db/src/constraint-target.ts`).
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "extra_list_items",
+        columns: ["list_id", "product_id"],
+      }),
+    ).toBe(true);
   });
 });
 

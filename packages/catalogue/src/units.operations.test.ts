@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal, decimalToThousandths } from "@waitron/shared";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -19,14 +25,27 @@ import { assertQuantityPrecision } from "./units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
+/**
+ * Both rows go through their drizzle tables: `catalogues.id` and `products.id` come from each
+ * table's own `$defaultFn` rather than from a SQL default, so a raw insert naming the other columns
+ * is refused `NOT NULL constraint failed: catalogues.id`.
+ */
 async function product(tx: Transaction, name: string) {
-  const menu = await tx.execute<{ id: string }>(sql`
-    insert into catalogues (name) values ('Menu') returning id`);
-  return (
-    await tx.execute<{ id: string }>(sql`
-      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
-      returning id`)
-  ).rows[0]!.id;
+  const [menu] = await tx
+    .insert(catalogues)
+    .values({ name: "Menu" })
+    .returning({ id: catalogues.id });
+  const [row] = await tx
+    .insert(products)
+    .values({
+      catalogueId: menu!.id,
+      name,
+      pricingUnit: "each",
+      unitPrice: 1,
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  return row!.id;
 }
 
 describe("unit operations", () => {
@@ -196,6 +215,19 @@ describe("unit operations", () => {
     // agree, which is why the storage change did not move this boundary. The SQL cast stays as the
     // control for the half it used to be: both readings round 1.2345 to three places the same way,
     // half away from zero.
+    //
+    // **LEFT RED BY THE STORAGE SWITCH, deliberately.** `1.2345::numeric(12,3)::text` is not SQL
+    // this engine has, and the control does not translate: SQLite has no exact decimal type, so
+    // the nearest readings go through a double. Measured on node:sqlite (Node v26.7.0):
+    // `round(1.2345, 3)` is 1.234 and `printf('%.3f', 1.2345)` is "1.234", where PostgreSQL's
+    // numeric gave 1.235 and `decimalToThousandths` still gives 1235. Control in the other
+    // direction, so this is float representation and not "SQLite always rounds down":
+    // `round(1.2355, 3)` is 1.236. So the two readings this line exists to compare no longer AGREE,
+    // and rewriting the expected value would assert the opposite of what the line is for. The
+    // product path reaches no SQL rounding at all now — the column is an integer count of
+    // thousandths written by `decimalToThousandths` — so whether this control keeps a home is a
+    // decision, not a translation. The two assertions below are the case's own subject and are
+    // untouched.
     const rounded = await suite.db.execute<{ value: string }>(
       sql`select 1.2345::numeric(12,3)::text as value`,
     );

@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
+import { catalogues, locationCatalogues } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { COUNTRY_PACKS, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
+import { contentLanguages } from "./schema/menu.js";
+import { unitSeedStates, units } from "./schema/units.js";
 
 const geographicLocales = [
   ...new Set([
@@ -64,43 +67,80 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
             ];
       // The default has to be one of the languages: `content_languages_default_ck`.
       const defaultLanguage = languages[0]!;
-      // Each element is its own bound parameter. A JavaScript array interpolated as one value is
-      // expanded by Drizzle into a value list — `($3, $4, $5)` — which Postgres rejects instead of
-      // reading as an array. The `::text[]` cast is not needed for this insert, whose target column
-      // supplies the type — the suite is green without it — and is kept only so this reads the same
-      // as its sibling in `packages/provisioning/src/venue-apply.ts`.
-      const languageArray = sql`array[${sql.join(
-        languages.map((language) => sql`${language}`),
-        sql`, `,
-      )}]::text[]`;
-      await tx.execute(sql`
-        insert into content_languages (default_language, languages)
-        values (${defaultLanguage}, ${languageArray})
-        on conflict (id) do nothing`);
-      const claimed = await tx.execute(sql`
-        insert into unit_seed_states default values
-        on conflict (id) do nothing returning id`);
-      if (claimed.rows.length > 0) {
-        await tx.execute(sql`
-          insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
-            ('g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, ${JSON.stringify(UNIT_ABBR.g)}::jsonb, 0, 'g'),
-            ('kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, ${JSON.stringify(UNIT_ABBR.kg)}::jsonb, 3, 'kg'),
-            ('mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, ${JSON.stringify(UNIT_ABBR.mg)}::jsonb, 0, 'mg'),
-            ('ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, ${JSON.stringify(UNIT_ABBR.ml)}::jsonb, 0, null),
-            ('l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, ${JSON.stringify(UNIT_ABBR.l)}::jsonb, 3, null)`);
+      // Every write below goes through its drizzle table rather than through raw SQL, because
+      // the column defaults these rows rely on are no longer SQL defaults: `id`, `created_at` and
+      // `updated_at` are supplied by `$defaultFn` in JavaScript
+      // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a
+      // null id and is refused `NOT NULL constraint failed: catalogues.id`. The same route also
+      // hands `languages`, `name` and `abbreviation` to the column mappings that serialise them —
+      // those columns store JSON TEXT here, so the `::jsonb` casts and the `array[…]` constructor
+      // they replaced have no counterpart to translate into.
+      await tx
+        .insert(contentLanguages)
+        .values({ defaultLanguage, languages })
+        .onConflictDoNothing({ target: contentLanguages.id });
+      // The id is stated rather than left out: this table's only column IS the key, and drizzle
+      // renders a values object with no columns in it as `insert into … () values ()`, which
+      // SQLite refuses. `1` is the value the column defaults to and the singleton check demands.
+      const claimed = await tx
+        .insert(unitSeedStates)
+        .values({ id: 1 })
+        .onConflictDoNothing({ target: unitSeedStates.id })
+        .returning({ id: unitSeedStates.id });
+      if (claimed.length > 0) {
+        await tx.insert(units).values([
+          {
+            seedKey: "g",
+            name: UNIT_NAMES.g,
+            abbreviation: UNIT_ABBR.g,
+            precision: 0,
+            hardwareUnit: "g",
+          },
+          {
+            seedKey: "kg",
+            name: UNIT_NAMES.kg,
+            abbreviation: UNIT_ABBR.kg,
+            precision: 3,
+            hardwareUnit: "kg",
+          },
+          {
+            seedKey: "mg",
+            name: UNIT_NAMES.mg,
+            abbreviation: UNIT_ABBR.mg,
+            precision: 0,
+            hardwareUnit: "mg",
+          },
+          {
+            seedKey: "ml",
+            name: UNIT_NAMES.ml,
+            abbreviation: UNIT_ABBR.ml,
+            precision: 0,
+            hardwareUnit: null,
+          },
+          {
+            seedKey: "l",
+            name: UNIT_NAMES.l,
+            abbreviation: UNIT_ABBR.l,
+            precision: 3,
+            hardwareUnit: null,
+          },
+        ]);
       }
       let catalogueId = location.rows[0]?.catalogue_id ?? null;
       if (catalogueId === null) {
-        const created = await tx.execute<{ id: string }>(sql`
-          insert into catalogues (name) values ('Menu') returning id`);
-        catalogueId = created.rows[0]!.id;
+        const [created] = await tx
+          .insert(catalogues)
+          .values({ name: "Menu" })
+          .returning({ id: catalogues.id });
+        catalogueId = created!.id;
         await tx.execute(sql`
           update locations set catalogue_id = ${catalogueId}
           where id = ${node.locationId}`);
       }
-      await tx.execute(sql`
-        insert into location_catalogues (location_id, catalogue_id) values (${node.locationId}, ${catalogueId})
-        on conflict (location_id, catalogue_id) do nothing`);
+      await tx
+        .insert(locationCatalogues)
+        .values({ locationId: node.locationId, catalogueId })
+        .onConflictDoNothing();
       return "initial menu ready";
     },
   },

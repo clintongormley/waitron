@@ -55,7 +55,7 @@ import type { AvailableProduct } from "./operations.js";
 import { createUnit, EACH_UNIT, readProductUnitId } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
-// Query behaviour runs on PGlite; each case starts with empty authoring tables.
+// Query behaviour. Each case starts with empty authoring tables.
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
@@ -219,7 +219,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Every test body runs as app_user on its own transaction.
+  // Every test body runs on its own transaction.
   const asTenant = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
@@ -1381,7 +1381,7 @@ describe("catalogue operations", () => {
         { id: casa.id, name: "Casa", isDefault: true },
       ]);
       const members = await tx.execute<{ count: number }>(
-        sql`select count(*)::int as count from location_catalogues where location_id = ${locationId}`,
+        sql`select count(*) as count from location_catalogues where location_id = ${locationId}`,
       );
       expect(members.rows[0]!.count).toBe(0);
     });

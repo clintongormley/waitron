@@ -9,10 +9,10 @@ import {
   resolveContentText,
   FALLBACK_LOCALE,
 } from "@waitron/shared";
-import { catalogues, categories, locationCatalogues, locations, products } from "@waitron/db";
+import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { productCategories } from "./schema/categories.js";
 import { readContentLanguages } from "./content-languages.js";
-import { replaceProductCategories, readProductCategories, lockCategories } from "./categories.js";
+import { categoryIdArray, replaceProductCategories, readProductCategories } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -563,17 +563,14 @@ export async function renameCatalogue(
 ): Promise<void> {
   const [row] = await tx
     .update(catalogues)
-    .set({ name, updatedAt: sql`now()` })
+    .set({ name, updatedAt: now() })
     .where(eq(catalogues.id, catalogueId))
     .returning({ id: catalogues.id });
   if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
 }
 
 export async function deactivateCatalogue(tx: Transaction, id: string): Promise<void> {
-  await tx
-    .update(catalogues)
-    .set({ active: false, updatedAt: sql`now()` })
-    .where(eq(catalogues.id, id));
+  await tx.update(catalogues).set({ active: false, updatedAt: now() }).where(eq(catalogues.id, id));
 }
 
 /**
@@ -608,7 +605,7 @@ export async function applyRecipeDerivation(
 ): Promise<void> {
   await tx
     .update(products)
-    .set({ recipeDerivation: derivation, updatedAt: sql`now()` })
+    .set({ recipeDerivation: derivation, updatedAt: now() })
     .where(eq(products.id, productId));
   await republishProduct(tx, productId);
 }
@@ -683,7 +680,7 @@ export async function applyDietDerivation(
 ): Promise<void> {
   await tx
     .update(products)
-    .set({ dietDerivation: derivation, updatedAt: sql`now()` })
+    .set({ dietDerivation: derivation, updatedAt: now() })
     .where(eq(products.id, productId));
   await republishProductDiet(tx, productId);
 }
@@ -766,9 +763,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
   const rows = await tx
     .select({
       ...PRODUCT_COLUMNS,
-      categoryIds: sql<
-        string[]
-      >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
+      categoryIds: categoryIdArray,
     })
     .from(products)
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
@@ -813,7 +808,8 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     variantsByProduct.set(productId, held);
   }
   return rows.map((row) => ({
-    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
+    // `categoryIdArray` hands back the JSON text SQLite built, never an array (categories.ts).
+    ...toProduct(row, JSON.parse(row.categoryIds) as string[], variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }
@@ -852,7 +848,6 @@ export async function updateProduct(
     // the only thing that ever did, and nothing mounts it), so changing it would alter a legacy
     // route's contract with nothing to gain. `docs/developers/product-categories.md` says which
     // path is which; `docs/backlog.md` carries removing this one when a client needs it relaxed.
-    await lockCategories(tx);
     const current = await readProductCategories(tx, id);
     if (categoryId === null && current.categoryIds.length > 1)
       throw new AppError("category.primary_required", {});
@@ -904,7 +899,7 @@ export async function updateProduct(
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
-      updatedAt: sql`now()`,
+      updatedAt: now(),
     })
     .where(eq(products.id, id));
   if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
@@ -923,10 +918,7 @@ export async function updateProduct(
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
-  await tx
-    .update(products)
-    .set({ active: false, updatedAt: sql`now()` })
-    .where(eq(products.id, id));
+  await tx.update(products).set({ active: false, updatedAt: now() }).where(eq(products.id, id));
 }
 
 export async function assignCatalogueToLocation(
@@ -984,7 +976,7 @@ export async function addCatalogueToLocation(
  * location stops selling from it. Idempotent — deleting a row that is not there is a no-op. This
  * NEVER touches the default (`locations.catalogue_id`), which is not stored as a member row, so it
  * cannot strip a location's default menu; call {@link assignCatalogueToLocation} to change the
- * default. `app_user` holds DELETE on `location_catalogues`.
+ * default.
  */
 export async function removeCatalogueFromLocation(
   tx: Transaction,

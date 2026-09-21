@@ -150,11 +150,11 @@ export async function assignProductUnit(
   productId: string,
   unitId: string,
 ): Promise<void> {
-  const [unit] = await tx
-    .select({ id: units.id })
-    .from(units)
-    .where(eq(units.id, unitId))
-    .for("key share");
+  // A plain existence read. It took `for key share` on PostgreSQL, holding the unit's row against
+  // a concurrent delete until the upsert below had written the row that points at it. There is no
+  // concurrent delete: one write transaction runs on the venue file at a time, the pattern this
+  // package states once on `assertExtraListForWrite` (extras.ts).
+  const [unit] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
   if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
     .select({ id: products.id })
@@ -170,9 +170,8 @@ export async function assignProductUnit(
 /** Move the listed products onto the target unit, in ONE statement scoped to the products still on
  * `sourceUnitId`. Both halves matter: a product another manager has already moved elsewhere since
  * the caller's list was read is left where it is rather than overwritten, and a single UPDATE takes
- * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
- * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
- * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
+ * its work in one scan instead of interleaving N separate statements across a loop. An id that is
+ * not currently on `sourceUnitId` —
  * an unknown id included — matches no row and is skipped, never an error. A
  * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
  * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
@@ -189,8 +188,8 @@ export async function reassignProductsToUnit(
   if (targetUnitId === null) {
     // Reassign to Each: the listed products still on the source unit lose their unit rows and, in the
     // same transaction, return to each-priced so the no-unit ⟺ pricing_unit='each' invariant holds.
-    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present, and
-    // the two are awaited in turn (pg queueing — CLAUDE.md §3).
+    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present,
+    // and the two are awaited in turn (CLAUDE.md §3).
     await tx
       .update(products)
       .set({ pricingUnit: "each" })
@@ -203,11 +202,7 @@ export async function reassignProductsToUnit(
     await tx.delete(productUnits).where(scope);
     return;
   }
-  const [target] = await tx
-    .select({ id: units.id })
-    .from(units)
-    .where(eq(units.id, targetUnitId))
-    .for("key share");
+  const [target] = await tx.select({ id: units.id }).from(units).where(eq(units.id, targetUnitId));
   if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
   await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
 }
@@ -247,12 +242,11 @@ export async function productsUsingUnit(
 }
 
 export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
-  const [locked] = await tx
-    .select({ id: units.id })
-    .from(units)
-    .where(eq(units.id, unitId))
-    .for("update");
-  if (locked === undefined) throw new AppError("unit.not_found", { unitId });
+  // `for update` here held the unit's row so that a concurrent assignment could not add a
+  // reference between the reference count below and the delete. Nothing can: one write transaction
+  // runs on the venue file at a time (`assertExtraListForWrite`, extras.ts).
+  const [existing] = await tx.select({ id: units.id }).from(units).where(eq(units.id, unitId));
+  if (existing === undefined) throw new AppError("unit.not_found", { unitId });
   const references = await productsUsingUnit(tx, unitId);
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });

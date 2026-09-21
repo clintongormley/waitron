@@ -1,8 +1,16 @@
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  catalogues,
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import { productVariants } from "./schema/variants.js";
+import { racePair } from "../test/fixtures.js";
 import { createCatalogue, createProduct, createMenuSection, createMenuItem } from "./operations.js";
 import {
   listProductVariants,
@@ -14,16 +22,23 @@ import {
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
 
-const suite = useTemplateDb({ template: "core" });
-function app<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
-    return fn(tx);
-  });
-}
+/**
+ * Variants against a real database, plus the pure selection core.
+ *
+ * This replaces a real-PostgreSQL suite. ONE CASE WENT: "creates, reads, edits and deletes
+ * variants as the non-superuser app role" asserted `current_user` was `app_user` with
+ * `rolsuper = false` and then walked list / edit / clear while holding that role. There are no
+ * roles. Its list and edit steps are `variants.test.ts`'s "round-trips ordered translated names,
+ * stable identities, absolute prices and availability"; its CLEAR step — `setProductVariants` with
+ * an empty body returning `[]` — was in no other case, and is now covered only indirectly, by the
+ * concurrent-removal case below issuing the same call.
+ */
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
+
 async function fixture() {
-  await seedTenant(suite.admin);
-  return app(suite.admin, async (tx) => {
+  await seedTenant(suite.db);
+  return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Bar" });
     const unit = await createUnit(
       tx,
@@ -71,94 +86,55 @@ async function fixture() {
   });
 }
 
-it("creates, reads, edits and deletes variants as the non-superuser app role", async () => {
-  const { productId, variant } = await fixture();
-  await app(suite.admin, async (tx) => {
-    const role = await tx.execute<{ role: string; superuser: boolean }>(
-      sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
-    );
-    expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await listProductVariants(tx, productId)).toEqual([variant]);
-    expect(
-      await setProductVariants(
-        tx,
-        productId,
-        [{ ...variant, available: false, unitPrice: "2.50" }],
-        "en",
-      ),
-    ).toEqual([{ ...variant, available: false, unitPrice: "2.50" }]);
-    expect(await setProductVariants(tx, productId, [], "en")).toEqual([]);
-  });
-});
-
 it("a concurrent variant removal waits for publication and then reports the dependency", async () => {
   const { productId, offerId, variant } = await fixture();
-  const [publisher, remover] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-  let release!: () => void;
-  let ready!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const published = new Promise<void>((resolve) => {
-    ready = resolve;
-  });
-  let publishing: Promise<unknown> | undefined;
-  let removing: Promise<unknown> | undefined;
-  try {
-    const pid = (await remover.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
-      .rows[0]!.pid;
-    publishing = app(publisher, async (tx) => {
-      await setMenuVariants(tx, offerId, [
-        { variantId: variant.id, unitPrice: "4.00", available: true },
-      ]);
-      ready();
-      await gate;
-    });
-    await Promise.race([published, publishing]);
-    removing = app(remover, (tx) => setProductVariants(tx, productId, [], "en"));
-    const rejected = expect(removing).rejects.toMatchObject({
+
+  // On PostgreSQL the publication held a row lock and the removal was watched blocking on it
+  // (`pg_blocking_pids`). One write transaction runs on the venue file at a time, so the removal
+  // simply runs second and sees the committed publication; `racePair` (`test/fixtures.ts`) carries
+  // the measurement that it does not start early. Both assertions are the ones this case carried.
+  const [publishing, removing] = await racePair(
+    suite.db,
+    (tx) =>
+      setMenuVariants(tx, offerId, [{ variantId: variant.id, unitPrice: "4.00", available: true }]),
+    (tx) => setProductVariants(tx, productId, [], "en"),
+  );
+
+  expect(publishing.status).toBe("fulfilled");
+  expect(removing.status).toBe("rejected");
+  if (removing.status === "rejected")
+    expect(removing.reason).toMatchObject({
       code: "product.variant_in_use",
       params: { variantId: variant.id, menuItemIds: [offerId] },
     });
-    await expect
-      .poll(
-        async () =>
-          (
-            await suite.admin.execute<{ blocked: boolean }>(
-              sql`select cardinality(pg_blocking_pids(${pid})) > 0 as blocked`,
-            )
-          ).rows[0]!.blocked,
-      )
-      .toBe(true);
-    release();
-    await publishing;
-    await rejected;
-    expect(await app(suite.admin, (tx) => listProductVariants(tx, productId))).toEqual([variant]);
-  } finally {
-    release();
-    await Promise.allSettled([publishing, removing]);
-    await publisher.close();
-    await remover.close();
-  }
+  expect(await app((tx) => listProductVariants(tx, productId))).toEqual([variant]);
 });
 
-// setProductVariants persists and listProductVariants reads back the widened variant shape (staff
-// name, customer name, kitchen name and image). Seeded with raw SQL so it does not depend on
-// createProduct (which a later task rewrites for the renamed products.name).
+/**
+ * `setProductVariants` persists and `listProductVariants` reads back the widened variant shape
+ * (staff name, customer name, kitchen name and image). Seeded through the tables rather than
+ * through `createProduct`, so it does not depend on that function — and through the TABLES rather
+ * than raw SQL, because `catalogues.id`, `products.id` and the two timestamps come from each
+ * table's `$defaultFn` and not from a SQL default.
+ */
 it("a variant round-trips staff name, customer name, kitchen name and image through set/list", async () => {
-  await seedTenant(suite.admin);
-  const { id: catalogueId } = (
-    await suite.admin.execute<{ id: string }>(
-      sql`insert into catalogues (name) values ('Bar') returning id`,
-    )
-  ).rows[0]!;
-  const { id: productId } = (
-    await suite.admin.execute<{ id: string }>(
-      sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${catalogueId}, 'Coffee', 'each', 900, 'reduced') returning id`,
-    )
-  ).rows[0]!;
-  await app(suite.admin, async (tx) => {
+  await seedTenant(suite.db);
+  const [menu] = await suite.db
+    .insert(catalogues)
+    .values({ name: "Bar" })
+    .returning({ id: catalogues.id });
+  const [created] = await suite.db
+    .insert(products)
+    .values({
+      catalogueId: menu!.id,
+      name: "Coffee",
+      pricingUnit: "each",
+      unitPrice: 900,
+      vatClass: "reduced",
+    })
+    .returning({ id: products.id });
+  const productId = created!.id;
+  await app(async (tx) => {
     await setProductVariants(
       tx,
       productId,
@@ -245,33 +221,44 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
   });
 });
 
-// Self-contained apply/round-trip proof for the A2 columns, seeded with raw SQL so it does not
-// depend on createProduct (which a later task rewrites for the renamed products.name).
+/**
+ * Self-contained apply/round-trip proof for the A2 columns, written through the tables so it does
+ * not depend on `createProduct`. The `customer_name` map goes in and comes back through the
+ * `json()` column's own mapping, which is what the `::jsonb` cast used to arrange — the column
+ * stores JSON TEXT here, and a RAW read would hand back that string rather than the map.
+ */
 it("round-trips a variant's new name, customer_name, kitchen_name and image columns", async () => {
-  await seedTenant(suite.admin);
-  // The return type is INFERRED from `execute`, which widens to drizzle's `Assume<T, ...>`; writing
-  // `Promise<T>` here would need a cast, and each call site names a concrete row shape anyway.
-  async function one<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
-    return (await suite.admin.execute<T>(query)).rows[0]!;
-  }
-  const { id: catalogueId } = await one<{ id: string }>(
-    sql`insert into catalogues (name) values ('Bar') returning id`,
-  );
-  const { id: productId } = await one<{ id: string }>(
-    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${catalogueId}, 'Coffee', 'each', 900, 'reduced') returning id`,
-  );
-  const row = await one<{
-    name: string;
-    customer_name: Record<string, string> | null;
-    kitchen_name: string | null;
-    image: string | null;
-  }>(
-    sql`insert into product_variants
-          (product_id, name, customer_name, kitchen_name, image, unit_price)
-        values (${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', 200)
-        returning name, customer_name, kitchen_name, image`,
-  );
+  await seedTenant(suite.db);
+  const [menu] = await suite.db
+    .insert(catalogues)
+    .values({ name: "Bar" })
+    .returning({ id: catalogues.id });
+  const [created] = await suite.db
+    .insert(products)
+    .values({
+      catalogueId: menu!.id,
+      name: "Coffee",
+      pricingUnit: "each",
+      unitPrice: 900,
+      vatClass: "reduced",
+    })
+    .returning({ id: products.id });
+  const [row] = await suite.db
+    .insert(productVariants)
+    .values({
+      productId: created!.id,
+      name: "Small",
+      customerName: { en: "Small" },
+      kitchenName: "SM COFFEE",
+      image: "abc123.jpg",
+      unitPrice: 200,
+    })
+    .returning({
+      name: productVariants.name,
+      customer_name: productVariants.customerName,
+      kitchen_name: productVariants.kitchenName,
+      image: productVariants.image,
+    });
   expect(row).toEqual({
     name: "Small",
     customer_name: { en: "Small" },

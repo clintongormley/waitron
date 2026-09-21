@@ -43,12 +43,19 @@ function validateAvailability(available: boolean): void {
     throw new AppError("product.variant_invalid", { field: "available" });
 }
 
-async function lockProduct(tx: Transaction, productId: string): Promise<void> {
+/**
+ * The product exists.
+ *
+ * This took `select … for update` on the product's row, so that two variant saves of the same
+ * product could not overlap. One write transaction runs on the venue file at a time, so there is
+ * no second save to overlap with; the mechanism and the receipt are on `assertExtraListForWrite`
+ * (extras.ts), which is where this package states the pattern once.
+ */
+async function assertProductForWrite(tx: Transaction, productId: string): Promise<void> {
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(eq(products.id, productId))
-    .for("update");
+    .where(eq(products.id, productId));
   if (!product) throw new AppError("product.not_found", { productId });
 }
 
@@ -108,7 +115,7 @@ export async function setProductVariants(
       await validateContentTranslations(tx, input.customerName, fallbackLanguage);
     normalized.push({ ...input, unitPrice });
   }
-  await lockProduct(tx, productId);
+  await assertProductForWrite(tx, productId);
   const current = await listProductVariants(tx, productId);
   const currentIds = new Set(current.map((v) => v.id));
   for (const id of seen) {
@@ -190,7 +197,7 @@ export async function setMenuVariants(
     );
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   // Product saves and publication take the same lock before checking dependencies or replacing rows.
-  await lockProduct(tx, offer.productId);
+  await assertProductForWrite(tx, offer.productId);
   const variants = await listProductVariants(tx, offer.productId);
   const ids = new Set(variants.map((v) => v.id));
   const seen = new Set<string>();

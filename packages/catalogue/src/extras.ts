@@ -123,7 +123,7 @@ export async function getExtraList(tx: Transaction, extraListId: string): Promis
   return list;
 }
 
-/** The list exists. A plain read, taking no locks — the preview path's half of the pair below. */
+/** The list exists — the preview path's half of the pair below. */
 async function assertExtraList(tx: Transaction, extraListId: string): Promise<void> {
   const [list] = await tx
     .select({ id: extraLists.id })
@@ -133,32 +133,37 @@ async function assertExtraList(tx: Transaction, extraListId: string): Promise<vo
 }
 
 /**
- * The list exists, and this transaction holds its row until it ends, so two saves of the SAME list
- * run one after the other instead of overlapping — and so does a save racing a menu offer
- * publishing that list ({@link lockPublishedLists}). {@link writeItems} needs that: it replaces the
- * whole item set, and a `delete` cannot see another transaction's uncommitted inserts, so an
- * unserialised second save removes nothing and then collides on
- * `extra_list_items_list_product_uq` — a `23505` that leaves `writeItems` as a drizzle
- * `Failed query:` error carrying no `code`, which the server's error boundary answers as an opaque
- * 500.
+ * The list exists. The write paths' half of the pair above — the same read, kept apart so a caller
+ * says which one it is making.
  *
- * Measured on a real backend, because the two saves were already serialised by accident and the
- * measurement had to remove the accident: with this lock gone AND `updateExtraList`'s own `update`
- * of the list row moved after `writeItems`, "keeps the later of two overlapping saves of the same
- * list" (extras.pg.test.ts) reported `23505` for one of the two saves; putting this lock back, with
- * that `update` still moved, it passed. So what the lock buys is that `writeItems` no longer depends
- * on an unrelated statement's position for its correctness.
+ * ## Why this stopped being a lock — the pattern for every `select … for update` in this package
  *
- * This is a ROW lock, not an advisory one: spec §7 bars advisory locks from new code and does not
- * reach a `select … for update`, which is what `lockProduct` already takes on a product row
- * (variants.ts).
+ * On PostgreSQL this took `for update` on the list's row, and what that arranged was: two saves of
+ * the SAME list run one after the other instead of overlapping. {@link writeItems} needed it,
+ * because it replaces the whole item set, and a `delete` cannot see another transaction's
+ * uncommitted inserts — so an unserialised second save removed nothing and then collided on
+ * `extra_list_items_list_product_uq`.
+ *
+ * There is no second save to overlap with. `withTransaction` (`packages/db/src/tenancy.ts`) runs
+ * its body inside the venue file's write queue, and that queue admits ONE write transaction on the
+ * file at a time: `packages/store/src/write-queue.ts` issues `begin immediate`, awaits the body,
+ * then `commit`, and the next caller's `begin` does not run until that `commit` has returned. So a
+ * read a write path takes is still true when its later statements run — for every row in the file,
+ * not only for the one a clause named. SQLite has no row locks to take instead, and drizzle's
+ * SQLite query builder has no `.for()` at all.
+ *
+ * The receipt is `racePair` in `packages/catalogue/test/fixtures.ts`: it holds one transaction open
+ * and asserts the second has not run a statement of its own. Run with the second body started
+ * outside `withTransaction`, that assertion reads `expected true to be false` — the control is
+ * recorded on the function itself, and every concurrency case in this package goes through it.
+ *
+ * What this function still does is the 404, which it always also did.
  */
-async function lockExtraList(tx: Transaction, extraListId: string): Promise<void> {
+async function assertExtraListForWrite(tx: Transaction, extraListId: string): Promise<void> {
   const [list] = await tx
     .select({ id: extraLists.id })
     .from(extraLists)
-    .where(eq(extraLists.id, extraListId))
-    .for("update");
+    .where(eq(extraLists.id, extraListId));
   if (!list) throw new AppError("extras.not_found", { extraListId });
 }
 
@@ -244,16 +249,17 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * `extra_list_items_list_product_uq` covers `(list_id, product_id)`, so a body exchanging two
  * retained items' products failed on the first update with `23505 duplicate key value` although its
  * final product set was fine. Seen red that way, on real PostgreSQL, by "saves a body that exchanges
- * two retained items' products" (extras.pg.test.ts).
+ * two retained items' products" (extras.concurrency.test.ts), which still runs.
  *
  * An id that names an item of a DIFFERENT list is refused as `extras.invalid` rather than moving
- * that item, and that refusal is decided on a plain `select`, which takes no row locks, before any
- * insert below. Two saves that each name the other list's item both read, both see the other's item
- * still there, and both refuse. Left to the insert's primary-key conflict instead, each save waits
- * on the other's uncommitted delete and PostgreSQL ends one of them with `40P01 deadlock detected`
- * in place of a domain refusal — measured on this code with the check removed, five runs out of
- * five, by "refuses both of two saves that each claim the other list's item, without deadlocking"
- * (extras.pg.test.ts).
+ * that item, and that refusal is decided on a plain `select` before any insert below. Two saves
+ * that each name the other list's item both read, both see the other's item still there, and both
+ * refuse. Left to the insert's primary-key conflict instead, each save waited on the other's
+ * uncommitted delete and PostgreSQL ended one of them with `40P01 deadlock detected` in place of a
+ * domain refusal — measured that way on PostgreSQL with the check removed, five runs out of five.
+ * That deadlock is not a shape one writer can produce; what still fails without the check is the
+ * final assertion of "refuses both of two saves that each claim the other list's item"
+ * (extras.concurrency.test.ts), which reads both lists back unchanged.
  */
 async function writeItems(
   tx: Transaction,
@@ -276,21 +282,19 @@ async function writeItems(
     throw new AppError("extras.invalid", { field: `items.${at}.id` });
   }
   // Within this transaction the list now starts from nothing, so no row the body keeps can collide
-  // with a row it is replacing. Rows another transaction is writing are a separate problem, and one
-  // this delete cannot see: every caller either holds the list's row lock ({@link lockExtraList}) or
-  // has just minted the list id, so there are none.
+  // with a row it is replacing. There are no rows another transaction is writing either: one write
+  // transaction runs on the venue file at a time ({@link assertExtraListForWrite}).
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
     // Each item's `sort` is its position in the body, so the order the editor sent is the order
     // `listExtraLists` and `getExtraList` read back.
-    // The read above locks nothing, and the list's row lock serialises saves of THIS list only, so a
-    // save of ANOTHER list can claim this id between the two. One that has already COMMITTED the id
-    // is refused as a domain fault rather than surfacing as a driver error. The conflict clause
-    // names the PRIMARY KEY: left untargeted, drizzle emits a bare `on conflict do nothing`, which
-    // also absorbs an `extra_list_items_list_product_uq` collision and would report a product clash
-    // as a stolen id. Still uncovered: two saves of DIFFERENT lists inserting the same NEW id each
-    // wait on the other's uncommitted insert, and a mutual wait can still end as `40P01`. The
-    // product index needs no such hedge — it is scoped to one `list_id`, which the row lock holds.
+    // An id another save has already COMMITTED is refused as a domain fault rather than surfacing
+    // as a driver error. The conflict clause names the PRIMARY KEY: left untargeted, drizzle emits
+    // a bare `on conflict do nothing`, which also absorbs an `extra_list_items_list_product_uq`
+    // collision and would report a product clash as a stolen id. The two-writer hedges this note
+    // used to carry are gone with the writers: one write transaction runs on the venue file at a
+    // time ({@link assertExtraListForWrite}), so no uncommitted insert of another save exists for this one to
+    // miss or to wait on.
     const inserted = await tx
       .insert(extraListItems)
       .values({
@@ -337,14 +341,7 @@ async function dropStaleMenuOverrides(
   );
 }
 
-/**
- * The only write path here that takes no lock of its own on an existing list, and the reason is the
- * id: it is minted below and no other transaction can name it yet, so there is nothing to serialise
- * against. The others do take one — a row lock, not an advisory lock, which spec §7 bars from new
- * code ({@link lockExtraList}): `updateExtraList` and `deleteExtraList` take exactly one each, and
- * `setMenuItemExtraLists` takes one per PUBLISHED LIST, so none at all when the body publishes
- * nothing. The content-language lock `validateNames` reaches through is the existing shared one.
- */
+/** The only write path here that reads no EXISTING list row, because the id is minted below. */
 export async function createExtraList(
   tx: Transaction,
   value: unknown,
@@ -373,7 +370,7 @@ export async function updateExtraList(
   const extraListId = callerListId.toLowerCase();
   // The list has to exist before its name is worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
-  await lockExtraList(tx, extraListId);
+  await assertExtraListForWrite(tx, extraListId);
   await validateNames(tx, input, fallbackLanguage);
   await tx.update(extraLists).set(listValues(input)).where(eq(extraLists.id, extraListId));
   await writeItems(tx, extraListId, input);
@@ -384,7 +381,7 @@ export async function updateExtraList(
 }
 
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
-  await lockExtraList(tx, extraListId);
+  await assertExtraListForWrite(tx, extraListId);
   // Three sets of rows go with it, all by ON DELETE CASCADE: the list's items through
   // `extra_list_items_list_fk`, every menu offer's publication of it through
   // `menu_item_extra_lists_list_fk` and, under those, each offer's per-item overrides through
@@ -399,56 +396,29 @@ export async function deleteExtraList(tx: Transaction, extraListId: string): Pro
 }
 
 /**
- * Every published list exists, and this transaction holds each of their rows until it ends — so a
- * save of one of those lists cannot land between {@link assertProductsOffered}'s membership read and
- * the override rows written below. Without it, a manager's override for a product the list dropped
- * in that window is written anyway and comes back the moment the product is offered again: measured
- * on a real backend by "does not keep a menu price for a product the list stopped offering while it
- * was saving" (extras.pg.test.ts), which read `0.25` where the product's own `2.50` was due.
+ * Every published list exists.
  *
- * LOCK ORDER is what keeps two writers from waiting on each other for ever. The next two paragraphs
- * are REASONING over the write paths named below, traced by hand; they are not a measurement, and
- * they say nothing about a path outside this file. Only the sort's paragraph is measured.
+ * This used to hold each of their rows `for update` until the transaction ended, so that a save of
+ * one of those lists could not land between {@link assertProductsOffered}'s membership read and the
+ * override rows written below. There is no such window left: one write transaction runs on the
+ * venue file at a time ({@link assertExtraListForWrite} carries the mechanism and the receipt), so no save of
+ * any list can land between any two statements of this one.
  *
- * Three locks are taken deliberately, and each path takes the ones it needs in this order: the menu
- * OFFER's row in `menu_items` (the only one of these paths that takes it), then `extra_lists` rows
- * in ascending id order ({@link lockExtraList}), then the content-languages ADVISORY lock, which
- * `validateNames` reaches through `findContentTranslationGap` (content-languages.ts) and only when
- * the body carries a customer-facing name. `setMenuItemExtraLists` takes the first two;
- * `updateExtraList` takes one list row and then the advisory lock; `deleteExtraList` takes one list
- * row and neither of the other two; `createExtraList` takes the advisory lock and no EXISTING list
- * row at all — the `extra_lists` row it locks after that is one it has just minted, which no other
- * transaction can name yet.
- *
- * Below those, each path's own writes take ordinary row locks this code does not order: the list's
- * `extra_list_items` rows, and its `menu_item_extra_items` rows — reached directly by
- * {@link dropStaleMenuOverrides}, which sweeps ONE list across every offer, and by the cascade under
- * `setMenuItemExtraLists`'s publication delete, which sweeps ONE offer across every list. Those two
- * sweeps cross, so nothing here claims they cannot wait on each other. What the paragraph above
- * claims is narrower: no path waits on one of the three deliberate locks while holding a row lock
- * from this one.
- *
- * The ascending sort is the part that IS measured, on real PostgreSQL in this worktree. With
- * `.sort()` removed and a 300ms pause after each acquired lock, two menu offers publishing the same
- * two lists in OPPOSITE body order ended one of the two in `40P01 deadlock detected` — three runs of
- * three; with the sort put back and the pause still in place, both completed — three runs of three.
- *
- * An unknown list id is refused from inside this loop, as `extras.not_found`
- * ({@link lockExtraList}), so the id the refusal names is the lowest unknown one in string order
- * rather than the first unknown one in body order. No test pins which.
- *
- * One statement per id rather than one `in (…) order by id for update`: the order the rows are
- * locked in is the whole point here, and a loop makes it this code's choice rather than a query
- * plan's. The count is the number of lists ONE menu offer publishes.
+ * With the locks gone, so is the lock ORDER the rest of this note used to reason about, and so is
+ * the deadlock the ascending sort was measured against. The sort STAYS, for the one effect it has
+ * left: an unknown list id is refused from inside this loop as `extras.not_found`, so the id the
+ * refusal names is the lowest unknown one in string order rather than the first unknown one in body
+ * order. No test pins which — the sort is kept because removing it would change an unpinned refusal
+ * for no reason, not because anything rests on it.
  */
-async function lockPublishedLists(
+
+async function assertPublishedListsExist(
   tx: Transaction,
   publications: MenuExtraPublication[],
 ): Promise<void> {
-  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3), and in turn is
-  // also what makes the order above real.
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
   for (const listId of publications.map((publication) => publication.listId).sort())
-    await lockExtraList(tx, listId);
+    await assertExtraListForWrite(tx, listId);
 }
 
 /**
@@ -542,10 +512,10 @@ async function assertProductsOffered(
  * refuses an offer that publishes none of the product's lists, for the reason
  * {@link assertProductCarries} gives.
  *
- * The existence read takes the menu offer's ROW LOCK, so two saves of the SAME offer run one after
- * the other rather than overlapping. NOT measured on this path: the receipt is for the same
- * delete-then-insert shape one table over, and it is on {@link lockExtraList}. The lists published
- * are locked next, in id order, for the reason {@link lockPublishedLists} gives.
+ * Two saves of the SAME offer run one after the other rather than overlapping, which is what the
+ * offer's `for update` used to arrange and what the venue file's write queue arranges now
+ * ({@link assertExtraListForWrite}). The published lists are checked next, in id order, for the reason
+ * {@link assertPublishedListsExist} gives.
  */
 export async function setMenuItemExtraLists(
   tx: Transaction,
@@ -556,25 +526,15 @@ export async function setMenuItemExtraLists(
   const [offer] = await tx
     .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)
-    .where(eq(menuItems.id, offerId))
-    .for("update");
+    .where(eq(menuItems.id, offerId));
   if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
   const publications = parseMenuExtraPublications(lists);
-  await lockPublishedLists(tx, publications);
-  // Both reads sit AFTER the offer's row lock and the lists' row locks, never before: an answer
-  // read ahead of a lock this path then waits for can be stale by the time the wait ends. Neither
-  // read locks `product_modifiers` itself, so a product's attachment list can still change between
-  // the first of them and the commit — with ONE exception. A save that ATTACHES a list this body
-  // publishes can no longer overlap this path: `writeProductModifiers` (product-modifiers.ts)
-  // takes `for key share` on every `extra_lists` row it names, `lockExtraList` above takes
-  // `for update` on the same rows, and the two conflict, so whichever transaction is second waits
-  // for the first. MEASURED on PostgreSQL 18.4: a `for update` on a row another session held
-  // `for key share` blocked until a 2s `lock_timeout`, while the same `for update` with nothing
-  // held returned at once and a second `for key share` never waited at all. A save that DETACHES a
-  // list does not name it and so locks nothing, so that change is still invisible here. Both paths
-  // take `extra_lists` rows in ascending id order and neither wants a row the other holds
-  // afterwards, so this is a wait and not a deadlock — that last part traced over the two files,
-  // not run.
+  await assertPublishedListsExist(tx, publications);
+  // Nothing can change `product_modifiers`, or any other table, between these two reads and the
+  // commit below: one write transaction runs on the venue file at a time ({@link assertExtraListForWrite}).
+  // The whole paragraph this note used to carry — which lock conflicted with which, in what order
+  // the two paths took `extra_lists` rows, and why the wait was not a deadlock — was about two
+  // transactions that can no longer overlap.
   // Carrying the list comes first: a body that publishes a list the dish does not have is wrong
   // about the list, whatever its overrides then say.
   await assertProductCarries(tx, offer.productId, publications);

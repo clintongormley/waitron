@@ -23,7 +23,8 @@ import { customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
-// PGlite exercises aggregate round-trips; role privileges and races use the PostgreSQL suite.
+// Aggregate round-trips. The two transactions started together, and the cases that used to sit in
+// a real-PostgreSQL sibling, are in variants.db.test.ts.
 const fx = useCatalogueDb();
 let productId: string;
 let offerId: string;

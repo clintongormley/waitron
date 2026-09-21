@@ -32,10 +32,8 @@ import { seedVenue } from "../test/fixtures.js";
  * imports catalogue (verified: `packages/core/package.json` names no `@waitron/catalogue`), so
  * importing `recordSale` here introduces no cycle.
  *
- * PGlite, not real Postgres: this suite proves the DATA FLOW across three packages, not any
- * PostgreSQL privilege semantics — the catalogue tables' grants are pinned by the privilege matrix
- * (`packages/fiscal-verifactu/src/privileges.expected.ts`) and the write path by `packages/core`'s
- * own suite. A `FakeFiscalBackend` stands in for the regime backend, exactly as `packages/core`'s own
+ * This suite proves the DATA FLOW across three packages. A `FakeFiscalBackend` stands in for the
+ * regime backend, exactly as `packages/core`'s own
  * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by the runnable demo
  * (`apps/server/scripts/catalogue-demo.ts`) and by `packages/fiscal-verifactu`'s e2e suite.
  */

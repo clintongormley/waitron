@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,14 +19,10 @@ import { readProductModifiers, writeProductModifiers } from "./product-modifiers
 import * as productModifiers from "./product-modifiers.js";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 
-// Publishing an extras list on a menu offer is authoring configuration, and PGlite is the lighter
-// target that still runs the real migrations (CLAUDE.md §4). It enforces the two publication
-// tables' grants once the session assumes the application role — which only the walkthrough at the
-// foot of this file does, with `asAppUser`; every other test in this file runs on PGlite's
-// superuser connection and so exercises no grant at all. What PGlite cannot show is two writers
-// overlapping, because every query serialises onto its one backend: the cases about a save racing a
-// list edit, and about a product vanishing mid-read, are in extras.pg.test.ts against a real
-// backend.
+// Publishing an extras list on a menu offer is authoring configuration, run here against one
+// SQLite file with the real migrations applied. The grants walkthrough this file used to end with
+// is gone with the grants themselves; the cases about a save racing a list edit are in
+// extras.concurrency.test.ts.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -132,7 +128,7 @@ const publish = async (
 
 const countRows = async (table: "menu_item_extra_lists" | "menu_item_extra_items") => {
   const rows = await fx.db.execute<{ count: number }>(
-    sql`select count(*)::int as count from ${sql.identifier(table)}`,
+    sql`select count(*) as count from ${sql.identifier(table)}`,
   );
   return rows.rows[0]!.count;
 };
@@ -824,84 +820,5 @@ describe("what deleting an extras list would touch", () => {
     expect(await countRows("menu_item_extra_lists")).toBe(0);
     expect(await countRows("menu_item_extra_items")).toBe(0);
     expect(await run((tx) => readMenuExtras(tx, [offers.burger]))).toEqual(new Map());
-  });
-});
-
-/**
- * The walkthrough that answers to the menu_item_extra_* grants in
- * drizzle/0001_catalogue_baseline_sql.sql, the sibling of extras.test.ts's for the extra_lists
- * grants in the same file. Every other test in this file runs as
- * PGlite's superuser, which holds every privilege and so proves nothing about a grant.
- *
- * Seen red rather than assumed, once per table, because a grant on one of them proves nothing about
- * the other. With `DELETE` revoked on `menu_item_extra_lists` this walkthrough failed at
- * `delete from "menu_item_extra_lists" where "menu_item_extra_lists"."menu_item_id" = $1`; with it
- * revoked on `menu_item_extra_items` alone it failed inside `dropStaleMenuOverrides` (extras.ts)
- * instead. Both said `42501 permission denied for table <that table>`, and both passed with the
- * grant put back.
- */
-describe("publishing on a menu offer as the non-superuser application role", () => {
-  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
-    withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
-
-  const baconPrice = (published: Awaited<ReturnType<typeof readMenuExtras>>) =>
-    published.get(offers.burger)![0]!.items.find((item) => item.productId === ids.bacon)!.price;
-
-  it("publishes, reads, reprices and clears under the application role's grants", async () => {
-    await app(async (tx) => {
-      const role = await tx.execute<{ role: string; superuser: boolean }>(
-        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
-      );
-      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-
-      const list = await createExtraList(tx, toppings(), "en");
-      // `publish` attaches the list to the burger's product first, so this also touches
-      // `product_modifiers` under the application role; that table's own grants are walked in
-      // product-modifiers.test.ts, and the two tables this walkthrough is about are below.
-      // INSERT on both of those: the publication row, and the override under it.
-      await publish(tx, "burger", [
-        { listId: list.id, items: [{ productId: ids.bacon, price: "1.00" }] },
-      ]);
-      // SELECT on both tables.
-      expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.00");
-
-      // UPDATE is granted and no write path reaches it today — `setMenuItemExtraLists` replaces
-      // rows rather than editing them — so it is walked by statement, which is the only way to
-      // establish the role actually holds what the migration granted it.
-      await tx.execute(
-        sql`update menu_item_extra_lists set display_order = 1 where menu_item_id = ${offers.burger}`,
-      );
-      await tx.execute(
-        sql`update menu_item_extra_items set price = 150 where menu_item_id = ${offers.burger}`,
-      );
-      expect(baconPrice(await readMenuExtras(tx, [offers.burger]))).toBe("1.50");
-
-      // DELETE on `menu_item_extra_items`, walked as its own step because nothing else here
-      // reaches it: dropping bacon from the LIST makes `dropStaleMenuOverrides` (extras.ts) issue a
-      // delete on that table under this role, and that is the only place in this PACKAGE that
-      // deletes from it. The configuration-transfer import clears the whole table too
-      // (apps/server/src/configuration-transfer.ts), but as the table owner, so it walks no grant.
-      await updateExtraList(
-        tx,
-        list.id,
-        { ...toppings(), items: toppings().items.filter((item) => item.productId !== ids.bacon) },
-        "en",
-      );
-      const overrides = await tx.execute<{ count: number }>(
-        sql`select count(*)::int as count from menu_item_extra_items`,
-      );
-      expect(overrides.rows).toEqual([{ count: 0 }]);
-
-      // DELETE on `menu_item_extra_lists`: republishing the offer as empty removes its publication
-      // row. Whatever override rows sat under it go by `menu_item_extra_items_list_fk`'s ON DELETE
-      // CASCADE, and a CASCADE is not checked against this role, so this statement leaves the child
-      // table's own `DELETE` grant unwalked. That is why the step above exists: without it, and with
-      // `DELETE` revoked on `menu_item_extra_items`, this walkthrough passed whole.
-      await setMenuItemExtraLists(tx, offers.burger, []);
-      expect(await readMenuExtras(tx, [offers.burger])).toEqual(new Map());
-    });
   });
 });
