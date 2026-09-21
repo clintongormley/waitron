@@ -15,7 +15,7 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * The operational agent/device groups are not mounted under `mode='mirror'`: boot.ts wraps both
  * `mountDeviceApi`/`mountPrintApi` in its `if (!fencedOrMirror)` mount guard (boot.ts, where
  * `fencedOrMirror = isMirror || fenced`). The agent pull — `POST /print-api/agent/jobs`, whose
- * `claimPrintJobs` runs a locking `SELECT … FOR UPDATE … SKIP LOCKED` + `UPDATE`
+ * `claimPrintJobs` claims its batch with one conditional `UPDATE`
  * (packages/printing/src/runtime.ts) — is an HONEST write verb the method gate below already refuses, so
  * the mount guard is belt-and-braces for it rather than the sole protection (it used to be a GET, a
  * write-behind-a-GET the verb gate could not catch — the pull moved to POST in the central-printer

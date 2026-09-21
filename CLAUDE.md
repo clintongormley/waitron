@@ -626,6 +626,11 @@ container or browser test** — most of these rules exist because a test passed 
   typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
   from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **A proof-by-deletion belongs to the SHAPE of the code it was taken against.** Restructure that
+  code and the deletion can stop failing while every test stays green — re-run the control, and move
+  the proof to whatever still catches it. Cost: P4a's one-statement claim left `packages/printing`'s
+  race suite passing with `for update skip locked` deleted, where the two-statement claim it replaced
+  had failed; the proof moved to `packages/db/src/job-claim.pg.test.ts`.
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
   `recordSale`; correcting it took 42 tests red-to-green across eight files and left three red that

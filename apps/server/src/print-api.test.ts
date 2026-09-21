@@ -46,7 +46,7 @@ import "./errors.js";
 // agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
 // (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The two properties PGlite
 // CANNOT show — the routes running as the non-owner app role with only its grants (the gate proven by
-// DELETION there) and the claim's `for update … skip locked` under true concurrency — live in
+// DELETION there) and what the claim does when two agents contend — live in
 // `print-api.pg.test.ts` against real Postgres (CLAUDE.md §4). Tests share the seeded tenant and
 // create their own printers; assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};

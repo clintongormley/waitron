@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { claimRows, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
 /**
@@ -10,9 +10,10 @@ import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-ag
  * The three steps:
  *  1. PULL — atomically CLAIM a batch of this agent's due jobs (queued, under-cap failed, or a
  *     lease-expired stuck `printing` job — §5 Gap 1), stamping each `printing` with a fresh `claimed_at`.
- *     The claim is the double-print guard: a locking `for update … skip locked` SELECT hands each row to
- *     exactly one agent instance, so two agents (the two-boxes / reimaged-agent topology) never
- *     deliver the same job twice. Proven load-bearing by deletion in runtime.race.test.ts.
+ *     The claim is the double-print guard, and it is ONE statement: two agents (the two-boxes /
+ *     reimaged-agent topology) never deliver the same job twice, because claiming a row moves it and
+ *     the claim only stamps rows where its own locking selection found them. Proven with two agents
+ *     contending in runtime.race.test.ts.
  *  2. PUSH — hand each claimed job's bytes to its printer via the injected transport.
  *  3. REPORT — mark each job `done`, or on a push failure `failed` with `attempts++` and the error.
  *
@@ -107,13 +108,26 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
  * mode) still calls this, then pushes+reports in the SAME transaction.
  *
- * Two statements in one transaction, deliberately: the locking SELECT is the claim, and keeping the
- * status filter OUT of the follow-up UPDATE's predicate is what makes `for update … skip locked`
- * UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
- * both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
- * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated. The
- * join to `printers` on its id reads each job's connection facts; it is NOT the
- * authorization scope. Eligibility is DERIVED (design §3): a `network_tcp` printer is claimable by any
+ * ONE statement, built by `claimRows` in `@waitron/db` — the only place in the tree that spells
+ * `ctid` or `for update … skip locked`, so the SQLite switch edits that file and not this call site.
+ * Its two halves:
+ *
+ *  - The inner selection chooses this batch and LOCKS it, skipping any row another agent is already
+ *    claiming. What the skip buys is that a second agent gets on with the rows it can have instead
+ *    of waiting: measured 2026-09-21 against a real server, with `skip locked` taken out and nothing
+ *    else changed, a second claimer had not returned 1.5s later and stood in `pg_locks` as one
+ *    ungranted lock. It did NOT double-claim even so — once the first committed it returned the rows
+ *    the first had not taken and never the claimed one.
+ *  - The outer UPDATE stamps the batch and, through its join to `printers` on that table's id, reads
+ *    each job's connection facts so the push step needs no second read. That join is not the
+ *    authorization scope, and it excludes nothing the selection has not already excluded.
+ *
+ * So the double-claim guard is the statement's shape rather than the lock clause, and this package's
+ * race suite no longer fails when the clause is deleted (it passed, same measurement). The clause's
+ * own proof-by-deletion lives with the SQL, in `packages/db/src/job-claim.pg.test.ts`.
+ *
+ * All values bind as `$n` (Drizzle-parameterised), never concatenated. Eligibility is DERIVED
+ * (design §3): a `network_tcp` printer is claimable by any
  * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
  * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
  * the local branch to `false` (an `in ()` matches nothing — the drain.ts hazard). The claim stamps
@@ -152,18 +166,18 @@ export async function claimPrintJobs(
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
   // A usb/bluetooth printer is eligible only when its `local_key` is one the agent currently SEES. An
-  // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard, runtime.ts's
-  // `id in ${ids}` guard below), so guard it with `false`. `local_key in ${array}` is the
+  // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard), so guard it
+  // with `false`. `local_key in ${array}` is the
   // proven-correct Drizzle expansion — `in ($1, $2, …)` — NOT `= any(…)` / `in (${ids})`, both of
   // which mis-expand for a text list.
   const usbBt =
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
       : sql`false`;
-  const picked = await tx.execute<{ id: string }>(sql`
-    select j.id from print_jobs j
-    join printers p on p.id = j.printer_id
-    where p.active = true
+  return claimRows<ClaimedJob>(tx, {
+    table: "print_jobs",
+    claimableFrom: sql`print_jobs j join printers p on p.id = j.printer_id`,
+    claimable: sql`p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       and (
         j.status = 'queued'
@@ -171,32 +185,19 @@ export async function claimPrintJobs(
         or (j.status = 'printing'
             and (j.claimed_at is null
                  or j.claimed_at < now() - ${PRINT_JOB_LEASE_MS}::double precision * interval '1 millisecond'))
-      )
-    order by j.created_at
-    limit ${PULL_BATCH_LIMIT}
-    for update of j skip locked
-  `);
-  if (picked.rows.length === 0) return [];
-  const ids = picked.rows.map((r) => r.id);
-
-  // Mark the locked rows `printing`, STAMP `claimed_at = now()` (the lease anchor — a fresh claim and a
-  // lease reclaim both restart the lease) and record `claimed_by = agentId` (the holder — overwritten
-  // by a lease reclaim, and the report's authorization key), returning each with its printer's
-  // connection facts (the RETURNING join) so the push step needs no second read. Keeping the status filter OUT of this
-  // UPDATE's predicate — it keys only on the ids the locking SELECT returned — is what makes
-  // `for update … skip locked` UNAMBIGUOUSLY load-bearing (runtime.race.test.ts). `id in ${ids}` uses
-  // Drizzle's array expansion — `in ($1, $2, …)` — the shape verified in
-  // packages/fiscal-verifactu/src/drain.ts (NOT `= any(…)` nor `in (${ids})`, both of which mis-expand
-  // for a uuid list). `ids` is non-empty (guarded above), so the expansion never degenerates to `in ()`.
-  const claimed = await tx.execute<ClaimedJob>(sql`
-    update print_jobs set status = 'printing', claimed_at = now(), claimed_by = ${agentId}
-    from printers p
-    where print_jobs.printer_id = p.id
-      and print_jobs.id in ${ids}
-    returning print_jobs.id, print_jobs.printer_id, print_jobs.payload,
-              p.transport, p.host, p.port, p.local_key
-  `);
-  return claimed.rows;
+      )`,
+    order: sql`j.created_at`,
+    limit: PULL_BATCH_LIMIT,
+    // The lease anchor: a fresh claim and a lease reclaim both restart it. `claimed_by` records the
+    // holder — a lease reclaim OVERWRITES it — and is the report's authorization key.
+    set: sql`status = 'printing', claimed_at = now(), claimed_by = ${agentId}`,
+    // Joined so the claim reads each job's connection facts on the way out; the push step needs no
+    // second read. It is NOT the authorization scope, and it filters nothing the predicate above
+    // has not already filtered.
+    join: { from: sql`printers p`, on: sql`print_jobs.printer_id = p.id` },
+    returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
+                   p.transport, p.host, p.port, p.local_key`,
+  });
 }
 
 /**

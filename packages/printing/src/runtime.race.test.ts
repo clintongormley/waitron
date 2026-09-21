@@ -15,10 +15,14 @@ import type { PrintConfig } from "./printers.js";
 // Real Postgres (a `core` template clone), NOT PGlite: the "two agents don't double-print" guarantee
 // is a CONCURRENCY property of the locking pull, and PGlite serialises every query onto one backend,
 // so two agent instances never truly contend there — a false pass, not a weak one (CLAUDE.md §4).
-// The locking clause (`for update ... skip locked` in runtime.ts's pull) is PROVEN LOAD-BEARING by
-// deletion: with it, agent B skips agent A's in-flight row and the job prints exactly once; delete it
-// and B re-claims the same row after A commits, printing it twice (total 2 → this test's `toBe(1)`
-// fails). See task-5-report.md for the recorded RED/GREEN of that deletion.
+// The locking clause is NOT what this suite proves any more, and saying so is the point of this
+// paragraph. The pull is now one statement built by `claimRows` (`packages/db/src/job-claim.ts`);
+// with `for update … skip locked` taken out of it and nothing else changed, this suite and
+// runtime.reclaim.test.ts both still PASSED — measured 2026-09-21, five tests green. The clause's
+// proof-by-deletion moved with the SQL into `packages/db/src/job-claim.pg.test.ts`, whose two cases
+// fail on their timeout without it. What this suite shows, and PGlite cannot, is the property
+// itself: two agents contending over one queue claim each job at most once, as the real deployment
+// role. task-5-report.md's recorded RED/GREEN is for the two-statement claim this code replaced.
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
@@ -204,11 +208,10 @@ describe("double-pull race (real Postgres)", () => {
       });
       await aClaimed; // A has claimed and is parked, holding the locks
 
-      // Agent B pulls the SAME queue concurrently. WITH the lock, B's SELECT skips A's locked rows and
-      // claims nothing — it settles fast. WITHOUT `for update … skip locked` (proof-by-deletion), B's
-      // unlocked SELECT re-reads the still-`queued` rows (A's UPDATE is uncommitted, invisible under
-      // READ COMMITTED) and blocks at its own id-keyed UPDATE — a lock waiter — then re-marks every row
-      // once A commits, a double claim. Release A the moment EITHER is observed so neither deadlocks.
+      // Agent B pulls the SAME queue concurrently. WITH the skip, B's claim passes over A's locked
+      // rows and claims nothing — it settles fast. WITHOUT it B becomes a lock waiter and sits there
+      // until A's transaction ends (see the header for the measurement). Either outcome is a state
+      // this test can observe, so release A the moment EITHER is observed and neither side deadlocks.
       let bSettled = false;
       const bDone = withTransaction(connB, async (tx) => {
         await asAppUser(tx);

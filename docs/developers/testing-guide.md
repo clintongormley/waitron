@@ -642,6 +642,32 @@ in the root `coverage.include` and excluded from its package's.
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 
+## A proof-by-deletion belongs to the SHAPE of the code it was taken against.
+
+Restructure that code and the deletion can stop failing, with every test still green and nothing
+saying so. Re-run the control after the restructure, and move the proof to whatever still catches it.
+
+The instance (2026-09-21, task P4a of the storage switch). `packages/printing`'s agent pull used to
+claim jobs in two statements — a locking `SELECT ... FOR UPDATE ... SKIP LOCKED`, then an `UPDATE`
+keyed only on the ids it returned. `runtime.race.test.ts`'s header recorded a deletion for that
+shape: remove the lock clause and both agents' selects return the same rows, both updates re-mark
+them, and the suite's `toBe(1)` fails on a double claim.
+
+P4a replaced the pair with one statement — an `UPDATE ... WHERE ctid IN (locking SELECT)`. Measured
+after the change, with `skip locked` removed from `packages/db/src/job-claim.ts` and nothing else
+touched: `runtime.race.test.ts` and `runtime.reclaim.test.ts` both PASSED, five tests green. The
+old proof no longer holds, because the new statement does not need the clause to avoid a double
+claim: claiming a row changes its `ctid`, and the outer `UPDATE` names the rows its own selection
+found by `ctid`, so a second claimer that waited for the first cannot re-take what the first took.
+
+What the clause still buys is that the second claimer does not WAIT. Measured the same day, on the
+shared `core` template container, with the clause removed and nothing else changed: a second claimer
+had not returned 1.5 seconds later and stood in `pg_locks` as one ungranted lock; when the first
+committed it returned the three rows the first had not taken, never the claimed one, and every row
+ended claimed exactly once. That is the property `packages/db/src/job-claim.pg.test.ts` now holds —
+both of its cases fail on the 30-second test timeout with the clause deleted, which is the control
+re-run in its new home.
+
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
 `coverageConfigDefaults.exclude` is `[]` in 4.1.11 and the object has no `all` key; in 3.2.7 it was a

@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { workingOrders } from "@waitron/db";
+import { claimLock, workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
@@ -451,9 +451,14 @@ function forwardableWhere(provider: string) {
 }
 
 /**
- * Claim this provider's accepted-offline payments for a forward pass, locking each row FOR UPDATE
- * SKIP LOCKED so concurrent `forward` passes partition the queue and never double-advance a row.
- * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass.
+ * Claim this provider's accepted-offline payments for a forward pass, so concurrent `forward`
+ * passes partition the queue and never double-advance a row. State IS the queue (no outbox table).
+ * Ordered by `created_at` for a stable pass.
+ *
+ * The claim is the row lock itself and stamps nothing: there is no claim column on `payments`, and
+ * the caller advances each row through its own state-guarded update before the transaction ends.
+ * `claimLock` is where the lock clause is spelled — one file for the storage switch to edit
+ * (`packages/db/src/job-claim.ts`), not this call site.
  *
  * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
  * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so
@@ -463,12 +468,13 @@ export async function claimAcceptedOffline(
   tx: Transaction,
   provider: string,
 ): Promise<ForwardablePayment[]> {
-  const rows = await tx
-    .select(FORWARDABLE_COLUMNS)
-    .from(payments)
-    .where(forwardableWhere(provider))
-    .orderBy(payments.createdAt)
-    .for("update", { skipLocked: true });
+  const rows = await claimLock(
+    tx
+      .select(FORWARDABLE_COLUMNS)
+      .from(payments)
+      .where(forwardableWhere(provider))
+      .orderBy(payments.createdAt),
+  );
   return rows.map(withDecimalAmount);
 }
 
