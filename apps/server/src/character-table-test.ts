@@ -45,9 +45,10 @@ export function formatCharacterTableTest({
     startTable,
   )) {
     for (const [index, sample] of calibration.finderSampleLines.entries()) {
-      b.charset(characterSet, characterTable).line(
-        `${code} ${String.fromCharCode(65 + index)}: ${prepareText(sample, characterSet)}`,
-      );
+      // If the candidate number is ignored, it must not inherit the previous candidate's table.
+      b.charset(characterSet, 0)
+        .charset(characterSet, characterTable)
+        .line(`${code} ${String.fromCharCode(65 + index)}: ${prepareText(sample, characterSet)}`);
     }
   }
   return b.feedAndCut().bytes();

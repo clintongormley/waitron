@@ -131,3 +131,8 @@ Afterward, the printing suite passed 16 tests; the server formatter and print AP
 host Docker access; the dashboard screen, accessibility and API-client suites passed 333 in
 Chromium. Typechecking passed for printing, server and dashboard. ESLint, `git diff --check`, and
 the production dashboard build passed. No physical printer was available for a paper check.
+
+The next owner follow-up identified gaps in the NT-806 table list and asked for a generic baseline
+between candidates. A new byte-sequence assertion for the unassigned table 11 failed because the
+finder only sent `ESC t 11`; it passed after the finder sent `ESC t 0` before each candidate line.
+This is a formatter-wide rule, not an NT-806-specific profile.

@@ -123,3 +123,10 @@ how the saved combination renders ordinary receipt content.
 
 This changes the generic finder, not the physical NT-806 result above. Without a printer on the
 current network, the new paper layout and its glyph matching have not been verified on hardware.
+
+The NT-806 manual lists gaps in its valid table numbers. A generic finder cannot assume how an
+unknown printer handles an unassigned number: ignoring the command would make that candidate print
+using the previous candidate's table, creating a false match. Before every A and B line, the finder
+therefore sends `ESC t 0` and then `ESC t n` for the candidate. This establishes a known baseline
+on printers that accept table 0 and ignore unsupported numbers. It does not claim that all printers
+handle invalid values that way; compare the actual paper with the expected glyphs.

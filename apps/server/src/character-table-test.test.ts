@@ -20,6 +20,23 @@ function printableLineWidths(bytes: Uint8Array): number[] {
 }
 
 describe("formatCharacterTableTest", () => {
+  it("selects table zero before every candidate line so an ignored number does not inherit the previous table", () => {
+    const bytes = formatCharacterTableTest({ startTable: 0, locale: "en-GB" });
+    for (const [characterSet, line] of [
+      ["wpc1252", "T11W A: áéíóú ÁÉÍÓÚ ñÑ üÜ"],
+      ["wpc1252", "T11W B: ¿¡ € £ çÇ “ ” ‘ ’"],
+      ["pc858", "T118 A: áéíóú ÁÉÍÓÚ ñÑ üÜ"],
+      ["pc858", "T118 B: ¿¡ € £ çÇ \" \" ' '"],
+    ] as const) {
+      expect(
+        bytesInclude(
+          bytes,
+          Uint8Array.from([0x1b, 0x74, 0, 0x1b, 0x74, 11, ...encodeText(line, characterSet)]),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("prints sixteen numbered tables with both supported encodings", () => {
     const bytes = formatCharacterTableTest({ startTable: 6, locale: "en-GB" });
     expect(
