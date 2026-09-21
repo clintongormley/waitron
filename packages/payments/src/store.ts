@@ -458,8 +458,9 @@ function forwardableWhere(provider: string) {
  * The claim is the row lock itself and stamps nothing: there is no claim column on `payments`, and
  * the caller advances each row through its own state-guarded update before the transaction ends.
  * `claimLock` is where this claim's lock clause is spelled, so the storage switch edits
- * `packages/db/src/job-claim.ts` rather than this call site. It is not the only place in the tree
- * that spells one — the fiscal drain still carries its own until plan task P4b moves it.
+ * `packages/db/src/job-claim.ts` rather than this call site. No caller in the tree spells one of
+ * its own any more: the fiscal drain was the last, and plan task P4b moved it onto that module's
+ * `claimLockedRows`.
  *
  * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
  * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so

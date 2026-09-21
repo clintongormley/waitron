@@ -732,17 +732,23 @@ function applyShippedTail(
  * real drain; what triggers the second is the model's own stand-in, not a mirror:
  *
  *  1. It claims across EVERY chain with no node filter — the real `claimBatch` takes no node
- *    argument (packages/fiscal-verifactu/src/drain.ts:542), which is why a record shipped from
- *    another node can be submitted by the receiver before the ship is confirmed.
+ *    argument (its declaration in `packages/fiscal-verifactu/src/drain.ts`), which is why a record
+ *    shipped from another node can be submitted by the receiver before the ship is confirmed.
  *  2. A per-pass in-memory blocked-chain set, skipping the rest of a blocked chain and re-examining
- *    it next pass (`blockedSifIds`, drain.ts:304 and 583 — the real key is `sif_id`, the model's is
- *    `node_id`).
+ *    it next pass (`blockedSifIds` in drain.ts, declared in `drainDue` and handed to `claimBatch` —
+ *    the real key is `sif_id`, the model's is `node_id`).
  *
- * The real set is added to in exactly one place, drain.ts:583: the claim-time environment guard,
- * when a row's `entorno` is NULL or disagrees with `WAITRON_ENV`. The model has no `entorno`, so it
- * blocks a chain on a `submit` throw instead. The real drain's answer to a `submit` throw is a
- * different thing the model does not have: drain.ts:359-370 backs the claimed batch off (rows to
- * `pendiente`, an incidencia, a later `proximo_intento_en`) and ends the pass for EVERY chain.
+ * The real set is added to in exactly one place, inside `claimBatch`: the claim-time environment
+ * guard, when a row's `entorno` is NULL or disagrees with `WAITRON_ENV`. The model has no
+ * `entorno`, so it blocks a chain on a `submit` throw instead. The real drain's answer to a
+ * `submit` throw is a different thing the model does not have: `drainDue`'s `catch` around
+ * `client.submit` calls `backoffBatch`, which backs the claimed batch off (rows to `pendiente`, an
+ * incidencia, a later `proximo_intento_en`) and ends the pass for EVERY chain.
+ *
+ * Every real site above is NAMED rather than numbered. They were cited by line number until
+ * 2026-09-21, when task P4b of the storage switch lengthened
+ * `packages/fiscal-verifactu/src/drain.ts` and two of the numbers stopped landing on what they
+ * described. What those sites DO is unchanged.
  *
  * `submit` stands in for the AEAT call. A throw returns the row to `pendiente`, so the pass records
  * a refusal rather than losing the row.

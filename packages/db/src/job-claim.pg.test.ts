@@ -6,22 +6,27 @@
 // so nobody assumes more: the probe table's grants are the ones this file hands out, so the role
 // can only catch SQL a non-owner may not run at all — not a privilege missing on a real table.
 //
-// This is where the two properties of a claim statement are held, rather than at any one caller:
-// that a claimer does not WAIT for another claimer, and that a claim takes a row another
-// transaction rewrote underneath it. `packages/payments/src/forward.concurrency.test.ts` holds the
+// This is where the properties of a claim statement that need a second session are held, rather
+// than at any one caller: that a claimer does not WAIT for another claimer, that a claim takes a
+// row another transaction rewrote underneath it, and that a lock-only claimer partitions the queue
+// with the rest. What one claim statement selects and stamps on its own, grants included, lives in
+// the hermetic sibling `job-claim.test.ts`. `packages/payments/src/forward.concurrency.test.ts` holds the
 // first property at its own call site and is deliberately untouched by the change that added this
 // file; the case below is the `packages/db` guard for it, so that this module's behaviour does not
 // depend on a suite in a package that depends on it.
 //
 // Running the negative control takes minutes, not seconds. Measured 2026-09-21 with `skip locked`
-// deleted from `job-claim.ts`: all three cases failed. The first fails on the 30s test timeout,
-// which IS the waiting the clause exists to avoid; its holder is then still parked, so the per-test
-// reset blocks on that holder's row locks (a 120s hook timeout) and the other two cases go with it.
-// Only the first case's failure is the control; the rest is collateral.
+// deleted from `job-claim.ts`: three cases failed, which on the day was every case in this file —
+// it has gained one since, so read that as a dated run rather than as a description of the file.
+// The first fails on the 30s test timeout, which IS the waiting the clause exists to avoid; its
+// holder is then still parked, so the per-test reset blocks on that holder's row locks (a 120s
+// hook timeout) and whatever follows goes with it. Only the first failure is the control; the rest
+// is collateral. Task P4b's `claimLockedRows` case was measured the same way on the same day, and
+// fails the same way — see the note on that case.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "./client.js";
-import { claimLock, claimRows } from "./job-claim.js";
+import { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
 import { count, label, table } from "./schema/columns.js";
 import { withTransaction } from "./tenancy.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
@@ -235,5 +240,46 @@ describe("claiming job rows against another session", () => {
     // `packages/payments` reads its queue oldest-first. The sibling cases sort because an UPDATE's
     // RETURNING carries no such promise.
     expect(second).toEqual([2, 3, 4]);
+  });
+  it("hands the lock-only claimer the rows the first did not take, and stamps nothing", async () => {
+    await seed();
+
+    // The negative control for this case, measured 2026-09-21: with `skip locked` deleted from
+    // `claimLockedRows` alone, it fails on the 30s test timeout — which IS the waiting the clause
+    // exists to avoid, and it then parks the per-test reset on its own 120s hook timeout. On the
+    // day it was measured another case followed it and went down with it; it is the file's last
+    // case now, so there is nothing left for it to take — that part is a deduction from the shape
+    // of the file, not something that was run again.
+    const pending = (limit: number) => ({
+      selection: sql`select j.position from probe_jobs j
+        where j.status = 'pending' order by j.position limit ${limit}`,
+      of: "j",
+    });
+    const first = await holdOpen(suite.pg, (tx) =>
+      claimLockedRows<{ position: number }>(tx, pending(2)).then((rows) =>
+        rows.map((r) => r.position),
+      ),
+    );
+    // Asking for all four while the first claimer holds two: it returns the other two straight
+    // away. Waiting instead would fail this case on the suite's timeout, never on an assertion.
+    const second = await whileHolding(first, () =>
+      asClaimer(suite.pg, (tx) =>
+        claimLockedRows<{ position: number }>(tx, pending(4)).then((rows) =>
+          rows.map((r) => r.position),
+        ),
+      ),
+    );
+
+    expect(first.value).toEqual([1, 2]);
+    // Exact order, not sorted: a lock-only claim is a SELECT with an ORDER BY, as in the sibling
+    // `claimLock` case above.
+    expect(second).toEqual([3, 4]);
+    // The claim is the lock alone. Nothing either claimer took carries a mark of having been
+    // taken — which is the whole difference from `claimRows`, and what lets the drain decide row
+    // by row which of the rows it locked it will actually stamp.
+    const after = await suite.admin.execute<{ status: string }>(
+      sql`select status from probe_jobs order by position`,
+    );
+    expect(after.rows.map((r) => r.status)).toEqual(["pending", "pending", "pending", "pending"]);
   });
 });

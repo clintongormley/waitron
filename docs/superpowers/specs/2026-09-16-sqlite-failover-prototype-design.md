@@ -102,6 +102,14 @@ cites the real table or code it stands in for, so a reader can check the model i
   review the same day: the stub also ACCEPTS a repeat, which AEAT does not — it answers error 3000
   and the real drain reads that as filed — so a second submission the stub counts is a refused call
   against the real endpoint. README → "What the FAIL means against the real system".)*
+  *(2026-09-21: two of the three `drain.ts` line numbers above no longer land where they did. Task
+  P4b of the storage switch took the lock clause out of `claimBatch` and put it in a shared helper,
+  which made the file longer, and the file was still being edited when this note was written — so
+  these sites are NAMED rather than renumbered, the repair the storage-switch plan made for the same
+  reason. `claimBatch`'s declaration is the filterless-claim site; `blockedSifIds` is declared in
+  `drainDue` and passed into `claimBatch` as a parameter. `:304` still lands on the declaration.
+  What the lines SAY is unchanged — the claim is still filterless and the blocked set is still
+  per-pass.)*
 
 Non-fiscal ledger shapes the loop also touches are modelled just as thinly: a `sales`/`sale_lines` pair
 (parent carries `node_id`, child hangs off `sale_id`) and a `supplier_invoices` table carrying a
@@ -393,7 +401,7 @@ exists to produce.
 | --- | --- | --- |
 | The loop's shape (promote/return/ship/rejoin) and the scenarios | topology design §5.1, §5.2, §12.2 | read 2026-09-16 |
 | Generation naming `gen-<term>-<node-id>`; `current.json` conditional write is the fence | topology design §2.2 | read 2026-09-16 |
-| `claimBatch` claims across every chain with no node filter; `blockedSifIds` is a per-pass in-memory set | `packages/fiscal-verifactu/src/drain.ts:542,304,547` | read 2026-09-16 |
+| `claimBatch` claims across every chain with no node filter; `blockedSifIds` is a per-pass in-memory set | `packages/fiscal-verifactu/src/drain.ts:542,304,547` — re-read 2026-09-21: task P4b lengthened that file, so two of the three numbers have moved; find the sites by name, `claimBatch`'s declaration and `blockedSifIds`. What they say is unchanged | read 2026-09-16 |
 | `records`/`chain_head` keyed by `node_id`; `envios` hangs off its parent | the `registros_facturacion`, `cadenas` and `registro_sif` schema files under `packages/fiscal-verifactu/src/schema/` | read 2026-09-16 |
 | The residual natural-key clash is the supplier invoice; the working-time clash was removed | outbox-swap design §4.2, §4.4 | read 2026-09-16 |
 | Litestream behaviour (snapshots, follow, one-writer-per-path, no 0.5 encryption) | litestream.io docs | quoted in discussion note §3 (`curl`, 2026-09-16); re-confirmed by the rig on the pinned version |

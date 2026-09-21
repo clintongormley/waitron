@@ -60,9 +60,10 @@ export interface ClaimSpec {
  * leaving the conditional update as the whole mechanism — under the write queue one transaction
  * writes at a time, so there are no locked rows to skip
  * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 16). Keeping the clause
- * here means that step edits one function. It is not the only place in the tree that spells the
- * clause: `packages/fiscal-verifactu/src/drain.ts` still carries its own until task P4b moves it,
- * and a suite that has to HOLD a row against the claim under test spells it too.
+ * here means that step edits this module rather than each caller. The clause is still spelled
+ * outside it, but only ever by a suite and never by a caller — some hold a row against the claim
+ * under test, others run it as a control they expect to be refused. Grep rather than trust a list
+ * here: this sentence has carried a count twice and been wrong both times.
  */
 export async function claimRows<Row extends Record<string, unknown>>(
   tx: Transaction,
@@ -85,6 +86,57 @@ export async function claimRows<Row extends Record<string, unknown>>(
   `);
   // `tx.execute` hands back `Assume<Row, Record<string, unknown>>[]`, which the constraint above
   // already makes the same type — but TypeScript will not reduce that while `Row` is a parameter.
+  return claimed.rows as Row[];
+}
+
+export interface LockedClaimSpec {
+  /** The rows to claim: a complete SELECT, carrying its own joins, ordering and limit. */
+  readonly selection: SQL;
+  /**
+   * Which ONE of the tables the selection names is locked, spelled as the selection spells it —
+   * its alias where it has one. Quoted by `sql.identifier`, like {@link ClaimSpec.table}, which
+   * means it is passed through as written: PostgreSQL folds an unquoted alias to lower case, so
+   * a selection written `from envios E` needs `of: "e"` here and not `"E"`.
+   */
+  readonly of: string;
+}
+
+/**
+ * Claims rows by LOCKING them and stamping nothing, like {@link claimLock}. Two things differ.
+ * The caller hands over raw SQL rather than a drizzle query, and gets back what `tx.execute`
+ * returns rather than drizzle's typed rows; and the lock it takes is narrowed to one table, where
+ * {@link claimLock} locks everything its query names.
+ *
+ * Both differences come back to the same thing: drizzle's `LockConfig` does carry an `of` (read in
+ * drizzle-orm 0.45.2, `pg-core/query-builders/select.types.d.ts:61`), but it wants a table object,
+ * and a caller writing its selection as raw SQL has only an alias to name. `Lockable` below, this
+ * module's own structural type, pins the config to `{ skipLocked: true }` and so offers no `of` at
+ * all.
+ *
+ * A caller needs that narrowing whenever it joins a table the role may not lock: PostgreSQL wants
+ * an update-shaped privilege on every table a `FOR UPDATE` touches, so an unnarrowed lock over
+ * such a join is refused `42501` before it reads anything. The case, with its control running the
+ * refused form first, is `job-claim.test.ts`'s "locks only the table `of` names" — measured there
+ * against a table-wide grant, which is the only shape it covers.
+ *
+ * A caller that needs to STAMP everything it locks wants {@link claimRows} instead, which does
+ * both in one statement. This one exists for a caller that locks a window and then decides, row by
+ * row, which of those rows it will stamp — `packages/fiscal-verifactu/src/drain.ts` reads each
+ * claimed record's own environment before it commits to sending it, and leaves the rest alone.
+ *
+ * Like {@link claimLock}, what task F1 leaves of this is an ordinary ordered SELECT with no claim
+ * in it, sound because the write queue admits one writer at a time — see that function's own
+ * paragraph. A caller relying on that should check {@link claimRows}'s warning against its own
+ * predicate first; the drain's does exclude the state it stamps, and says so at its call site.
+ */
+export async function claimLockedRows<Row extends Record<string, unknown>>(
+  tx: Transaction,
+  spec: LockedClaimSpec,
+): Promise<Row[]> {
+  const claimed = await tx.execute<Row>(
+    sql`${spec.selection} for update of ${sql.identifier(spec.of)} skip locked`,
+  );
+  // Same reduction TypeScript will not make for `claimRows` above, for the same reason.
   return claimed.rows as Row[];
 }
 

@@ -4714,10 +4714,10 @@ The entry further down carries what it found.
 **Task P4a — job claiming becomes one statement — LANDED as #481 on 2026-09-21** (main
 `f0b9a73e`). `FOR UPDATE ... SKIP LOCKED` and `ctid` now live in one file,
 `packages/db/src/job-claim.ts`, so task F1 edits that instead of three call sites in three packages.
-It holds TWO functions rather than the plan's one: `claimRows`, which claims by updating the rows in
-a single statement (`packages/printing/src/runtime.ts` moved onto it, its two statements becoming
-one), and `claimLock`, which claims by locking and stamping nothing. `packages/payments/src/store.ts`
-takes the second because a payment's own state IS the queue and there is no claim column to stamp;
+It holds more than the one function the plan sketched: `claimRows`, which claims by updating the
+rows in a single statement (`packages/printing/src/runtime.ts` moved onto it, its two statements
+becoming one), and beside it `claimLock`, which claims by locking the rows and stamping nothing.
+`packages/payments/src/store.ts` takes the second because a payment's own state IS the queue and there is no claim column to stamp;
 putting it through `claimRows` would have meant a no-op UPDATE writing a new version of every row a
 forward pass merely looked at. `apps/server/src/read-only-gate.ts`, the plan's fourth site, turned
 out to contain no SQL — only a comment describing the claim.
@@ -4744,10 +4744,16 @@ out to contain no SQL — only a comment describing the claim.
    consequence was, and a receipt re-attributed to a code shape it had not been taken against. Budget
    for the third round.
 4. **Still open after P4a.** **Task P4b** moves the fiscal drain
-   (`packages/fiscal-verifactu/src/drain.ts`, which still spells `for update of e skip locked`) onto
-   the same helper; it is autonomous by the owner's 2026-09-20 decision, and its
-   `drain.concurrency` suite must pass unedited. Two things P4a chose not to do, each deliberate and
-   each stated in #481: the holder/waiter scaffold is still hand-written in every real-PostgreSQL
+   (`packages/fiscal-verifactu/src/drain.ts`) onto the same FILE, but not onto the same function:
+   `claimRows` stamps every row the window it locked selected, and the drain stamps only the part of
+   that window whose `entorno` agrees with the host's, so it would stamp rows it is about to refuse.
+   The branch in flight adds a lock-only sibling instead, `claimLockedRows` — raw SQL in, nothing
+   stamped, and the lock narrowed to the one table it names, because `app_user` holds
+   `select, insert` alone on `registros_facturacion` and PostgreSQL refuses an unnarrowed lock over
+   that join. The `for update of e skip locked` the drain used to spell itself is spelled there now.
+   The task is autonomous by the owner's 2026-09-20 decision, and its `drain.concurrency` suite must
+   pass unedited. Two things P4a chose not to do, each deliberate and each stated in #481: the
+   holder/waiter scaffold is still hand-written in every real-PostgreSQL
    contention suite in the tree, because sharing it means editing
    `packages/db/src/testing/lifecycle.ts` and reaching all of them; and running the negative control
    for the lock clause takes minutes rather than seconds, because the blocked claim's holder is still

@@ -20,8 +20,10 @@ const DRAIN_PROBE_PASSWORD = "probe";
  * `describe.skipIf(!dockerAvailable)` anywhere in this file, for the same reason
  * `chain.concurrency.test.ts` gives: a concurrency suite that silently vanishes when Docker is absent
  * reports a green run that proves nothing about the ONE property this file exists to establish — that
- * `claimBatch`'s `FOR UPDATE SKIP LOCKED` prevents two concurrent drainers from ever submitting the
- * same record twice. PGlite cannot substitute for this: it serialises every "concurrent" query onto
+ * `claimBatch`'s claim prevents two concurrent drainers from ever submitting the
+ * same record twice. Its `FOR UPDATE ... SKIP LOCKED` is no longer spelled in `claimBatch` itself:
+ * task P4b moved it into `claimLockedRows` (@waitron/db), which is where to delete it when a
+ * comment below asks you to. PGlite cannot substitute for this: it serialises every "concurrent" query onto
  * one backend process (`chain.pglite-cannot-test-contention.test.ts`), which would make this suite
  * pass vacuously whether or not the locking clause is even present. Docker-absence now fails loudly at
  * the package globalSetup (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every
@@ -67,7 +69,8 @@ describe("drain — claim concurrency (real Postgres)", () => {
 
       const [ra, rb] = await Promise.all([drain(depsA, now), drain(depsB, now)]);
 
-      // The submitted count detects duplicate claims. Without `FOR UPDATE ... SKIP LOCKED` in `claimBatch`, a plain
+      // The submitted count detects duplicate claims. Without `FOR UPDATE ... SKIP LOCKED` behind
+      // `claimBatch`'s claim, a plain
       // `SELECT` (no row locking at all) lets two concurrent transactions each see the SAME
       // `pendiente` rows before either commits its own claim — both would then submit the SAME
       // batch to AEAT, and BOTH `drain()` calls would count those rows in their own
@@ -75,7 +78,9 @@ describe("drain — claim concurrency (real Postgres)", () => {
       // PENDING_COUNT. With the lock in place, a row claimed (and therefore counted) by one
       // drainer is invisible to the other's claim query, so the sum is exactly the seeded count —
       // every row claimed by exactly one drainer. (Confirmed live: reverting `claimBatch` to the
-      // pre-Task-8 unlocked SELECT makes this assertion fail — see this task's report.)
+      // pre-Task-8 unlocked SELECT makes this assertion fail — see this task's report. That receipt
+      // was taken when the clause sat in this function; the shape it was taken against has moved,
+      // so re-taking it now means editing `claimLockedRows`.)
       expect(ra.recordsSubmitted + rb.recordsSubmitted).toBe(PENDING_COUNT);
       // No duplicate identity stored: AEAT's fake store is keyed by invoice identity, and a
       // resubmit of an identity it already holds is answered as `RegistroDuplicado` (3000)

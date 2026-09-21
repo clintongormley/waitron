@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, pgErrorCode, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -1289,5 +1289,37 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
         await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: defaultNode })}`);
       }
     }
+  });
+});
+
+/**
+ * The reason `claimBatch`'s claim names the table it locks. `app_user` is revoked from
+ * `registros_facturacion` and re-granted `select, insert` alone
+ * (drizzle/0001_fiscal_baseline_sql.sql:4 and :6), and PostgreSQL wants an update-shaped privilege
+ * on every table a `FOR UPDATE` locks — so a lock the claim did not narrow would be refused before
+ * it read anything. PGlite is enough for this one and a container is not needed: nothing here runs
+ * a second session, and a grant is enforced once the session has assumed the role (CLAUDE.md §4).
+ */
+describe("the claim's lock is narrowed to the envíos, and has to be", () => {
+  it("refuses the same selection when the lock is not narrowed", async () => {
+    const selection = sql`select e.registro_id from envios e
+      join registros_facturacion r on r.id = e.registro_id
+      where e.estado = 'pendiente' order by r.sif_id, r.secuencia limit 1`;
+    // Each form is caught OUTSIDE its transaction: a refusal aborts the transaction it happened
+    // in, so catching it inside and carrying on there fails on the next statement with `25P02`
+    // instead (CLAUDE.md §3).
+    const attempt = async (locking: ReturnType<typeof sql>) =>
+      withTransaction(pg.db, async (tx) => {
+        await asAppUser(tx);
+        await tx.execute(sql`${selection} ${locking}`);
+      }).then(
+        () => "allowed",
+        (error: unknown) => pgErrorCode(error) ?? "no code",
+      );
+
+    expect(await attempt(sql`for update skip locked`)).toBe("42501");
+    // The control in the other direction, so the case cannot pass just because the query was
+    // broken: narrowed to the envíos, the very same selection is allowed.
+    expect(await attempt(sql`for update of e skip locked`)).toBe("allowed");
   });
 });

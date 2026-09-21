@@ -664,10 +664,12 @@ nothing else touched:
   of the one statement (keyed on `ctid`) — **5 passed**.
 - The same command against the version that shipped (keyed on the row's primary key) — **5 passed**
   again. The old proof does not hold for either.
-- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**. Only
-  the FIRST failure is the control: it fails on the 30-second test timeout, which is the waiting.
-  Its holder is then still parked, so the per-test reset blocks on that holder's row locks and takes
-  the other two cases with it. Expect the control run to take minutes.
+- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**, which
+  on the day was every case in that file; it has gained cases since, so read the run as a dated
+  reading and not as a description of the file. Only the FIRST failure is the control: it fails on
+  the 30-second test timeout, which is the waiting. Its holder is then still parked, so the per-test
+  reset blocks on that holder's row locks and takes the rest of the file down with it. Expect the
+  control run to take minutes.
 
 So what the clause buys is that a claimer does not WAIT, and that is the property
 `packages/db/src/job-claim.pg.test.ts` now holds. What keeps a row from being claimed twice without
