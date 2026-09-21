@@ -2477,6 +2477,20 @@ Two halves, one branch each (owner decision 2026-09-12).
   bill against roughly 70 for routing by METHOD onto Bizum, so **method first**. The variant that
   earns its keep is card-present: spend SumUp's Tarifa Plana €2 500 monthly allowance first, which
   routes on cumulative volume and needs no second merchant account.
+- **Some card payments ask the cardholder to sign instead of enter a PIN — open question, nothing
+  built.** When a card or its issuer picks signature as the way it proves the person is who they say
+  (the card-scheme term is the Cardholder Verification Method), the payment is only complete once a
+  signature is captured, and the merchant is usually expected to keep it in case the payment is later
+  disputed. Three things to settle before this is a task, none of them verified yet: (1) whether our
+  readers — the SumUp Solo, and Stripe Terminal if it ever comes back — handle the signature entirely
+  on the reader and hand us a finished payment, or whether they hand the signature step back to us to
+  run on the waiter's screen; (2) if it lands on us, WHERE the signature is captured and kept (an
+  on-screen signature pad, or a printed receipt with a signature line the waiter files) and how that
+  record is stored and retrieved for a dispute; and (3) whether the fiscal receipt has to show
+  anything about it — this is a card-scheme rule, separate from the Veri\*Factu invoice record, so
+  confirm the two do not touch before assuming they are independent. Start by reading what the SumUp
+  Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
+  because if the reader owns the whole step there may be nothing for us to build.
 
 ### A7. Users, roles and the dashboard shell
 
