@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { useVenueDb } from "./venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { kitchenStations } from "../schema/kitchen-stations.js";
+import { locations } from "../schema/tenants.js";
 import { freshNif, seedKitchenStation, seedNode, seedTenant } from "./seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -40,7 +42,7 @@ describe("seedTenant", () => {
   it("inserts the one taxpayer row, keyed 1", async () => {
     await seedTenant(db);
     const result = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from tenants where id = 1`,
+      sql`select count(*) as n from tenants where id = 1`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
@@ -49,7 +51,7 @@ describe("seedTenant", () => {
     await seedTenant(db);
     await seedTenant(db);
     await seedTenant(db);
-    const result = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    const result = await db.execute<{ n: number }>(sql`select count(*) as n from tenants`);
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 });
@@ -65,12 +67,18 @@ describe("seedNode", () => {
     // seedNode takes the location as given, so build it first: a node FKs it, and
     // there is deliberately no seedLocation helper (only seedTenant and seedNode exist).
     await seedTenant(db);
-    const locResult = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
-    const location = brandLocationId(locResult.rows[0]!.id);
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Test location",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurant",
+      })
+      .returning({ id: locations.id });
+    const location = brandLocationId(loc!.id);
     const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from nodes where id = ${node} and location_id = ${location}`,
+      sql`select count(*) as n from nodes where id = ${node} and location_id = ${location}`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
@@ -86,18 +94,28 @@ describe("seedKitchenStation", () => {
   // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
   async function seedVenue() {
     await seedTenant(db);
-    const locResult = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
-    return { location: brandLocationId(locResult.rows[0]!.id) };
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Test location",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurant",
+      })
+      .returning({ id: locations.id });
+    return { location: brandLocationId(loc!.id) };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
     const { location } = await seedVenue();
     const id = await seedKitchenStation(db, { locationId: location });
-    const result = await db.execute<{ name: string; is_default: boolean }>(
-      sql`select name, is_default from kitchen_stations where id = ${id} and location_id = ${location}`,
-    );
-    expect(result.rows[0]).toEqual({ name: "Cocina", is_default: true });
+    // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
+    // column's own mapping turns it back into a boolean. That is why the key reads `isDefault`
+    // here — the shape of the read changed, the values asserted did not.
+    const rows = await db
+      .select({ name: kitchenStations.name, isDefault: kitchenStations.isDefault })
+      .from(kitchenStations)
+      .where(and(eq(kitchenStations.id, id), eq(kitchenStations.locationId, location)));
+    expect(rows[0]).toEqual({ name: "Cocina", isDefault: true });
   });
 
   it("honours an overridden name and is_default", async () => {
@@ -107,9 +125,10 @@ describe("seedKitchenStation", () => {
       name: "Barra",
       isDefault: false,
     });
-    const result = await db.execute<{ name: string; is_default: boolean }>(
-      sql`select name, is_default from kitchen_stations where id = ${id}`,
-    );
-    expect(result.rows[0]).toEqual({ name: "Barra", is_default: false });
+    const rows = await db
+      .select({ name: kitchenStations.name, isDefault: kitchenStations.isDefault })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(rows[0]).toEqual({ name: "Barra", isDefault: false });
   });
 });
