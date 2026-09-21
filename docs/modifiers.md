@@ -71,10 +71,21 @@ An extras entry declares its allergens and its dietary suitability through the p
 you maintain those on that product under **Products**, not here. An options label declares neither —
 it is wording, not something eaten.
 
-> **Not finished yet (2026-09-21).** The till does not offer these two kinds of list to an operator
-> yet, so a dish carrying an extras or options list is still sold without the question being asked.
-> Half of the wiring has landed: the reads behind the till's menu now hand it every list a dish
-> carries, in the order you arranged them, with each extra already priced. What is still missing is
-> the till screen that draws them. That is the rest of Task 12 of
-> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. Until it lands, treat this page
-> as a guide to building lists in the dashboard rather than to selling with them.
+## What the till does with a list
+
+Tapping a dish that carries a list opens the question straight away, one list after another in the
+order you arranged them. An extras list shows its entries at the price you set, with a tick box
+each, or a stepper where you allowed more than one; a list you made required keeps **Add** shut
+until something is picked. An options list shows its labels as a set of radio buttons, exactly one
+to choose, with your default already selected.
+
+The operator reads the staff name throughout. The till is a staff screen: the diner's wording is
+what the receipt prints, and the kitchen's is what the ticket prints.
+
+Each extra picked becomes its own indented line under the dish in the basket, with its own price
+and its own allergens and dietary labels — never folded into the dish's. An options answer costs
+nothing and rides along as wording on the dish's line.
+
+One thing an operator cannot do yet: reopen a saved order and change the answers on a line that
+already has them. An order stores the wording that was chosen and not a link back to the list, so
+there is nothing to reopen the question with. The till asks for the answers again instead.

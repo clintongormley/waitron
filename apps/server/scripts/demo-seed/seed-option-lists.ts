@@ -5,15 +5,18 @@
 // other staff-facing name in `menu.ts` is, and a staff name is one plain string that is never
 // translated at read time, so an English one would show in English on the Spanish demo.
 //
-// What that does NOT yet mean: the TILL does not offer the list to an operator. The paragraph that
-// stood here said `listAvailableProducts` read the legacy attachments alone, and half of that is no
-// longer true — as of 2026-09-21 it carries the new `product_modifiers` rows this file writes too,
-// resolved and in the product's own order, in an `offeredModifiers` field beside the legacy
-// `optionGroups` (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`, pinned by
-// "listAvailableProducts carries the product-side walk" in its test file). What is still true is the
-// part that matters here: no till SCREEN draws that field — `apps/till` was not touched by that
-// change — so the seeded `Punto` list is still never put to an operator. Drawing it is the rest of
-// Task 12 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
+// The till DOES offer this list to an operator, as of 2026-09-21. `listAvailableProducts` and
+// `listMenuOffers` carry the `product_modifiers` rows this file writes, resolved and in the
+// product's own order, in an `offeredModifiers` field beside the legacy `optionGroups`
+// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`, pinned by
+// "listAvailableProducts carries the product-side walk" in its test file), and the till's picker
+// draws that field. Two earlier paragraphs here claimed the opposite in turn; both are retired.
+//
+// The demo steak therefore carries the cooking question TWICE in the data — this `Punto` list and
+// the legacy "Cooking" option group that `seed-options.ts` writes — and is asked it ONCE, because
+// the picker reads `offeredModifiers` and never `optionGroups`
+// (`git grep -l -i optiongroup HEAD -- apps/till/src` matches no source file; the same command on
+// `main` matches eight).
 //
 // A file of its own, not part of `seed-options.ts`, on purpose: that file seeds the LEGACY option
 // groups, whose tables Task 13 of

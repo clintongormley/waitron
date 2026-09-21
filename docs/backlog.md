@@ -530,9 +530,11 @@ compatibility code. TWO CONSEQUENCES WORTH KNOWING BEFORE ANYONE OPENS A DEV TIL
 still sends the legacy `{optionGroupItemId}` shape, so a line carrying a legacy modifier now
 answers 400 rather than being ignored (reaching it takes a product with a legacy option group
 attached, and the dashboard can no longer attach one); and the till's read surfaces, which look
-for a child line by a NULL product, no longer recognise one. Task 12 wires the till. Task 10 has
+for a child line by a NULL product, no longer recognise one. Task 10 has
 since taken doneness out end to end and seeded a cooking options list in its place, and Task 11 has
-built the dashboard's Extras and Options tabs (below), so the next task is Task 12.
+built the dashboard's Extras and Options tabs (below). **Both of those dev-till consequences are
+closed by Task 12 (2026-09-21):** the till sends the new `extras`/`options` shapes, and it tells a
+child line by `TabLine.parentLineNo` instead of by a null product. The next task is Task 13.
 
 Task 10 has landed as **#471** (main `bc958bd3b`). It deleted the built-in `doneness` field end to
 end — the enum, its column on the open order line and on the fired ticket item, the
@@ -575,17 +577,25 @@ guard, and the failing SET changed between two consecutive runs of the same code
 machine the same tree is 46/46. Load, not the branch — and the control is the quiet run, not a
 re-run past to green.
 
-STILL OPEN after this task, precisely. The till does not yet OFFER the seeded list. Half of that is
-closed as of 2026-09-21: `listAvailableProducts` and `listMenuOffers` now carry the
-`product_modifiers` attachments too, resolved and in the product's own order, in a new
-`offeredModifiers` field beside the legacy `optionGroups` (`readOfferedModifiers`,
-`packages/catalogue/src/offered-modifiers.ts`). No till SCREEN reads that field yet, so nothing an
-operator sees has changed. Because Task 12 lands BEFORE Task 13 deletes the legacy tables, there is
-a window in which the demo steak asks how it should be cooked twice; whoever writes the till's
-picker removes the legacy group from the seed in the same change or accepts the duplicate
-knowingly. That window is still SHUT today, because the picker reads neither field. Whether a
-`+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
-`** MEDIUM RARE **` framing is an open question nobody has put to a real cook.
+CLOSED as of 2026-09-21 by Task 12. The two sell-side reads carry the `product_modifiers`
+attachments resolved and in the product's own order, in an `offeredModifiers` field beside the
+legacy `optionGroups` (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`), and
+the till's picker now draws that field: the seeded `Punto` list IS put to an operator.
+
+**The double-cooking-question window never opened.** This entry warned that, with Task 12 landing
+before Task 13 deletes the legacy tables, the demo steak would ask how it should be cooked twice —
+once from the legacy "Cooking" option group and once from the new list. It does not, because the
+till's picker draws `offeredModifiers` and nothing else: the legacy `optionGroups` field is still on
+the payload and no till source reads it. Checked, not assumed —
+`git grep -l -i optiongroup HEAD -- apps/till/src` matches three test files, each setting
+`optionGroups: []` only to satisfy catalogue's declared `MenuOffer`, and no source file, where the
+same command against `main` matches eight source files; the till's own `TillProduct` no longer
+declares the field, so a screen naming it would not compile. So nobody has to pull the legacy group
+out of the seed, and Task 13 can delete it with the rest of the legacy machinery. NOT established by
+opening a demo box and tapping the steak, which is what would settle it beyond the code.
+
+Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
+`** MEDIUM RARE **` framing is still an open question nobody has put to a real cook.
 
 Task 8 has landed too, as #465. This is what it changed. It took the preserve path's comparison out of
 `updateHeldOrder` into two named functions — `sameOptionSelections` and `matchExtraChildren`
@@ -879,6 +889,40 @@ What extras lists left open, and what #449 found on the way:
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
 
+Task 12 has landed (2026-09-21), which is the till side, and the plan's last code task before
+Task 13's deletions. The picker walks a dish's `offeredModifiers` in the order the offer gives them
+and draws one widget per entry: an extras list offers its products at the resolved price, each with
+a checkbox or a stepper where the dish may take more than one, held inside two bounds (the
+product's own maximum and what is left of the list's allowance); an options list offers its labels
+as radios with the offer's default preselected. Every name drawn is the STAFF name. The basket
+turns each pick into an indented child row under its dish, with that product's OWN allergens and
+dietary labels resolved live from the offer by product, never folded into the dish's. The five wire
+mirrors in `apps/till/src/api/client.ts` read `optionSnapshots`, and `option-snapshot.ts` makes each
+surface name the reader it draws for over the shared builders in `packages/catalogue`, so a screen
+and its paper twin cannot drift apart. The tab screen tells a child extras row from a dish by
+`TabLine.parentLineNo`. The legacy `Modifier`/`ModifierSelection`/`ModifierSnapshot`/`TillOptionGroup`
+declarations, the free-text `text` modifier and the `optionGroups` field on a till product are gone
+from the app.
+
+What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
+
+- **The legacy `optionGroups` and `modifiers` fields stay on both sell-side payloads, and the legacy
+  demo seed stays.** The till reads neither, so there was nothing to gain by removing them early and
+  the removal belongs with the tables. Task 13 takes all of it.
+- **The per-line kitchen NOTE was not touched**, despite living in a file called
+  `line-extras-editor.ts`. It was never part of this feature; the file name is now misleading and
+  nobody has renamed it.
+- **A retrieved line's options answers cannot be re-sent.** A frozen answer carries six names and no
+  ids by design (spec §2.3), so there is nothing to put back on the wire; the server refuses the
+  edit until the operator re-answers through the picker, and the till's types say so. Not a gap to
+  close without putting an id on the line, which the spec rules out.
+- **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
+  its own name, quantity and price — where the basket and the settled ticket both nest a child under
+  its dish. It is now correctly skipped by the per-line action, the course picker and the split and
+  transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
+  action it cannot take; whether the drawer should also INDENT it is a display question nobody has
+  decided. Deliberately left as it is.
+
 What the order path (the plan's Task 7) left behind:
 
 - **A quantity-only edit made after an OPTIONS list is RENAMED re-prices the line.** `updateHeldOrder`'s
@@ -899,7 +943,12 @@ What the order path (the plan's Task 7) left behind:
   comparison could use — would mean putting a list or label id on the line, which is exactly what
   spec §2.3 rules out and what makes editing or deleting a list unable to change a saved order. With
   no id on either side there is nothing but the wording to compare, so a rename is indistinguishable
-  from a different answer.
+  from a different answer. **The reachability line above is out of date as of 2026-09-21:** the till
+  does send `extras`/`options` now, so this IS reachable from a real basket. What the till will not
+  do is re-send a RETRIEVED line's options answers at all — a frozen answer carries six names and no
+  ids, so there is nothing to put on the wire, and the server refuses the edit until the operator
+  re-answers through the picker. That narrows the exposure to an order answered and edited inside one
+  session, rather than closing it.
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
@@ -923,15 +972,18 @@ What the order path (the plan's Task 7) left behind:
   `options.invalid` naming `optionSelections.optionGroupItemId` rather than being priced. It takes a
   product that still has a legacy option group attached to reach it, and the dashboard can no longer
   attach one (Task 6 removed that section), so a fresh venue cannot; a dev database seeded before
-  that change can. **Next action:** Task 12 rebuilds the till's picker and basket over extras and
-  options; until then, reset a dev database rather than debugging a 400.
+  that change can. **DONE (2026-09-21, Task 12):** the picker and the basket are rebuilt over extras
+  and options, and `apps/till/src/state/order-line.ts` builds `{ listId, labelId }` answers. The
+  legacy `{ optionGroupItemId }` shape is gone from the till, so the 400 this describes can no longer
+  be produced from it.
 - **A filed sale now carries its options answers, and the receipt prints them** (Task 9, slices C
   and D). A walk-up files them off the priced basket and a retrieved order off
   `working_order_lines.option_snapshots` via `readLockedLines`; the customer receipt prints one
   `<list>: <label>` line under each dish, each side taking its customer text and falling back to the
   staff name (`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`, beside the
-  kitchen-facing twin). `apps/server/src/modifier-snapshot-labels.ts` is deleted. Still not reachable
-  from the till, which sends no answers until Task 12.
+  kitchen-facing twin). `apps/server/src/modifier-snapshot-labels.ts` is deleted. Reachable from the
+  till as of 2026-09-21: it sends the answers, and shows them on its own settled ticket through
+  `customerOptionSnapshotLabels` (`apps/till/src/widgets/option-snapshot.ts`).
 - **`modifierDependants(...).orders` is always 0, and `deleteModifier` no longer refuses.** An open
   order line has no column that could name a legacy modifier or one of its choices, so the refusal
   and the count that fed the dashboard's delete confirmation had nothing left to find. The whole
@@ -958,6 +1010,15 @@ What the order path (the plan's Task 7) left behind:
   instead of being skipped. Unreachable today for the same reason as the rest of this entry — the
   till sends no extras, so no child line exists for it to mis-classify, and the legacy child line
   that used to carry a null product cannot be created at all any more.
+  **DONE (2026-09-21, Task 12).** The tab wire gained the marker the till was missing —
+  `TabLine.parentLineNo`, the parent dish's line number, null on a dish — and the screen tests that
+  instead. `#isSendable`, `#lineAction`, `#lineCourse` and the split picker all ask one `#isChild`
+  helper. Two corrections to the paragraph above, found by running it rather than reading it: the
+  SEND action was never reachable for a child (a child gets no `ticket_items` row, so
+  `readTabLines` sends `state: null`, which `#isSendable` already refused), and the picker the
+  paragraph does not mention — TRANSFER — was the one with a server refusal behind it
+  (`tab.transfer_modifier_line`). It has listed every line since PR #174, so its unfiltered list
+  predates the branch; what changed is that the row now carries a real dish name.
   A THIRD thing, in the same app but on a different screen, found while fixing its paper twin and
   NOT a consequence of the rename: `apps/till/src/screens/till-ticket-view.ts` resolves a line's
   unit abbreviation through its own `lineName` helper, which is
@@ -976,13 +1037,17 @@ What the order path (the plan's Task 7) left behind:
   is filed and printed from the in-memory priced result instead (`priceBasketWithOptions` sets
   `unitName: item.product.unit.abbreviation`, `packages/catalogue/src/pricing.ts`), so the
   constant's own key order survives and it printed the ENGLISH `ea`.
-  The paper side is fixed (`resolveSnapshotText`); the screen still shows the wrong language's unit,
-  so paper and screen now disagree until somebody takes it. The till's own suites stay green over it
-  because each of their fixtures keys `unitName` with a full tag, which the exact-key lookup hits:
-  `apps/till/src/screens/till-ticket-view.test.ts`, `apps/till/src/screens/till-expo-screen.test.ts`
-  and `apps/till/src/widgets/station-queue.test.ts` all use `{ "es-ES": "kg" }`.
-  **Next action:** Task 12 owns the till — recorded here so nobody debugs a missing line as a data
-  problem, and so the child-line detection is rewritten rather than trusted.
+  The paper side was fixed first (`resolveSnapshotText`), which left paper and screen disagreeing.
+  **The screen is fixed too as of 2026-09-21:** `till-ticket-view.ts` resolves `unitName` through
+  `resolveSnapshotText` and keeps the exact-key `lineName` only for `descriptions`, which
+  `toInvoiceLineDescriptions` really does re-key. Its new test uses a BARE content-language key —
+  the shape production writes — where the fixtures named above all key with a full tag and would
+  have passed either way.
+  **DONE (2026-09-21, Task 12):** the five mirrors declare `optionSnapshots`, the answers render
+  again on the tab, the kitchen rail, the pass and the till's own settled ticket, and each surface
+  names the reader it draws for (`apps/till/src/widgets/option-snapshot.ts`, over the shared
+  builders in `packages/catalogue/src/option-snapshot-labels.ts`, so a screen and its paper twin
+  cannot drift apart).
   **A second next action on the same task, raised by the Task 9 review and deliberately NOT taken
   there:** the two label builders the till will need live in `apps/server` and the till cannot
   import them. `packages/catalogue/src/option-snapshot-labels.ts` turns a frozen answer into the
@@ -999,8 +1064,8 @@ What the order path (the plan's Task 7) left behind:
   left them where they are because the server's two printers were the only callers.
   **DONE:** the pair moved to `packages/catalogue/src/option-snapshot-labels.ts`, the two printers
   now import them from `@waitron/catalogue`, and a third builder for the till's own staff wording
-  (`staffOptionSnapshotLabels`) sits beside them. The till screens that will call it are still Task
-  12's to write.
+  (`staffOptionSnapshotLabels`) sits beside them. The till screens call them as of 2026-09-21,
+  through `apps/till/src/widgets/option-snapshot.ts`, which makes each caller name its reader.
 - **A dead dashboard surface was left behind by `modifierDependants(...).orders` always being 0 —
   MOSTLY CLEARED by Task 11.** Rewriting the Modifiers screen took all three consumers with it: the
   orders-block element, the delete button disabled on `dependants.orders > 0` and the
@@ -1595,11 +1660,13 @@ What it left open:
   `pricingUnit` that `MenuOffer` does not model. (The server does still send `pricingUnit` on the offer
   body, but the till does not need it — an offer-derived product always carries a full `unit`, which is
   what it weighs from — so `menuOfferToTillProduct` no longer copies it.) Both leaves are guarded as
-  type-only by `scripts/dashboard-browser-purity.test.ts`. `TillProduct` and its
-  `TillOptionGroup`/`TillOptionItem` sub-shapes deliberately stay till-LOCAL: `TillProduct` is built
-  from an offer and from a retrieved order line (not received as one wire shape), and the option
-  sub-shapes could be aliased to catalogue's resolved-option types the same way — a follow-up this
-  change did not take.
+  type-only by `scripts/dashboard-browser-purity.test.ts`. `TillProduct` deliberately stays
+  till-LOCAL: it is built from an offer and from a retrieved order line, never received as one wire
+  shape. **The option sub-shapes this entry left as a follow-up are settled (2026-09-21):**
+  `TillOptionGroup` and `TillOptionItem` are deleted rather than aliased, and what replaced them —
+  `OfferedModifier` and its parts — is imported type-only from `menu-types.ts` and re-exported from
+  `apps/till/src/api/client.ts`, so the picker draws exactly the shape the order path accepts an
+  answer from.
   What is still a hand-written local mirror, by the bundle-decoupling rule and a separate, lower-risk
   concern from the drift-prone product shapes: the sale-result and till-info response shapes
   (`TillSaleResult`, `TillInfo`, …) in `apps/till/src/api/client.ts`.
@@ -2178,17 +2245,20 @@ ongoing overhaul listed at the top of Track A.
   / `MUY HECHO`. **Open, and worth a cook's eye before a real service:** whether a `+` sub-line is
   enough for something a cook must not miss, or whether an options answer deserves its own
   prominent form on the ticket. Nobody has watched a real kitchen read one.
-  **Still owed:** the till does not OFFER the seeded list yet. The catalogue half landed 2026-09-21 —
-  `listAvailableProducts` and `listMenuOffers` now also carry the `product_modifiers` attachments,
-  resolved, under `offeredModifiers` (`packages/catalogue/src/offered-modifiers.ts`) — and no till
-  screen draws that field. The rest of Task 12 of the modifiers plan is the picker.
-  **A window nobody had written down, found by the review wave:** the demo steak now carries the
-  cooking question TWICE — the legacy "Cooking" option group and the new list, side by side. That is
-  still invisible today: as of 2026-09-21 the catalogue read offers BOTH, but the till's picker
-  draws neither, so no operator is asked anything twice. Task 12 (wire the till) lands BEFORE Task 13
-  (delete the legacy tables), so once the picker reads the new field a demo steak will ask the diner
-  how it should be cooked twice over. Whoever writes that picker should either pull the legacy group
-  out of the seed in the same change or accept the duplicate knowingly.
+  **Settled 2026-09-21 by Task 12:** the till OFFERS the seeded list. The two sell-side reads carry
+  the `product_modifiers` attachments resolved, under `offeredModifiers`
+  (`packages/catalogue/src/offered-modifiers.ts`), and the picker draws them.
+  **A window nobody had written down, found by the review wave — and it never opened.** The demo
+  steak does carry the cooking question twice in the data: the legacy "Cooking" option group and the
+  new `Punto` list, side by side. The worry was that Task 12 lands before Task 13 deletes the legacy
+  tables, so a picker reading both fields would ask the diner twice. It reads one:
+  `offeredModifiers`, never the legacy `optionGroups` beside it. Checked with
+  `git grep -l -i optiongroup HEAD -- apps/till/src` — three test files, each setting
+  `optionGroups: []` only to satisfy catalogue's declared `MenuOffer`, and no source file, against
+  eight source files for the same command on `main`; the till's `TillProduct` no longer declares the
+  field either, so a screen naming it would not compile. Nobody needs to pull the legacy group out
+  of the seed; Task 13 deletes it with the rest. What that does NOT cover is a real demo box opened
+  and tapped, which is the check that would settle it outside the code.
 - **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and
   it reproduces itself** (found by the review wave on the doneness removal, 2026-09-20). What
   `backend.recordSale` is actually handed is twelve fields
@@ -5667,7 +5737,7 @@ partial scope; the detail for a live thread is in its track.
 | 15 | Online ordering | — | not started (later phase) |
 | 16 | Workforce | *registro de jornada* (chain per node since #268), D2 scheduling, roster authoring + approvals, staff request path + portal | **wage-computation engine** (convenio-gated); D3 payroll export (integrate-not-build) |
 | 17 | Accounting export | — | not started (core subset; extends Reporting) |
-| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, modifiers and option groups, per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
+| 18 | Menu/recipes/allergens | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups survive only as tables Task 13 deletes), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | counter/walk-up kitchen fire; menu draft/publish + schedule; customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked |
 | 19 | Opening hours & channel sync | — | not started (Google Business Profile / Maps) |
 | 20 | Procurement & inventory | received purchase invoices (`@waitron/purchasing`, feeds modelo 303) | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred |
 

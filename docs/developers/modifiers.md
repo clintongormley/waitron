@@ -252,9 +252,14 @@ it answered was renamed between the two sends" (`apps/server/src/working-order.t
 list is different: its children are compared by the picked product's id, so renaming the list — or
 the product — disturbs nothing and the line is preserved.
 
-The till has not moved onto this wire yet: `apps/till` still builds and reads the old
-`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own — its mirror of the
-settled ticket included. The gap, and which till files it touches, is in `docs/backlog.md`.
+The till is on this wire as of 2026-09-21. It sends one `options` entry per answered list and one
+`extras` entry per list picked from, reads a line's frozen answers back as `optionSnapshots` on all
+five mirrors it keeps (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by
+`parentLineNo` rather than by a null product. The old `modifierSelections`/`modifierSnapshots`
+shapes and the `{ optionGroupItemId }` answer are gone from it, its mirror of the settled ticket
+included. What one of those surfaces can NOT do is re-send a retrieved line's options answers: a
+frozen answer carries six names and no ids by design, so there is nothing to put on the wire, and
+the server refuses the edit until the operator re-answers through the picker.
 
 ## What a till is offered
 
@@ -267,8 +272,13 @@ beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `Of
 
 The legacy `optionGroups` and `modifiers` fields on those two payloads are untouched and still
 carry the old `option_groups` model; Task 13 of
-`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. As of 2026-09-21 no
-till screen reads EITHER field.
+`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. Nothing in `apps/till`
+reads either of them any more — the picker walks `offeredModifiers` alone
+(`apps/till/src/widgets/modifier-picker.ts`), and the product grid decides whether a dish needs a
+picker at all from the same field. Checked with `git grep -l -i optiongroup HEAD -- apps/till/src`:
+three test files match, each setting `optionGroups: []` only to satisfy catalogue's declared
+`MenuOffer`, and no source file at all — against eight source files for the same command on
+`main`.
 
 Five things it is worth knowing about that payload:
 
