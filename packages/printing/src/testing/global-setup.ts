@@ -21,17 +21,17 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes. Because globalSetup runs before every worker, a Docker-absent run dies HERE,
  * taking the whole package with it — accepted for the same reason db/identity accept it: these suites
- * prove a CONCURRENCY property (runtime.race's "two agents don't double-print", enforced by the
- * locking `for update skip locked` pull) and the exact `app_user` grants the claim/lease paths run
+ * prove a CONCURRENCY property (runtime.race's "two agents don't double-print", which rests on the
+ * pull being one locking claim statement) and the exact `app_user` grants the claim/lease paths run
  * under, and PGlite (one serialised, all-superuser backend) can stage neither (CLAUDE.md §4).
  */
 export default async function ({ provide }: TestProject) {
   const { handle, teardown } = await startSharedContainer({
     dockerRequired:
       "@waitron/printing's real-Postgres suites require a running Docker daemon. They cannot be " +
-      "skipped: the agent pull is a CONCURRENCY property enforced by a row-locking " +
-      "`for update skip locked`, and PGlite serialises every query onto one backend, so two agents " +
-      "never truly overlap there — a PGlite run would be a false pass.",
+      "skipped: the agent pull is a CONCURRENCY property enforced by one row-locking claim " +
+      "statement, and PGlite serialises every query onto one backend, so two agents never truly " +
+      "overlap there — a PGlite run would be a false pass.",
     templates: {
       core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
     },

@@ -16,7 +16,7 @@ import type { PrintConfig } from "./printers.js";
 // failure isolation, the retry cap, and the venue-scope filter — none of which depend on concurrency
 // or the deployment role. The one property PGlite CANNOT show is the double-pull race (it serialises
 // every query onto one backend, so two agents never truly contend): that lives in runtime.race.test.ts
-// against real Postgres, proven by deletion of the locking pull (CLAUDE.md §4).
+// against real Postgres (CLAUDE.md §4).
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {

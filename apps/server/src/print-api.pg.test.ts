@@ -32,8 +32,10 @@ import "./errors.js";
 // list/revoke/CRUD), and the properties this suite is FOR are the ones PGlite's all-superuser,
 // single-backend connection FALSE-passes: the table grants the routes need, the `printer.manage` gate
 // proven by DELETION, the claim COMMITTING within the request (observed cross-connection), and
-// revocation stopping the Bearer instantly under the real deployment role. The claim's `for update … skip locked` under true concurrency is proven separately (by deletion)
-// in packages/printing's runtime.race.test.ts; the SERVER path calls that same `claimPrintJobs`.
+// revocation stopping the Bearer instantly under the real deployment role. What the claim does when
+// two agents contend is proven separately in packages/printing's runtime.race.test.ts, and the claim
+// statement's own behaviour under contention in packages/db's job-claim.pg.test.ts; the SERVER path
+// calls that same `claimPrintJobs`.
 const noopLog: Logger = () => {};
 
 interface Tenant {

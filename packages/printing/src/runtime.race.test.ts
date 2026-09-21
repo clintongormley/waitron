@@ -13,12 +13,15 @@ import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
 // Real Postgres (a `core` template clone), NOT PGlite: the "two agents don't double-print" guarantee
-// is a CONCURRENCY property of the locking pull, and PGlite serialises every query onto one backend,
+// is a CONCURRENCY property of the claim, and PGlite serialises every query onto one backend,
 // so two agent instances never truly contend there — a false pass, not a weak one (CLAUDE.md §4).
-// The locking clause (`for update ... skip locked` in runtime.ts's pull) is PROVEN LOAD-BEARING by
-// deletion: with it, agent B skips agent A's in-flight row and the job prints exactly once; delete it
-// and B re-claims the same row after A commits, printing it twice (total 2 → this test's `toBe(1)`
-// fails). See task-5-report.md for the recorded RED/GREEN of that deletion.
+// What this suite shows is the PROPERTY — two agents contending over one queue claim each job at
+// most once, as the real deployment role. It does not show what the property rests on. Measured
+// 2026-09-21: with `for update … skip locked` taken out of `packages/db/src/job-claim.ts` and
+// nothing else changed, this suite and runtime.reclaim.test.ts both still PASSED, five tests green.
+// The clause's own proof-by-deletion lives with the SQL, in `packages/db/src/job-claim.pg.test.ts`.
+// See docs/developers/testing-guide.md, "A proof-by-deletion belongs to the SHAPE of the code it
+// was taken against".
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
@@ -120,9 +123,10 @@ describe("double-pull race (real Postgres)", () => {
       );
       await gated.entered;
 
-      // Agent B now pulls WHILE A holds the row. With the lock, B skips A's row and claims nothing —
-      // it settles quickly. WITHOUT the lock (proof-by-deletion), B blocks on A's row and shows up as
-      // a lock waiter. Release A the moment EITHER is observed, so neither variant deadlocks.
+      // Agent B now pulls WHILE A holds the row. With the skip, B passes over A's row and claims
+      // nothing — it settles quickly. Without it, B blocks on A's row and shows up as a lock waiter.
+      // Either is a state this test can observe, so release A the moment EITHER is, and neither
+      // variant deadlocks.
       let bSettled = false;
       const bDone = asApp(connB, (tx) =>
         runAgentOnce({
@@ -161,7 +165,7 @@ describe("double-pull race (real Postgres)", () => {
 
   it("two DISTINCT agents claiming one network printer's queue never double-claim a job", async () => {
     // The two-boxes / reimaged-agent topology under the NEW eligibility: a network printer carries no
-    // agent binding, so BOTH agents in the venue are eligible for the same queue. Only the locking pull
+    // agent binding, so BOTH agents in the venue are eligible for the same queue. The claim is what
     // keeps each job to one claimer. Distinct agentIds (not the same one twice) so the claim's
     // `claimed_by` stamp differs per winner — the union of what each claims must still be disjoint.
     const cfg = await setup();
@@ -204,11 +208,10 @@ describe("double-pull race (real Postgres)", () => {
       });
       await aClaimed; // A has claimed and is parked, holding the locks
 
-      // Agent B pulls the SAME queue concurrently. WITH the lock, B's SELECT skips A's locked rows and
-      // claims nothing — it settles fast. WITHOUT `for update … skip locked` (proof-by-deletion), B's
-      // unlocked SELECT re-reads the still-`queued` rows (A's UPDATE is uncommitted, invisible under
-      // READ COMMITTED) and blocks at its own id-keyed UPDATE — a lock waiter — then re-marks every row
-      // once A commits, a double claim. Release A the moment EITHER is observed so neither deadlocks.
+      // Agent B pulls the SAME queue concurrently. WITH the skip, B's claim passes over A's locked
+      // rows and claims nothing — it settles fast. WITHOUT it B becomes a lock waiter and sits there
+      // until A's transaction ends (see the header for the measurement). Either outcome is a state
+      // this test can observe, so release A the moment EITHER is observed and neither side deadlocks.
       let bSettled = false;
       const bDone = withTransaction(connB, async (tx) => {
         await asAppUser(tx);
@@ -222,8 +225,10 @@ describe("double-pull race (real Postgres)", () => {
 
       const [aResult, bResult] = await Promise.all([aDone, bDone]);
 
-      // The assertion that matters: across both agents every job was claimed AT MOST once, and all N
-      // were claimed. Deleting the lock makes B re-claim A's rows → duplicate ids, length 2N.
+      // The assertion that matters: across both agents every job was claimed AT MOST once, and all
+      // N were claimed. Duplicate ids here, length 2N, would be a double claim — which is what the
+      // two-statement pull this replaced produced when its lock clause was deleted, and what this
+      // suite no longer catches on its own (see the header).
       const claimedIds = [...aResult.map((j) => j.id), ...bResult.map((j) => j.id)];
       expect(new Set(claimedIds).size).toBe(claimedIds.length); // no duplicate claim
       expect(claimedIds).toHaveLength(N); // and the whole queue was claimed

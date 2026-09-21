@@ -44,10 +44,10 @@ import "./errors.js";
 // id screens, the agent Bearer guard, the claim/report logic, the management-gate wiring and the STATUS
 // map — end to end in-process, the same way `purchasing-api.test.ts` proves the purchase routes. The
 // agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
-// (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The two properties PGlite
-// CANNOT show — the routes running as the non-owner app role with only its grants (the gate proven by
-// DELETION there) and the claim's `for update … skip locked` under true concurrency — live in
-// `print-api.pg.test.ts` against real Postgres (CLAUDE.md §4). Tests share the seeded tenant and
+// (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The property PGlite
+// CANNOT show — the routes running as the non-owner app role with only its grants, the gate proven
+// by DELETION there — lives in `print-api.pg.test.ts` against real Postgres, which is also where
+// the pointers to the suites holding the claim's contention behaviour are (CLAUDE.md §4). Tests share the seeded tenant and
 // create their own printers; assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};
 

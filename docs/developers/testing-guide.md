@@ -642,6 +642,55 @@ in the root `coverage.include` and excluded from its package's.
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 
+## A proof-by-deletion belongs to the SHAPE of the code it was taken against.
+
+Restructure that code and the deletion can stop failing, with every test still green and nothing
+saying so. Re-run the control after the restructure, and move the proof to whatever still catches it.
+
+The instance (2026-09-21, task P4a of the storage switch). `packages/printing`'s agent pull used to
+claim jobs in two statements — a locking `SELECT ... FOR UPDATE ... SKIP LOCKED`, then an `UPDATE`
+keyed only on the ids it returned. `runtime.race.test.ts`'s header recorded a deletion for that
+shape, and the sentence is copied here because the change below replaced it and the report it cited
+(`task-5-report.md`) is not in this tree: *"with it, agent B skips agent A's in-flight row and the
+job prints exactly once; delete it and B re-claims the same row after A commits, printing it twice
+(total 2 → this test's `toBe(1)` fails)"*. That is a receipt nobody now holds, recorded as what the
+old header said rather than as something re-run.
+
+P4a replaced the pair with one statement — an `UPDATE ... WHERE <key> IN (locking SELECT)`. Three
+control runs, each with `for update ... skip locked` removed from `packages/db/src/job-claim.ts` and
+nothing else touched:
+
+- `pnpm --filter @waitron/printing test -- runtime.race runtime.reclaim`, against the first version
+  of the one statement (keyed on `ctid`) — **5 passed**.
+- The same command against the version that shipped (keyed on the row's primary key) — **5 passed**
+  again. The old proof does not hold for either.
+- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**. Only
+  the FIRST failure is the control: it fails on the 30-second test timeout, which is the waiting.
+  Its holder is then still parked, so the per-test reset blocks on that holder's row locks and takes
+  the other two cases with it. Expect the control run to take minutes.
+
+So what the clause buys is that a claimer does not WAIT, and that is the property
+`packages/db/src/job-claim.pg.test.ts` now holds. What keeps a row from being claimed twice without
+it was not measured and is not a property of the helper: it depends on whether the CALLER's
+predicate excludes the state its stamp writes, which `claimPrintJobs`'s does.
+
+## The key a claim stamps by must be the row's identifier, not its physical address.
+
+`ctid` is the obvious way to carry a locking selection's choice out to the UPDATE around it, and it
+is wrong. Measured 2026-09-21 on PostgreSQL 18, with a claim parked mid-statement on an advisory
+lock inside its own predicate while another transaction committed a change to the row it was about
+to take: keyed on `ctid` the claim returned NOTHING — the outer scan still saw the row where it used
+to be, while the selection had followed it to where it now was — and keyed on the row's primary key
+the same claim took the row and carried the other transaction's change.
+
+The measurement is one row, so what it shows is that a rewritten row is MISSED. In a batch the rows
+nobody touched are still stamped, which is the shape worth worrying about: the claim comes back
+short and says nothing.
+
+The case is `packages/db/src/job-claim.pg.test.ts`, "takes a row another transaction rewrote while
+the claim was running"; set its `key` to `ctid` and it fails with `expected [] to deeply equal
+[ { position: 1, ... } ]`.
+
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
 `coverageConfigDefaults.exclude` is `[]` in 4.1.11 and the object has no `all` key; in 3.2.7 it was a
