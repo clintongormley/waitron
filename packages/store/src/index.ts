@@ -62,11 +62,54 @@ export interface VenueStore<
   close: () => Promise<void>;
 }
 
+/** How long a statement blocked on another connection waits, and how long the switch below retries. */
+const BUSY_TIMEOUT_MS = 5000;
+
+/** Gap between attempts at the switch into write-ahead mode. */
+const WAL_RETRY_INTERVAL_MS = 25;
+
+/**
+ * SQLite's `SQLITE_BUSY`, which `node:sqlite` puts on the thrown error's `errcode`. The driver
+ * throws an `Error` carrying that property; a refusal for any other reason — a file that is not a
+ * database reads 26 — is not something waiting can fix.
+ */
+const SQLITE_BUSY = 5;
+
+const isLocked = (error: unknown): boolean =>
+  (error as { errcode?: number }).errcode === SQLITE_BUSY;
+
+/**
+ * Switches the file into write-ahead mode, waiting out whoever else holds it.
+ *
+ * The retry is the invariant, and `busy_timeout` is no substitute for it: converting a file into
+ * write-ahead mode needs an exclusive lock, and that is the one lock SQLite takes without
+ * consulting the busy handler, so the pragma is refused at once however long the timeout is. The
+ * reading is in `./index.test.ts` under `openVenueStore under contention`, which fails without
+ * this loop.
+ *
+ * Only a file not already in write-ahead mode is exposed, which is a fresh venue directory: against
+ * a file already converted the pragma is a no-op that succeeds even under a held write transaction.
+ */
+async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
+  const deadline = Date.now() + BUSY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      connection.exec("pragma journal_mode = wal");
+      return;
+    } catch (error) {
+      if (!isLocked(error) || Date.now() >= deadline) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAL_RETRY_INTERVAL_MS));
+  }
+}
+
 /**
  * Opens a connection with the settings the engine needs.
  *
- * Write-ahead mode lets a reader run while the writer works, and `busy_timeout` makes a blocked
- * statement wait rather than fail at once. `foreign_keys` is stated rather than inherited: this
+ * `busy_timeout` is set FIRST because a statement issued before it has none. Write-ahead mode lets
+ * a reader run while the writer works, and `busy_timeout` makes a blocked statement wait rather
+ * than fail at once — every statement but the switch into write-ahead mode itself, which is why
+ * {@link enterWriteAheadMode} exists. `foreign_keys` is stated rather than inherited: this
  * driver happens to enable it (`node:sqlite` on Node v26.7.0 reads 1 without the pragma, and 0
  * when opened with `enableForeignKeyConstraints: false`), where the SQLite library it wraps
  * defaults it off, and without it every `REFERENCES` clause in the schema is decoration.
@@ -82,10 +125,11 @@ export interface VenueStore<
  * and Litestream arrives in slice 2. Turning it off here, with nothing else checkpointing, would
  * let the write-ahead file grow without limit from day one.
  */
-function openConnection(path: string): DatabaseSync {
+async function openConnection(path: string): Promise<DatabaseSync> {
   const connection = new DatabaseSync(path);
-  connection.exec("pragma journal_mode = wal");
-  connection.exec("pragma busy_timeout = 5000");
+  connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
+  await enterWriteAheadMode(connection);
+  // Connection settings rather than file operations, so no lock stands between these and success.
   connection.exec("pragma foreign_keys = on");
   connection.exec("pragma recursive_triggers = on");
   return connection;
@@ -119,8 +163,8 @@ export async function openVenueStore<
   config: VenueStoreConfig<TVenueSchema, TNodeSchema>,
 ): Promise<VenueStore<TVenueSchema, TNodeSchema>> {
   await mkdir(config.directory, { recursive: true });
-  const venueConnection = openConnection(join(config.directory, VENUE_FILE));
-  const nodeConnection = openConnection(join(config.directory, NODE_FILE));
+  const venueConnection = await openConnection(join(config.directory, VENUE_FILE));
+  const nodeConnection = await openConnection(join(config.directory, NODE_FILE));
   const handle = <TSchema extends Record<string, unknown>>(
     connection: DatabaseSync,
     schema: TSchema,

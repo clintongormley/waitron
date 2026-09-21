@@ -1,10 +1,11 @@
-import { mkdtempSync, readdirSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openVenueStore } from "./index.js";
 
 // Two one-table schemas standing in for the real split: a `ledger`/`state` table belongs in the
@@ -267,5 +268,137 @@ describe("openVenueStore", () => {
     // serialisation, the table is EMPTY, because B's `begin immediate` is refused on the shared
     // connection and A's rollback then takes its own row.
     expect(store.venue.all(sql`select who from t`)).toEqual([{ who: "B" }]);
+  });
+});
+
+/**
+ * The file is opened while ANOTHER PROCESS holds a write lock on it.
+ *
+ * A child process is what makes this a real reading. `openVenueStore` issues its pragmas without
+ * yielding, so nothing in this process could take the lock and release it again in between; and
+ * the lock SQLite refuses on is a file lock, which a second connection in one process would
+ * contend for in the same way but under a holder this suite controls too directly to be evidence
+ * about two boxes.
+ *
+ * The child leaves the file in SQLite's default rollback-journal mode deliberately. That is the
+ * state a fresh venue directory is in, and it is the only state in which the switch into
+ * write-ahead mode has to take an exclusive lock — against a file already in write-ahead mode the
+ * same pragma is a no-op that succeeds under a held write transaction.
+ */
+const HOLDER_SCRIPT = `import { DatabaseSync } from "node:sqlite";
+const [path, holdMs] = process.argv.slice(2);
+const db = new DatabaseSync(path);
+db.exec("pragma busy_timeout = 10000");
+db.exec("create table if not exists holder (id integer primary key)");
+db.exec("begin immediate");
+db.exec("insert into holder (id) values (1)");
+process.stdout.write("locked\\n");
+setTimeout(() => {
+  db.exec("commit");
+  db.close();
+  process.exit(0);
+}, Number(holdMs));
+`;
+
+/** Resolves once the child says it holds the lock — never on a sleep that hopes it does. */
+const untilLocked = (child: ChildProcess) =>
+  new Promise<void>((resolve, reject) => {
+    let seen = "";
+    child.stdout!.on("data", (chunk: Buffer) => {
+      seen += chunk.toString();
+      if (seen.includes("locked")) resolve();
+    });
+    let stderr = "";
+    child.stderr!.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+    child.on("exit", (code) => reject(new Error(`holder exited early (${code}): ${stderr}`)));
+  });
+
+/**
+ * The sum of the waiting case's waits: the holder process starting (node's own startup, which on
+ * a loaded machine is the largest and least predictable term), the hold below, and one retry
+ * interval past it. The bound clears all three with room rather than sitting just above them.
+ */
+const CONTENTION_TIMEOUT_MS = 20_000;
+
+describe("openVenueStore under contention", () => {
+  it(
+    "waits for another process to release the file rather than refusing to open",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
+      const script = join(directory, "holder.mjs");
+      writeFileSync(script, HOLDER_SCRIPT);
+      const holdMs = 750;
+      const child = spawn(process.execPath, [script, join(directory, "venue.db"), String(holdMs)], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      try {
+        await untilLocked(child);
+
+        const started = Date.now();
+        const store = await openVenueStore({ directory, venueSchema, nodeSchema });
+        opened.push(store);
+        const waited = Date.now() - started;
+
+        // Opening at all is the reading the defect failed: with the switch into write-ahead mode
+        // attempted once, this line threw `database is locked` (errcode 5) in about a
+        // millisecond, before any statement of the store's own had run.
+        expect(pragma(store.venue, "journal_mode")).toBe("wal");
+        // And it opened by WAITING, not because the holder had already let go. Without this floor
+        // a child that failed to take the lock would look exactly like a fix.
+        expect(waited).toBeGreaterThan(holdMs / 4);
+      } finally {
+        child.kill("SIGKILL");
+      }
+    },
+    CONTENTION_TIMEOUT_MS,
+  );
+
+  /**
+   * The other side of the same condition: a refusal waiting cannot fix is re-thrown at once. A
+   * file of bytes that is not a database reads errcode 26 rather than 5, measured on Node v26.7.0
+   * — so a retry that looked only at whether the pragma threw would sit on this for the whole
+   * budget and then report it anyway.
+   */
+  it("re-throws a refusal that is not a lock, without waiting", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
+    writeFileSync(join(directory, "venue.db"), "these bytes are not a database".repeat(100));
+
+    const started = Date.now();
+    await expect(openVenueStore({ directory, venueSchema, nodeSchema })).rejects.toThrow(
+      "file is not a database",
+    );
+    // The discriminating half: it came back at once rather than after the whole retry budget,
+    // which is five seconds. A second is far below that and far above what this path costs.
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  /**
+   * The budget is bounded, so a holder that never lets go ends in the engine's own refusal rather
+   * than a hang. The holder here is a second connection in THIS process, which contends for the
+   * same file lock — measured, errcode 5, exactly as the child process produces.
+   *
+   * Only `Date` is faked, and a real interval pushes the mocked clock forward. That reaches the
+   * give-up in milliseconds instead of the budget's five seconds, and it does not depend on
+   * catching the retry loop at a particular moment: whenever the deadline was computed, the mocked
+   * clock overtakes it within a few real ticks.
+   */
+  it("gives up when the holder never releases", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "waitron-store-"));
+    const holder = new DatabaseSync(join(directory, "venue.db"));
+    holder.exec("pragma busy_timeout = 10000");
+    holder.exec("create table holder (id integer primary key)");
+    holder.exec("begin immediate");
+    holder.exec("insert into holder (id) values (1)");
+    let pump: ReturnType<typeof setInterval> | undefined;
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const opening = openVenueStore({ directory, venueSchema, nodeSchema });
+      pump = setInterval(() => vi.setSystemTime(Date.now() + 1000), 1);
+      await expect(opening).rejects.toThrow("database is locked");
+    } finally {
+      if (pump !== undefined) clearInterval(pump);
+      vi.useRealTimers();
+      holder.close();
+    }
   });
 });
