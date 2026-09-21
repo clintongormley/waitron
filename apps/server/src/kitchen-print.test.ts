@@ -659,7 +659,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       // Each extra carries three DIFFERENT names, so a sub-line that read the customer-facing text
-      // instead of the staff name the child line froze reads differently (CLAUDE.md §4).
+      // instead of the staff name the child line froze reads differently (CLAUDE.md §3).
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
         { name: "Nata", customerName: "Nata montada", kitchenName: "NAT" },
         { name: "Leche avena", customerName: "Bebida de avena", kitchenName: "AVE" },

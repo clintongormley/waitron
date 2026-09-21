@@ -932,3 +932,34 @@ describe("till-expo-screen", () => {
     expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
   });
 });
+
+it("shows a dish's frozen options answers in the KITCHEN's wording", async () => {
+  // Three different texts per name, so the assertion fails if the pass reads the staff or the
+  // customer side by mistake (CLAUDE.md §3).
+  const first = threeCourseOrder.courses[0]!;
+  const order: ExpoOrder = {
+    ...threeCourseOrder,
+    courses: [
+      {
+        ...first,
+        items: [
+          {
+            ...first.items[0]!,
+            optionSnapshots: [
+              {
+                listName: { es: "Punto personal" },
+                listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+                listKitchenName: "PTO",
+                labelName: { es: "Poco personal" },
+                labelCustomerName: { "es-ES": "Poco hecho" },
+                labelKitchenName: "PH",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const el = await mount({ api: stubApi([order]) });
+  expect(el.shadowRoot!.querySelector(".modifier-answer")!.textContent).toBe("PTO: PH");
+});

@@ -1,4 +1,5 @@
 import type { Modifier } from "@waitron/shared";
+import type { OptionLabel } from "./modifier-list-types.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
@@ -45,6 +46,11 @@ export interface MenuOffer extends MenuItem {
   courseId: string | null;
   optionGroups: MenuOfferOptionGroup[];
   modifiers: Modifier[];
+  /** The ordered extras and options lists this OFFER puts in front of a diner — see
+   * {@link OfferedModifier}. Each extras entry is the version this menu offer publishes. The legacy
+   * `optionGroups` and `modifiers` above are what it replaces; Task 13 of
+   * `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. */
+  offeredModifiers: OfferedModifier[];
   variants: ProductVariant[];
 }
 
@@ -154,6 +160,10 @@ export interface AvailableProduct {
    * validate a diner's selection against these. */
   optionGroups: ResolvedOptionGroup[];
   modifiers: Modifier[];
+  /** The ordered extras and options lists this PRODUCT puts in front of a diner — see
+   * {@link OfferedModifier}. No menu offer is involved, so each extras entry is the list as the
+   * product itself carries it. Replaces `optionGroups` and `modifiers` above (Task 13). */
+  offeredModifiers: OfferedModifier[];
 }
 
 /** One catalogue (menu) a location may sell from — its id, display name, and whether it is the
@@ -164,3 +174,70 @@ export interface AccessibleCatalogue {
   /** True for `locations.catalogue_id` — the till's menu switcher pre-selects this one. */
   isDefault: boolean;
 }
+
+/**
+ * One product an extras list offers, with everything a surface needs to draw and describe it: the
+ * RESOLVED price (§3.3's chain — the menu offer's own price, then the list item's, then the
+ * product's `unit_price` — already settled, because a till has no way to walk it), the terms of the
+ * OFFER, and the product's own names and declarations.
+ *
+ * `ExtraListItem` (modifier-list-types.ts) carries none of the product's facts on purpose: the row
+ * duplicates nothing the `products` row already holds (spec
+ * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1). This shape is where the two
+ * are put back together for a reader.
+ *
+ * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
+ * because that is what a pick becomes: the same two field names, carrying the same two values, as
+ * `QueueModifier` (`readQueueSubItems`, apps/server/src/working-order.ts) — the product's own
+ * `allergens`, and its `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown
+ * BESIDE the dish's own declarations, never folded into them (spec §3.4).
+ */
+export interface OfferedExtraItem {
+  productId: string;
+  name: string;
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  /** GROSS, in the money shape `unitPrice` uses. Never null: the inheritance is already resolved. */
+  price: string;
+  /** Always the extra PRODUCT's own rate — an extra never inherits the dish's (spec §3.3). */
+  vatClass: VatClass;
+  maxQuantity: number;
+  preselected: boolean;
+  addAllergens: ProductAllergens | null;
+  suitableFor: DietaryLabel[];
+}
+
+/** One extras list on offer, with its items narrowed and priced. Only ACTIVE lists are offered. */
+export interface OfferedExtrasList {
+  kind: "extras";
+  id: string;
+  name: string;
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  minPicks: number;
+  maxPicks: number | null;
+  items: OfferedExtraItem[];
+}
+
+/**
+ * One options list on offer. `labels` holds the AVAILABLE labels alone — the set
+ * `validateOptionSelections` (option-contract.ts) will accept an answer from — and `defaultLabelId`
+ * is null unless it names one of them.
+ */
+export interface OfferedOptionsList {
+  kind: "options";
+  id: string;
+  name: string;
+  customerName: Record<string, string> | null;
+  kitchenName: string | null;
+  defaultLabelId: string | null;
+  labels: OptionLabel[];
+}
+
+/**
+ * One entry of the ordered list a dish offers a till: the extras widget or the options radio group
+ * the picker draws (spec §5, §10). Walked in the PRODUCT's own `product_modifiers.sort` order on
+ * both reads; what a menu offer changes is each extras entry's contents, and whether it is there at
+ * all — not where it sits.
+ */
+export type OfferedModifier = OfferedExtrasList | OfferedOptionsList;

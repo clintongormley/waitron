@@ -3,84 +3,76 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import type { TillProduct } from "../api/client.js";
+import type { OfferedModifier, TillProduct } from "../api/client.js";
+
+/** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
+function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
+  return {
+    productId,
+    name: staff,
+    customerName: { es: `${staff} carta` },
+    kitchenName: `${staff} KDS`,
+    price,
+    vatClass: "general" as const,
+    maxQuantity,
+    preselected: false,
+    addAllergens: null,
+    suitableFor: [],
+  };
+}
+
+const extras: OfferedModifier = {
+  kind: "extras",
+  id: "list-extras",
+  name: "Extras",
+  customerName: { es: "Extras carta" },
+  kitchenName: "Extras KDS",
+  minPicks: 0,
+  maxPicks: 2,
+  items: [offeredItem("p-bacon", "Bacon", "1.50"), offeredItem("p-cheese", "Queso", "1.00", 3)],
+};
+
+const cooked: OfferedModifier = {
+  kind: "options",
+  id: "list-cooked",
+  name: "Punto",
+  customerName: { es: "Punto carta" },
+  kitchenName: "Punto KDS",
+  defaultLabelId: "label-medium",
+  labels: [
+    {
+      id: "label-rare",
+      name: "Poco hecha",
+      customerName: { es: "Poco hecha carta" },
+      kitchenName: "Poco hecha KDS",
+      available: true,
+    },
+    {
+      id: "label-medium",
+      name: "Al punto",
+      customerName: { es: "Al punto carta" },
+      kitchenName: "Al punto KDS",
+      available: true,
+    },
+  ],
+};
 
 const burger: TillProduct = {
   id: "burger",
   name: "Burger",
-  customerName: { en: "Burger for the customer", es: "Hamburguesa para el cliente" },
+  customerName: { es: "Burger carta" },
   pricingUnit: "each",
   unitPrice: "8.00",
   vatClass: "general",
   category: null,
   allergens: null,
-  optionGroups: [
-    {
-      id: "g-doneness",
-      name: { en: "Doneness", es: "Punto" },
-      minSelect: 1,
-      maxSelect: 1,
-      required: true,
-      items: [
-        {
-          id: "i-rare",
-          name: { en: "Rare", es: "Poco hecha" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        {
-          id: "i-medium",
-          name: { en: "Medium", es: "Al punto" },
-          priceDelta: "0.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-      ],
-    },
-    {
-      id: "g-extras",
-      name: { en: "Extras", es: "Extras" },
-      minSelect: 0,
-      maxSelect: 3,
-      required: false,
-      items: [
-        {
-          id: "i-cheese",
-          name: { en: "Cheese", es: "Queso" },
-          priceDelta: "1.00",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        {
-          id: "i-bacon",
-          name: { en: "Bacon", es: "Bacon" },
-          priceDelta: "1.50",
-          vatClass: null,
-          maxQuantity: 1,
-          addAllergens: null,
-        },
-        // A per-option-quantity item (maxQuantity 2) so the sweep also covers the stepper controls.
-        {
-          id: "i-shot",
-          name: { en: "Extra shot", es: "Café extra" },
-          priceDelta: "0.60",
-          vatClass: null,
-          maxQuantity: 2,
-          addAllergens: null,
-        },
-      ],
-    },
-  ],
+  offeredModifiers: [extras, cooked],
 };
 
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)", (theme) => {
-  it("has no violations with radio + checkbox groups shown", async () => {
+  it("has no violations with an extras list and an options list on screen", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
@@ -90,31 +82,62 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations once a group is at its max (disabled options)", async () => {
+  it("has no violations once a list is at its allowance (disabled controls)", async () => {
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
       { product: burger },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
-    el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-cheese")!.click();
-    el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-bacon")!.click();
+    el.shadowRoot!.querySelector<HTMLInputElement>("#pick-list-extras-p-bacon")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="pick-list-extras-p-cheese-inc"]',
+    )!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a per-option-quantity stepper stepped up (labelled controls)", async () => {
+  it("has no violations with a stepper stepped up (labelled controls)", async () => {
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
       { product: burger },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLInputElement>("#opt-i-rare")!.click();
-    // Step the "extra shot" up once so the stepper (and its accessible labels) is on screen.
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="opt-i-shot-inc"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="pick-list-extras-p-cheese-inc"]',
+    )!.click();
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("announces an options list that offers no label", async () => {
+    setLocale("es-ES");
+    const { host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: { ...burger, offeredModifiers: [{ ...cooked, defaultLabelId: null, labels: [] }] },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("announces a reopened pick the dish no longer offers", async () => {
+    setLocale("es-ES");
+    const { host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: burger,
+        initialSelections: {
+          extras: [
+            { listId: "list-extras", productId: "p-gone", name: "Ido", price: "1.00", quantity: 1 },
+          ],
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
+        },
+      },
+      theme,
+    );
     await expectNoA11yViolations(host);
   });
 });

@@ -175,12 +175,11 @@ export const PRODUCT_OPTION_GROUPS: SeedProductOptions[] = [
         ],
       },
       {
-        // This dish has a TWIN cooking question: `PRODUCT_OPTION_LISTS` below attaches the new
-        // options list to the same steak. Both are seeded on purpose while the till still reads
-        // only these legacy attachments. The moment that stops being invisible is Task 12 of
-        // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`, which wires the till and
-        // lands BEFORE Task 13 deletes these tables — whoever takes it removes this group or
-        // accepts a steak that asks twice.
+        // This dish carries a TWIN cooking question in the DATA: `PRODUCT_OPTION_LISTS` below
+        // attaches the new options list to the same steak. The operator is asked it once, because
+        // the till's picker draws `offeredModifiers` and never `optionGroups` — the reasoning and
+        // the check are in `seed-option-lists.ts`. This group goes with its tables in Task 13 of
+        // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`.
         name: { en: "Cooking", es: "Punto de la carne" },
         minSelect: 1,
         maxSelect: 1,

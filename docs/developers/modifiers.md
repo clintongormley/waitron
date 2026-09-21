@@ -9,8 +9,10 @@ Use the reusable definition for configuration and explicit selections for each o
 > `packages/shared/src/modifier-snapshots.ts` now records it as dead, and Task 13 of
 > `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` deletes it. Checked by grepping
 > the tree: the only thing importing it is that package's own barrel
-> (`packages/shared/src/index.ts`), and `apps/till` declares a separate `ModifierSnapshot` of its
-> own in `apps/till/src/api/client.ts` rather than using this one. An order or sale line's frozen
+> (`packages/shared/src/index.ts`). `apps/till` declared a separate `ModifierSnapshot` of its own in
+> `apps/till/src/api/client.ts` until 2026-09-21, when Task 12 rewrote the till's wire types over
+> extras and options and deleted it; no TypeScript file outside `packages/shared` names the type
+> today. An order or sale line's frozen
 > answers are `OptionSnapshot`s (`packages/shared/src/option-selection.ts`), and an extras pick is
 > its own line.
 
@@ -186,12 +188,14 @@ Reading them back, four wire types carry `optionSnapshots` — the field these f
 `modifierSnapshots` before this change: `TabLine`, `HeldOrder.lines`, `StationQueueItem` and
 `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
 `extras` array holding what each CHILD line froze. Those are VALUES, not a re-sendable selection:
-the child line holds no list id to name.
+the child line holds no list id to name. The till rebuilds one from them against the dish's live
+offer (`deriveExtraSelections` and `deriveOptionSelections`, `apps/till/src/state/`) — see the end
+of this section.
 
 A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
-holds, by value; equal, the line and its locked price are kept, otherwise the line is replaced and
-re-priced.
+holds, by value; equal, every line and its locked price are kept. One line that does not match
+sends the WHOLE order down the replacement path, which re-prices every line on it.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
@@ -243,18 +247,80 @@ gives up the price lock a quantity-only edit exists to keep; or let the child ca
 off, which is what §3.5 rules out when it says an open order's child points at the product and not
 the list. Recorded in `docs/backlog.md` as an owner decision rather than guessed at here.
 
-An OPTIONS list RENAMED between the two sends does make the two sides differ, and the line is
-replaced and re-priced. That is a decision, not an omission: an options answer freezes six names and
-no ids, so the wording is the only evidence the line carries about what was chosen, and a rename
-cannot be told from a different answer. Giving the comparison an id to use would mean putting one on
-the line, which §2.3 of the design rules out. Pinned by "re-prices a held line when the options list
-it answered was renamed between the two sends" (`apps/server/src/working-order.test.ts`). An EXTRAS
-list is different: its children are compared by the picked product's id, so renaming the list — or
-the product — disturbs nothing and the line is preserved.
+An OPTIONS list RENAMED between the two sends does make the two sides differ, and the WHOLE ORDER is
+replaced and re-priced — not just the line that answered it. The preserve test is all-or-nothing
+(`preservesEveryLine`, `apps/server/src/working-order.ts`), so one line that does not match sends
+the request down the replacement path, which prices every line at today's offers and then deletes
+and re-inserts them all under new ids. That is a decision, not an omission: an options answer
+freezes six names and no ids, so the wording is the only evidence the line carries about what was
+chosen, and a rename cannot be told from a different answer. Giving the comparison an id to use
+would mean putting one on the line, which §2.3 of the design rules out. Pinned by "re-prices a held
+line when the options list it answered was renamed between the two sends"
+(`apps/server/src/working-order.test.ts`). An EXTRAS list is different: its children are compared by
+the picked product's id, so renaming the list — or the product — disturbs nothing and the line is
+preserved.
 
-The till has not moved onto this wire yet: `apps/till` still builds and reads the old
-`modifierSelections`/`modifierSnapshots` shapes, which is a task of its own — its mirror of the
-settled ticket included. The gap, and which till files it touches, is in `docs/backlog.md`.
+The till is on this wire as of 2026-09-21. It sends one `options` entry per answered list and one
+`extras` entry per list picked from, reads a line's frozen answers back as `optionSnapshots` on all
+five mirrors it keeps (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by
+`parentLineNo` rather than by a null product. The old `modifierSelections`/`modifierSnapshots`
+shapes and the `{ optionGroupItemId }` answer are gone from it, its mirror of the settled ticket
+included. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
+six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
+answer's STAFF names back against the dish's live offer and rebuilds the `{ listId, labelId }` pair,
+which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
+`options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
+the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
+the server then re-prices the whole order as it does for any other changed wording. What it will not
+do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
+tells the operator to open the line and choose again rather than substituting the list's own
+default.
+
+## What a till is offered
+
+The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
+(`packages/catalogue/src/operations.ts`) — each carry an `offeredModifiers` array: the ordered
+extras and options lists a dish puts in front of a diner, already resolved. It is built by
+`readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
+beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
+`OfferedOptionsList`, `OfferedExtraItem`).
+
+The legacy `optionGroups` and `modifiers` fields on those two payloads are untouched and still
+carry the old `option_groups` model; Task 13 of
+`docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. Nothing in `apps/till`
+reads either of them any more — the picker walks `offeredModifiers` alone
+(`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD a line, the product grid
+and tender-pay's weighed quantity, decide whether a dish needs a picker from that field or from an
+available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`). Checked with `git grep -l -i optiongroup HEAD -- apps/till/src`:
+three test files match, each setting `optionGroups: []` only to satisfy catalogue's declared
+`MenuOffer`, and no source file at all — against eight source files for the same command on
+`main`.
+
+Five things it is worth knowing about that payload:
+
+- **The order is the product's own `product_modifiers.sort`, on both reads** (spec §5). A menu
+  offer changes what is inside an extras entry, and whether the entry is there at all, but not
+  where it sits — so `menu_item_extra_lists.display_order` decides nothing here. It still decides
+  the order in which the order path builds a line's answers, which is the table above.
+- **An extras entry on a MENU offer is that offer's own version** — items withdrawn and repriced by
+  `menu_item_extra_items` (spec §3.2) — and a list the offer does not publish is left out of the
+  walk entirely.
+- **Every price is settled**: the menu's price, then the list item's, then the product's
+  `unit_price` (spec §3.3). A till has no way to walk that chain itself, because the last rung is
+  not on the list item.
+- **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
+  is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
+  (`option-contract.ts`) will accept an answer from. That agreement is the reason the order path
+  and these two reads resolve their lists through ONE body, `resolveAttachedModifiers` in the same
+  file: a required list the picker never drew would refuse the order with `options.label_required`
+  or `extras.limit_exceeded`, and an offered list the server does not know about would be refused
+  as `options.invalid`.
+- **An extras item carries the PRODUCT's facts**, not the row's: its three names, its own VAT class,
+  its allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
+  them (spec §3.1). The two declaration fields take the names a CHILD LINE uses on the kitchen and
+  expo screens — `addAllergens` and `suitableFor`, the same two values `readQueueSubItems`
+  (`apps/server/src/working-order.ts`) hands those screens — because a pick is what becomes such a
+  line. Shown beside the dish's own, never folded into them (spec §3.4).
 
 ## On the filed sale
 
@@ -311,7 +377,7 @@ pinned against is the CALLER's declared total, not the basket.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
 CUSTOMER text at the invoice locale and falls back to the staff name, never to the kitchen name —
-`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`), beside the
+`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside the
 kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage and integration order

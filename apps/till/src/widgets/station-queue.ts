@@ -1,4 +1,4 @@
-import { modifierSnapshotLabels } from "./modifier-snapshot.js";
+import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
@@ -855,14 +855,14 @@ export class TillStationQueue extends LitElement {
     </span>`;
   }
 
-  /** The dish's selected options (ordering modifiers, Task 14) as indented `+ <name>` sub-text beneath
-   *  the dish row — matching the kitchen-print ticket's own sub-text style
-   *  (`apps/server/src/kitchen-ticket.ts`'s `formatKitchenTicket`). Each name resolves in the operator
-   *  locale with the same first-available fallback the dish name uses. `nothing` for a plain dish (no
-   *  `modifiers`, or an empty array), so a modifier-free item renders identically to before this task. */
+  /** The dish's extras and its frozen options answers as indented sub-text beneath the dish row,
+   *  matching the printed kitchen ticket's own sub-text style (`apps/server/src/kitchen-ticket.ts`).
+   *  A cook reads the KITCHEN wording of an answer (spec §10), which carries no per-language text and
+   *  so needs no locale; an extra's own name is still a locale map and resolves like the dish name.
+   *  `nothing` when the item has neither, so a plain dish renders as a single row. */
   #modifiers(item: StationQueueItem): TemplateResult | typeof nothing {
     const modifiers = item.modifiers ?? [];
-    const answers = modifierSnapshotLabels(item.modifierSnapshots);
+    const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
     if (modifiers.length === 0 && answers.length === 0) return nothing;
     return html`<span class="line-modifiers">
       ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}

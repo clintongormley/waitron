@@ -1549,9 +1549,12 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           catalogueId: aguaProduct.catalogueId,
           catalogueName: "Carta",
           // Ordering modifiers (Task 3): the `AvailableProduct` shape carries attached option groups;
-          // these seeded products have none, so an empty array.
+          // these seeded products have none, so an empty array. `offeredModifiers` is the extras and
+          // options walk the till draws from (`readOfferedModifiers`), empty here for the same
+          // reason — these products attach nothing.
           optionGroups: [],
           modifiers: [],
+          offeredModifiers: [],
         },
         {
           id: cervezaProduct.id,
@@ -1573,6 +1576,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
           catalogueName: "Happy Hour",
           optionGroups: [],
           modifiers: [],
+          offeredModifiers: [],
         },
       ],
     });
@@ -3107,7 +3111,7 @@ async function modifierOfferFixture() {
 
     // What the ORDER path answers: an extras list the offer republishes at its own price, and an
     // options list the product carries. The cheese's three names carry DIFFERENT text, so a line
-    // freezing the wrong one of them fails (CLAUDE.md §4), and its own 9.00 unit price is the price
+    // freezing the wrong one of them fails (CLAUDE.md §3), and its own 9.00 unit price is the price
     // a child line would show if the offer's 0.35 were never read.
     const cheese = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,

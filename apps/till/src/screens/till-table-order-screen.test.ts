@@ -412,38 +412,21 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("send-round threads a line's selected modifier options as bare optionGroupItemIds (ordering modifiers)", async () => {
+  it("send-round threads a line's picks as one entry per list, naming products and counts alone", async () => {
     const { el } = await mount();
-    // Seed the round store with a modifier-carrying line (the picker, Task 10, is what will produce these
-    // through the UI); only the `optionGroupItemId`s reach the wire — never the display name/priceDelta.
-    grid(el).store.addProduct(cafe, "1", [
-      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
-    ]);
-    await el.updateComplete;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
-    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-    expect(captured!.detail.lines).toEqual([
-      { productId: "cafe", quantity: "1", options: [{ optionGroupItemId: "opt-oat" }] },
-    ]);
-  });
-
-  it("send-round forwards a per-option quantity > 1 and OMITS it at 1 (per-option quantity, feature A)", async () => {
-    const { el } = await mount();
-    grid(el).store.addProduct(cafe, "1", [
-      {
-        optionGroupItemId: "opt-shot",
-        name: { es: "Extra chupito" },
-        priceDelta: "0.50",
-        quantity: 2,
-      },
-      {
-        optionGroupItemId: "opt-oat",
-        name: { es: "Leche de avena" },
-        priceDelta: "0.50",
-        quantity: 1,
-      },
-    ]);
+    // Seed the round store with a line carrying a pick (through the UI the picker produces these);
+    // only the list, the product and the count reach the wire — never the display name or price.
+    grid(el).store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+    });
     await el.updateComplete;
     let captured: CustomEvent | undefined;
     el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
@@ -452,10 +435,45 @@ describe("till-table-order-screen", () => {
       {
         productId: "cafe",
         quantity: "1",
-        options: [
-          { optionGroupItemId: "opt-shot", quantity: 2 },
-          { optionGroupItemId: "opt-oat" }, // quantity 1 → omitted
+        extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
+      },
+    ]);
+  });
+
+  it("send-round carries each pick's own per-dish count, and groups two lists separately", async () => {
+    const { el } = await mount();
+    grid(el).store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-extras",
+          productId: "p-shot",
+          name: "Extra chupito",
+          price: "0.50",
+          quantity: 2,
+        },
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+      options: [{ listId: "list-cooked", labelId: "label-medium" }],
+    });
+    await el.updateComplete;
+    let captured: CustomEvent | undefined;
+    el.addEventListener("send-round", (e) => (captured = e as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    expect(captured!.detail.lines).toEqual([
+      {
+        productId: "cafe",
+        quantity: "1",
+        extras: [
+          { listId: "list-extras", picks: [{ productId: "p-shot", quantity: 2 }] },
+          { listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] },
         ],
+        options: [{ listId: "list-cooked", labelId: "label-medium" }],
       },
     ]);
   });
@@ -692,12 +710,16 @@ describe("till-table-order-screen", () => {
     // A line the kitchen has already STARTED (fired + preparing/ready) — the cancel-only case.
     const preparingLine: TabLine = { ...pendingLine, lineNo: 1, state: "preparing" };
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
-    // A CHILD MODIFIER line (ordering modifiers): productId null, no ticket item of its own, so firedAt
-    // AND state are both null — the shape whose null firedAt would wrongly fall into the HELD/Send branch
-    // and whose held-shape would paint an editable course picker, if the child guard were absent.
+    // A CHILD EXTRAS line, in the shape the tab wire really sends one: it carries the PICKED product
+    // (spec §3.4) and names its parent dish by line number, which is the ONLY field telling the two
+    // apart. It has no ticket item of its own, so firedAt AND state are both null — the shape whose
+    // null firedAt would wrongly fall into the HELD/Send branch, and whose held shape would paint an
+    // editable course picker, if the child guard were absent. A fixture with `productId: null` would
+    // pass against a screen that still read a null product as "child", so it carries one on purpose.
     const childLine: TabLine = {
       lineNo: 2,
-      productId: null,
+      productId: "cafe",
+      parentLineNo: 1,
       quantity: "1.000",
       unitPriceGross: "0.50",
       servedAt: null,
@@ -706,7 +728,7 @@ describe("till-table-order-screen", () => {
       state: null,
     };
 
-    it("renders NO per-line action and NO course picker on a child modifier line (productId null)", async () => {
+    it("renders NO per-line action and NO course picker on a child extras line", async () => {
       // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
@@ -720,8 +742,27 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
     });
 
+    it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {
+      // A waiter scanning "Pendiente de servir" must not read a pick as another dish. The basket's
+      // `.option` rule is the house shape for a pick: indented under its dish and muted. Measured
+      // here rather than asserted as a class, because a class the stylesheet has no rule for paints
+      // nothing.
+      const { el } = await mount({ lines: [pendingLine, childLine], courses });
+      await openDrawer(el);
+      const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".pending-line")];
+      expect(rows).toHaveLength(2);
+      const dish = getComputedStyle(rows[0]!);
+      const child = getComputedStyle(rows[1]!);
+      expect(parseFloat(child.paddingLeft)).toBeGreaterThan(parseFloat(dish.paddingLeft));
+      expect(child.color).not.toBe(dish.color);
+      expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
+    });
+
     it("hides Send all on a fully-fired tab that merely contains a modifier'd dish (child excluded)", async () => {
-      // pendingLine: firedAt set (fired). childLine: firedAt null but productId null ⇒ NOT held.
+      // pendingLine: firedAt set (fired). childLine: firedAt null, so it is the held-LOOKING row — but
+      // it is not held. HONEST about what this pins: on the real wire a child never has a ticket item,
+      // so `state === null` refuses it here whether or not the parent-marker guard is in place. The
+      // guard itself is pinned by the course-picker assertion in the test above, which flips.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
@@ -1028,7 +1069,9 @@ describe("till-table-order-screen", () => {
     });
 
     it("split excludes modifier children and explains that dishes with options move together", async () => {
-      const modifier = { ...pendingLine, lineNo: 2, productId: null, quantity: "2.000" };
+      // A child extras row as the wire sends one: the picked product, plus the parent dish's line
+      // number. Keeping `productId` would let this pass against the old null-product child test.
+      const modifier = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "2.000" };
       const { el } = await mount({ lines: [pendingLine, modifier], orderId: "wo-7" });
       await toMenu(el);
       click(el, '[data-action="split"]');
@@ -1167,6 +1210,26 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     });
 
+    it("transfer line-picker offers dishes only, never a child extras row", async () => {
+      // The server REFUSES a directly named child: `carveOffLines` throws `tab.transfer_modifier_line`
+      // for a line whose `parent_line_id` is set (apps/server/src/working-order.ts), and cascades a
+      // dish's children with the dish instead. So offering the row at all only buys a refusal.
+      const child = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "1.000" };
+      const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
+      const { el } = await mount({
+        lines: [pendingLine, child],
+        orderId: "wo-7",
+        tables: [other],
+      });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-9"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-transfer-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-transfer-line="2"]')).toBeNull();
+    });
+
     it("shows an empty-state when there are no free tables to move to", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [] });
       await toMenu(el);
@@ -1283,30 +1346,6 @@ describe("till-table-order-screen", () => {
   });
 });
 
-it("sends explicit modifier answers in table rounds without sending local charge previews", async () => {
-  const { el } = await mount();
-  const modifierSelections = [
-    {
-      modifierId: "extras",
-      type: "extras" as const,
-      choices: [{ choiceId: "cheese", quantity: 2 }],
-    },
-  ];
-  grid(el).store.addProduct(
-    cafe,
-    "1",
-    [{ optionGroupItemId: "cheese", name: { es: "Queso" }, priceDelta: "1.00", quantity: 2 }],
-    { modifierSelections },
-  );
-  await el.updateComplete;
-  let captured: CustomEvent | undefined;
-  el.addEventListener("send-round", (event) => (captured = event as CustomEvent));
-  el.shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
-  expect(captured!.detail.lines).toEqual([
-    { productId: "cafe", quantity: "1", modifierSelections },
-  ]);
-});
-
 it("shows a retained table line's recorded name and modifier answer after live names change", async () => {
   const { el } = await mount({
     products: [
@@ -1316,13 +1355,14 @@ it("shows a retained table line's recorded name and modifier answer after live n
       {
         ...pendingLine,
         name: "Nombre guardado",
-        modifierSnapshots: [
+        optionSnapshots: [
           {
-            modifierId: "cut",
-            name: { "es-ES": "Cortar" },
-            type: "options",
-            choiceId: "fino",
-            choiceName: { "es-ES": "Fino" },
+            listName: { es: "Cortar" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { es: "Fino" },
+            labelCustomerName: null,
+            labelKitchenName: null,
           },
         ],
       },
@@ -1334,4 +1374,31 @@ it("shows a retained table line's recorded name and modifier answer after live n
   // The saved snapshot resolves the modifier name and the chosen label, not the live catalogue name.
   expect(row.textContent).toContain("Cortar");
   expect(row.textContent).not.toContain("Nuevo nombre");
+});
+
+it("shows a tab line's frozen options answers in the STAFF wording", async () => {
+  // Three different texts per name, so the assertion fails if the tab reads the kitchen or the
+  // customer side by mistake (CLAUDE.md §3).
+  const { el } = await mount({
+    lines: [
+      {
+        ...pendingLine,
+        name: "Nombre guardado",
+        optionSnapshots: [
+          {
+            listName: { es: "Punto personal" },
+            listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+            listKitchenName: "PTO",
+            labelName: { es: "Poco personal" },
+            labelCustomerName: { "es-ES": "Poco hecho" },
+            labelKitchenName: "PH",
+          },
+        ],
+      },
+    ],
+  });
+  await openDrawer(el);
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Punto personal: Poco personal"]);
 });

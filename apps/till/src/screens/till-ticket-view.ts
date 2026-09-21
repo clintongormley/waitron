@@ -1,9 +1,9 @@
-import { modifierSnapshotLabels } from "../widgets/modifier-snapshot.js";
+import { optionAnswers } from "../widgets/option-snapshot.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
+import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
@@ -22,6 +22,12 @@ export interface TicketIssuer {
  * only for an empty map (a catalogue defect that still
  * prints something). The line comes from the SERVER's filed composition, so this reads its map rather
  * than a `TillProduct`.
+ *
+ * `descriptions` is the ONE map on this ticket an exact-key lookup may be used on:
+ * `toInvoiceLineDescriptions` (`packages/catalogue/src/invoice-descriptions.ts`) re-keys every priced
+ * line's onto the venue's invoice locales. Nothing re-keys the line's `unitName`, which is why the
+ * quantity below resolves that one through `resolveSnapshotText` instead — as the printed twin
+ * (`apps/server/src/receipt-ticket.ts`) does.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
@@ -447,12 +453,14 @@ export class TillTicketView extends LitElement {
                 <span class="line-name">${lineName(group.dish.descriptions, locale)}</span>
                 <span class="line-qty"
                   >${group.dish.quantity}${
-                    group.dish.unitName == null ? "" : ` ${lineName(group.dish.unitName, locale)}`
+                    group.dish.unitName == null
+                      ? ""
+                      : ` ${resolveSnapshotText(group.dish.unitName, locale, locale)}`
                   }</span
                 >
                 <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
               </li>
-              ${modifierSnapshotLabels(group.dish.modifierSnapshots, (text) => lineName(text, locale)).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
+              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map(
                 // Per-option quantity: the per-dish count is recovered from the filed COMBINED child
                 // quantity (see perDishOptionQuantity). Append a "×N" badge to the name ONLY when it

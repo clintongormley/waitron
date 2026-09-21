@@ -2,11 +2,19 @@
 // generic replacement for the deleted built-in `doneness` field — and attaches it to the steak, so
 // the demo data still carries the question "how do you want it cooked?".
 //
-// What this does NOT establish is that a TILL asks it. `listAvailableProducts`, the read the till
-// uses, resolves the LEGACY attachments (it calls `readLegacyProductModifiers`,
-// packages/catalogue/src/operations.ts:1477); only `listProducts` (:1054) reads the
-// `product_modifiers` rows this seed writes, and that is the read asserted below. Wiring the till
-// to the new mechanism is a separate task.
+// What this does NOT establish is that a TILL asks it, and no assertion below names
+// `offeredModifiers` at all. What is asserted is the seed and three reads of what it stored:
+// `listOptionLists` (the list, its three names and its labels), `readProductModifiers` (the
+// attachment row on the steak and none on the coffee), and `listAvailableProducts` — of which only
+// the LEGACY `optionGroups` are checked, to show the new list was added beside them.
+// The field a till actually draws is `offeredModifiers`, which `listAvailableProducts` also carries
+// (`readOfferedModifiers`, `packages/catalogue/src/offered-modifiers.ts`); the screen that draws it
+// is `apps/till/src/widgets/modifier-picker.ts`, which draws one group per entry of that field.
+// THREE doors open that screen, and only one of them turns on `offeredModifiers` alone:
+// `apps/till/src/widgets/product-grid.ts` and `apps/till/src/widgets/tender-pay.ts` both gate on
+// `needsModifierPicker` (`apps/till/src/state/order-line.ts`), which answers true on an available
+// variant BEFORE it looks at `offeredModifiers`, and `apps/till/src/widgets/basket.ts` has its own
+// narrower gate on the offered lists. None of the three is exercised from here.
 //
 // Real Postgres, not PGlite, and NOT because of the grants. The reason first given here — that
 // PGlite cannot check them — is false, and CLAUDE.md §4 says so plainly: grants ARE enforced once

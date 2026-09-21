@@ -708,6 +708,34 @@ describe("readTabLines", () => {
     expect(child.state).toBeNull();
   });
 
+  it("names a child extras line's parent by LINE NUMBER, and leaves the dish's own null", async () => {
+    // The only marker on the tab wire that tells a child extras line from a dish. A child carries the
+    // PICKED product (spec §3.4), so `productId` cannot do it, and the two products here are different
+    // rows so a test reading the wrong one fails. The parent is named by its `lineNo`, the same shape
+    // `TillSaleLine.parentLineNo` uses on the settled-sale wire (`apps/server/src/till-sale.ts`), so a
+    // screen groups children under dishes without a second lookup.
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cafeId, aguaId));
+
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          extras: [{ listId: extraListId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(lines).toHaveLength(2);
+    const parent = lines.find((l) => l.productId === cafeId)!;
+    const child = lines.find((l) => l.productId === aguaId)!;
+    expect(parent.parentLineNo).toBeNull();
+    expect(child.parentLineNo).toBe(parent.lineNo);
+  });
+
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

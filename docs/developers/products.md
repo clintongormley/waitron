@@ -74,7 +74,7 @@ render time. `joinCustomerPresentationText` only joins.
 exactly as the catalogue row holds it — `null` included — and widens each plain staff name into a
 one-entry map under the venue's default content language. Nothing has fallen back by the time the
 row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
-`customerOptionSnapshotLabels` (`apps/server/src/option-snapshot-labels.ts`): it takes the customer
+`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
 map when `nonBlankTranslations` says that map holds text in some language and the staff map
 otherwise, then resolves whichever it picked against the locale it was asked for. The kitchen half
 does the same thing a function along, through `kitchenPresentationName`
@@ -85,10 +85,12 @@ rule is spelled out away from `product-presentation.ts`. A list and a label carr
 there is no whole `customerPresentationText` to call, only the same
 `nonBlankTranslations(…) ?? <the staff name>` fold written out again. Checked by following every
 use of `nonBlankTranslations` in the tree: the other callers use it to normalise a map on a write
-path and none of them falls back to a staff name. It is recorded in `docs/backlog.md` as something
-to move into `packages/catalogue` when the till needs the same two labels for its own settled
-ticket, because the till cannot import from `apps/server` and would otherwise write it a third
-time.
+path and none of them falls back to a staff name. The move `docs/backlog.md` asked for has happened.
+These builders lived in `apps/server` until Task 12 (2026-09-21) and went into `packages/catalogue`
+there, because the till had to show the same labels on its own settled ticket and a browser cannot
+import from `apps/server`. A third builder for the till's own staff wording
+(`staffOptionSnapshotLabels`) sits beside them, and the till reaches all three through
+`apps/till/src/widgets/option-snapshot.ts`.
 
 None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
@@ -104,11 +106,12 @@ Where each one surfaces:
 | Surface | Reads | Code |
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
-| Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts` |
+| Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
 | Kitchen ticket | the four frozen staff and kitchen names, plus each frozen answer's kitchen names falling back to its staff names | `apps/server/src/kitchen-print.ts` |
 | Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, joined server-side | `readTabLines`, `apps/server/src/working-order.ts` |
+| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Printed allergen sheet | the live product's customer-facing name | `apps/till/src/screens/till-allergen-screen.ts` |
 | Top-sellers report | the frozen staff names, joined | `packages/reporting/src/top-sellers.ts` |
 
@@ -144,7 +147,7 @@ blank, and that is a gap, because you clearly meant to translate it and stopped.
 an options label's and an extras list's customer-facing name is optional in the same way and is left
 out of the report for the same reason. Two of those three now reach a surface: an options list's and
 an options label's customer-facing name are what the printed receipt puts under the dish
-(`customerOptionSnapshotLabels`, `apps/server/src/option-snapshot-labels.ts`), which is also where
+(`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`), which is also where
 the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
 name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
 PRODUCT's names, and nothing copies the list's name onto it. The other kinds the

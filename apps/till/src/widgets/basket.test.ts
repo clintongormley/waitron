@@ -6,8 +6,52 @@ import { setContentLanguages } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
-import type { TillOptionItem, TillProduct } from "../api/client.js";
-import type { SelectedLineOption } from "../state/working-order.js";
+import type { OfferedExtraItem, OfferedModifier, TillProduct } from "../api/client.js";
+import type { SelectedExtra } from "../state/working-order.js";
+
+/**
+ * One product an extras list offers. Its three names are DIFFERENT texts, so a surface reading the
+ * customer or kitchen wording where it should read the staff name fails (CLAUDE.md §3).
+ */
+function offeredItem(
+  productId: string,
+  staff: string,
+  price: string,
+  declarations: Partial<Pick<OfferedExtraItem, "addAllergens" | "suitableFor">> = {},
+): OfferedExtraItem {
+  return {
+    productId,
+    name: staff,
+    customerName: { es: `${staff} carta` },
+    kitchenName: `${staff} KDS`,
+    price,
+    vatClass: "general",
+    maxQuantity: 3,
+    preselected: false,
+    addAllergens: null,
+    suitableFor: [],
+    ...declarations,
+  };
+}
+
+/** One extras list on offer, holding the given products. */
+function offeredExtras(id: string, staff: string, items: OfferedExtraItem[]): OfferedModifier {
+  return {
+    kind: "extras",
+    id,
+    name: staff,
+    customerName: { es: `${staff} carta` },
+    kitchenName: `${staff} KDS`,
+    minPicks: 0,
+    maxPicks: null,
+    items,
+  };
+}
+
+/** One pick of an offered product, as a confirmed line carries it. */
+function pick(listId: string, item: OfferedExtraItem, quantity = 1): SelectedExtra {
+  return { listId, productId: item.productId, name: item.name, price: item.price, quantity };
+}
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -52,8 +96,14 @@ describe("till-basket", () => {
             customerName: { "en-GB": "Hogaza", ca: "Hogaza" },
           },
           quantity: "1",
-          options: [
-            { optionGroupItemId: "butter", name: { "es-ES": "Mantequilla" }, priceDelta: "0.50" },
+          extras: [
+            {
+              listId: "list-spread",
+              productId: "p-butter",
+              name: "Mantequilla",
+              price: "0.50",
+              quantity: 1,
+            },
           ],
         },
       ]);
@@ -220,106 +270,94 @@ describe("till-basket", () => {
     expect(row.querySelector(".step-dec")).toBeNull();
   });
 
-  it("groups a line's options under the dish — dish at its own price, options indented at their delta, no per-option remove", async () => {
+  it("groups a line's extras under the dish — dish at its own price, picks indented, no per-pick remove", async () => {
+    const cheese = offeredItem("p-cheese", "Extra queso", "0.50");
+    const noOnion = offeredItem("p-noonion", "Sin cebolla", "0.00"); // a FREE pick
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
-    };
-    const extraCheese: SelectedLineOption = {
-      optionGroupItemId: "opt-cheese",
-      name: { es: "Extra queso" },
-      priceDelta: "0.50",
-    };
-    const noOnion: SelectedLineOption = {
-      optionGroupItemId: "opt-noonion",
-      name: { es: "Sin cebolla" },
-      priceDelta: "0.00", // a FREE option
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [cheese, noOnion])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [extraCheese, noOnion]);
+    store.addProduct(burger, "1", {
+      extras: [pick("list-extras", cheese), pick("list-extras", noOnion)],
+    });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
-    // One dish row and two indented option rows.
+    // One dish row and two indented pick rows.
     const dishRows = el.shadowRoot!.querySelectorAll(".line");
     const optionRows = el.shadowRoot!.querySelectorAll(".option");
     expect(dishRows).toHaveLength(1);
     expect(optionRows).toHaveLength(2);
 
-    // The dish shows its OWN gross (10.00 × 1), never the dish+options running total (10.50).
+    // The dish shows its OWN gross (10.00 × 1), never the dish+picks running total (10.50).
     expect(dishRows[0]!.textContent).toContain("Hamburguesa");
     expect(dishRows[0]!.textContent).toContain(formatMoney("10.00"));
 
-    // Each option is indented under the dish and shows its delta; the free one shows 0.00.
+    // Each pick is indented under the dish at its own gross, by its STAFF name; the free one is 0.00.
     expect(optionRows[0]!.textContent).toContain("Extra queso");
+    expect(optionRows[0]!.textContent).not.toContain("Extra queso carta");
     expect(optionRows[0]!.textContent).toContain(formatMoney("0.50"));
     expect(optionRows[1]!.textContent).toContain("Sin cebolla");
     expect(optionRows[1]!.textContent).toContain(formatMoney("0.00"));
 
-    // A child option is NOT independently deletable: only the dish carries a remove control, and no
-    // option row carries a stepper (a modifier is counted through the picker, not the basket).
+    // A child is NOT independently deletable: only the dish carries a remove control, and no pick row
+    // carries a stepper (a pick is counted through the picker, not the basket).
     expect(el.shadowRoot!.querySelectorAll(".remove")).toHaveLength(1);
     expect(el.shadowRoot!.querySelectorAll(".option .step-inc")).toHaveLength(0);
   });
 
-  // ×N badge (features A + B): an option taken more than once per dish shows a `×{quantity}` badge on
-  // its name; a plain (quantity 1/absent) option renders exactly as before. `quantity` here is the
-  // CLIENT per-dish count carried directly on the selected option — no derivation.
-  it("appends a ×N badge to an option taken more than once per dish, and none to a plain option", async () => {
+  // A pick taken more than once per dish shows a `×{quantity}` badge on its name; a single pick
+  // shows none. The count is the per-dish one carried on the pick — no derivation.
+  it("appends a ×N badge to a pick taken more than once per dish, and none to a single pick", async () => {
+    const shot = offeredItem("p-shot", "Extra chupito", "0.50");
+    const plain = offeredItem("p-plain", "Sin cebolla", "0.00");
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
-    };
-    const extraShotX2: SelectedLineOption = {
-      optionGroupItemId: "opt-shot",
-      name: { es: "Extra chupito" },
-      priceDelta: "0.50",
-      quantity: 2,
-    };
-    const plain: SelectedLineOption = {
-      optionGroupItemId: "opt-plain",
-      name: { es: "Sin cebolla" },
-      priceDelta: "0.00",
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [shot, plain])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [extraShotX2, plain]);
+    store.addProduct(burger, "1", {
+      extras: [pick("list-extras", shot, 2), pick("list-extras", plain)],
+    });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const optionRows = el.shadowRoot!.querySelectorAll(".option");
     expect(optionRows[0]!.textContent).toContain("Extra chupito");
-    expect(optionRows[0]!.textContent).toContain("×2"); // stepped option → badge
+    expect(optionRows[0]!.textContent).toContain("×2"); // taken twice → badge
+    // …and it is priced twice: 0.50 × (1 dish × 2).
+    expect(optionRows[0]!.textContent).toContain(formatMoney("1.00"));
     expect(optionRows[1]!.textContent).toContain("Sin cebolla");
-    expect(optionRows[1]!.textContent).not.toContain("×"); // plain option → no badge
+    expect(optionRows[1]!.textContent).not.toContain("×"); // single pick → no badge
   });
 
-  it("removing the parent dish removes its options with it", async () => {
+  it("removing the parent dish removes its picks with it", async () => {
+    const cheese = offeredItem("p-cheese", "Extra queso", "0.50");
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
-    };
-    const extraCheese: SelectedLineOption = {
-      optionGroupItemId: "opt-cheese",
-      name: { es: "Extra queso" },
-      priceDelta: "0.50",
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [cheese])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [extraCheese]);
+    store.addProduct(burger, "1", { extras: [pick("list-extras", cheese)] });
     store.addProduct(cafe, "1"); // a second, plain line
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(1);
 
-    // Remove the dish that carries the option (the first remove control).
+    // Remove the dish that carries the pick (the first remove control).
     el.shadowRoot!.querySelectorAll<HTMLElement>(".remove")[0]!.click();
     await el.updateComplete;
 
-    // The whole line — dish and its option — is gone; only the plain café line remains.
+    // The whole line — dish and its pick — is gone; only the plain café line remains.
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.product).toBe(cafe);
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(0);
@@ -329,15 +367,8 @@ describe("till-basket", () => {
   // The basket shows each line's OWN allergen profile CLIENT-side — the dish's declared allergens, with
   // no modifier contribution. Each extra's own allergens are shown separately (Task 4).
 
-  it("shows the dish's OWN allergens, ignoring a gluten-removing extra", async () => {
-    const glutenFreeBun: TillOptionItem = {
-      id: "opt-1",
-      name: { es: "Pan sin gluten" },
-      priceDelta: "0.00",
-      vatClass: null,
-      maxQuantity: 1,
-      addAllergens: null,
-    };
+  it("shows the dish's OWN allergens, ignoring a gluten-free bun picked as an extra", async () => {
+    const bun = offeredItem("p-gf-bun", "Pan sin gluten", "0.00");
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
@@ -345,174 +376,112 @@ describe("till-basket", () => {
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } }, // base REVIEWED, declares gluten
-      optionGroups: [
-        {
-          id: "grp-bun",
-          name: { es: "Pan" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [glutenFreeBun],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-bun", "Pan", [bun])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [
-      { optionGroupItemId: "opt-1", name: { es: "Pan sin gluten" }, priceDelta: "0.00" },
-    ]);
+    store.addProduct(burger, "1", { extras: [pick("list-bun", bun)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // The extra no longer strips the dish's gluten — the dish shows its OWN gluten (the label "Cereales
+    // The pick no longer strips the dish's gluten — the dish shows its OWN gluten (the label "Cereales
     // con gluten"/"Cereals containing gluten" both contain the word, so its presence proves it stayed).
     expect(asServed!.textContent).toMatch(/gluten/i);
     // The base was reviewed, so nothing is pending: no "not fully reviewed" note.
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
   });
 
-  it("shows each selected extra's own allergens and diet, distinct from the dish's own", async () => {
-    const bacon: TillOptionItem = {
-      id: "opt-bacon",
-      name: { es: "Bacon" },
-      priceDelta: "1.00",
-      vatClass: null,
-      maxQuantity: 1,
-      addAllergens: { milk: { presence: "contains" } }, // the EXTRA's own allergen
-      suitableFor: ["halal"], // the EXTRA's own positive diet claim
-    };
+  it("shows each pick's own allergens and diet, distinct from the dish's own", async () => {
+    const bacon = offeredItem("p-bacon", "Bacon", "1.00", {
+      addAllergens: { milk: { presence: "contains" } }, // the PICK's own allergen
+      suitableFor: ["halal"], // the PICK's own positive diet claim
+    });
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } }, // the DISH's own allergen (not milk)
-      optionGroups: [
-        {
-          id: "grp",
-          name: { es: "Extras" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [bacon],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [bacon])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [
-      { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
-    ]);
+    store.addProduct(burger, "1", { extras: [pick("list-extras", bacon)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const milkName = allergenName("milk", currentLocale());
 
-    // The extra's OWN allergen node carries its milk, NOT the dish's gluten — a node distinct from the
+    // The pick's OWN allergen node carries its milk, NOT the dish's gluten — a node distinct from the
     // dish's own allergen row.
     const optionAllergens = el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`);
     expect(optionAllergens).not.toBeNull();
     expect(optionAllergens!.textContent).toContain(milkName);
     expect(optionAllergens!.textContent).not.toMatch(/gluten/i);
 
-    // The dish's OWN allergen row still shows gluten and NOT the extra's milk (no fold, distinct nodes).
+    // The dish's OWN allergen row still shows gluten and NOT the pick's milk (no fold, distinct nodes).
     const dishAllergens = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(dishAllergens!.textContent).toMatch(/gluten/i);
     expect(dishAllergens!.textContent).not.toContain(milkName);
 
-    // The extra's OWN diet badge shows its positive suitability (halal).
+    // The pick's OWN diet badge shows its positive suitability (halal).
     const optionDiet = el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"]`);
     expect(optionDiet).not.toBeNull();
     expect(optionDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
     expect(optionDiet!.textContent).toContain(t("diet.halal"));
   });
 
-  it("renders no per-extra nutrition chrome for an extra that declares neither", async () => {
-    const plainBun: TillOptionItem = {
-      id: "opt-plain",
-      name: { es: "Pan normal" },
-      priceDelta: "0.00",
-      vatClass: null,
-      maxQuantity: 1,
-      addAllergens: null,
-    };
+  it("renders no per-pick nutrition chrome for a pick that declares neither", async () => {
+    const bun = offeredItem("p-plain-bun", "Pan normal", "0.00");
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } },
-      optionGroups: [
-        {
-          id: "grp",
-          name: { es: "Pan" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [plainBun],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-bun", "Pan", [bun])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [
-      { optionGroupItemId: "opt-plain", name: { es: "Pan normal" }, priceDelta: "0.00" },
-    ]);
+    store.addProduct(burger, "1", { extras: [pick("list-bun", bun)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)).toBeNull();
     expect(el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"]`)).toBeNull();
   });
 
-  it("resolves a selected extra's own nutrition from the product's modifiers (not just optionGroups)", async () => {
-    // A product whose extras come via `modifiers` (the newer system), NOT `optionGroups` — the basket
-    // must still find each selected extra's own list to show it.
+  it("resolves a pick's own nutrition by the PICKED PRODUCT, across the dish's offered lists", async () => {
+    // Two lists offer two products; the basket must read the declarations of the one actually picked,
+    // and find it in the second list rather than stopping at the first.
+    const cheese = offeredItem("p-cheese", "Queso", "1.00", {
+      addAllergens: { gluten: { presence: "contains" } },
+      suitableFor: ["vegetarian"],
+    });
+    const bacon = offeredItem("p-bacon", "Bacon", "1.00", {
+      addAllergens: { milk: { presence: "contains" } },
+      suitableFor: ["kosher"],
+    });
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
       name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: null,
-      modifiers: [
-        {
-          id: "mod-extras",
-          name: { es: "Extras" },
-          type: "extras",
-          available: true,
-          required: false,
-          maxTotalQuantity: null,
-          choices: [
-            {
-              id: "opt-bacon",
-              name: { es: "Bacon" },
-              priceDelta: "1.00",
-              maxQuantity: 1,
-              available: true,
-              preselected: false,
-              addAllergens: { milk: { presence: "contains" } },
-              suitableFor: ["kosher"],
-            },
-          ],
-        },
+      offeredModifiers: [
+        offeredExtras("list-cheese", "Quesos", [cheese]),
+        offeredExtras("list-meat", "Carnes", [bacon]),
       ],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [
-      { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
-    ]);
+    store.addProduct(burger, "1", { extras: [pick("list-meat", bacon)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    expect(
-      el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)!.textContent,
-    ).toContain(allergenName("milk", currentLocale()));
+    const allergens = el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)!;
+    expect(allergens.textContent).toContain(allergenName("milk", currentLocale()));
+    expect(allergens.textContent).not.toMatch(/gluten/i);
     expect(
       el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"] [data-diet='kosher']`),
     ).not.toBeNull();
   });
 
-  it("marks the row 'not fully reviewed' for an unreviewed dish, ignoring an add-milk extra (Cautious)", async () => {
-    const extraCheese: TillOptionItem = {
-      id: "opt-cheese",
-      name: { es: "Extra queso" },
-      priceDelta: "0.50",
-      vatClass: null,
-      maxQuantity: 1,
+  it("marks the row 'not fully reviewed' for an unreviewed dish, ignoring an add-milk pick (Cautious)", async () => {
+    const cheese = offeredItem("p-cheese", "Extra queso", "0.50", {
       addAllergens: { milk: { presence: "contains" } },
-    };
+    });
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
@@ -520,27 +489,16 @@ describe("till-basket", () => {
       customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
       allergens: null, // base UNREVIEWED → the plate stays pending
-      optionGroups: [
-        {
-          id: "grp-extras",
-          name: { es: "Extras" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [extraCheese],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [cheese])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(burger, "1", [
-      { optionGroupItemId: "opt-cheese", name: { es: "Extra queso" }, priceDelta: "0.50" },
-    ]);
+    store.addProduct(burger, "1", { extras: [pick("list-extras", cheese)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // Unreviewed base → the waiter sees the "not reviewed" note. The extra's milk is NOT folded in — it
-    // is shown separately (Task 4) — so the dish's own row names no milk.
+    // Unreviewed base → the waiter sees the "not reviewed" note. The pick's milk is NOT folded in — it
+    // is shown separately — so the dish's own row names no milk.
     expect(asServed!.textContent).not.toMatch(/milk|leche/i);
     expect(asServed!.textContent).toMatch(/review|pendiente/i);
   });
@@ -570,50 +528,40 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`)).toBeNull();
   });
 
-  // A selection whose option carries an add-milk overlay must NOT change the dish's own allergen row —
-  // the dish shows its OWN reviewed gluten, and the option's milk is shown separately (Task 4).
-  it("shows the dish's own allergens with a selected option, no fold", async () => {
-    const realCheese: TillOptionItem = {
-      id: "opt-real",
-      name: { es: "Extra queso" },
-      priceDelta: "0.50",
-      vatClass: null,
-      maxQuantity: 1,
+  // A pick the dish no longer offers must NOT change the dish's own allergen row, and must not crash
+  // the row either: the dish shows its OWN reviewed gluten and the pick simply gets no chrome.
+  it("shows the dish's own allergens beside a pick it no longer offers, no fold", async () => {
+    const cheese = offeredItem("p-real-cheese", "Extra queso", "0.50", {
       addAllergens: { milk: { presence: "contains" } },
-    };
+    });
     const tostada: TillProduct = {
       ...cafe,
       id: "tostada-stale",
       name: "Tostada",
       customerName: { es: "Tostada para el cliente" },
       allergens: { gluten: { presence: "contains" } }, // base REVIEWED → the row renders
-      optionGroups: [
-        {
-          id: "grp-extras",
-          name: { es: "Extras" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [realCheese],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [cheese])],
     };
     const store = new WorkingOrderStore();
-    // The selection points at an id NOT present in `optionGroups` (a stale/removed option).
-    const stale: SelectedLineOption = {
-      optionGroupItemId: "opt-ghost",
-      name: { es: "Fantasma" },
-      priceDelta: "0.00",
+    // The pick names a product NO offered list carries any more (withdrawn since it was chosen).
+    const stale: SelectedExtra = {
+      listId: "list-extras",
+      productId: "p-ghost",
+      name: "Fantasma",
+      price: "0.00",
+      quantity: 1,
     };
-    store.addProduct(tostada, "1", [stale]);
+    store.addProduct(tostada, "1", { extras: [stale] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // The dish's own gluten shows; the selected option's milk is NOT folded in (shown separately).
+    // The dish's own gluten shows; the offered cheese's milk is NOT folded in (it was not picked).
     expect(asServed!.textContent).toMatch(/gluten/i);
     expect(asServed!.textContent).not.toMatch(/milk|leche/i);
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+    // An unresolvable pick gets no nutrition chrome rather than an empty declaration.
+    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)).toBeNull();
   });
 
   // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
@@ -692,42 +640,24 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
   });
 
-  it("shows the dish's OWN diet, ignoring a meat-adding extra", async () => {
-    const addBacon: TillOptionItem = {
-      id: "opt-bacon",
-      name: { es: "Beicon" },
-      priceDelta: "1.00",
-      vatClass: null,
-      maxQuantity: 1,
-      addAllergens: null,
-    };
+  it("shows the dish's OWN diet, ignoring a meat-adding pick", async () => {
+    const bacon = offeredItem("p-bacon", "Beicon", "1.00");
     const salad: TillProduct = {
       ...cafe,
       id: "salad-bacon",
       name: "Ensalada",
       customerName: { es: "Ensalada para el cliente" },
       dietDerivation: { origins: ["plant"], pending: false },
-      optionGroups: [
-        {
-          id: "grp-extras",
-          name: { es: "Extras" },
-          minSelect: 0,
-          maxSelect: 1,
-          required: false,
-          items: [addBacon],
-        },
-      ],
+      offeredModifiers: [offeredExtras("list-extras", "Extras", [bacon])],
     };
     const store = new WorkingOrderStore();
-    store.addProduct(salad, "1", [
-      { optionGroupItemId: "opt-bacon", name: { es: "Beicon" }, priceDelta: "1.00" },
-    ]);
+    store.addProduct(salad, "1", { extras: [pick("list-extras", bacon)] });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
 
     const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
     expect(diet).not.toBeNull();
-    // The dish is plant-only: it keeps its vegan badge and shows no contains-meat chip — the extra's
-    // meat is shown separately (Task 4), never folded into the dish's own diet.
+    // The dish is plant-only: it keeps its vegan badge and shows no contains-meat chip — the pick's
+    // meat is shown on the pick's own row, never folded into the dish's diet.
     expect(diet!.querySelector("[data-diet='vegan']")).not.toBeNull();
     expect(diet!.querySelector("[data-diet-contains='meat']")).toBeNull();
   });
@@ -852,7 +782,7 @@ describe("till-basket", () => {
 
   it("renders the line's set note as an indented sub-row (at a glance)", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(steak, "1", undefined, { note: "no butter" });
+    store.addProduct(steak, "1", { note: "no butter" });
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     const sub = el.shadowRoot!.querySelector(`[data-test="line-extras-0"]`);
     expect(sub).not.toBeNull();
@@ -945,56 +875,87 @@ describe("till-basket", () => {
   });
 });
 
-it("keeps different answers on distinct lines through quantity editing and shows the answer's name", async () => {
+/** One options list on offer, three DIFFERENT texts per name and per label (CLAUDE.md §3). */
+const cutList: OfferedModifier = {
+  kind: "options",
+  id: "list-cut",
+  name: "Cortar",
+  customerName: { es: "Cortar carta" },
+  kitchenName: "Cortar KDS",
+  defaultLabelId: "label-fino",
+  labels: [
+    {
+      id: "label-fino",
+      name: "Fino",
+      customerName: { es: "Fino carta" },
+      kitchenName: "Fino KDS",
+      available: true,
+    },
+    {
+      id: "label-grueso",
+      name: "Grueso",
+      customerName: { es: "Grueso carta" },
+      kitchenName: "Grueso KDS",
+      available: true,
+    },
+  ],
+};
+
+/** The line as the picker confirms it: the answer for the wire, and the six names for the basket. */
+function answered(labelId: string, labelName: string) {
+  return {
+    options: [{ listId: "list-cut", labelId }],
+    optionSnapshots: [
+      {
+        listName: { es: "Cortar" },
+        listCustomerName: { es: "Cortar carta" },
+        listKitchenName: "Cortar KDS",
+        labelName: { es: labelName },
+        labelCustomerName: { es: `${labelName} carta` },
+        labelKitchenName: `${labelName} KDS`,
+      },
+    ],
+  };
+}
+
+it("keeps each line's own answer through a quantity edit, and shows it in STAFF wording", async () => {
   const store = new WorkingOrderStore();
-  for (const choiceId of ["fino", "grueso"])
-    store.addProduct(cafe, "1", undefined, {
-      modifierSelections: [{ modifierId: "cut", type: "options", choiceId }],
-      modifierSnapshots: [
-        {
-          modifierId: "cut",
-          type: "options",
-          choiceId,
-          choiceName: { es: choiceId === "fino" ? "Fino" : "Grueso" },
-          name: { es: "Cortar" },
-        },
-      ],
-    });
+  store.addProduct(cafe, "1", answered("label-fino", "Fino"));
+  store.addProduct(cafe, "1", answered("label-grueso", "Grueso"));
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
   store.setLineQuantity(0, "2");
   await el.updateComplete;
-  expect(store.lines.map((line) => line.modifierSelections)).toEqual([
-    [{ modifierId: "cut", type: "options", choiceId: "fino" }],
-    [{ modifierId: "cut", type: "options", choiceId: "grueso" }],
+  expect(store.lines.map((line) => line.options)).toEqual([
+    [{ listId: "list-cut", labelId: "label-fino" }],
+    [{ listId: "list-cut", labelId: "label-grueso" }],
   ]);
-  // Each line keeps its own recorded choice, resolved as the modifier name and the chosen label.
+  // Each line keeps its own answer, read as the list's staff name and the chosen label's.
   expect(
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
   ).toEqual(["Cortar: Fino", "Cortar: Grueso"]);
 });
 
-it("reopens a draft modifier editor with its explicit answer and changes only that line", async () => {
+it("offers no Edit on a line whose only question was its variant", async () => {
+  // The basket's Edit reaches a line's ANSWERS only — `setLineModifiers` never replaces the line's
+  // product — so a variant-only dish has nothing to edit here, unlike the two surfaces that ADD a
+  // line, which hand the picker's variant-resolved product to `addProduct`.
   const store = new WorkingOrderStore();
   const product: TillProduct = {
     ...cafe,
-    modifiers: [
-      {
-        id: "cut",
-        name: { es: "Cortar" },
-        type: "options",
-        available: true,
-        defaultChoiceId: "fino",
-        choices: [
-          { id: "fino", name: { es: "Fino" }, available: true },
-          { id: "grueso", name: { es: "Grueso" }, available: true },
-        ],
-      },
-    ],
+    variants: [{ id: "v-large", name: "Grande", unitPrice: "2.00", available: true }],
+    variantId: "v-large",
+    variantName: "Grande",
   };
+  store.addProduct(product, "1");
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(el.shadowRoot!.querySelector(".edit-modifiers")).toBeNull();
+});
+
+it("reopens the picker on one line's answer and changes only that line", async () => {
+  const store = new WorkingOrderStore();
+  const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
   for (let index = 0; index < 2; index++)
-    store.addProduct(product, "1", undefined, {
-      modifierSelections: [{ modifierId: "cut", type: "options", choiceId: "fino" }],
-    });
+    store.addProduct(product, "1", answered("label-fino", "Fino"));
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
   el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
   await el.updateComplete;
@@ -1003,29 +964,67 @@ it("reopens a draft modifier editor with its explicit answer and changes only th
       "till-modifier-picker",
     )!;
   await picker.updateComplete;
-  // The reopened draft chose "Fino"; switch it to the second option ("Grueso") on this line only.
-  const radios = [
-    ...picker.shadowRoot!.querySelectorAll<HTMLInputElement>(
-      'input[type="radio"][name="modifier-cut"]',
-    ),
-  ];
-  radios[1]!.checked = true;
-  radios[1]!.dispatchEvent(new Event("change"));
+  // The reopened answer is "Fino"; switch this line alone to "Grueso".
+  const chosen = picker.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cut-label-fino")!;
+  expect(chosen.checked).toBe(true);
+  picker.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cut-label-grueso")!.click();
   await picker.updateComplete;
   picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
-  expect(store.lines.map((line) => line.modifierSelections)).toEqual([
-    [{ modifierId: "cut", type: "options", choiceId: "grueso" }],
-    [{ modifierId: "cut", type: "options", choiceId: "fino" }],
+  expect(store.lines.map((line) => line.options)).toEqual([
+    [{ listId: "list-cut", labelId: "label-grueso" }],
+    [{ listId: "list-cut", labelId: "label-fino" }],
   ]);
-  expect(store.lines[0]?.modifierSnapshots).toEqual([
+  // The re-answer re-freezes the six names, so the basket reads the NEW label.
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Cortar: Grueso", "Cortar: Fino"]);
+});
+
+it("hands the open picker ONE seed object, not a fresh one per basket render", async () => {
+  // Lit's reactive-property `hasChanged` is an identity check, so a seed rebuilt inside `render()`
+  // would re-render the open dialog on every basket render — note keystrokes included.
+  const store = new WorkingOrderStore();
+  const product: TillProduct = { ...cafe, offeredModifiers: [cutList] };
+  store.addProduct(product, "1", answered("label-fino", "Fino"));
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
+  await el.updateComplete;
+  const picker =
+    el.shadowRoot!.querySelector<import("./modifier-picker.js").TillModifierPicker>(
+      "till-modifier-picker",
+    )!;
+  const seed = picker.initialSelections;
+  expect(seed).toBeDefined();
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(picker.initialSelections).toBe(seed);
+});
+
+it("shows a retrieved line's frozen options answers in the STAFF wording", async () => {
+  // Three different texts per name, so the assertion fails if the basket reads the kitchen or the
+  // customer side by mistake (CLAUDE.md §3).
+  const store = new WorkingOrderStore();
+  store.loadFrom("wo-1", [
     {
-      modifierId: "cut",
-      name: { es: "Cortar" },
-      type: "options",
-      choiceId: "grueso",
-      choiceName: { es: "Grueso" },
+      product: cafe,
+      quantity: "1",
+      workingOrderLineId: "wol-1",
+      optionSnapshots: [
+        {
+          listName: { es: "Punto personal" },
+          listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+          listKitchenName: "PTO",
+          labelName: { es: "Poco personal" },
+          labelCustomerName: { "es-ES": "Poco hecho" },
+          labelKitchenName: "PH",
+        },
+      ],
     },
   ]);
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(
+    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+  ).toEqual(["Punto personal: Poco personal"]);
 });

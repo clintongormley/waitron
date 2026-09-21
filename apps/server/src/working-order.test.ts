@@ -260,7 +260,7 @@ async function attachModifierList(
 
 /**
  * An extras list offering ONE product, attached to `dishId`. Its three names all differ, and so do
- * the offered product's, so a surface reading the wrong one of the six fails (CLAUDE.md §4).
+ * the offered product's, so a surface reading the wrong one of the six fails (CLAUDE.md §3).
  *
  * `price` is the list item's own — `null` makes it borrow the offered product's `unitPrice`, which is
  * deliberately different, so a child priced at `unitPrice` when a `price` was given means the offer
@@ -1965,11 +1965,27 @@ describe("basket-wide modifier resolution (perf)", () => {
   afterEach(() => vi.restoreAllMocks());
 
   // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line.
-  // Each basket below is three lines — the same dish twice, then a second dish — so a resolver that
-  // moved inside the loop would call each reader three times instead of once. Behaviour alone
-  // cannot tell the two apart (the same order comes out either way), so the readers are spied on.
+  // The two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see
+  // that: a resolver moved inside the loop resolves three times instead of once. Behaviour alone
+  // cannot tell the two apart (the same order comes out either way), so the resolver is spied on.
   // Proven by mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the
-  // line loop takes both cases from 1 to 3.
+  // line loop takes those two from 1 to 3 ("expected resolveAttachedModifiers to be called 1
+  // times, but got 3 times").
+  // The MIDDLE case is not one of them and does not cover the line loop at all: its basket is a
+  // SINGLE line, so it reads 1 either way, and it passed under that same mutation. What it pins is
+  // a different thing — that a preserve check which cannot hold does not resolve the catalogue a
+  // SECOND time on top of `priceOrderLines`.
+  //
+  // What is spied on is `resolveAttachedModifiers` — the ORDER path's own way into the shared walk,
+  // and the only caller of it in product code (`resolveBasketModifiers`, working-order.ts). It is
+  // NOT what the two reads a till sells from call: those reach the shared body,
+  // `walkAttachedModifiers`, through `readOfferedModifiers`, so nothing counted here says anything
+  // about what a till is offered (packages/catalogue/src/offered-modifiers.ts). The readers that
+  // body calls are not reachable from here either: it calls them through its own relative imports,
+  // which are different namespace objects from the `@waitron/catalogue` index these spies replace
+  // bindings on. Which reader each side of a basket reaches, and that the attachments map is handed
+  // on rather than read twice, is covered where the walk lives — "one shared resolution for a set
+  // of dishes" (packages/catalogue/src/offered-modifiers.test.ts).
 
   it("reads each PRODUCT-side definition once for a walk-up basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
@@ -1981,10 +1997,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { cafe, agua };
     });
-    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
-    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     await parkOrder({ db }, cfg, {
       id: randomUUID(),
@@ -2007,22 +2020,14 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(productExtras).toHaveBeenCalledTimes(1);
-    expect(optionLists).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
-    // No line names a menu offer, so the menu-side read is never reached.
-    expect(menuExtras).not.toHaveBeenCalled();
-
-    // `readProductExtras` reads the same `product_modifiers` rows as its own first statement, so
-    // the basket hands it the map it just read. The spies above cannot see that second read: they
-    // replace the bindings on the `@waitron/catalogue` INDEX namespace, and `extra-projection.ts`
-    // calls `readProductModifiers` through its own `./product-modifiers.js` import, which is a
-    // different namespace object — with the resolve deliberately left duplicated, `attachments`
-    // still reported 1. What is checkable from here is the WIRING, by identity; that supplying
-    // the map skips the query is
-    // "takes attachments the caller already read rather than reading them again"
-    // (packages/catalogue/src/extra-projection.test.ts).
-    expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    // One entry per line, every one of them on the PRODUCT side: no line names a menu offer, so
+    // nothing the resolver is handed can send it to the menu-side read.
+    expect(resolve.mock.calls[0]![1]).toEqual([
+      { productId: cafeId, menuItemId: null },
+      { productId: cafeId, menuItemId: null },
+      { productId: aguaId, menuItemId: null },
+    ]);
   });
 
   it("does not resolve the catalogue twice for an edit that cannot be preserved", async () => {
@@ -2041,8 +2046,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     const held = await getHeldOrder({ db }, cfg, id);
 
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     // A changed note is not a quantity-only edit, so this takes the replacement path and is
     // re-priced from the current offer. The preserve check that runs first decides that from the
@@ -2061,8 +2065,7 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(contentLanguages).toHaveBeenCalledTimes(1);
-    expect(productExtras).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledTimes(1);
 
     const stored = await db
       .select({ note: workingOrderLines.note })
@@ -2096,10 +2099,7 @@ describe("basket-wide modifier resolution (perf)", () => {
       const agua = await addOptionList(tx, aguaId, "Tamano");
       return { aguaOfferId: aguaOffer.id, cafe, agua };
     });
-    const menuExtras = vi.spyOn(catalogue, "readMenuExtras");
-    const productExtras = vi.spyOn(catalogue, "readProductExtras");
-    const attachments = vi.spyOn(catalogue, "readProductModifiers");
-    const optionLists = vi.spyOn(catalogue, "readOptionListsByIds");
+    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
 
     await parkOrder({ db }, cfg, {
       id: randomUUID(),
@@ -2123,11 +2123,14 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(menuExtras).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveBeenCalledTimes(1);
-    expect(optionLists).toHaveBeenCalledTimes(1);
-    // Every line names an offer, so the product-side extras read is never reached.
-    expect(productExtras).not.toHaveBeenCalled();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    // One entry per line, every one of them carrying the OFFER it was ordered through, so nothing
+    // the resolver is handed can send it to the product-side read.
+    expect(resolve.mock.calls[0]![1]).toEqual([
+      { productId: cafeId, menuItemId: cafeOfferId },
+      { productId: cafeId, menuItemId: cafeOfferId },
+      { productId: aguaId, menuItemId: seeded.aguaOfferId },
+    ]);
   });
 });
 
@@ -5189,7 +5192,7 @@ it("does not let an omitted payload waive a required extras list the menu offer 
  * `option_snapshots`, and its EXTRAS picks become child lines carrying the picked PRODUCT.
  *
  * Every name in the fixture carries its own text, so a read of the wrong one of the six fails
- * (CLAUDE.md §4).
+ * (CLAUDE.md §3).
  */
 describe("order path — extras and options", () => {
   interface Seeded {
@@ -5848,5 +5851,83 @@ describe("what a held-order edit preserves and what it replaces", () => {
     expect(after[0]!.optionSnapshots[0]).toMatchObject({
       listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
     });
+  });
+
+  /**
+   * The body a till line sends is the same one an edit sends, so an edit that carries no `options`
+   * key is refused exactly as a first order would be — `validateOptionSelections`
+   * (`packages/catalogue/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
+   * first one no answer names, whether the line is new or being changed. That is what a RETRIEVED
+   * till line used to send, because the server hands its answers back as six frozen names and no
+   * ids.
+   *
+   * The next case is the control: the same edit body against a dish carrying NO options list, which
+   * succeeds — so the refusal below is the options list and not the shape of the edit.
+   */
+  it("refuses a quantity-only edit that names no answer for an active options list", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const punto = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return addOptionList(tx, cafeId, "Punto", ["Solo"]);
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCafeOfferId,
+            quantity: "2",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: punto.listId },
+    });
+  });
+
+  it("accepts the same quantity-only edit on a dish carrying no options list", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [{ workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity: "2" }],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: "2.000" });
   });
 });

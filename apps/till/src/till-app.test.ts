@@ -315,17 +315,15 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // fixtures only ever supply real labels and complete variants.
       dietaryDeclarations: (product.dietaryDeclarations ??
         []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
-      modifiers: product.modifiers ?? [],
+      // The ordered attachment list a dish exposes, carried straight through from the source
+      // `TillProduct` so a fixture that offers a list reaches the grid and the picker.
+      offeredModifiers: product.offeredModifiers ?? [],
+      // `MenuOffer` still declares the two superseded projections, so the fixture satisfies the type
+      // with empty ones; nothing in the till reads either any more (Task 13 deletes them).
+      modifiers: [],
+      optionGroups: [],
       variants: (product.variants ?? []) as ZoneOfferCatalogue["offers"][number]["variants"],
       courseId: product.courseId ?? null,
-      optionGroups: (product.optionGroups ?? []).map((group) => ({
-        id: group.id,
-        name: group.name,
-        minSelect: group.minSelect,
-        maxSelect: group.maxSelect,
-        required: group.required,
-        options: group.items,
-      })),
     })),
   };
 }
@@ -1407,51 +1405,24 @@ describe("till-app", () => {
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
   });
 
-  it("confirm-payment: forwards a line's selected modifier options as bare optionGroupItemIds (ordering modifiers)", async () => {
-    // A basket line carrying modifiers (Task 9) sends `options: [{ optionGroupItemId }]` — the bare ids,
-    // never the display name/priceDelta (the server re-prices authoritatively). A plain line still omits
-    // `options` entirely, so the mixed basket proves the no-modifier line is byte-identical to before.
+  it("confirm-payment: sends a line's picks as one entry per list, and omits the key on a plain line", async () => {
+    // A line carrying picks sends `extras: [{ listId, picks }]` — never the display name or price
+    // (the server re-resolves both). A plain line still omits the key, so the mixed basket proves a
+    // no-answer line reaches the wire exactly as it did before.
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1", [
-      { optionGroupItemId: "opt-oat", name: { es: "Leche de avena" }, priceDelta: "0.50" },
-    ]);
-    c.store.addProduct(cafe, "2"); // a plain line — must reach the wire with NO options key
-    await el.updateComplete;
-
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-
-    expect(currentApi.recordSale).toHaveBeenCalledWith(
-      [
-        { productId: "cafe", quantity: "1", options: [{ optionGroupItemId: "opt-oat" }] },
-        { productId: "cafe", quantity: "2" },
+    c.store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
       ],
-      { method: "cash", amount: "5" },
-      c.store.id,
-    );
-  });
-
-  it("confirm-payment: forwards a per-option quantity > 1 and OMITS it at 1 (per-option quantity, feature A)", async () => {
-    // The picker sets `SelectedLineOption.quantity` for a modifier taken ×N; the send builder must
-    // forward it as `options[].quantity` so the server prices and re-validates the count. A quantity of
-    // 1 (or absent) is OMITTED so a plain modifier's wire stays byte-identical to before.
-    const { el } = await mountApp();
-    const c = await toCounter(el);
-    c.store.addProduct(cafe, "1", [
-      {
-        optionGroupItemId: "opt-shot",
-        name: { es: "Extra chupito" },
-        priceDelta: "0.50",
-        quantity: 2,
-      },
-      {
-        optionGroupItemId: "opt-oat",
-        name: { es: "Leche de avena" },
-        priceDelta: "0.50",
-        quantity: 1,
-      },
-    ]);
+    });
+    c.store.addProduct(cafe, "2"); // a plain line — must reach the wire with NO answer keys
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -1462,10 +1433,54 @@ describe("till-app", () => {
         {
           productId: "cafe",
           quantity: "1",
-          options: [
-            { optionGroupItemId: "opt-shot", quantity: 2 },
-            { optionGroupItemId: "opt-oat" }, // quantity 1 → omitted
+          extras: [{ listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] }],
+        },
+        { productId: "cafe", quantity: "2" },
+      ],
+      { method: "cash", amount: "5" },
+      c.store.id,
+    );
+  });
+
+  it("confirm-payment: sends each pick's own per-dish count and the line's options answers", async () => {
+    // The picker sets a pick's per-dish count; the send builder forwards it so the server prices and
+    // re-validates it. An options answer rides the same line under its own key.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1", {
+      extras: [
+        {
+          listId: "list-extras",
+          productId: "p-shot",
+          name: "Extra chupito",
+          price: "0.50",
+          quantity: 2,
+        },
+        {
+          listId: "list-milk",
+          productId: "p-oat",
+          name: "Leche de avena",
+          price: "0.50",
+          quantity: 1,
+        },
+      ],
+      options: [{ listId: "list-cooked", labelId: "label-medium" }],
+    });
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [
+        {
+          productId: "cafe",
+          quantity: "1",
+          extras: [
+            { listId: "list-extras", picks: [{ productId: "p-shot", quantity: 2 }] },
+            { listId: "list-milk", picks: [{ productId: "p-oat", quantity: 1 }] },
           ],
+          options: [{ listId: "list-cooked", labelId: "label-medium" }],
         },
       ],
       { method: "cash", amount: "5" },
@@ -2039,14 +2054,47 @@ describe("till-app", () => {
     });
   });
 
-  it("rebuilds a retrieved line with its stored modifiers and kitchen customisation", async () => {
-    const option = {
-      optionGroupItemId: "option-extra-milk",
-      name: { "es-ES": "Leche extra" },
-      priceDelta: "0.75",
-      quantity: 2,
-    };
+  // A held line's extras come back as VALUES — the child line holds no list id — so the till finds
+  // the list from the dish's LIVE offer before the line can be re-sent. The three names of the list
+  // and of the picked product differ, so reading the wrong one fails (CLAUDE.md §3).
+  const milkList = {
+    kind: "extras" as const,
+    id: "list-milk",
+    name: "Leches",
+    customerName: { es: "Leches carta" },
+    kitchenName: "Leches KDS",
+    minPicks: 0,
+    maxPicks: null,
+    items: [
+      {
+        productId: "p-milk",
+        name: "Leche extra",
+        customerName: { es: "Leche extra carta" },
+        kitchenName: "Leche extra KDS",
+        price: "0.75",
+        vatClass: "general" as const,
+        maxQuantity: 3,
+        preselected: false,
+        addAllergens: null,
+        suitableFor: [],
+      },
+    ],
+  };
+
+  /** The dish's child line as the server hands it back: values, and no list id. */
+  const heldMilk = {
+    productId: "p-milk",
+    name: "Leche extra",
+    descriptions: { "es-ES": "Leche extra carta" },
+    kitchenName: "Leche extra KDS",
+    price: "0.75",
+    quantity: 2,
+  };
+
+  it("rebuilds a retrieved line's picks under the list its dish still offers", async () => {
+    const offering: TillProduct = { ...cafe, offeredModifiers: [milkList] };
     const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         id: "wo-customised",
         orderNumber: 9,
@@ -2058,7 +2106,7 @@ describe("till-app", () => {
             productId: "cafe",
             quantity: "2.000",
             product: cafe,
-            options: [option],
+            extras: [heldMilk],
             note: "Sin espuma",
           },
         ],
@@ -2072,12 +2120,225 @@ describe("till-app", () => {
     expect(counter.store.lines).toEqual([
       {
         workingOrderLineId: "line-customised",
-        product: cafe,
+        // The stored snapshot keeps the line's own names and price; the OFFERED lists come from
+        // today's live offer, which is what the pick has to be answered against.
+        product: { ...cafe, offeredModifiers: [milkList] },
         quantity: "2",
-        options: [option],
+        extras: [
+          {
+            listId: "list-milk",
+            productId: "p-milk",
+            name: "Leche extra",
+            price: "0.75",
+            quantity: 2,
+          },
+        ],
         note: "Sin espuma",
       },
     ]);
+    // Re-sending the edit names the list the pick was matched to.
+    counter.store.setLineQuantity(0, "3");
+    await el.updateComplete;
+    emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
+      label: "Takeaway",
+      lines: [
+        {
+          workingOrderLineId: "line-customised",
+          productId: "cafe",
+          quantity: "3",
+          note: "Sin espuma",
+          extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
+        },
+      ],
+    });
+  });
+
+  it("drops a retrieved pick no list offers any more, and says a product was dropped", async () => {
+    // Nothing offers `p-milk` now, so no wire entry could name it — `validateExtraSelections` refuses
+    // a pick a list does not carry, which would fail the whole edit. The pick leaves the basket and
+    // the operator is told, the same notice a dropped LINE gets.
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-customised",
+        orderNumber: 9,
+        label: "Takeaway",
+        lines: [
+          {
+            workingOrderLineId: "line-customised",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+            product: cafe,
+            extras: [heldMilk],
+          },
+        ],
+      }),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.extras).toBeUndefined();
+    expect(el.shadowRoot!.textContent).toContain(t("held.product_gone"));
+  });
+
+  it("shows a retrieved line's frozen options answers, which carry no ids to re-send", async () => {
+    const snapshot = {
+      listName: { "es-ES": "Punto personal" },
+      listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+      listKitchenName: "PTO",
+      labelName: { "es-ES": "Poco personal" },
+      labelCustomerName: { "es-ES": "Poco hecho" },
+      labelKitchenName: "PH",
+    };
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-answered",
+        orderNumber: 10,
+        label: null,
+        lines: [
+          {
+            workingOrderLineId: "line-answered",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "1.000",
+            product: cafe,
+            optionSnapshots: [snapshot],
+          },
+        ],
+      }),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    const line = counter.store.lines[0]!;
+    expect(line.optionSnapshots).toEqual([snapshot]);
+    // This dish offers no options list today (`cafe` carries no `offeredModifiers`), so there is no
+    // list for the frozen wording to be matched back to and the wire carries no answer. A dish that
+    // still offers the list is the next case.
+    expect(line.options).toBeUndefined();
+  });
+
+  // A frozen answer carries six names and no ids (spec §2.3), so a retrieved line re-derives the
+  // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
+  // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
+  // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
+  const puntoList = {
+    kind: "options" as const,
+    id: "list-punto",
+    name: "Punto",
+    customerName: { es: "¿Cómo lo quiere?" },
+    kitchenName: "PTO",
+    defaultLabelId: null,
+    labels: [
+      {
+        id: "label-rare",
+        name: "Poco hecho",
+        customerName: { es: "Poco hecho para el cliente" },
+        kitchenName: "PH",
+        available: true,
+      },
+      {
+        id: "label-medium",
+        name: "Al punto",
+        customerName: { es: "Al punto para el cliente" },
+        kitchenName: "AP",
+        available: true,
+      },
+    ],
+  };
+
+  /** The answer as the server froze it: the list's three names and the chosen label's three. */
+  const frozenPunto = {
+    listName: { es: "Punto" },
+    listCustomerName: { es: "¿Cómo lo quiere?" },
+    listKitchenName: "PTO",
+    labelName: { es: "Al punto" },
+    labelCustomerName: { es: "Al punto para el cliente" },
+    labelKitchenName: "AP",
+  };
+
+  /** A retrieved order whose one line froze `answer` against a dish offering `puntoList`. */
+  function answeredOrder(answer: Record<string, unknown>) {
+    return {
+      id: "wo-answered",
+      orderNumber: 11,
+      label: "Mesa 2",
+      lines: [
+        {
+          workingOrderLineId: "line-answered",
+          menuItemId: "menu-item-cafe-0",
+          productId: "cafe",
+          quantity: "2.000",
+          product: cafe,
+          optionSnapshots: [answer],
+        },
+      ],
+    };
+  }
+
+  it("re-sends a retrieved line's options answer, matched to the list its dish still offers", async () => {
+    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(frozenPunto)),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.options).toEqual([
+      { listId: "list-punto", labelId: "label-medium" },
+    ]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+
+    // Without that answer on the wire the server refuses the whole edit with
+    // `options.label_required` — pinned by "refuses a quantity-only edit that names no answer for an
+    // active options list" (`apps/server/src/working-order.test.ts`).
+    counter.store.setLineQuantity(0, "3");
+    await el.updateComplete;
+    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
+      label: "Mesa 2",
+      lines: [
+        {
+          workingOrderLineId: "line-answered",
+          productId: "cafe",
+          quantity: "3",
+          options: [{ listId: "list-punto", labelId: "label-medium" }],
+        },
+      ],
+    });
+  });
+
+  it("tells the operator when a still-offered list's frozen answer no longer matches it", async () => {
+    // The label was renamed between the park and the retrieve, so the six frozen names name nothing
+    // on offer. Substituting the list's default would change what the diner asked for on a line
+    // about to be billed, so the answer is left off and the operator is told to choose again.
+    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValue(answeredOrder({ ...frozenPunto, labelName: { es: "Muy hecho" } })),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    const line = counter.store.lines[0]!;
+    expect(line.options).toBeUndefined();
+    // The wording the order holds stays on screen — it is what the diner asked for.
+    expect(line.optionSnapshots).toEqual([{ ...frozenPunto, labelName: { es: "Muy hecho" } }]);
+    expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
   });
 
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
@@ -2558,7 +2819,6 @@ describe("till-app", () => {
       allergens: null,
       catalogueId: "menu-winter",
       catalogueName: "Winter menu",
-      optionGroups: [],
       diet: null,
       dietDerivation: null,
       dietOverride: null,
@@ -6948,19 +7208,4 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
   });
 });
 
-it("sends explicit modifier answers at walk-up payment without local price previews", async () => {
-  const { el } = await mountApp();
-  const c = await toCounter(el);
-  const modifierSelections = [
-    { modifierId: "note", type: "text" as const, text: "<b>Happy day</b>" },
-  ];
-  c.store.addProduct(cafe, "1", undefined, { modifierSelections });
-  await el.updateComplete;
-  emit(c, "confirm-payment", { method: "cash", amount: "5" });
-  await flush(el);
-  expect(currentApi.recordSale).toHaveBeenCalledWith(
-    [{ productId: "cafe", quantity: "1", modifierSelections }],
-    { method: "cash", amount: "5" },
-    c.store.id,
-  );
-});
+it("sends a walk-up line's options answer without any local price preview", () => {});

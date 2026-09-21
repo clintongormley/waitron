@@ -1,4 +1,5 @@
 import { readMenuModifiers, readLegacyProductModifiers } from "./modifier-projection.js";
+import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
@@ -75,6 +76,10 @@ export type {
   MenuOffer,
   MenuOfferOption,
   MenuOfferOptionGroup,
+  OfferedExtraItem,
+  OfferedExtrasList,
+  OfferedModifier,
+  OfferedOptionsList,
   ResolvedOptionGroup,
   ResolvedOptionItem,
 } from "./menu-types.js";
@@ -730,6 +735,12 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     tx,
     rows.map((row) => row.id),
   );
+  // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
+  // this offer publishes (spec §3.2), while the order stays the product's own.
+  const offeredByItem = await readOfferedModifiers(
+    tx,
+    rows.map((row) => ({ productId: row.productId, menuItemId: row.id })),
+  );
   const variantRows = await tx
     .select({
       menuItemId: menuItemVariants.menuItemId,
@@ -791,6 +802,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     courseId: row.courseId,
     optionGroups: groupsByItem.get(row.id) ?? [],
     modifiers: modifiersByItem.get(row.id) ?? [],
+    offeredModifiers: offeredByItem.get(row.id) ?? [],
     variants: variantRows
       .filter((variant) => variant.menuItemId === row.id)
       .map((variant) => ({
@@ -1505,6 +1517,12 @@ export async function listAvailableProducts(
     rows.length === 0
       ? new Map<string, Modifier[]>()
       : await readLegacyProductModifiers(tx, productIds);
+  // No menu offer is in this read at all, so each extras list is the one the product itself
+  // carries, priced without an offer's overrides (spec §3.3, minus the menu step).
+  const offeredByProduct = await readOfferedModifiers(
+    tx,
+    rows.map((row) => ({ productId: row.id, menuItemId: null })),
+  );
 
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
@@ -1539,6 +1557,7 @@ export async function listAvailableProducts(
     catalogueName: row.catalogueName,
     optionGroups: groupsByProduct.get(row.id) ?? [],
     modifiers: modifiersByProduct.get(row.id) ?? [],
+    offeredModifiers: offeredByProduct.get(row.id) ?? [],
   }));
   return { products: available, invoiceLocales };
 }

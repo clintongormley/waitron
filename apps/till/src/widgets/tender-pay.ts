@@ -13,6 +13,7 @@ import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../ap
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, unitName } from "./product-name.js";
+import { needsModifierPicker } from "../state/order-line.js";
 
 /**
  * The payload of the `confirm-payment` event — either tender the widget can settle:
@@ -598,7 +599,7 @@ export class TillTenderPay extends LitElement {
     this.selected = undefined;
     this.entry = "";
     this.view = "idle";
-    if (product.modifiers?.some((modifier) => modifier.available)) {
+    if (needsModifierPicker(product)) {
       this.modifierDraft = { product, quantity };
     } else {
       this.store.addProduct(product, quantity);
@@ -628,12 +629,9 @@ export class TillTenderPay extends LitElement {
               if (!this.modifierDraft) return;
               const quantity = this.modifierDraft.quantity;
               this.modifierDraft = undefined;
-              this.store.addProduct(
-                event.detail.product,
-                quantity,
-                event.detail.options.length ? event.detail.options : undefined,
-                event.detail,
-              );
+              // The detail IS the selection (it extends `LineSelection`, note included); the store
+              // attaches only the keys that name something.
+              this.store.addProduct(event.detail.product, quantity, event.detail);
             }}
             @wt-modifier-cancel=${(event: Event) => {
               event.stopPropagation();

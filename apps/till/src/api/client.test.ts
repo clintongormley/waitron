@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   TillApi,
   isNetworkFailure,
+  menuOfferToTillProduct,
+  type OfferedModifier,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -1409,7 +1411,10 @@ describe("TillApi", () => {
     // `firedAt`/`state` carry the kitchen coursing state the waiter-fire + recall-vs-cancel-only actions
     // read (coursing corrections, C1): `state: null` for the second line pins the LEFT-join edge (a line
     // with no ticket item yet), distinct from a held line that already has one (`state: "queued"`,
-    // `firedAt: null`). `unitPriceGross` is the LOCKED gross unit, not a re-price.
+    // `firedAt: null`). `unitPriceGross` is the LOCKED gross unit, not a re-price. The second line is a
+    // CHILD extras row, naming its parent dish by `parentLineNo` — the one field that tells a child from
+    // a dish, since a child carries the picked product. The round trip below is what proves it survives
+    // decoding; that the MIRROR declares it is proved by `tsc` over this fixture, not at runtime.
     const lines: TabLine[] = [
       {
         lineNo: 1,
@@ -1424,6 +1429,7 @@ describe("TillApi", () => {
       {
         lineNo: 2,
         productId: "agua",
+        parentLineNo: 1,
         quantity: "2.000",
         unitPriceGross: "2.00",
         servedAt: null,
@@ -1448,6 +1454,9 @@ describe("TillApi", () => {
     // the line with no ticket item yet.
     expect(r[0]!.state).toBe("queued");
     expect(r[1]!.state).toBeNull();
+    // The child marker survives too: null on the dish, the parent's line number on the child.
+    expect(r[0]!.parentLineNo ?? null).toBeNull();
+    expect(r[1]!.parentLineNo).toBe(1);
   });
 
   it("getTabLines surfaces { code } when the tab is not open", async () => {
@@ -2041,5 +2050,79 @@ describe("isNetworkFailure", () => {
     expect(isNetworkFailure(new DOMException("aborted", "AbortError"))).toBe(true);
     expect(isNetworkFailure({ code: "sale.empty_basket" })).toBe(false);
     expect(isNetworkFailure(new Error("x"))).toBe(false);
+  });
+});
+
+describe("menuOfferToTillProduct", () => {
+  it("carries the offer's ordered lists through, in the order they arrive", () => {
+    // The till re-sorts nothing: the order IS the product's own attachment order (spec §5), and the
+    // picker draws it as given. Three different texts per name, so a reader of the wrong one fails.
+    const extras: OfferedModifier = {
+      kind: "extras",
+      id: "list-extras",
+      name: "Extras",
+      customerName: { es: "Extras carta" },
+      kitchenName: "Extras KDS",
+      minPicks: 0,
+      maxPicks: 2,
+      items: [
+        {
+          productId: "p-bacon",
+          name: "Bacon",
+          customerName: { es: "Bacon carta" },
+          kitchenName: "Bacon KDS",
+          price: "1.50",
+          vatClass: "general",
+          maxQuantity: 1,
+          preselected: false,
+          addAllergens: null,
+          suitableFor: [],
+        },
+      ],
+    };
+    const options: OfferedModifier = {
+      kind: "options",
+      id: "list-cooked",
+      name: "Punto",
+      customerName: { es: "Punto carta" },
+      kitchenName: "Punto KDS",
+      defaultLabelId: null,
+      labels: [],
+    };
+    const offer = {
+      id: "offer-burger",
+      menuId: "menu-1",
+      productId: "burger",
+      sectionId: "section-1",
+      grossPrice: "8.00",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Platos" },
+      name: "Burger",
+      customerName: { es: "Burger carta" },
+      kitchenName: "Burger KDS",
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general" as const,
+      category: "Platos",
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      optionGroups: [],
+      modifiers: [],
+      offeredModifiers: [extras, options],
+      variants: [],
+    };
+
+    expect(menuOfferToTillProduct(offer).offeredModifiers).toEqual([extras, options]);
   });
 });

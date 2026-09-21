@@ -3,8 +3,10 @@
  *
  * DEAD as written, as of 2026-09-20: no order and no receipt reads this type. The only thing that
  * still IMPORTS it is this package's own barrel re-export (`./index.ts`); nothing else under
- * `packages/` and nothing in `apps/server` does, and `apps/till` uses a local copy of its own
- * (`apps/till/src/api/client.ts`) rather than this one. It is still NAMED in prose next door —
+ * `packages/` and nothing under `apps/` does. `apps/till` did keep a copy of its own in
+ * `apps/till/src/api/client.ts`, which is no longer true as of 2026-09-21: Task 12 rewrote the
+ * till's wire types over extras and options and deleted that declaration, so no TypeScript file
+ * outside this package names the type at all. It is still NAMED in prose next door —
  * `./option-selection.ts` cites `ModifierSnapshot.name` and `choiceName` as the field shape the
  * replacement matched. An order or sale line's frozen answers are
  * `OptionSnapshot`s (`./option-selection.ts`), and an extras pick is its own line. Deleted with the

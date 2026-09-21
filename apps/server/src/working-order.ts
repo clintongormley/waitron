@@ -57,10 +57,7 @@ import {
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
-  readMenuExtras,
-  readOptionListsByIds,
-  readProductExtras,
-  readProductModifiers,
+  resolveAttachedModifiers,
   toInvoiceLineDescriptions,
   readContentLanguages,
   selectMenuVariant,
@@ -69,16 +66,15 @@ import {
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
+  AttachedModifiers,
   BasketItemWithOptions,
   AvailableProduct,
   ProductPresentation,
   DietaryLabel,
   DietProfile,
   LockedLine,
-  OptionList,
   PricedLines,
   ProductAllergens,
-  ResolvedExtraList,
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
@@ -137,14 +133,23 @@ export type LineExtras = { note?: string; variantId?: string };
  * Every extras and options definition the dishes in one basket offer, read ONCE before the line
  * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
  * resolution (perf)" in `apps/server/src/working-order.test.ts`.
+ *
+ * The LIST maps come from one body — `walkAttachedModifiers`
+ * (`packages/catalogue/src/offered-modifiers.ts`). This path reaches it through
+ * `resolveAttachedModifiers`, which is a wrapper over it and has no other caller in product code;
+ * the two sell-side reads a till draws its picker from reach the SAME body through
+ * `readOfferedModifiers` (`listAvailableProducts` and `listMenuOffers`), not through the wrapper.
+ * Deliberate: what the till is OFFERED has to be the set the validators below answer, or a required
+ * list the picker never drew refuses the order.
+ *
+ * The product facts are NOT shared, and two bodies read the `products` rows: this file's
+ * {@link resolveBasketModifiers} and `readExtraProducts` (offered-modifiers.ts). Neither shape can
+ * be had from the other — this one resolves customer text under the order's `defaultLanguage`,
+ * which no sell-side caller supplies, and that one expands dietary declarations through
+ * `validateDietaryDeclarations`, which throws `diet.declaration_invalid`. Sharing only the SELECT
+ * would put two jsonb columns this path discards on the order path.
  */
-interface BasketModifiers {
-  /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
-   * the offer when there is one and held by the product when there is not (spec §3.2). */
-  extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
-  /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
-   * and a menu offer neither republishes nor narrows one (spec §3.1). */
-  optionsByProduct: ReadonlyMap<string, OptionList[]>;
+interface BasketModifiers extends AttachedModifiers {
   /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child. */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
@@ -162,52 +167,8 @@ async function resolveBasketModifiers(
   dishes: readonly { productId: string; menuItemId: string | null }[],
   defaultLanguage: string,
 ): Promise<BasketModifiers> {
-  const productIds = [...new Set(dishes.map((dish) => dish.productId))];
-  const menuItemIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [] : [dish.menuItemId]))),
-  ];
-  const productOnlyIds = [
-    ...new Set(dishes.flatMap((dish) => (dish.menuItemId === null ? [dish.productId] : []))),
-  ];
-  // Every dish's attachments, read ONCE: the options side below needs them for the whole basket,
-  // and `readProductExtras` would otherwise ask the same table for the same ids on the same
-  // transaction as its own first statement. Awaited in turn with the reads below, never in
-  // parallel (CLAUDE.md §3).
-  const attachments = await readProductModifiers(tx, productIds);
-
-  // Each dish is read on the side its own identity puts it on, so a basket mixing offer lines with
-  // plain product lines resolves both. The two key spaces are distinct ids, so nothing collides.
-  const extrasByHolder = new Map<string, ResolvedExtraList[]>();
-  if (menuItemIds.length > 0) {
-    for (const [holder, lists] of await readMenuExtras(tx, menuItemIds)) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
-  if (productOnlyIds.length > 0) {
-    for (const [holder, lists] of await readProductExtras(tx, productOnlyIds, attachments)) {
-      extrasByHolder.set(holder, lists);
-    }
-  }
-  const optionLists = new Map(
-    (
-      await readOptionListsByIds(tx, [
-        ...new Set(
-          [...attachments.values()].flatMap((refs) =>
-            refs.flatMap((ref) => (ref.kind === "options" ? [ref.id] : [])),
-          ),
-        ),
-      ])
-    ).map((list) => [list.id, list]),
-  );
-  const optionsByProduct = new Map(
-    [...attachments].map(([productId, refs]): [string, OptionList[]] => [
-      productId,
-      refs.flatMap((ref) => {
-        const list = ref.kind === "options" ? optionLists.get(ref.id) : undefined;
-        return list === undefined ? [] : [list];
-      }),
-    ]),
-  );
+  const attached = await resolveAttachedModifiers(tx, dishes);
+  const { extrasByHolder } = attached;
 
   const offeredProductIds = [
     ...new Set(
@@ -250,7 +211,7 @@ async function resolveBasketModifiers(
       });
     }
   }
-  return { extrasByHolder, optionsByProduct, extraProducts };
+  return { ...attached, extraProducts };
 }
 
 /**
@@ -2009,6 +1970,13 @@ export interface TabLine {
   // and the diner is charged for (spec §3.4). Every `insert(workingOrderLines)` in this file sets
   // it.
   productId: string | null;
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else null on a top-level
+   * dish — the ONE field on this wire that tells the two apart. `productId` cannot: a child carries the
+   * PICKED product (see the note above it, spec §3.4). Named by LINE NUMBER, not by row id, so a screen
+   * groups a child under the dish it already has in hand — the same shape the settled-sale wire's
+   * `TillSaleLine.parentLineNo` uses (`apps/server/src/till-sale.ts`). {@link readTabLines} resolves it
+   * from the stored `parent_line_id` over the rows it has already read, so it costs no extra query. */
+  parentLineNo: number | null;
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
@@ -2065,6 +2033,8 @@ export async function readTabLines(
       variantName: workingOrderLines.variantName,
       optionSnapshots: workingOrderLines.optionSnapshots,
       productId: workingOrderLines.productId,
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       servedAt: workingOrderLines.servedAt,
@@ -2076,12 +2046,32 @@ export async function readTabLines(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  // Resolve each child extras line's `parent_line_id` (a row id) to its parent's `line_no` over the
+  // rows ALREADY read — this query selects every line of the tab, so the parent of any child is in
+  // hand and no per-line lookup is needed (CLAUDE.md §3). The stored `line_no` is what this read
+  // returns as `lineNo`, so the two spaces are the same one here — UNLIKE `readLockedLines`, which
+  // renumbers into compacted array positions and must resolve into THAT space instead.
+  // `?? null` covers a parent this read did not see. `parent_line_id` references a line of the SAME
+  // working order and this read takes the whole order, so no such row is expected — an expectation
+  // from reading the inserts, not a case any test here reaches.
+  const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
   // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
-  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads.
-  return rows.map(({ variantName, ...row }) => ({
-    ...row,
+  // the stored count of cents becomes the decimal amount every consumer of `TabLine` reads. Neither
+  // row id belongs on this wire: `id` appears nowhere below, being only the KEY of `lineNoById`
+  // above, and `parent_line_id` is read once and only to look its parent's `lineNo` up in that map,
+  // because the tab screen addresses a line by `lineNo`.
+  return rows.map((row) => ({
+    lineNo: row.lineNo,
+    name: staffPresentationName({ name: row.name, variantName: row.variantName }),
+    optionSnapshots: row.optionSnapshots,
+    productId: row.productId,
+    parentLineNo: row.parentLineId === null ? null : (lineNoById.get(row.parentLineId) ?? null),
+    quantity: row.quantity,
     unitPriceGross: centsToDecimal(row.unitPriceGross),
-    name: staffPresentationName({ name: row.name, variantName }),
+    servedAt: row.servedAt,
+    courseId: row.courseId,
+    firedAt: row.firedAt,
+    state: row.state,
   }));
 }
 
@@ -2803,7 +2793,9 @@ export interface HeldOrder {
   orderNumber: number;
   label: string | null;
   /**
-   * Parent and child rows in `line_no` order. Contextual parent rows carry their stored offer and
+   * PARENT rows only, in `line_no` order — {@link getHeldOrder} filters `parent_line_id IS NULL` and
+   * nests each dish's child extras lines under it as the `extras` array below, so this list needs no child
+   * marker of its own. Contextual parent rows carry their stored offer and
    * display snapshot so retrieval does not depend on the offer still being active. Product-only rows
    * remain readable while older order paths are migrated to menu-item identity.
    */

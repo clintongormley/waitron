@@ -71,9 +71,35 @@ An extras entry declares its allergens and its dietary suitability through the p
 you maintain those on that product under **Products**, not here. An options label declares neither —
 it is wording, not something eaten.
 
-> **Not finished yet (2026-09-20).** The till does not offer these two kinds of list to an operator
-> yet. The read behind its menu still resolves only the older attachments
-> (`listAvailableProducts`), so a dish carrying an extras or options list is sold without the
-> question being asked. Wiring the till is Task 12 of
-> `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`. Until it lands, treat this page
-> as a guide to building lists in the dashboard rather than to selling with them.
+## What the till does with a list
+
+Tapping a dish that carries a list opens the question straight away, one list after another in the
+order you arranged them. An extras list shows its entries at the price you set, with a tick box
+each, or a stepper where you allowed more than one; a list you made required keeps **Add** shut
+until something is picked. An options list shows its labels as a set of radio buttons, exactly one
+to choose, with your default already selected.
+
+The operator reads the staff name throughout. The till is a staff screen: the diner's wording is
+what the receipt prints, and the kitchen's is what the ticket prints.
+
+Each extra picked becomes its own indented line under the dish in the basket, with its own price
+and its own allergens and dietary labels — never folded into the dish's. An options answer costs
+nothing and rides along as wording on the dish's line.
+
+An order stores the answers it was given and not a link back to the list they came from, so a parked
+order has to be matched up with the dish's lists again before it can be changed. An options answer
+is stored as wording, all three names of the list and all three of the chosen label, and the till
+matches on the staff name of each. An extra is stored as the product that was picked, so the till
+finds its list by that product instead.
+
+Change the staff name of a list or a label, or turn a label off, and an options answer no longer
+matches. The till will not guess: it asks the operator to open that line and choose again before the
+order can be sent.
+
+Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
+it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
+different one, so the next change made to that parked order, even a change of quantity, rebuilds the
+whole order from today's catalogue. Every line on it is then charged at today's prices instead of
+the prices it was parked at. Do your renaming between services rather than while orders are parked.
+An extras list is the exception, because an extra is matched by its product: renaming an extras
+list, or the product on it, leaves a parked order alone.

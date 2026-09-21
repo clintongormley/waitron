@@ -7,30 +7,28 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
-import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
-import { modifierSnapshotLabels } from "./modifier-snapshot.js";
-import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
+import { optionAnswers } from "./option-snapshot.js";
+import { dishGross, extraGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type { LineSelection, OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { lineProductName, productUnit } from "./product-name.js";
 
 /**
- * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
+ * The multiplication sign for a pick's count badge (`×2`). The SAME `×` (U+00D7) the printed
  * receipt (`apps/server/src/receipt-ticket.ts`) and the settled-ticket view use, so the badge reads
  * identically on the screen basket, the paper receipt and the filed ticket.
  */
 const QTY_BADGE = "×";
 
 /**
- * The `×N` badge for a modifier taken more than once per dish (per-option quantity), or "" for the
- * common one-per-dish case (quantity 1 or absent) so a plain option renders byte-identical to before.
- * `quantity` is the CLIENT per-dish count carried directly on the selected option — no derivation.
+ * The `×N` badge for an extra taken more than once per dish, or "" for the common one-per-dish case
+ * so a single pick renders without one. `quantity` is the per-dish count carried on the pick itself.
  */
-function optionQuantityBadge(quantity: number | undefined): string {
-  return quantity !== undefined && quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
+function pickQuantityBadge(quantity: number): string {
+  return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
 }
 
 /**
@@ -115,8 +113,8 @@ export class TillBasket extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
-      /* A selected option (ordering modifiers, Task 8) — indented beneath its dish, name left and
-         delta right, with no quantity column and no remove control (a child is not independently
+      /* A pick, and a frozen options answer — indented beneath its dish, name left and any price
+         right, with no quantity column and no remove control (a child is not independently
          deletable; removing the dish removes it). */
       .option {
         display: grid;
@@ -206,13 +204,36 @@ export class TillBasket extends LitElement {
    * can carry allergy info) would reattach to whatever line slid into the edited line's old slot. */
   @state() private editingIndex: number | null = null;
 
+  /** The line whose modifier picker is open, or `null` when none is. Assigned only through
+   * {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
+   * {@link #modifierSelection} in step with it. */
+  @state() private modifierLine: OrderLine | null = null;
+
+  /**
+   * The seed handed to the open picker, built ONCE when it opens rather than per render. Lit's
+   * default `hasChanged` is an identity check, so a fresh object literal in `render()` would set the
+   * property on every basket render — including the ones a note keystroke causes — and re-render the
+   * dialog each time. Non-null exactly while {@link modifierLine} is.
+   */
+  #modifierSelection: LineSelection | null = null;
+
   /** The `store.id` last seen by {@link #onStoreChanged}, used to detect a whole-basket swap. `clear`
    * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
    * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
    * first change fires (the initial render already starts with no editor open). */
-  @state() private modifierLine: OrderLine | null = null;
-
   #lastStoreId?: string;
+
+  /** Open the picker on `line`, freezing the selection it is seeded with. */
+  #openModifierPicker(line: OrderLine): void {
+    this.modifierLine = line;
+    this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
+  }
+
+  /** Close the picker, dropping the seed with it. */
+  #closeModifierPicker(): void {
+    this.modifierLine = null;
+    this.#modifierSelection = null;
+  }
 
   constructor() {
     super();
@@ -247,10 +268,10 @@ export class TillBasket extends LitElement {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
       this.editingIndex = null;
-      this.modifierLine = null;
+      this.#closeModifierPicker();
     }
     if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
-      this.modifierLine = null;
+      this.#closeModifierPicker();
     this.requestUpdate();
   }
 
@@ -273,59 +294,48 @@ export class TillBasket extends LitElement {
     this.store.removeLine(index);
   }
 
-  #lineText(line: OrderLine, text: Record<string, string>, fallback: string): string {
-    // Retrieved rows carry receipt snapshots; new selections carry enabled catalogue translations.
-    return line.workingOrderLineId === undefined
-      ? descriptionFor(text, fallback)
-      : snapshotDescriptionFor(text, fallback);
-  }
-
   /** The line's own label: the STAFF name, with any chosen variant joined on. A new line reads it
    * from the live catalogue product; a retrieved line reads the name frozen onto it at add time. It
-   * is plain text either way, so unlike {@link #lineText} it needs no language fallback. */
+   * is plain text either way, so it needs no language fallback. */
   #lineName(line: OrderLine): string {
     return lineProductName(line.product);
   }
 
   /**
-   * A selected option's OWN allergens and dietary suitability, resolved from the line's product option
-   * definition by its `optionGroupItemId` — the source of truth for an extra's own list, so both a
-   * freshly-picked line and a retrieved one (each carrying the resolved product) render identically.
-   * Scans BOTH the product's `optionGroups` items (ordering modifiers) and its `modifiers` choices,
-   * since a selected extra can come from either. `undefined` when the id resolves to neither (a
-   * stale/removed option), so the row adds no per-extra chrome.
+   * A line's frozen options answers, in the STAFF wording a server at the till reads (spec §10) —
+   * never the kitchen shorthand or the diner's text. ONE source: the six frozen names, whether the
+   * operator answered here (the picker builds them at confirm) or the line came back from a held
+   * order (the server built them).
    */
-  #optionOwnNutrition(
+  #answers(line: OrderLine): string[] {
+    return optionAnswers(line.optionSnapshots, { reads: "staff" });
+  }
+
+  /**
+   * One pick's OWN allergens and dietary suitability, resolved LIVE from the dish's offer by the
+   * PICKED PRODUCT — an extra IS a product, and its declarations are read at display time rather
+   * than frozen onto the line (spec §3.4). `undefined` when no offered list names that product any
+   * more, and on a retrieved line whose stored snapshot carries no offer, so the row adds no
+   * per-extra chrome rather than claiming an empty declaration.
+   */
+  #extraOwnNutrition(
     line: OrderLine,
-    optionGroupItemId: string,
+    productId: string,
   ):
     | {
         addAllergens: Record<
           string,
           { presence: "contains" | "may_contain"; source?: string }
         > | null;
-        suitableFor: string[];
+        suitableFor: readonly string[];
       }
     | undefined {
-    const fromGroups = (line.product.optionGroups ?? [])
-      .flatMap((group) => group.items)
-      .find((candidate) => candidate.id === optionGroupItemId);
-    if (fromGroups !== undefined)
-      return {
-        addAllergens: fromGroups.addAllergens ?? null,
-        suitableFor: fromGroups.suitableFor ?? [],
-      };
-    const fromModifiers = (line.product.modifiers ?? [])
-      .flatMap((modifier) =>
-        modifier.type === "extras" || modifier.type === "options" ? modifier.choices : [],
-      )
-      .find((candidate) => candidate.id === optionGroupItemId);
-    if (fromModifiers !== undefined)
-      return {
-        addAllergens: fromModifiers.addAllergens ?? null,
-        suitableFor: fromModifiers.suitableFor ?? [],
-      };
-    return undefined;
+    const item = (line.product.offeredModifiers ?? [])
+      .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
+      .find((candidate) => candidate.productId === productId);
+    return item === undefined
+      ? undefined
+      : { addAllergens: item.addAllergens, suitableFor: item.suitableFor };
   }
 
   override render() {
@@ -362,60 +372,60 @@ export class TillBasket extends LitElement {
             </wt-button>
           </div>
           ${
-            line.product.modifiers?.length
+            // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
+            // answers and never its product, so a dish whose only question is its variant gets no
+            // Edit button rather than a dialog whose save would carry nothing ("offers no Edit on a
+            // line whose only question was its variant", basket.test.ts). This gate does not reach
+            // the MIXED case — variants AND an offered list — which still opens the dialog, re-asks
+            // the variant and discards it; open in `docs/backlog.md`, Task 12.
+            line.product.offeredModifiers?.length
               ? html`<wt-button
                   class="edit-modifiers"
                   size="sm"
                   variant="ghost"
-                  @click=${() => {
-                    this.modifierLine = line;
-                  }}
+                  @click=${() => this.#openModifierPicker(line)}
                   >${t("modifier.edit")}</wt-button
                 >`
               : nothing
           }
           ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
-          ${(line.options ?? []).map(
-            // Each selected modifier on its own indented row — the option's name and its delta (0,00 for
-            // a free option). No remove control: a child is removed only by removing its dish above,
-            // which drops the whole line (options and all). A modifier taken more than once per dish
-            // (per-option quantity) shows a "×N" badge on its name — the CLIENT per-dish count carried
-            // directly on the option (no derivation); a plain option (quantity 1/absent) is unchanged.
-            // Beneath each extra, its OWN allergens/diet (nutrition redesign, pass 1) — resolved from the
-            // product's option definition, shown beside the dish's own rows below, never a fold.
-            (option, i) => {
-              const own = this.#optionOwnNutrition(line, option.optionGroupItemId);
+          ${(line.extras ?? []).map(
+            // Each pick on its own indented row — the picked product's STAFF name and its own gross
+            // (0,00 for a free pick). No remove control: a child goes only with its dish above, which
+            // drops the whole line, picks and all. A pick taken more than once per dish shows a "×N"
+            // badge. Beneath it, that product's OWN allergens and diet, resolved live from the offer
+            // and shown beside the dish's own rows below — never folded into them (spec §3.4).
+            (extra, i) => {
+              const own = this.#extraOwnNutrition(line, extra.productId);
               return html`
                 <div class="option">
-                  <span class="name"
-                    >${this.#lineText(line, option.name, "")}${optionQuantityBadge(option.quantity)}</span
-                  >
-                  <span class="option-total">${formatMoney(optionGross(line, option))}</span>
+                  <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
+                  <span class="option-total">${formatMoney(extraGross(line, extra))}</span>
                 </div>
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
             },
           )}
-          ${modifierSnapshotLabels(line.modifierSnapshots ?? [], (labels, fallback) => this.#lineText(line, labels, fallback)).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
+          ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
         `,
       )}
       ${
-        this.modifierLine
+        this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
               .product=${this.modifierLine.product}
               .quantity=${this.modifierLine.quantity}
-              .initialSelections=${this.modifierLine.modifierSelections ?? []}
+              .initialSelections=${this.#modifierSelection}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                 event.stopPropagation();
                 if (!this.modifierLine) return;
                 const index = this.store.lines.indexOf(this.modifierLine);
-                this.modifierLine = null;
+                this.#closeModifierPicker();
                 this.store.setLineModifiers(index, event.detail);
               }}
               @wt-modifier-cancel=${(event: Event) => {
                 event.stopPropagation();
-                this.modifierLine = null;
+                this.#closeModifierPicker();
               }}
             ></till-modifier-picker>`
           : nothing
@@ -518,16 +528,16 @@ export class TillBasket extends LitElement {
 
   /**
    * The line's as-served allergen row, or `nothing` for the noise-free common case: a plain line with
-   * no modifiers AND no declared allergens on the dish renders nothing at all. When it DOES render, the
+   * NO picks AND no declared allergens on the dish renders nothing at all. When it DOES render, the
    * chips are the folded `asServedAllergens` set (localised via the till's allergen-name i18n) and the
    * "not fully reviewed" note appears whenever the fold is pending (the dish's own allergens unreviewed
    * — the Cautious policy, since a removed-but-unknown base can't be proven allergen-free). A reviewed
    * fold that leaves an empty set reads as "No declared allergens" rather than a bare label.
    */
   #allergenRow(line: OrderLine, index: number) {
-    const hasOptions = (line.options ?? []).length > 0;
+    const hasExtras = (line.extras ?? []).length > 0;
     const hasAllergens = line.product.allergens != null;
-    if (!hasOptions && !hasAllergens) return nothing;
+    if (!hasExtras && !hasAllergens) return nothing;
 
     const asServed = asServedAllergens(line);
     const locale = currentLocale();
