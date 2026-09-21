@@ -4711,6 +4711,48 @@ out. It lists FILES, not packages and not call sites.
 their own pull request, after the last conversion, as planned. With it the whole of task P2 is done.
 The entry further down carries what it found.
 
+**Task P4a — job claiming becomes one statement — LANDED as #481 on 2026-09-21** (main
+`f0b9a73e`). `FOR UPDATE ... SKIP LOCKED` and `ctid` now live in one file,
+`packages/db/src/job-claim.ts`, so task F1 edits that instead of three call sites in three packages.
+It holds TWO functions rather than the plan's one: `claimRows`, which claims by updating the rows in
+a single statement (`packages/printing/src/runtime.ts` moved onto it, its two statements becoming
+one), and `claimLock`, which claims by locking and stamping nothing. `packages/payments/src/store.ts`
+takes the second because a payment's own state IS the queue and there is no claim column to stamp;
+putting it through `claimRows` would have meant a no-op UPDATE writing a new version of every row a
+forward pass merely looked at. `apps/server/src/read-only-gate.ts`, the plan's fourth site, turned
+out to contain no SQL — only a comment describing the claim.
+
+**What P4a found, and what is left.**
+
+1. **A key that is not the row's identifier loses claims, and only RUNNING it shows that.** The first
+   version named the rows it stamps by `ctid`, as the plan's own sketch did. The `/finish-branch`
+   run-it seat parked a claim in the middle of its own statement on an advisory lock, committed a
+   change to the row it was about to take from another connection, and watched the claim return
+   NOTHING: a row's physical address moves when anything rewrites it, so the outer UPDATE was still
+   reading the row where it used to be. The helper takes the key column from its caller now. Rule:
+   `CLAUDE.md` §4; receipt and the reproduction: [testing-guide.md](developers/testing-guide.md).
+2. **A proof-by-deletion did not survive the restructure, and nothing said so.** The printing race
+   suite's header recorded the lock clause as proven load-bearing by deletion. Measured against both
+   versions of the one-statement claim: delete the clause and that suite still PASSES, five tests
+   green. What the clause buys is that a claimer does not WAIT; that property moved to
+   `packages/db/src/job-claim.pg.test.ts`, which fails on its test timeout without it. What keeps a
+   row from being claimed twice is the CALLER's predicate excluding the state its own stamp writes —
+   not anything the shared helper can promise. Rule: `CLAUDE.md` §4.
+3. **The cost was paid a third time: the corrections bred corrections.** Three reviews produced their
+   findings; the wave that fixed them produced ten more, found by a reader whose only job was to
+   check the corrections — among them a sentence claiming a mechanism was "measured" when only its
+   consequence was, and a receipt re-attributed to a code shape it had not been taken against. Budget
+   for the third round.
+4. **Still open after P4a.** **Task P4b** moves the fiscal drain
+   (`packages/fiscal-verifactu/src/drain.ts`, which still spells `for update of e skip locked`) onto
+   the same helper; it is autonomous by the owner's 2026-09-20 decision, and its
+   `drain.concurrency` suite must pass unedited. Two things P4a chose not to do, each deliberate and
+   each stated in #481: the holder/waiter scaffold is still hand-written in every real-PostgreSQL
+   contention suite in the tree, because sharing it means editing
+   `packages/db/src/testing/lifecycle.ts` and reaching all of them; and running the negative control
+   for the lock clause takes minutes rather than seconds, because the blocked claim's holder is still
+   parked when the per-test reset comes round and the reset then waits on its row locks.
+
 **Task P3 — the change log replaces the database's notifications — LANDED as #477 on 2026-09-21**
 (main `e96afb96`). `LISTEN`/`NOTIFY` is gone. The change trigger writes a row into a `change_log`
 table inside whatever transaction caused the change, `withTransaction` takes those rows out again
