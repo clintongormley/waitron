@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, inArray, lt, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
-import { isUniqueViolation, type Transaction } from "@waitron/db";
+import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
 import { scheduledRuns, type RunState } from "./schema/scheduled-runs.js";
@@ -156,7 +156,12 @@ export async function claimRow(
       // `reclaimStale` only ever touches rows that are already `running`, so this is the one write
       // that could leave a stale value.
       nextAttemptAt: null,
-      updatedAt: sql`now()`,
+      // Every `updated_at` stamp in this file reads this process's clock, which is also what the
+      // column's own `$defaultFn(nowIso)` writes on the insert, and what `started_at`/`finished_at`
+      // already took from the caller's `params.now`. The PostgreSQL `now()` this replaced read the
+      // DATABASE's clock, once per transaction; this engine has no such function and the statement
+      // failed outright with `no such function: now`.
+      updatedAt: nowIso(),
     })
     .where(
       and(
@@ -188,7 +193,7 @@ export async function reclaimStale(
     .set({
       attempts: sql`${scheduledRuns.attempts} + 1`,
       startedAt: now,
-      updatedAt: sql`now()`,
+      updatedAt: nowIso(),
     })
     .where(
       and(
@@ -236,7 +241,7 @@ export async function completeRun(
       errorCode: params.errorCode,
       nextAttemptAt: params.nextAttemptAt?.toISOString() ?? null,
       finishedAt: params.now.toISOString(),
-      updatedAt: sql`now()`,
+      updatedAt: nowIso(),
     })
     .where(
       and(

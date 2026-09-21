@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { claimLock, workingOrders } from "@waitron/db";
+import { claimLock, nowIso, workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
@@ -175,7 +175,11 @@ async function resolveAttempting(
       cardLast4: extra.card?.last4 ?? null,
       cardEntryMode: extra.card?.entryMode ?? null,
       cardAuthCode: extra.card?.authCode ?? null,
-      updatedAt: sql`now()`,
+      // Every `updated_at` stamp in this file reads this process's clock, which is also what the
+      // column's own `$defaultFn(nowIso)` writes on the insert. The PostgreSQL `now()` this
+      // replaced read the DATABASE's clock, once per transaction; this engine has no such function
+      // and the statement failed outright with `no such function: now`.
+      updatedAt: nowIso(),
     })
     .where(and(keyWhere(params), eq(payments.state, "attempting")))
     .returning(PAYMENT_COLUMNS);
@@ -195,10 +199,7 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
   if (row.state !== "captured") {
     throw new AppError("payment.not_voidable", { paymentRef: params.paymentRef, state: row.state });
   }
-  await tx
-    .update(payments)
-    .set({ state: "voided", updatedAt: sql`now()` })
-    .where(keyWhere(params));
+  await tx.update(payments).set({ state: "voided", updatedAt: nowIso() }).where(keyWhere(params));
   return { ...row, state: "voided" };
 }
 
@@ -242,10 +243,7 @@ export async function recordRefund(
   });
   const state: PaymentState =
     compareDecimal(afterThis, captured) === 0 ? "refunded" : "partially_refunded";
-  await tx
-    .update(payments)
-    .set({ state, updatedAt: sql`now()` })
-    .where(keyWhere(params));
+  await tx.update(payments).set({ state, updatedAt: nowIso() }).where(keyWhere(params));
   return { ...row, state };
 }
 
@@ -295,7 +293,7 @@ export async function associatePaymentWithSale(
     .set({
       saleId: params.saleId,
       ...(params.readerId === undefined ? {} : { readerId: params.readerId }),
-      updatedAt: sql`now()`,
+      updatedAt: nowIso(),
     })
     .where(and(keyWhere(params), isNull(payments.saleId)))
     .returning({ id: payments.id });
@@ -543,7 +541,7 @@ export async function stampAttemptingRef(
 ): Promise<void> {
   await tx
     .update(payments)
-    .set({ externalRef, updatedAt: sql`now()` })
+    .set({ externalRef, updatedAt: nowIso() })
     .where(and(keyWhere(params), eq(payments.state, "attempting")));
 }
 
@@ -571,7 +569,7 @@ async function advanceAcceptedOffline(
 ): Promise<void> {
   await tx
     .update(payments)
-    .set({ state, updatedAt: sql`now()` })
+    .set({ state, updatedAt: nowIso() })
     .where(and(keyWhere(params), eq(payments.state, "accepted_offline")));
 }
 
@@ -605,7 +603,7 @@ export async function settleInitiated(
 ): Promise<SettledInitiated | null> {
   const [row] = await tx
     .update(payments)
-    .set({ state: "captured", settledAt: params.settledAt.toISOString(), updatedAt: sql`now()` })
+    .set({ state: "captured", settledAt: params.settledAt.toISOString(), updatedAt: nowIso() })
     .where(
       and(
         eq(payments.provider, params.provider),
@@ -630,7 +628,7 @@ export async function expireInitiated(
 ): Promise<void> {
   await tx
     .update(payments)
-    .set({ state: "failed", updatedAt: sql`now()` })
+    .set({ state: "failed", updatedAt: nowIso() })
     .where(
       and(
         eq(payments.provider, params.provider),
@@ -874,7 +872,7 @@ export async function markReconcileRemediated(
 ): Promise<boolean> {
   const [row] = await tx
     .update(payments)
-    .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: sql`now()` })
+    .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: nowIso() })
     .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
     .returning({ id: payments.id });
   return row !== undefined;

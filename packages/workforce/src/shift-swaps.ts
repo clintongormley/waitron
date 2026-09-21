@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 // Side-effect: registers this package's swap.*/shift.* codes so `new AppError(...)` below type-checks
@@ -128,7 +128,7 @@ export interface DecideSwapInput {
 /**
  * A manager approves or rejects an ACCEPTED swap — the `accepted → approved | rejected` transition
  * (design §3a). The success path is a single conditional UPDATE guarded on `status = 'accepted'`,
- * setting `status = decision`, `decided_by_person_id` and `decided_at = now()` and `RETURNING id`
+ * setting `status = decision`, `decided_by_person_id` and `decided_at` and `RETURNING id`
  * (mirrors `setAbsenceStatus`) — one round trip in the common case. When it matches no row the swap is
  * either absent or not decidable, and ONLY THEN a `SELECT` disambiguates: throws `swap.not_found` if
  * absent (never created), else the new `swap.not_decidable` (a `requested` swap has
@@ -139,11 +139,14 @@ export async function decideSwap(tx: Transaction, input: DecideSwapInput): Promi
   // The common case in ONE round trip: the UPDATE only fires while the swap is still `accepted`, and
   // `RETURNING id` reports whether it matched — the `status = 'accepted'` predicate IS the decidability
   // guard (delete it and a requested/terminal swap would be decided).
+  // `decided_at` is bound from this process's clock, matching `setAbsenceStatus`. The PostgreSQL
+  // `now()` it replaced read the DATABASE's clock, once per transaction; this engine has no such
+  // function and the statement failed outright with `no such function: now`.
   const { rows: decided } = await tx.execute<{ id: string }>(sql`
     update shift_swaps
     set status = ${input.decision},
         decided_by_person_id = ${input.decidedByPersonId},
-        decided_at = now()
+        decided_at = ${nowIso()}
     where id = ${input.swapId} and status = 'accepted'
     returning id`);
   if (decided.length > 0) return;

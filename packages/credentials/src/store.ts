@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { nowIso, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
@@ -132,11 +132,12 @@ export async function putCredential(
         iv: sealed.iv,
         authTag: sealed.authTag,
         keyVersion: ring.current.version,
-        // The database clock, matching the column's own `defaultNow()` on the INSERT branch —
-        // never the app clock (`new Date()`). Mixing the two would let host clock skew stamp an
-        // update earlier than the original insert. Same idiom as
-        // `packages/fiscal-verifactu/src/registro-sif.ts`'s `actualizadoEn: sql\`now()\``.
-        updatedAt: sql`now()`,
+        // The same clock the column's own `$defaultFn(nowIso)` reads on the INSERT branch, so the
+        // two branches cannot disagree the way a database clock paired with an app clock could.
+        // That pairing is what the PostgreSQL `now()` here used to be: the DATABASE's clock, once
+        // per transaction. This engine has no such function and the statement failed outright with
+        // `no such function: now`.
+        updatedAt: nowIso(),
       },
     });
 }

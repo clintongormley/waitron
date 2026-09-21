@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { AbsenceKind, AbsenceStatus } from "./schema/absences.js";
 // Side-effect: registers this package's absence.* codes so `new AppError(...)` below type-checks
@@ -85,11 +85,14 @@ export async function setAbsenceStatus(
   tx: Transaction,
   input: SetAbsenceStatusInput,
 ): Promise<void> {
+  // `decided_at` is bound from this process's clock. The PostgreSQL `now()` it replaced read the
+  // DATABASE's clock, once per transaction; this engine has no such function and the statement
+  // failed outright with `no such function: now`.
   const { rows } = await tx.execute<{ id: string }>(sql`
     update absences
     set status = ${input.status},
         decided_by_person_id = ${input.decidedByPersonId},
-        decided_at = now()
+        decided_at = ${nowIso()}
     where id = ${input.absenceId}
     returning id`);
   if (rows.length === 0) {

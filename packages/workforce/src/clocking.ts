@@ -1,5 +1,5 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import { isUniqueViolation, type Transaction } from "@waitron/db";
+import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -688,9 +688,12 @@ export class WorkforceBackend {
     }
     await this.supersedePriorPublished(tx, input.versionId);
     try {
+      // `published_at` is bound from this process's clock. The PostgreSQL `now()` it replaced read
+      // the DATABASE's clock, once per transaction; this engine has no such function and the
+      // statement failed outright with `no such function: now`.
       await tx.execute(sql`
         update roster_versions
-        set status = 'published', published_at = now(),
+        set status = 'published', published_at = ${nowIso()},
             published_by_person_id = ${input.publishedByPersonId ?? null}
         where id = ${input.versionId}`);
     } catch (error) {
