@@ -19,13 +19,17 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { currentLocale, t } from "../i18n/t.js";
 import {
+  characterCalibration,
+  characterFinderOptions,
   characterSetOptions,
   testCharsetSamples,
 } from "@waitron/printing/src/test-page-samples.js";
+import { prepareText } from "@waitron/printing/src/charset.js";
 import type { SupportedLocale } from "@waitron/shared";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -336,6 +340,10 @@ export class PrintersScreen extends LitElement {
   @state() private testCalibrationLocale: SupportedLocale | null = null;
   @state() private printingSample = false;
   @state() private printingTableTest = false;
+  @state() private tableBlockStart = 0;
+  @state() private finderCalibrationLocale: SupportedLocale | null = null;
+  @state() private finderChosenCode = "";
+  #tableTestEpoch = 0;
   #testEpoch = 0;
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
@@ -969,11 +977,16 @@ export class PrintersScreen extends LitElement {
 
   async #testCharacterTables(p: EditablePrinter): Promise<void> {
     if (this.printingTableTest) return;
-    if (!this.#validatePrinter(p)) return;
     this.printingTableTest = true;
     this.errorKey = null;
+    const blockStart = this.tableBlockStart;
+    const epoch = this.#tableTestEpoch;
     try {
-      await this.api.testCharacterTables(p.id, p.characterTable);
+      const { calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
+      if (epoch === this.#tableTestEpoch && this.tableBlockStart === blockStart) {
+        if (this.finderCalibrationLocale !== calibrationLocale) this.finderChosenCode = "";
+        this.finderCalibrationLocale = calibrationLocale;
+      }
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -1402,6 +1415,10 @@ export class PrintersScreen extends LitElement {
     this.#rememberEditTrigger(event);
     this.formErrors = {};
     this.errorKey = null;
+    this.tableBlockStart = 0;
+    this.finderCalibrationLocale = null;
+    this.finderChosenCode = "";
+    this.#tableTestEpoch++;
     this.editingPrinter = {
       id: p.id,
       name: p.name,
@@ -1734,6 +1751,23 @@ export class PrintersScreen extends LitElement {
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
+    const finder = this.finderCalibrationLocale
+      ? characterFinderOptions(this.finderCalibrationLocale, this.tableBlockStart)
+      : [];
+    const calibration = this.finderCalibrationLocale
+      ? characterCalibration(this.finderCalibrationLocale)
+      : null;
+    const selectedCode =
+      this.finderChosenCode === "plain"
+        ? p.characterSet === "plain" && p.characterTable === 0
+          ? "plain"
+          : ""
+        : (finder.find(
+            ({ code, characterSet, characterTable }) =>
+              code === this.finderChosenCode &&
+              p.characterSet === characterSet &&
+              p.characterTable === characterTable,
+          )?.code ?? "");
     const field = (key: "name" | "host" | "port", label: string, required = false) =>
       html`<wt-input
         name=${`printer-${key}`}
@@ -1812,46 +1846,123 @@ export class PrintersScreen extends LitElement {
               <option value="203dpi">${t("printers.resolution_203")}</option>
             </select>
           </label>
+        </div>
+        <p class="hint">${t("printers.character_table_hint")}</p>
+        <div class="field-row">
           <label class="setting-field"
-            >${t("printers.character_set")}
+            >${t("printers.table_block")}
             <select
-              name="printer-character-set"
-              .value=${p.characterSet}
-              @change=${(e: Event) =>
-                this.#editPrinter(p.id, {
-                  characterSet: (e.target as HTMLSelectElement).value as PrintCharacterSet,
-                })}
+              name="printer-table-block"
+              @change=${(e: Event) => {
+                this.tableBlockStart = Number((e.target as HTMLSelectElement).value);
+                this.finderCalibrationLocale = null;
+                this.finderChosenCode = "";
+                this.#tableTestEpoch++;
+              }}
             >
-              ${characterSetOptions(currentLocale()).map(
-                ({ value, label }) =>
-                  html`<option value=${value} .selected=${p.characterSet === value}>
-                    ${label}
+              ${Array.from({ length: 16 }, (_, index) => index * 16).map(
+                (start) =>
+                  html`<option value=${start} .selected=${start === this.tableBlockStart}>
+                    ${start}–${start + 15}
                   </option>`,
               )}
             </select>
           </label>
-          <wt-input
-            name="printer-character-table"
-            type="number"
-            label=${t("printers.character_table")}
-            .value=${Number.isNaN(p.characterTable) ? "" : String(p.characterTable)}
-            .invalid=${!!this.formErrors.characterTable}
-            .error=${this.formErrors.characterTable ?? ""}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editPrinter(p.id, {
-                characterTable: e.detail.value.trim() === "" ? Number.NaN : Number(e.detail.value),
-              });
-            }}
-          ></wt-input>
+          <wt-button
+            data-test=${`print-character-tables-${p.id}`}
+            ?loading=${this.printingTableTest}
+            @click=${() => void this.#testCharacterTables(p)}
+            >${t("printers.character_table_test")}</wt-button
+          >
         </div>
-        <p class="hint">${t("printers.character_table_hint")}</p>
-        <wt-button
-          data-test=${`print-character-tables-${p.id}`}
-          ?loading=${this.printingTableTest}
-          @click=${() => void this.#testCharacterTables(p)}
-          >${t("printers.character_table_test")}</wt-button
+        ${
+          calibration
+            ? calibration.finderEncodings.map(
+                ({ label, characterSet }) =>
+                  html`<div class="hint" data-test=${`finder-expected-${label}`}>
+                    <strong>${label}:</strong>
+                    ${calibration.finderSampleLines.map(
+                      (line, index) =>
+                        html`<div>
+                          ${String.fromCharCode(65 + index)}: ${prepareText(line, characterSet)}
+                        </div>`,
+                    )}
+                  </div>`,
+              )
+            : nothing
+        }
+        <label class="setting-field"
+          >${t("printers.matching_code")}
+          <select
+            name="printer-matching-code"
+            @change=${(e: Event) => {
+              const code = (e.target as HTMLSelectElement).value;
+              this.finderChosenCode = code;
+              if (code === "plain")
+                this.#editPrinter(p.id, { characterSet: "plain", characterTable: 0 });
+              else {
+                const match = finder.find((candidate) => candidate.code === code);
+                if (match)
+                  this.#editPrinter(p.id, {
+                    characterSet: match.characterSet,
+                    characterTable: match.characterTable,
+                  });
+              }
+            }}
+          >
+            <option value="" .selected=${selectedCode === ""}>
+              ${t("printers.matching_code_choose")}
+            </option>
+            ${finder.map(
+              ({ code }) =>
+                html`<option value=${code} .selected=${selectedCode === code}>${code}</option>`,
+            )}
+            <option value="plain" .selected=${selectedCode === "plain"}>
+              ${t("printers.matching_code_plain")}
+            </option>
+          </select>
+        </label>
+        <wt-disclosure
+          data-test="advanced-character-settings"
+          heading=${t("printers.advanced_character_settings")}
+          summary=${`${characterSetOptions(currentLocale()).find(({ value }) => value === p.characterSet)?.label ?? p.characterSet} · ${p.characterTable}`}
+          .hasError=${!!this.formErrors.characterTable}
         >
+          <div class="field-row">
+            <label class="setting-field"
+              >${t("printers.character_set")}
+              <select
+                name="printer-character-set"
+                @change=${(e: Event) =>
+                  this.#editPrinter(p.id, {
+                    characterSet: (e.target as HTMLSelectElement).value as PrintCharacterSet,
+                  })}
+              >
+                ${characterSetOptions(currentLocale()).map(
+                  ({ value, label }) =>
+                    html`<option value=${value} .selected=${p.characterSet === value}>
+                      ${label}
+                    </option>`,
+                )}
+              </select>
+            </label>
+            <wt-input
+              name="printer-character-table"
+              type="number"
+              label=${t("printers.character_table")}
+              .value=${Number.isNaN(p.characterTable) ? "" : String(p.characterTable)}
+              .invalid=${!!this.formErrors.characterTable}
+              .error=${this.formErrors.characterTable ?? ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                e.stopPropagation();
+                this.#editPrinter(p.id, {
+                  characterTable:
+                    e.detail.value.trim() === "" ? Number.NaN : Number(e.detail.value),
+                });
+              }}
+            ></wt-input>
+          </div>
+        </wt-disclosure>
         <p class="hint" data-test=${`test-page-hint-${p.id}`}>${t("printers.test_page_hint")}</p>
         <wt-button data-test=${`print-test-page-${p.id}`} @click=${() => this.#openTest(p)}
           >${t("printers.test_page")}</wt-button

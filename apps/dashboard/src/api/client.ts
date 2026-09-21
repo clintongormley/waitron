@@ -2616,9 +2616,12 @@ export class DashboardApi {
     );
   }
 
-  /** Print two readable encoding candidates for sixteen consecutive printer table numbers. */
-  testCharacterTables(printerId: string, startTable: number): Promise<{ jobId: string }> {
-    return this.#request<{ jobId: string }>(
+  /** Print sixteen table numbers and return the venue locale used for their samples. */
+  testCharacterTables(
+    printerId: string,
+    startTable: number,
+  ): Promise<{ jobId: string; calibrationLocale: SupportedLocale }> {
+    return this.#request<{ jobId: string; calibrationLocale: SupportedLocale }>(
       `/management-api/printers/${printerId}/character-table-test`,
       "POST",
       { startTable },

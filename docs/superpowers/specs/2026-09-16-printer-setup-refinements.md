@@ -107,3 +107,28 @@ are exhaustive records keyed by the shipped locales and database character-set v
 language forces an explicit calibration profile and localized setting labels. A Ukrainian profile
 must add its Cyrillic byte encoder, database enum value, representative glyph sample and finder
 candidates; the generic tests then exercise that new profile alongside every other shipped locale.
+
+## Calibration chooser follow-up, 2026-09-21
+
+Start the finder with printer tables 0–15, which includes the documented default table 0. Let the
+operator choose another sixteen-table range only if no printed candidate matches; keep the full
+0–255 byte range available for other firmware. Print two lines per candidate: accented Spanish
+letters and other receipt characters, including the euro sign, inverted punctuation and quotation
+marks. Compare both lines with the examples shown in the editor. A compact code such as `T6W`
+identifies one numeric printer table and one Waitron byte encoding; choosing it sets both fields.
+The dashboard offers aligned sixteen-table ranges; the API retains its earlier arbitrary starting
+number, capped at 240 so the last request still prints sixteen tables through 255.
+The editor keeps the individual fields in a collapsed Advanced section for manual correction.
+Multiple candidates may print the same tested glyphs; choosing the first matching code establishes
+that sample, not the whole 256-character table or every possible language. A sample receipt checks
+how the saved combination renders ordinary receipt content.
+
+This changes the generic finder, not the physical NT-806 result above. Without a printer on the
+current network, the new paper layout and its glyph matching have not been verified on hardware.
+
+The NT-806 manual lists gaps in its valid table numbers. A generic finder cannot assume how an
+unknown printer handles an unassigned number: ignoring the command would make that candidate print
+using the previous candidate's table, creating a false match. Before every A and B line, the finder
+therefore sends `ESC t 0` and then `ESC t n` for the candidate. This establishes a known baseline
+on printers that accept table 0 and ignore unsupported numbers. It does not claim that all printers
+handle invalid values that way; compare the actual paper with the expected glyphs.

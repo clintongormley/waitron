@@ -20,40 +20,71 @@ function printableLineWidths(bytes: Uint8Array): number[] {
 }
 
 describe("formatCharacterTableTest", () => {
+  it("selects table zero before every candidate line so an ignored number does not inherit the previous table", () => {
+    const bytes = formatCharacterTableTest({ startTable: 0, locale: "en-GB" });
+    for (const [characterSet, line] of [
+      ["wpc1252", "T11W A: áéíóú ÁÉÍÓÚ ñÑ üÜ"],
+      ["wpc1252", "T11W B: ¿¡ € £ çÇ “ ” ‘ ’"],
+      ["pc858", "T118 A: áéíóú ÁÉÍÓÚ ñÑ üÜ"],
+      ["pc858", "T118 B: ¿¡ € £ çÇ \" \" ' '"],
+    ] as const) {
+      expect(
+        bytesInclude(
+          bytes,
+          Uint8Array.from([0x1b, 0x74, 0, 0x1b, 0x74, 11, ...encodeText(line, characterSet)]),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("prints sixteen numbered tables with both supported encodings", () => {
     const bytes = formatCharacterTableTest({ startTable: 6, locale: "en-GB" });
     expect(
       bytesInclude(
         bytes,
-        Uint8Array.from([0x1b, 0x74, 6, ...encodeText("T006 W: Café", "wpc1252")]),
+        Uint8Array.from([0x1b, 0x74, 6, ...encodeText("T6W A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "wpc1252")]),
       ),
-    ).toBe(true);
-    expect(
-      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 6, ...encodeText("T006 8: Café", "pc858")])),
     ).toBe(true);
     expect(
       bytesInclude(
         bytes,
-        Uint8Array.from([0x1b, 0x74, 21, ...encodeText("T021 8: Café", "pc858")]),
+        Uint8Array.from([0x1b, 0x74, 6, ...encodeText("T6W B: ¿¡ € £ çÇ “ ” ‘ ’", "wpc1252")]),
       ),
     ).toBe(true);
+    expect(
+      bytesInclude(
+        bytes,
+        Uint8Array.from([0x1b, 0x74, 21, ...encodeText("T218 A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "pc858")]),
+      ),
+    ).toBe(true);
+    expect(Buffer.from(bytes).toString("latin1")).not.toContain("T0W A:");
   });
 
   it("prints a complete final block and keeps every English and Spanish line within 58mm", () => {
     for (const locale of ["en-GB", "es-ES"] as const) {
       const bytes = formatCharacterTableTest({ startTable: 250, locale });
       const raw = Buffer.from(bytes).toString("latin1");
-      expect(raw.match(/T\d{3} W:/g)).toHaveLength(16);
+      expect(raw.match(/T\d{3}W A:/g)).toHaveLength(16);
       expect(
         bytesInclude(
           bytes,
-          Uint8Array.from([0x1b, 0x74, 240, ...encodeText("T240 W: Café", "wpc1252")]),
+          Uint8Array.from([
+            0x1b,
+            0x74,
+            240,
+            ...encodeText("T240W A: áéíóú ÁÉÍÓÚ ñÑ üÜ", "wpc1252"),
+          ]),
         ),
       ).toBe(true);
       expect(
         bytesInclude(
           bytes,
-          Uint8Array.from([0x1b, 0x74, 255, ...encodeText("T255 8: Café", "pc858")]),
+          Uint8Array.from([
+            0x1b,
+            0x74,
+            255,
+            ...encodeText("T2558 B: ¿¡ € £ çÇ \" \" ' '", "pc858"),
+          ]),
         ),
       ).toBe(true);
       expect(raw).toContain(locale === "es-ES" ? "BUSCADOR DE TABLAS" : "CHARACTER TABLE FINDER");

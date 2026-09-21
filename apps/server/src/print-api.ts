@@ -887,7 +887,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           session.locale,
           resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         );
-        return enqueuePrintJob(
+        const queued = await enqueuePrintJob(
           tx,
           deps.cfg,
           id,
@@ -897,6 +897,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             calibrationLocale: deps.venueLocale,
           }),
         );
+        return { ...queued, calibrationLocale: deps.venueLocale };
       });
       return c.json(result, 202);
     }),

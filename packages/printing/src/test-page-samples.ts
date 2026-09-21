@@ -38,7 +38,7 @@ const CHARACTER_ENCODING_DEFINITIONS: Readonly<Record<CharacterSet, CharacterEnc
 
 export interface CharacterCalibration {
   testPageSampleText: string;
-  finderSampleText: string;
+  finderSampleLines: readonly string[];
   finderEncodings: readonly TestCharacterEncoding[];
   commonProfiles: readonly {
     characterSet: CharacterSet;
@@ -53,9 +53,15 @@ export interface TestCharacterSample {
   text: string;
 }
 
+export interface CharacterFinderOption {
+  code: string;
+  characterSet: CharacterSet;
+  characterTable: number;
+}
+
 const WESTERN_EUROPEAN_CALIBRATION: CharacterCalibration = {
   testPageSampleText: "Café jamón Ñ ¿¡ ç ü 5 €",
-  finderSampleText: "Café niño pingüino 5 €",
+  finderSampleLines: ["áéíóú ÁÉÍÓÚ ñÑ üÜ", "¿¡ € £ çÇ “ ” ‘ ’"],
   finderEncodings: [
     { label: "W", characterSet: "wpc1252" },
     { label: "8", characterSet: "pc858" },
@@ -93,6 +99,25 @@ export function characterCalibration(locale: string): CharacterCalibration {
 
 export function characterEncodingName(characterSet: CharacterSet): string {
   return CHARACTER_ENCODING_DEFINITIONS[characterSet].technicalName;
+}
+
+/** One code on paper identifies both the printer's table and Waitron's byte encoding. */
+export function characterFinderOptions(
+  locale: string,
+  startTable: number,
+): readonly CharacterFinderOption[] {
+  if (!Number.isInteger(startTable) || startTable < 0 || startTable > 255) {
+    throw new RangeError(`start table must be an integer in [0, 255], got ${startTable}`);
+  }
+  const firstTable = Math.min(startTable, 240);
+  const encodings = characterCalibration(locale).finderEncodings;
+  return Array.from({ length: 16 }, (_, offset) => firstTable + offset).flatMap((characterTable) =>
+    encodings.map(({ label, characterSet }) => ({
+      code: `T${characterTable}${label}`,
+      characterSet,
+      characterTable,
+    })),
+  );
 }
 
 export function characterSetOptions(

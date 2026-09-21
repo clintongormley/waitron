@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import {
   characterCalibration,
+  characterFinderOptions,
   characterSetOptions,
   testCharsetSamples,
 } from "./test-page-samples.js";
@@ -70,6 +71,41 @@ describe("decode tables", () => {
 });
 
 describe("prepareText / encodeText", () => {
+  it("maps compact finder codes to both printer settings across selected blocks", () => {
+    const first = characterFinderOptions("es-ES", 0);
+    expect(first).toHaveLength(32);
+    expect(first[0]).toEqual({ code: "T0W", characterSet: "wpc1252", characterTable: 0 });
+    expect(first.find(({ code }) => code === "T68")).toEqual({
+      code: "T68",
+      characterSet: "pc858",
+      characterTable: 6,
+    });
+    expect(first.at(-1)?.code).toBe("T158");
+    const last = characterFinderOptions("en-GB", 240);
+    expect(last[0]?.code).toBe("T240W");
+    expect(last.at(-1)?.code).toBe("T2558");
+    const unaligned = characterFinderOptions("es-ES", 5);
+    expect(unaligned[0]?.code).toBe("T5W");
+    expect(unaligned.at(-1)?.code).toBe("T208");
+    expect(() => characterFinderOptions("en-GB", -1)).toThrow(RangeError);
+    expect(() => characterFinderOptions("en-GB", 256)).toThrow(RangeError);
+  });
+
+  it("probes Spanish receipt glyphs and bytes that separate the offered encodings", () => {
+    for (const { code } of SUPPORTED_LOCALES) {
+      const { finderSampleLines, finderEncodings } = characterCalibration(code);
+      expect(finderSampleLines).toHaveLength(2);
+      for (const { characterSet } of finderEncodings) {
+        const printed = finderSampleLines.map((line) => prepareText(line, characterSet)).join(" ");
+        for (const glyph of "áéíóúÁÉÍÓÚñÑüÜ¿¡€£çÇ") expect(printed).toContain(glyph);
+      }
+      expect(encodeText("€", "wpc1252")).toEqual([0x80]);
+      expect(encodeText("€", "pc858")).toEqual([0xd5]);
+      expect(prepareText(finderSampleLines[1]!, "wpc1252")).toContain("“ ” ‘ ’");
+      expect(prepareText(finderSampleLines[1]!, "pc858")).toContain("\" \" ' '");
+    }
+  });
+
   it("keeps accents and the euro sign in wpc1252 and pc858", () => {
     expect(encodeText("Café", "wpc1252")).toEqual([0x43, 0x61, 0x66, 0xe9]);
     expect(encodeText("€", "wpc1252")).toEqual([0x80]);

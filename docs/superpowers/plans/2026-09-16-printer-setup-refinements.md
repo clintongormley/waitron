@@ -116,3 +116,41 @@ Instructions retain the operator's locale, while the site locale selects those s
 back to the dashboard with the queued job. English and Spanish intentionally share today's profile.
 Adding a future locale produces type errors until its printer calibration entry and setting labels
 are supplied; a Ukrainian entry must deliberately add and test its Cyrillic encoding path.
+
+## Calibration chooser follow-up, 2026-09-21
+
+The owner asked for one code that applies both text settings, fewer leading zeroes, a scan starting
+at table 0, a selectable range, and a stronger glyph sample. The finder now builds compact codes
+from the site's calibration profile and shares that mapping with the editor. The editor displays
+the site's expected lines after a finder page is queued, and keeps individual text settings under
+Advanced. The default block is 0–15; later blocks remain selectable through 255.
+
+The new finder helper first failed its test because it did not exist. The server formatter, queue
+response, and dashboard flow also failed their new focused assertions before implementation.
+Afterward, the printing suite passed 16 tests; the server formatter and print API passed 67 with
+host Docker access; the dashboard screen, accessibility and API-client suites passed 333 in
+Chromium. Typechecking passed for printing, server and dashboard. ESLint, `git diff --check`, and
+the production dashboard build passed. No physical printer was available for a paper check.
+
+The next owner follow-up identified gaps in the NT-806 table list and asked for a generic baseline
+between candidates. A new byte-sequence assertion for the unassigned table 11 failed because the
+finder only sent `ESC t 11`; it passed after the finder sent `ESC t 0` before each candidate line.
+This is a formatter-wide rule, not an NT-806-specific profile.
+
+## Chooser finish-branch review, 2026-09-21
+
+The isolated run-it review (`/tmp/waitron-printers-review-XBhfvA/report.md`, 457 seconds) found
+three changes to make. The finder no longer validates unrelated unsaved printer fields, so a blank
+manual table does not prevent a lookup; reprinting the same range retains an operator-chosen code;
+and a non-aligned API start such as 5 again starts at table 5 while the dashboard continues to
+offer aligned ranges. Browser, helper and formatter regressions failed before each correction and
+passed afterward. The helper's range guard now has invalid-input assertions. A test also confirms
+that switching from a matching code to Plain saves both the encoding and table 0. The review's
+table-0 duplicate command is deliberately retained so every candidate line has the same baseline
+sequence; physical behavior for invalid table numbers remains unverified.
+
+After those fixes, the focused printing suite passed 16 tests, the server formatter/API/preview
+suite passed 117 with real PostgreSQL, and the dashboard screen/accessibility/API-client suite
+passed 336 in Chromium. Typechecks in printing, server and dashboard, the dashboard production build,
+ESLint for changed TypeScript, and `git diff --check` passed. Required package coverage remains
+CI's responsibility on the pushed head.
