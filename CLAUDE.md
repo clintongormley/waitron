@@ -443,13 +443,20 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   every rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core
   set only.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
-  list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — a replication
-  apply worker skips ordinary triggers. No PRODUCT code replicates today (2026-09-19) — some test
-  suites still do, named in [testing-guide.md](docs/developers/testing-guide.md) — and the flag stays
-  anyway; why, and what does not carry into the replacement, in
-  [conventions-data.md](docs/developers/conventions-data.md). No policies, no RLS: one tenant per
-  database. Guards, on a new table: `scripts/classification-complete.test.ts`,
-  `scripts/append-only-enable-always.test.ts`.
+  list, and classifying one `ledger` is what makes it append-only** — `installAppendOnlyTriggers`
+  (`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on every table the
+  classification names, so a new ledger table is protected by being classified and nobody has to
+  remember a second step. It needs `PRAGMA recursive_triggers`, which the store turns on: without it
+  `INSERT OR REPLACE` rewrites a ledger row silently, while the other three mutation shapes are
+  refused either way — so a suite that omits the replace case passes with the hole open. What a
+  trigger cannot refuse is `DROP TABLE`: SQLite has no trigger event for it and no `TRUNCATE`
+  statement at all, so the truncate-blocking trigger the PostgreSQL schema carried has no equivalent
+  (2026-09-21, the storage switch; the `ENABLE ALWAYS` rule that stood here belonged to PostgreSQL's
+  replication apply worker and went with it). No policies, no RLS: one tenant per database. Guards,
+  on a new table: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` —
+  which proves the refusal of a plain `UPDATE` and `DELETE` on every ledger table against a real
+  database built from the tree's migrations, and leaves the other two shapes to
+  `packages/store/src/append-only.test.ts`, where a conflicting key is available.
 - **The class also chooses the database FILE, so no foreign key may join a `local` table to a
   `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
   and names, at the column, what establishes the target exists — or that nothing does, and where the

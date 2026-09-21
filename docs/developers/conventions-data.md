@@ -642,7 +642,7 @@ guard kept its `1.2345::numeric(12,3)` SQL probe as a control and now measures
 `decimalToThousandths` beside it: both round to `1.235`, so the rounding that guard defends against
 moved with the storage and did not change.
 
-## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`
+## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and classifying one `ledger` is what makes it append-only
 
 A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what
 those triggers exist to refuse. `ENABLE ALWAYS` is kept although the PostgreSQL replication that
@@ -659,16 +659,45 @@ lands, plus optionally a follower that keeps a local read-only copy warm". What 
 classification, "now also choosing the file". So the CLASS carries into the replacement and the flag
 does not, and §8.1 sends their guards the same two ways: it names `append-only-enable-always` among
 the guards it deletes alongside the flag. That is a statement about the storage switch and not about
-today — both halves are guarded on every non-docs push right now, the flag by
-`scripts/append-only-enable-always.test.ts` and the class by
+today — both halves are guarded on every non-docs push right now, the flag by the
+append-only-enable-always guard (named without a path: the file is deleted, and the pointer guard
+`scripts/claude-md-pointers.test.ts` reads a backticked one) and the class by
 `scripts/classification-complete.test.ts` and `scripts/two-file-foreign-keys.test.ts`.
 
+**2026-09-21, task F1 step group 6: everything above the line is now history, and it went the way
+§8.1 said.** The flag and its guard are both deleted. `ENABLE ALWAYS` was a PostgreSQL trigger state
+and SQLite has no equivalent, so the thing the flag protected — an apply worker copying a corrupted
+row past an ordinary trigger — has no path left to take. The class carried over and now does more
+than before: it is what INSTALLS the enforcement. `installAppendOnlyTriggers`
+(`packages/store/src/append-only.ts`) puts a `RAISE(ABORT)` trigger pair on every table the modules
+classify `ledger`, so the enforcement is no longer written into each migration by hand.
+
+Three things about the replacement that a reader should not have to re-derive:
+
+- **`PRAGMA recursive_triggers` is not optional.** SQLite's default is off, and with it off the
+  delete that `INSERT OR REPLACE` performs internally does not fire a `BEFORE DELETE` trigger, so
+  that one statement rewrites a ledger row and nothing is raised. Plain `UPDATE`, plain `DELETE` and
+  `INSERT … ON CONFLICT DO UPDATE` are refused either way — which is the trap, because a suite that
+  omits the replace case passes while the hole is open. Measured 2026-09-21 on Node v26.7.0 by
+  turning the pragma off in `packages/store/src/append-only.test.ts` and re-running: exactly one
+  case of nine went red, the replace one. The store sets the pragma in `openConnection`
+  (`packages/store/src/index.ts`), beside `foreign_keys`.
+- **`DROP TABLE` is not refusable.** SQLite has no trigger event for it, and no `TRUNCATE` statement
+  at all, so the truncate-blocking trigger each append-only table carried on PostgreSQL has no
+  equivalent and was not replaced. A caller that can issue DDL can drop a ledger table.
+- **A row trigger needs a row.** SQLite's only trigger granularity is `FOR EACH ROW`, so an `UPDATE`
+  or `DELETE` against an EMPTY ledger table succeeds and changes nothing whether the triggers exist
+  or not. Any test of this has to seed a row first; the root guard does, and states it.
+
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
-decision 2026-09-05). Two root guards enforce this on every non-docs push:
+decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
 `scripts/classification-complete.test.ts` (every table in every module's `drizzle/` is classified
-exactly once) and `scripts/append-only-enable-always.test.ts` (every `reject_mutation` trigger is
-`ENABLE ALWAYS`); `packages/fiscal-verifactu`'s `inmutabilidad` suite still scans the triggers
-themselves. Run them after adding any table anywhere.
+exactly once) and `scripts/append-only-triggers.test.ts` (every table classified `ledger` refuses a
+plain `UPDATE` and a plain `DELETE`, tried against a real database built from the tree's own
+migrations). The second is narrower than its name in one way it states itself: it covers those two
+shapes only, because the other two need a conflicting key, which is per-table — those are proven
+once against the trigger pair in `packages/store/src/append-only.test.ts`. Run both after adding any
+table anywhere.
 
 ## The class also chooses the database FILE, so no foreign key may join a `local` table to a `ledger`/`state` one
 

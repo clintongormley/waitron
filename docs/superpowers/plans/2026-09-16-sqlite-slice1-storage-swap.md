@@ -4404,7 +4404,10 @@ The whole-package `test:coverage` run belongs to step 29, once the harness is go
 
 ### Step group 6 — append-only, and the archive
 
-- [ ] **Step 19: Write the failing test for the append-only trigger**
+- [x] **Step 19: Write the failing test for the append-only trigger**
+
+_Corrected in place 2026-09-21, when the step ran. The snippet below is what the plan said; both of
+its lines are wrong on this engine, and the second one is wrong in the dangerous direction._
 
 ```ts
 it("refuses an update to a ledger table", async () => {
@@ -4417,6 +4420,20 @@ it("refuses a delete from a ledger table", async () => {
     .rejects.toThrow(/append-only/);
 });
 ```
+
+- **`.rejects` never fires.** This engine is synchronous: `execute` returns rows, not a promise of
+  them (`packages/store/src/node-sqlite-adapter.ts`), so the statement throws before any promise
+  exists. `expect(() => …).toThrow(…)` is the shape that runs.
+- **Matching the caught error proves nothing.** Drizzle wraps the driver's refusal and its own
+  message is `Failed to run the query '<the statement>'`, so a match on `append-only` — or on the
+  table name, or on any word the statement contains — passes whether a trigger fired or not.
+  Measured 2026-09-21: with NO trigger installed anywhere, a plain `NOT NULL` refusal on
+  `registros_facturacion` satisfies `toThrow(/registros_facturacion/)`. The assertion has to walk
+  the `cause` chain to the layer carrying `errcode`, and compare the driver's own message. The real
+  file does that in a `refusal()` helper and says why.
+- The trigger's refusal arrives under result code **1811**, `SQLITE_CONSTRAINT_TRIGGER` — its own
+  code, distinct from a unique index (2067), a primary key (1555), a `NOT NULL` (1299) and a check
+  (275).
 
 - [ ] **Step 20: Install `RAISE(ABORT)` triggers on every `ledger` table — and turn on recursive triggers**
 
@@ -4436,13 +4453,103 @@ it passes while the hole is open.
 
 Driven from the classification lists, not a hand-written list — a new ledger table must get its triggers without anyone remembering. Add a guard asserting every `ledger` table carries them, and prove it by deleting one trigger.
 
+_Done 2026-09-21 as `scripts/append-only-triggers.test.ts`, a root-project guard, replacing the one
+step 22 deletes. Three things it had to establish that are worth not re-deriving:_
+
+- **A row trigger needs a row.** `FOR EACH ROW` is SQLite's only granularity, so `UPDATE` and
+  `DELETE` against an EMPTY ledger table both succeed and change nothing — whether or not the
+  triggers exist. A guard that skipped the seeding would pass on an unprotected tree. The control
+  that shows it: delete the seeding call and 44 of the 47 cases go red.
+- **One generic row satisfies every table with two pragmas off.** `foreign_keys = off` and
+  `ignore_check_constraints = on`, then one row per table built from `pragma table_info`. Measured
+  on this tree: 64 of 108 tables take the row with checks ON, all 108 with them off. Neither pragma
+  touches triggers — and the guard's "a `state` table still accepts both statements" case is the
+  control that says so, because it runs under the same two pragmas.
+- **The cases share one connection, so a failing case MUTATES it.** A ledger table whose triggers
+  are missing has its row deleted by its own failing case, so a row count taken afterwards reports
+  the seeding as the fault. Count at build time and assert on the snapshot.
+
+_Controls run and restored: skip one table in the installer -> that table's two cases fail and
+nothing else; install only the update trigger -> every delete case fails; install only the delete
+trigger -> every update case fails; remove the seeding -> every update and delete case fails._
+
 - [ ] **Step 21: Replace the `pg_dump` path with `VACUUM INTO`**
 
 `apps/server/src/pg-restore.ts` goes. The archive path must work in this same pull request, or `main` lands with no way to copy a venue. A test takes an archive, opens it, and reads a row from it.
 
-- [ ] **Step 22: Delete `scripts/append-only-enable-always.test.ts`**
+_Split in two on 2026-09-21, when the step ran, because those three sentences describe a change
+about twenty times their size. Traced, not guessed:_
+
+- **`packages/store/src/archive.ts` — the engine capability — stays in step group 6.** `VACUUM INTO`,
+  its atomic-rename discipline, and the acceptance test the plan names. DONE 2026-09-21. Four
+  measurements from it that the app-layer step inherits, each re-run independently before this was
+  written down:
+  - **The path CAN be bound**, so it is neither escaped nor validated. Drizzle emits
+    `vacuum into ?` and the engine accepts it, including a path holding the quotes that make a
+    statement built as text a syntax error (`near "s": syntax error`, errcode 1). `CLAUDE.md` §3
+    asks for escape-or-throw only where a statement cannot be parameterised; this one can.
+  - **`VACUUM INTO` does not refuse every existing target**, so its refusal is not an atomicity
+    guarantee and temp-then-rename is still needed. Measured against three: a database file gives
+    `output file already exists` (errcode 1), a file whose bytes are not a database gives
+    `file is not a database` (errcode 26), and a ZERO-BYTE one is ACCEPTED and written into.
+  - **A stale working file would otherwise make one interruption permanent** — something
+    `dumpAtomic` never had to handle, because `pg_dump` overwrites. `archiveTo` clears the working
+    file before the copy as well as after a failure.
+  - **It cannot run inside a transaction**: `cannot VACUUM from within a transaction`, errcode 1,
+    no file written. So an archive cannot be taken inside `withWriteLock`, and a backup attempted
+    while a write transaction is in flight on that connection FAILS rather than waits. No queueing
+    was built for it; whether the backup sweep needs any is the app-layer step's decision.
+- **The app-layer surgery moves to step group 7**, which is where the rest of the app converts. It is
+  still the SAME pull request, which is what this step's constraint actually asks for: nothing lands
+  on `main` without a way to copy a venue.
+
+_Why it cannot be done here. `apps/server/src/restore.ts`'s `writeValidated` calls `restoreDatabase`
+(one `pg_restore` spawn), then `applyMigrations(databaseUrl, …)`, then `openPostgres(databaseUrl)`.
+The last two are still PostgreSQL, so converting the first alone leaves one function half-converted
+and its 41 tests half-meaningful — a worse state than either end._
+
+**A GAP IN THIS PLAN, found here and stated so nobody assumes coverage.** `packages/migrations` is
+named by NO step in this document — `applyMigrations` (`packages/migrations/src/apply.ts`) is still
+`new Client`, `select pg_advisory_lock($1)` and `createPostgresDb`, and every migrating path in
+`apps/server` goes through it. `openVenueStore` + `runMigrations` replaced its INSIDES for the
+package suites in step group 5; nothing has replaced it for the product. Step 29's whole-workspace
+run is where this surfaces, which is the worst place to meet it. It belongs in step group 7, beside
+the restore surgery.
+
+**A SECOND GAP, same class.** Nothing in this plan wires `installAppendOnlyTriggers` into a boot
+path. Step 20 builds it and guards it; the caller that runs it after migrations does not exist, so
+on the product's own boot path today no ledger table carries a trigger. It belongs with the
+migration-path conversion above, because that is the code that knows when migrations finished.
+
+**What else step 21 has to carry, from the survey taken on 2026-09-21** (call graph and file list in
+`docs/handoffs/2026-09-21-f1-the-flip.md`):
+
+- `apps/server/src/pg-dump.ts`: `dumpAtomic`, `BACKUP_KEY_PREFIX`, `dumpFileName`,
+  `backupArchiveKey` and `backupArchiveTimestamp` are engine-neutral and SURVIVE. Only
+  `pgDumpShellOut` and `realPgDump` go.
+- `PgRestoreRunner` must be REHOMED, not deleted: `restore.ts` and three test files type against it.
+- `apps/server/src/backup-probe.ts` asks PostgreSQL's catalogue whether a role can read the fiscal
+  tables. With grants gone it has no subject — and deleting it makes `backup.role_rls_fenced`
+  unreachable, which `scripts/errors-reachable.test.ts` pins. Delete the code and the error together.
+- The two real-container fiscal receipts — `apps/server/src/pg-restore.test.ts`'s single container
+  case and `restore-fiscal-e2e.test.ts`'s four — are the only end-to-end proof that a RESTORED
+  database is fiscally correct. This step's stated bar ("a test takes an archive, opens it, and reads
+  a row from it") is materially weaker than what they cover. Do not let the weaker bar retire them
+  silently; account for each in step 25's disposition table.
+- `deploy/Dockerfile`'s PGDG apt block and `postgresql-client-${PG_MAJOR}`, `deploy/compose.yml`'s
+  `postgres:18-alpine`, and `deploy/waitron.sh`'s `HELPER_IMAGE` / `psql` stamp read.
+
+- [x] **Step 22: Delete `scripts/append-only-enable-always.test.ts`**
 
 Its subject is PostgreSQL's replication apply worker skipping ordinary triggers, which no longer exists. Note the deletion and the reason in the commit.
+
+_Done 2026-09-21. Deleting it also retired the live claims about it, which are not all in the plan's
+file list: the `CLAUDE.md` §3 rule (rewritten around the classification, which is what installs the
+enforcement now), the section in `docs/developers/conventions-data.md` that predicted this deletion
+(a dated note says the prediction came true, and the historical references to the deleted file are
+now un-backticked, because `scripts/claude-md-pointers.test.ts` reads a backticked path), and one
+paragraph in `docs/backlog.md`. Historical PLANS that name the guard are left alone — they record
+what was true when written._
 
 - [ ] **Step 23: Commit**
 

@@ -2085,6 +2085,10 @@ image constraints under *Detail → Box image*.
   the grant, with no trigger backing it, and TRUNCATE is wider still — no table grants it and only ten
   carry a trigger blocking it. The per-table matrix is read from
   `packages/fiscal-verifactu/src/privileges.expected.ts`, which goes when the grants do.
+  The `ENABLE ALWAYS` immutability trigger ten of those tables carried is gone with
+  PostgreSQL; the refusal is installed at runtime from the `ledger` classification instead
+  (`packages/store/src/append-only.ts`), so a newly classified ledger table is protected
+  without a migration remembering to do it.
 
   **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
   rather than the annotated TypeScript constant every sibling guard uses, because the plan named a

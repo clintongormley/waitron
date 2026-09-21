@@ -1,4 +1,5 @@
 import { mkdtempSync, readdirSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -85,7 +86,33 @@ describe("openVenueStore", () => {
       // SQLite's own default, deliberately not zero: nothing else checkpoints until Litestream
       // arrives, so a zero here would let the write-ahead file grow without limit.
       expect(pragma(db, "wal_autocheckpoint")).toBe(1000);
+      // SQLite's default is 0, so this one is a real setting rather than a restated default. The
+      // case below is what it buys.
+      expect(pragma(db, "recursive_triggers")).toBe(1);
     }
+  });
+
+  // Recursive triggers, proven by what they change rather than by reading the pragma back. The
+  // delete `INSERT OR REPLACE` performs internally fires a `BEFORE DELETE` trigger only with the
+  // pragma on; with SQLite's default the row is rewritten and nothing is raised. That is the whole
+  // reason append-only enforcement on this engine needs the setting (`./append-only.ts`).
+  it("fires a before-delete trigger for the delete inside an insert or replace", async () => {
+    const { store } = await open();
+    store.venue.run(sql`create table ledger (id integer primary key, payload text not null)`);
+    store.venue.run(
+      sql.raw(
+        "create trigger ledger_no_delete before delete on ledger for each row " +
+          "begin select raise(abort, 'ledger is append-only'); end",
+      ),
+    );
+    store.venue.run(sql`insert into ledger (id, payload) values (1, 'first')`);
+
+    expect(() =>
+      store.venue.run(sql`insert or replace into ledger (id, payload) values (1, 'rewritten')`),
+    ).toThrow();
+    expect(store.venue.get(sql`select payload from ledger where id = 1`)).toEqual({
+      payload: "first",
+    });
   });
 
   it("refuses a row whose foreign key points at nothing", async () => {
@@ -169,6 +196,56 @@ describe("openVenueStore", () => {
     // connections directly would fail its own teardown after a handle was closed.
     await expect(store.close()).resolves.toBeUndefined();
     opened.pop();
+  });
+
+  /**
+   * The store-level archive is the venue file's, which is the interface the slice-1 plan names
+   * (step 21). Each file's tables are the discriminating reading: an archive of the node file
+   * would come back holding `sessions`, and one of a store that pointed both handles at one file
+   * would hold both.
+   */
+  it("archives the venue file, not the node file", async () => {
+    const { directory, store } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    store.node.run(sql`create table sessions (id integer primary key, token text)`);
+    store.venue.run(sql`insert into sales (id, total) values (1, 250)`);
+
+    await store.archiveTo(join(directory, "archive.db"));
+
+    const archive = new DatabaseSync(join(directory, "archive.db"));
+    try {
+      expect(
+        (
+          archive.prepare("select name from sqlite_master where type = 'table'").all() as {
+            name: string;
+          }[]
+        ).map((row) => row.name),
+      ).toEqual(["sales"]);
+      expect(archive.prepare("select id, total from sales").all()).toEqual([{ id: 1, total: 250 }]);
+    } finally {
+      archive.close();
+    }
+  });
+
+  it("archives the node file through the node handle", async () => {
+    const { directory, store } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    store.node.run(sql`create table sessions (id integer primary key, token text)`);
+
+    await store.node.archiveTo(join(directory, "node-archive.db"));
+
+    const archive = new DatabaseSync(join(directory, "node-archive.db"));
+    try {
+      expect(
+        (
+          archive.prepare("select name from sqlite_master where type = 'table'").all() as {
+            name: string;
+          }[]
+        ).map((row) => row.name),
+      ).toEqual(["sessions"]);
+    } finally {
+      archive.close();
+    }
   });
 
   it("serialises writes through the write queue", async () => {

@@ -1,8 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { archiveTo } from "./archive.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 
+export { installAppendOnlyTriggers } from "./append-only.js";
+export type { StatementTarget } from "./append-only.js";
+export { archiveTo } from "./archive.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 import { createWriteQueue } from "./write-queue.js";
@@ -36,6 +40,11 @@ export interface VenueStoreConfig<
 export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDatabase<TSchema> & {
   /** Runs `body` as the only write transaction on this file at that moment. */
   withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
+  /**
+   * Copies this whole file to `path`. Not callable from inside {@link StoreHandle.withWriteLock} —
+   * the engine refuses the copy while a transaction is open on the connection (`./archive.ts`).
+   */
+  archiveTo: (path: string) => Promise<void>;
   /** Closes this file's connection. {@link VenueStore.close} closes both. */
   close: () => Promise<void>;
 };
@@ -48,6 +57,8 @@ export interface VenueStore<
   node: StoreHandle<TNodeSchema>;
   /** Runs `body` as the only write transaction on the venue file at that moment. */
   withWriteLock: <T>(body: () => Promise<T>) => Promise<T>;
+  /** Copies the VENUE file to `path`; the node file carries only this box's own local rows. */
+  archiveTo: (path: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -60,6 +71,11 @@ export interface VenueStore<
  * when opened with `enableForeignKeyConstraints: false`), where the SQLite library it wraps
  * defaults it off, and without it every `REFERENCES` clause in the schema is decoration.
  *
+ * `recursive_triggers` is what makes append-only enforcement whole: the delete that
+ * `INSERT OR REPLACE` performs internally fires a `BEFORE DELETE` trigger only with this on, and
+ * SQLite's default is off, so without it a ledger row is silently rewritten by that one statement
+ * while the other three mutation shapes are still refused. `./append-only.ts` carries the detail.
+ *
  * Automatic checkpointing stays at SQLite's own default. The topology design
  * (`docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md` §8.3) sets
  * `wal_autocheckpoint = 0`, which is right only once Litestream does the checkpointing instead —
@@ -71,6 +87,7 @@ function openConnection(path: string): DatabaseSync {
   connection.exec("pragma journal_mode = wal");
   connection.exec("pragma busy_timeout = 5000");
   connection.exec("pragma foreign_keys = on");
+  connection.exec("pragma recursive_triggers = on");
   return connection;
 }
 
@@ -109,9 +126,11 @@ export async function openVenueStore<
     schema: TSchema,
   ): StoreHandle<TSchema> => {
     const writes = createWriteQueue(connection);
+    const db = drizzleNodeSqlite(connection, { schema });
     let closed = false;
-    return Object.assign(drizzleNodeSqlite(connection, { schema }), {
+    return Object.assign(db, {
       withWriteLock: <T>(body: () => Promise<T>) => writes.run(body),
+      archiveTo: (path: string) => archiveTo(db, path),
       // Idempotent: `node:sqlite` throws "database is not open" on a second close, and a caller
       // that closed one file still has to be able to close the store.
       close: async () => {
@@ -127,6 +146,7 @@ export async function openVenueStore<
     venue,
     node,
     withWriteLock: venue.withWriteLock,
+    archiveTo: venue.archiveTo,
     close: async () => {
       await venue.close();
       await node.close();
