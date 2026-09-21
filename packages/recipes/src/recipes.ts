@@ -23,7 +23,8 @@ import type { Ingredient } from "./ingredients.js";
 
 /** The ingredients that make up a product (ordered by created_at then id — a stable order, not
  * the order the ids were passed to setProductRecipe: setProductRecipe inserts every line in one
- * batch, so created_at ties on every row and the tiebreak falls to id, a random gen_random_uuid()). */
+ * batch, so created_at ties on every row and the tiebreak falls to id, which is a random UUID the
+ * column vocabulary generates per row (`newId`, `packages/db/src/schema/columns.ts`)). */
 export async function getProductRecipe(tx: Transaction, productId: string): Promise<Ingredient[]> {
   return tx
     .select(INGREDIENT_COLUMNS)

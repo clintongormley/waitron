@@ -1,5 +1,5 @@
-import { eq, sql } from "drizzle-orm";
-import { ingredients } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { ingredients, now } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   validateAllergens,
@@ -83,7 +83,7 @@ export async function updateIngredient(
   if (patch.dietaryOrigin != null) validateOrigin(patch.dietaryOrigin);
   await tx
     .update(ingredients)
-    .set({ ...patch, updatedAt: sql`now()` })
+    .set({ ...patch, updatedAt: now() })
     .where(eq(ingredients.id, id));
   // Propagate only when a derivation input actually moved: a rename or an `active` toggle leaves both
   // the ingredient's allergens AND its dietary origin unchanged, so re-deriving dependent products
