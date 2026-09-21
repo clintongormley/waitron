@@ -944,7 +944,7 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   picker's source (`readOfferedModifiers`) keeps only the lists the product's `product_modifiers`
   attachments name, while `readMenuExtras` (`packages/catalogue/src/extra-projection.ts:131`)
   reads `menu_item_extra_lists` and nothing else, and the order path
-  (`apps/server/src/working-order.ts:436,3185`) consumes `extrasByHolder`/`optionsByProduct`
+  (`apps/server/src/working-order.ts:438,3188`) consumes `extrasByHolder`/`optionsByProduct`
   straight — so the detached list reaches it. **Not true of the other two reads, checked rather
   than generalised:** `optionsByProduct` is BUILT from the attachments
   (`packages/catalogue/src/offered-modifiers.ts:109`), and the PRODUCT-side extras read is handed
@@ -988,20 +988,22 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   on `main` too. Left unfixed on purpose — it needs a decision first about whether a basket edit
   may change a variant AT ALL. If the answer is no, the cheaper fix is to stop offering the
   variant control on a reopened line; if yes, `setLineModifiers` has to carry the product. Task 12
-  did close the neighbouring gap: a dish whose only question is its variant now opens the picker
-  from the tender-pay quantity path as well as from the grid (`needsModifierPicker`,
-  `apps/till/src/state/order-line.ts`), where before it rang straight up at the base product's
-  price.
-- **Every input the modifier picker draws still carries a GENERATED id as its `name`.** An extras
-  checkbox group is named `extras-${list.id}` and an options radio group `options-${list.id}`
+  did close the neighbouring gap, and in ONE place only: the tender-pay quantity path now asks for
+  a variant, where it used to ring straight up at the base product's price. The grid already asked
+  before this task (`git show main:apps/till/src/widgets/product-grid.ts`); what changed there is
+  only that both now ask through one `needsModifierPicker`
+  (`apps/till/src/state/order-line.ts`).
+- **Both of the modifier picker's LIST inputs still carry a generated id as their `name`.** An
+  extras checkbox group is named `extras-${list.id}` and an options radio group `options-${list.id}`
   (`apps/till/src/widgets/modifier-picker.ts`), and a list id is a uuid — so a kind in front of one
   is still the generated widget id `docs/developers/conventions-ui.md` refuses, and CLAUDE.md §3
-  with it. What Task 12 changed is only that the two kinds now spell it the SAME way; the extras
-  checkbox carried a bare list id before, where its options sibling was already prefixed. Left
-  because the offered-list wire carries no stable per-list name to use instead: an offered list
-  arrives with its uuid `id` and its three display names and nothing else
-  (`OfferedExtrasList`/`OfferedOptionsList`, `packages/catalogue/src/menu-types.ts`), and a display
-  name is renameable and not unique, so closing this means adding something to that wire.
+  with it. NOT every input: the variant radios are `name="product-variant"` already, so they are not
+  part of this. What Task 12 changed is only that the two LIST kinds now spell it the SAME way; the
+  extras checkbox carried a bare list id before, where its options sibling was already prefixed.
+  Left because the offered-list wire carries no stable per-list IDENTIFIER to use instead: an
+  offered list arrives with its uuid `id`, its `kind`, its three display names and its items or its
+  labels (`OfferedExtrasList`/`OfferedOptionsList`, `packages/catalogue/src/menu-types.ts`), and a
+  display name is renameable and not unique, so closing this means adding something to that wire.
 
 What the order path (the plan's Task 7) left behind:
 

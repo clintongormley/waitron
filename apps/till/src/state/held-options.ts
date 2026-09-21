@@ -101,7 +101,8 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
  *    (`./held-extras.ts`) takes for a pick no list offers any more.
  *
  * The frozen wording itself is carried through untouched by the caller: it is what the order holds
- * and what the basket must keep showing until the server re-prices the line.
+ * and what the basket must keep showing until the server re-prices — which, as above, is the whole
+ * order and not the one line.
  */
 export function deriveOptionSelections(
   offered: readonly OfferedModifier[],

@@ -13,8 +13,10 @@ import type { SelectedExtra } from "./working-order.js";
  * lists alone, so "offered" already means active here and nothing re-checks a flag.
  *
  * TWO lists offering the same product is left deliberately at "the first one wins". The server cannot
- * tell which list a stored child came off either, so it refuses the pairing and re-prices the line
- * whichever of them the till names — documented behaviour, not a decision this function can improve
+ * tell which list a stored child came off either, so it refuses the pairing whichever of them the
+ * till names, and the refusal re-prices the WHOLE order rather than the one line
+ * (`apps/server/src/working-order.ts:3213`, `:3266`) — documented behaviour, not a decision this
+ * function can improve
  * (`docs/developers/modifiers.md`, "A picked product that more than one of the dish's ACTIVE lists
  * offers refuses the pairing").
  *

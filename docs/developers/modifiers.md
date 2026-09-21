@@ -194,8 +194,8 @@ of this section.
 
 A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
 rebuilds what those answers would freeze NOW and compares the result with what the stored line
-holds, by value; equal, the line and its locked price are kept, otherwise the line is replaced and
-re-priced.
+holds, by value; equal, every line and its locked price are kept. One line that does not match
+sends the WHOLE order down the replacement path, which re-prices every line on it.
 
 Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
@@ -289,8 +289,9 @@ The legacy `optionGroups` and `modifiers` fields on those two payloads are untou
 carry the old `option_groups` model; Task 13 of
 `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md` removes them. Nothing in `apps/till`
 reads either of them any more — the picker walks `offeredModifiers` alone
-(`apps/till/src/widgets/modifier-picker.ts`), and the product grid decides whether a dish needs a
-picker at all from the same field. Checked with `git grep -l -i optiongroup HEAD -- apps/till/src`:
+(`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD a line, the product grid
+and tender-pay's weighed quantity, decide whether a dish needs a picker from that field or from an
+available variant (`needsModifierPicker`, `apps/till/src/state/order-line.ts`). Checked with `git grep -l -i optiongroup HEAD -- apps/till/src`:
 three test files match, each setting `optionGroups: []` only to satisfy catalogue's declared
 `MenuOffer`, and no source file at all — against eight source files for the same command on
 `main`.
