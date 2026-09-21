@@ -4753,6 +4753,76 @@ out to contain no SQL — only a comment describing the claim.
    for the lock clause takes minutes rather than seconds, because the blocked claim's holder is still
    parked when the per-test reset comes round and the reset then waits on its row locks.
 
+**Task P10 — a refusal is matched by its table and columns, not the constraint's name — LANDED as
+#482 on 2026-09-21** (main `50ac0ea8`). PostgreSQL reports the NAME of the rule a write broke;
+SQLite reports the table and the column and no name, even when the rule was named explicitly. So
+every write path that turned a refusal into a domain error now declares the key it translates as a
+table and a column list, cited back to the migration that created it, and asks one helper —
+`refusalOn(error, sqlstate, target)` in `packages/db/src/constraint-target.ts` — whether the refusal
+it caught is that class on that key. `pgErrorConstraint` and `uniqueViolationConstraint` are gone.
+Every column list was read off a REAL refusal rather than written from the schema.
+
+**The task's own file list was short by three, and the reason generalises.** It was derived from a
+grep for the four `@waitron/db` helpers, so it could not see a caller that walks the error chain
+itself — `packages/reporting/src/record-daily-close.ts`, `apps/server/src/tables.ts` and
+`packages/core/src/settle-sale.ts` all did. Two greps are needed, and they find different things:
+`grep -rn "constraint?: unknown"` finds a walk that goes on to read the constraint NAME, while only
+`grep -rn "cause?: unknown"` reaches one that reads a SQLSTATE and stops. Counting five hand-written
+copies of that walk (the two chain files included) is what the spec's dated pointer now records.
+
+**The parser was wrong three ways, and a regular expression could not have been right.** The column
+list was pulled out of the server's message with one pattern, and a pattern cannot tell a separator
+from the same character sitting inside an entry. The Codex review seat broke it with three real
+refusals: a quoted column name holding a comma, an index over a multi-argument expression, and a
+quoted name holding the `)=(` that separates key from value. It is a hand scanner now, tracking
+double quotes, single quotes and parenthesis depth, with each of those as a case driven through a
+real refusal on both drivers.
+
+**Reading a message means depending on its language, where the field it replaced did not.** Both
+review seats found this independently. It is a TEST rather than a sentence: the suite asks the server
+for `lc_messages = 'es_ES.UTF-8'`, drives a refusal and checks the parser still reads it. Measured
+2026-09-21 on the image `deploy/compose.yml` runs — the setting is ACCEPTED and the answer comes back
+in English anyway, so the English-only parse is safe by a property of the IMAGE. Swap in an image
+carrying locale data and that case is what says so.
+
+**A per-test bound landed with it, and it is not about refusals.** Three root guard suites failed a
+HEALTHY run on the clock — "Test timed out in 5000ms", the assertion never reaching the point of
+running. Nearly every case in the root project shells out, so its cost is a child process, and this
+machine runs two campaign lanes at once. The root `vitest.config.ts` now sets `testTimeout: 30_000`,
+with what thirty seconds does NOT buy written beside it: at a load average near 48,
+`scripts/ci-workflow.test.mjs` timed out too and it declares sixty.
+
+**Three things left open, deliberately.**
+
+1. **No test shows a chain refusal followed by a SUCCESSFUL retry.** The Codex seat established this
+   by mutating the retry catch to `if (true) throw error` and finding
+   `packages/fiscal-verifactu/src/chain.concurrency.test.ts` still green — 7 passed. Its conclusion
+   was narrower than it read: the same mutation DOES turn `chain.test.ts` red on two cases, so the
+   retry is guarded. What no suite covers is the deterministic middle — one refusal, then a retry
+   that succeeds. Exhaustion is covered and a concurrent race is covered. This predates #482, whose
+   diff does not touch either retry loop.
+2. **Six test files each spell a crafted refusal their own way**, and the `detail` string the parser
+   reads is duplicated across all six. `refusalError({ sqlstate, table, columns })` in
+   `packages/db/src/testing/errors.ts` is the natural home — same package as the parser. Not taken in
+   #482 because widening a review-fix wave into six more files late is how a fix wave breeds defects;
+   the stated cost ("a change to what the parser accepts means editing six files") turned out lower
+   than argued, since #482 changed exactly that and edited none of them.
+3. **A pre-existing defect in `packages/printing`, found by the review and NOT fixed.** An
+   out-of-range `character_table` is reported to the operator as a transport-fields problem, because
+   `printers.ts` translates the `23514` it trips by CLASS rather than by key — and `printers` carries
+   a second CHECK, `printers_character_table_ck` (`packages/db/drizzle/0037_normal_red_ghost.sql`).
+   Measured 2026-09-21: `createPrinter` with `characterTable: 300` returns `printer.invalid_config`
+   with `params.reason = "transport_fields"`, while `characterTable: 16` is accepted. The fix is
+   `refusalOn` with a target per constraint, which is now available.
+
+**What the review wave cost, because it is the reusable part.** The wave found nine claims in the fix
+wave itself, four of them sentences written hours earlier — including a receipt naming a test case the
+file did not contain, which had been corrected in the plan in the SAME commit and left standing in the
+code. That is `CLAUDE.md` §1's "the correction is a new claim" arriving as a specific shape:
+**when you correct a claim that appears in two places, the one you are not editing is the one that
+survives.** Two of this branch's own three in-place plan corrections were also wrong and had to be
+corrected again. Budget a reader for the fix wave who did not write it.
+
 **Task P3 — the change log replaces the database's notifications — LANDED as #477 on 2026-09-21**
 (main `e96afb96`). `LISTEN`/`NOTIFY` is gone. The change trigger writes a row into a `change_log`
 table inside whatever transaction caused the change, `withTransaction` takes those rows out again
