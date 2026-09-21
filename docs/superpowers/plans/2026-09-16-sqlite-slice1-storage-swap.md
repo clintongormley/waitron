@@ -68,7 +68,7 @@ Items marked **owner review** touch the unrepairable fiscal core or the arithmet
 | `packages/db/src/schema/columns.test.ts` | Proves each helper emits the type it claims, by reading the generated SQL. |
 | `packages/db/src/testing/venue-db.ts` | The one test-database helper. Today wraps `usePgliteDb`; F1 swaps its body. |
 | `packages/db/src/change-log.ts` | The post-commit change publisher that replaces `LISTEN`/`NOTIFY`. |
-| `packages/db/src/job-claim.ts` | The shared claim-by-update helper that replaces `FOR UPDATE SKIP LOCKED`. |
+| `packages/db/src/job-claim.ts` | The shared job-claim helpers that replace `FOR UPDATE SKIP LOCKED`: one claims a batch by updating it, the others claim by locking rows and stamping nothing. F1 swaps their bodies. |
 | `packages/db/src/constraint-target.ts` | Answers "which table and columns did this refusal name?", replacing constraint-name matching. |
 | `scripts/write-path-tables.test.ts` | The guard that replaces what grants enforce: a write path may not touch a table it has no business writing. |
 | `scripts/two-file-foreign-keys.test.ts` | Fails if a foreign key crosses between `venue.db` and `node.db`, read from each set's drizzle head snapshot. Created by P7, not by the flip — the flip's table below said otherwise until 2026-09-19. Carries no engine types, so F1 changes nothing here unless drizzle's SQLite snapshots name those fields differently. |
@@ -3041,6 +3041,21 @@ packages' concurrency tests pass unmodified."
 
 **Runner: owner review.** **Depends on:** P4a.
 
+_Dated note, 2026-09-21, written while the task ran: the approach the steps below describe cannot
+work, and what landed is a different helper._ `claimRows` stamps every row the window it locked
+selected. The drain locks a window and then stamps only the subset whose fiscal `entorno` agrees
+with the host's — `drain.test.ts`'s "halts a chain behind a refused predecessor" case reads the
+refused rows' `intentos` as still 0 — so putting the drain through `claimRows` would stamp rows it
+is about to refuse. So the drain moved onto a new lock-only sibling in the same file,
+`claimLockedRows`: it claims by LOCKING and stamps nothing, it takes the caller's raw SQL selection
+whole, and it locks only the one table the caller names. That narrowing is not a preference either
+— `app_user` is granted `select, insert` alone on `registros_facturacion`, so PostgreSQL refuses an
+unnarrowed `for update` over the drain's join with `42501`. The rule and its case live on
+`claimLockedRows`; the case is in `packages/db/src/job-claim.test.ts`, which runs the refused form
+first as a control. What holds it for the drain's own join is a deletion control recorded at the
+call site in `packages/fiscal-verifactu/src/drain.ts`. The steps below are left as they
+were written.
+
 The same change for `packages/fiscal-verifactu/src/drain.ts`. Separate because a mistake here delays or duplicates a filing to the tax agency.
 
 **Files:**
@@ -4300,6 +4315,17 @@ Its signature does not change. Its body takes the write lock, begins, runs the b
 - [ ] **Step 16: Remove the PostgreSQL-only SQL from `claimRows`**
 
 `ctid` and `for update skip locked` go; under the write queue the conditional update is the whole mechanism. P4a's two tests must pass unmodified.
+
+_Dated note, 2026-09-21, after P4a and P4b: this step has more than one function to strip, and they
+do not all end the same way._ `packages/db/src/job-claim.ts` holds `claimRows`, which claims by
+updating the rows, and beside it two that claim by LOCKING and stamp nothing — `claimLock`, which
+takes a drizzle query it may lock whole, and `claimLockedRows`, which takes raw SQL and locks only
+one named table. Take the PostgreSQL-only SQL out of `claimRows` and a conditional update is left,
+still doing the claiming. Take the lock clause out of the other two and nothing of the claim is
+left: each becomes an ordinary ordered SELECT, which is sound only because the write queue admits
+one writer at a time. That last sentence is a reading of this plan, not a line anywhere in it — so
+decide it deliberately when the step runs. The suites that must pass unmodified are P4a's and P4b's
+together, including `packages/fiscal-verifactu`'s `drain.concurrency`.
 
 - [ ] **Step 17: Answer `constraintTarget` from SQLite's message**
 

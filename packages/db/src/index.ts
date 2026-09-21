@@ -3,8 +3,8 @@ export { createPgliteDb, createPostgresDb } from "./client.js";
 export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
-// The three shapes a job claim takes, and the one file holding the engine-specific SQL they rest
-// on (`job-claim.ts`).
+// Each shape a job claim takes, and the one file holding the engine-specific SQL they all rest on
+// (`job-claim.ts`).
 export { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
 export type { ClaimSpec, LockedClaimSpec } from "./job-claim.js";
 // The column vocabulary. Another package reaches it only through this barrel (CLAUDE.md §3), and

@@ -33,6 +33,28 @@
 > [2026-09-16-sqlite-slice1-storage-swap.md](../plans/2026-09-16-sqlite-slice1-storage-swap.md).
 > Everything below is left as it was written.
 
+> **Dated pointer, 2026-09-21.** Tasks P4a and P4b have been built, and §6.2's sentence "Each
+> becomes a claim by update under the write queue" held for one of the four places it lists.
+>
+> **What each caller actually became.** The printing runtime
+> (`packages/printing/src/runtime.ts`) is the one that became a claim by update: it asks `claimRows`,
+> which stamps the batch it locked in a single statement. Payment forwarding
+> (`packages/payments/src/store.ts`) became a claim by LOCKING that stamps nothing — a payment's own
+> state is the queue, so there is no claim column to stamp, and putting it through `claimRows` would
+> have meant a no-op UPDATE writing a new version of every row a forward pass merely looked at. The
+> fiscal drain (`packages/fiscal-verifactu/src/drain.ts`) became a claim by locking as well, and a
+> narrowed one that locks the `envios` rows alone: it stamps only the part of its window whose
+> `entorno` agrees with the host's, so stamping the whole window would stamp rows it is about to
+> refuse, and `app_user` is granted `select, insert` alone on `registros_facturacion`, which refuses
+> an unnarrowed lock over the drain's join. The read-only gate
+> (`apps/server/src/read-only-gate.ts`), the fourth place §6.2 names, turned out to carry no SQL at
+> all — only a comment describing a claim — so nothing there changed.
+>
+> All of it lives in `packages/db/src/job-claim.ts`, which is still the one file task F1 edits; what
+> F1 is left to strip from each function differs, and that is written up in step 16 of
+> [2026-09-16-sqlite-slice1-storage-swap.md](../plans/2026-09-16-sqlite-slice1-storage-swap.md).
+> §6.2 below is left as it was written.
+
 This is slice 1 of the build order in
 [2026-09-16-sqlite-litestream-topology-design.md](2026-09-16-sqlite-litestream-topology-design.md)
 §11. That document decides *what* Waitron's storage and failover become; this one decides *how the

@@ -226,7 +226,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
 /**
  * T1/T2 split (spec §7.2): claim due rows in their own short transaction (T1), which commits
  * before the network call — so no row lock or connection is held across the AEAT round-trip while
- * `claimBatch`'s `FOR UPDATE SKIP LOCKED` (Task 8) is in effect, and `recoverStaleClaims` (Task 8,
+ * `claimBatch`'s `FOR UPDATE SKIP LOCKED` (Task 8, applied by `claimLockedRows`) is in effect, and `recoverStaleClaims` (Task 8,
  * called at the top of this function) has real committed `enviando` rows to recover after a crash.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
@@ -457,9 +457,10 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
  * attempt's wait from if the submit below fails.
  *
- * `FOR UPDATE OF e SKIP LOCKED` — spelled by `claimRows`' lock-only sibling `claimLockedRows`
- * (@waitron/db), not here: two concurrent drainers race
- * over the same rows — e.g. two scheduler instances, or a retried call overlapping a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
+ * `FOR UPDATE OF e SKIP LOCKED` — applied by `claimLockedRows` (@waitron/db), which is where to
+ * edit or delete it, not here: two concurrent drainers race over the same rows — e.g. two
+ * scheduler instances, or a retried call overlapping a slow one. Without row locking here, both
+ * transactions' plain `SELECT` would each see the same
  * `pendiente` rows (READ COMMITTED takes a fresh per-statement snapshot, but neither SELECT blocks
  * on the other), and both would go on to submit the SAME batch to AEAT — a genuine duplicate
  * submission, not merely a wasted query. `FOR UPDATE` alone would already prevent this (the second
@@ -549,12 +550,10 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  // `of: "e"` locks the envío rows alone, and it is not a preference. `app_user` is revoked from
-  // `registros_facturacion` and re-granted `select, insert` only
-  // (drizzle/0001_fiscal_baseline_sql.sql:4 and :6), and PostgreSQL wants an update-shaped
-  // privilege on every table a `FOR UPDATE` locks. Measured 2026-09-21 against the real migrated
-  // schema, as `app_user`, over THIS join: `for update skip locked` came back `42501`, and
-  // `for update of e skip locked` succeeded.
+  // `of: "e"` locks the envío rows alone, and this join is why the helper takes that parameter at
+  // all: `app_user` may read `registros_facturacion` and never write it, so a lock this claim did
+  // not narrow would be refused `42501`. Held on this exact selection, both ways round, by
+  // `drain.test.ts`'s "refuses the same selection when the lock is not narrowed".
   const rows = await claimLockedRows<DueRow>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e
@@ -605,6 +604,15 @@ async function claimBatch(
     // with no extra parens of our own, is the form drizzle's own expansion is already shaped for.
     // The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment above relies
     // on for its own array parameter.
+    // Named by id alone, with no `and estado = 'pendiente'` of its own — the SELECT above already
+    // applied that, and these ids came from it. The distinction `claimRows`' doc comment draws
+    // between a caller whose predicate excludes the state it stamps and one whose does not puts
+    // this drainer in the first group: a second drainer that runs its SELECT after this
+    // transaction commits cannot see these rows again, because they are no longer `pendiente`.
+    // What the lock covers is the window before that commit, where READ COMMITTED would still
+    // show them as `pendiente` to somebody else. Task F1 removes the lock and closes that window
+    // a different way — the write queue admits one writer at a time, so there is no second
+    // drainer inside it.
     await tx.execute(sql`
       update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
