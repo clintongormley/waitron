@@ -1086,18 +1086,19 @@ describe("ordering extras and options — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross —
-    // read straight off the column, so 300 is that gross as a count of whole cents.
+    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross.
+    // Both columns are read straight off the row, so each is the whole number its own scale stores:
+    // 300 is that gross in cents, and 2000 and 6000 are the two quantities in thousandths.
     expect(wol).toHaveLength(2);
-    expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: "2.000" });
+    expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: 2000 });
     expect(wol[1]!.productId).toBe(v.baconId);
-    expect(wol[1]!.quantity).toBe("6.000");
+    expect(wol[1]!.quantity).toBe(6000);
     expect(wol[1]!.lineTotal).toBe(300);
 
     // The FILED child sale_line carries the same combined quantity (fiscal record).
     expect(sl).toHaveLength(2);
     const child = sl.find((l) => l.parentLineId !== null)!;
-    expect(child.quantity).toBe("6.000");
+    expect(child.quantity).toBe(6000);
   });
 
   /** The six frozen strings one answer to "Tamaño" carries, under the venue's default content
@@ -1215,16 +1216,17 @@ describe("ordering extras and options — parent + child lines", () => {
     // Bacon is offered at 0.50 by the list and is a 3.00 product in its own right, at its OWN reduced
     // rate where the burger is general — so name, quantity, price and VAT each come from the frozen
     // pick rather than from the catalogue row or the dish. 0.50 gross at 10% is 0.45 net per unit,
-    // 0.91 for the two — read straight off `sale_lines`, so 45 and 91 are those amounts in whole
-    // cents.
+    // 0.91 for the two. Every one of these columns is read straight off `sale_lines`, so each is
+    // the whole number its own scale stores: 45 and 91 are the amounts in cents, 2000 is two units
+    // in thousandths, and 1000 is the 10% rate in basis points.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed).toHaveLength(2);
     const child = filed.find((line) => line.parentLineId !== null)!;
     expect(child).toMatchObject({
       name: "Bacon staff",
-      quantity: "2.000",
+      quantity: 2000,
       unitPrice: 45,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: 91,
       optionSnapshots: [],
     });

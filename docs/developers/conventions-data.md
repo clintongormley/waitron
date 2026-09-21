@@ -492,6 +492,145 @@ existing decimal by rounding, so a development database that held rows ends up h
 euros. No data-migration code is allowed before production, so the generated migration was left
 unedited; a box needs `wa-wt reset demo <name>`.
 
+## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
+
+Task P6, 2026-09-21. Seven columns followed money out of `numeric`: two quantities
+(`working_order_lines.quantity`, `sale_lines.quantity`) and five rates (`vat_rate` twice,
+`purchase_invoices.deductible_proportion`, `purchase_invoice_vat.rate`,
+`convenio_config.night_premium_pct`).
+
+**Why they are not cents.** A quantity carries three decimal places and the money scale holds two,
+so one conversion cannot serve both. Five grams — `0.005` kg — is the count 5 at the quantity scale
+and the count 1 at the money scale, because `decimalToCents` ROUNDS that third place half away from
+zero rather than dropping it: `decimalToCents(decimal("0.005"))` returns 1, measured 2026-09-21. An
+earlier draft of this paragraph said it returned 0, which is why the measurement is written down —
+the shared conversion nobody wrote would not have refused anything or emptied the line, it would
+have returned a number five times too small. That is the whole reason the scales
+are separate, and it is the second case in `packages/shared/src/scales.test.ts`; the
+`the two scales do not share a conversion` case reads
+one literal, `"21.00"`, in both scales and gets 21000 and 2100, so a caller reaching for the wrong
+converter by autocomplete gets an answer that is wrong by a factor of ten rather than one that
+looks plausible.
+
+**Where the conversions live, and why not where the plan put them.** The plan said
+`packages/db/src/schema/columns.ts`. They are `packages/shared/src/scales.ts`, beside
+`packages/shared/src/cents.ts`, because that is where the money crossing went and where a reader
+greps. `columns.ts` is the engine vocabulary; a conversion in it would be the second thing the
+SQLite switch has to think about in the one file that exists so it only has to think about one.
+The names follow `cents.ts`'s pair, not the plan's shorter ones, for the same reason.
+
+**The bodies could not be written the way the plan sketched them.** `Number(value) * 1000`,
+`Math.round` and `.toFixed(3)` are all float operations, and
+`packages/shared/src/conventions.test.ts` reads this family of files as text and fails on every one
+of them. The rounding is `toScale`'s, in BigInt, half away from zero — which is also the rule the
+decimal columns applied on the way in, so the conversion is exact rather than close. The guard was
+extended to `scales.ts` and proved by deletion: a `Math.round` added to the file turns
+`contains no Math.round` red.
+
+**The two widths differ, and that is not decoration.** `numeric(12, 3)` admitted 999999999.999,
+which is 999999999999 thousandths — past `integer`'s 2147483647 — so `quantity` is `bigint`.
+`numeric(5, 2)` admitted 999.99, which is 99999 basis points, so `rate` is `integer`. Getting this
+backwards is P5's four-byte-cast defect in a new place: a value the column accepts on the way in,
+refused on the way out.
+
+**Each decimal column's bound moved into the converter.** `numeric(12, 3)` refused a quantity past
+nine integer digits with a `22003` and `numeric(5, 2)` refused a rate past three; an integer column
+takes both silently. `MAX_QUANTITY_INTEGER_DIGITS` and `MAX_RATE_INTEGER_DIGITS` are where those
+refusals live now. The raw readers carry the same bound, which is what `top-sellers.ts`'s old
+`sum(sl.quantity)::numeric(12, 3)::text` cast was enforcing.
+
+**A rate's CHECK constraint does not follow the column.** Four of them compared a rate against 100.
+`ALTER COLUMN ... SET DATA TYPE` keeps a check and CASTS it, so left alone every one of them would
+have refused every rate above one percent. Changing their SQL text in the schema made drizzle
+generate the DROP/ADD itself — unlike P5, where the checks' text did not change and drizzle
+therefore saw nothing. The two QUANTITY checks are P5's case exactly: `quantity <> 0` reads the
+same in either scale, so drizzle generated nothing and PostgreSQL kept
+`((quantity)::numeric <> (0)::numeric)`. Both were named by
+`packages/db/src/schema/schema-conformance.test.ts`, which builds a database from the migrations
+and compares every check expression with the schema's, and both are rebuilt by hand in
+`packages/db/drizzle/0048_scaled_integers_sql.sql`. That guard covers the CORE set only; the module
+sets have none, which is the same asymmetry P5 recorded.
+
+**Three ways a raw-SQL site can be wrong, and only one of them is loud.** This is the sharpened
+version of the money rule's parenthetical, measured on this branch:
+
+1. A QUOTED literal with a fractional part fails: `'21.00'` into an `integer` column gives `22P02`,
+   `invalid input syntax for type integer`, routine `pg_strtoint32_safe`.
+2. An UNQUOTED numeric literal does NOT fail. `25.00` into an `integer` column takes PostgreSQL's
+   assignment cast and stores 25 — a hundredfold wrong, nothing red. Found in
+   `packages/workforce-es/src/convenio.test.ts`, where the test PASSED before the conversion
+   because the reader was unconverted too and the two errors cancelled. CLAUDE.md §1's
+   "a measurement taken where both answers look alike", with a green suite attached.
+3. A value whose text is already a whole number is accepted silently in either form and means a
+   thousandth of what the author meant: a quantity sent as `'2'` stores 2, which is 0.002 units.
+   Seen in `packages/core`'s pre-fix failure dump.
+
+**The migration rounds, exactly as P5's did, and which of two bad outcomes a development database
+gets turns on whether it holds a small quantity.** `ALTER COLUMN ... SET DATA TYPE` casts each existing decimal by rounding, and
+there is no scaling `USING` expression — none is allowed, because no data-migration code may exist
+before production. Two outcomes, and which one a box gets turns on whether it holds a small
+quantity. Measured on PostgreSQL 18.6 against populated old-type tables, 2026-09-21:
+
+- **Any quantity below half a unit rounds to `0` and trips `quantity <> 0` with a `23514`** —
+  `0.320::numeric(12,3)::bigint` and `0.499::numeric(12,3)::bigint` are both `0`, `0.500` is `1`.
+  Both `working_order_lines_quantity_ck` and `sale_lines_quantity_ck` carry that check, so 320
+  grams of anything on a line is enough. The whole `ALTER` then errors and the database is left
+  un-migrated. WHICH boxes have such a row: `dev:setup`'s own seed writes only whole quantities
+  (`grep -o 'quantity: *"[0-9.]*"' apps/server/scripts/demo-seed/*.ts` returns `"1"` and `"2"`
+  only), but `demo:till`, `demo:park-retrieve` and `demo:catalogue` all write `0.200`, `0.250` or
+  `0.320`, and so does anyone who rings up a weighed item.
+- **Without such a row it succeeds quietly and every value is wrong.** A quantity of `1.500`
+  becomes `2`, which reads back as 0.002 units; a rate of `21.00` becomes `21`, which reads back
+  as 0.21%. Both sit inside the rebuilt CHECK constraints, so nothing refuses them.
+
+Either way a box needs `wa-wt reset demo <name>`.
+
+**A column-level codec was weighed and not taken.** Drizzle's `customType` with `toDriver`/`fromDriver`
+would put each crossing in `columns.ts` once and leave every typed `.select()` and `.values()` call
+site handling decimal strings unchanged — roughly twenty-five hand-written conversions that would not
+exist. It was not taken, for the reason *Where the conversions live, and why not where the plan put them*
+gives above: `columns.ts` is the
+one file the SQLite switch has to think about, and a conversion living in it is a second thing to
+think about there. The helpers would still be `scales.ts`; only the crossing would move. The raw-SQL
+readers would be needed either way. Recorded here rather than left as a silent default, because the
+cost is now paid twice (money and these two scales) and a third scale would pay it again.
+
+So a green run is not evidence that every raw-SQL site was found. They were found by grep, and the
+sites that stayed green got more attention than the ones that went red.
+
+**What the byte-identical fiscal gate does and does not establish.**
+`packages/fiscal-verifactu/src/money-conversion.huella.test.ts` passed against the same literals,
+which is the gate this task was required to clear. Read it narrowly: the breakdown a sale files is
+built by `buildVatBreakdown` from the sale's own `RecordSaleLine.vatRate`, a domain value, and
+never from a stored row — traced through `record-sale.ts`, `record-correction.ts` and
+`record-substitution.ts`, each of which calls it on `input.lines`. So on the converted tree the
+rate reaching the fiscal record does not cross the storage boundary at all. The gate would have
+caught a conversion placed ABOVE the row; it cannot see one placed below it.
+
+**A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
+vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its
+forbidden set from the vocabulary's own import block, so `numeric` would have become legal in every
+table file on the same day it stopped being used in any. The guard now carries a hand-written
+`RETIRED` set beside the derived one, holding `numeric`. That list GROWS as builders retire, where
+the `ALLOWED` list only shrinks. It still cannot cover a builder the vocabulary never imported —
+`bigserial` is the standing example.
+
+**The module set was probed rather than grepped.** `schema-conformance.test.ts` covers the CORE
+set only, and P5's nine stale objects were all found by applying the migrations and reading the
+catalogue back. The one module set this task touches is `workforce-es`. Probed 2026-09-21 by
+applying `CORE_MIGRATIONS` then `WORKFORCE_ES_MIGRATIONS` and querying
+`information_schema.columns` and `pg_get_constraintdef` over `convenio_config`:
+`night_premium_pct` is `integer` with a null default, `split_shift_premium` is `bigint` from P5,
+and not one of the nineteen constraints on the table names either column. So there was nothing to
+re-derive there — established by running it, not by reading the migration.
+
+**What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
+validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
+All of them work in decimal strings and all of them still do. `packages/catalogue`'s precision
+guard kept its `1.2345::numeric(12,3)` SQL probe as a control and now measures
+`decimalToThousandths` beside it: both round to `1.235`, so the rounding that guard defends against
+moved with the storage and did not change.
+
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`
 
 A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what

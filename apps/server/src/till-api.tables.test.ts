@@ -440,7 +440,8 @@ describe("table + tab routes", () => {
       servedAt: string | null;
     }[];
     expect(lines).toHaveLength(2);
-    // Seeded product is 1.50; the locked gross unit rides back verbatim, quantity at numeric(_,3).
+    // Seeded product is 1.50; the locked gross unit rides back verbatim, and the quantity at the
+    // three places `thousandthsToDecimal` renders.
     expect(lines[0]).toMatchObject({
       lineNo: 1,
       productId,

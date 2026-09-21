@@ -98,12 +98,15 @@ const LINE = {
   lineNo: 1,
   name: "Café solo",
   descriptions: { es: "Café solo", ca: "Cafè sol" },
-  quantity: "1.000",
+  // One unit, in whole thousandths (`quantity()` in packages/db/src/schema/columns.ts).
+  quantity: 1000,
   unitPrice: 130,
   // The GROSS (VAT-inclusive) unit locked at add time (unit_price_gross, 7c): 1.30 net at 10% VAT,
   // in whole cents.
   unitPriceGross: 143,
-  vatRate: "10.00",
+  // 10.00%, in whole basis points (`rate()` in the same file). It is the same number as the
+  // quantity above meaning something else, which is why the two scales have separate converters.
+  vatRate: 1000,
   lineTotal: 130,
 };
 
@@ -141,7 +144,7 @@ describe("working_orders", () => {
       .values({ ...LINE, productId: productA, lineNo: 2, workingOrderId: id });
     await db
       .update(workingOrderLines)
-      .set({ quantity: "2.000", lineTotal: 260 })
+      .set({ quantity: 2000, lineTotal: 260 })
       .where(eq(workingOrderLines.workingOrderId, id));
     const found = await db
       .select({ total: workingOrderLines.lineTotal })
@@ -505,7 +508,7 @@ describe("working_order_lines — the draft line's links", () => {
     return rows<{ id: string }>(
       db,
       sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
-             ${descriptions}::jsonb, '1.000', 130, 143, '10.00', 130,
+             ${descriptions}::jsonb, 1000, 130, 143, 1000, 130,
              ${opts.parentLineId ?? null}
            ) returning id`,
     );
@@ -521,12 +524,26 @@ describe("working_order_lines — the draft line's links", () => {
       productId: productA,
       parentLineId: parent.id,
     });
-    const [row] = await rows<{ parent_line_id: string; product_id: string | null }>(
+    const [row] = await rows<{
+      parent_line_id: string;
+      product_id: string | null;
+      quantity: string;
+      vat_rate: string;
+    }>(
       db,
-      sql`select parent_line_id, product_id from working_order_lines where id = ${child.id}::uuid`,
+      // The two scaled counts are read back, which is what pins the raw helper above: written as
+      // `1` and `10` — the whole-unit spelling the decimal columns took — the insert succeeds and
+      // stores a thousandth of a unit at a hundredth of a percent, refused by neither
+      // `working_order_lines_quantity_ck` nor `working_order_lines_vat_rate_ck`. Measured by
+      // putting those two literals back and running this case. Cast to text so the assertion does
+      // not turn on how the driver renders each of the two integer widths.
+      sql`select parent_line_id, product_id, quantity::text as quantity, vat_rate::text as vat_rate
+            from working_order_lines where id = ${child.id}::uuid`,
     );
     expect(row.parent_line_id).toBe(parent.id);
     expect(row.product_id).toBe(productA);
+    expect(row.quantity).toBe("1000");
+    expect(row.vat_rate).toBe("1000");
   });
 
   it("refuses to delete a product an open order's child line names, and allows one nothing names", async () => {

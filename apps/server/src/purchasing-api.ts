@@ -60,7 +60,7 @@ const PURCHASE_WRITE_PERMISSION: Permission = "purchase.manage";
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to — the purchase parallel of
  * `catalogue-api.ts`'s `STATUS`. CLIENT faults only: a genuine SERVER fault (a driver error, or a
- * malformed decimal string that reaches the op's `compareDecimal` / a `numeric` column) reaches `run`
+ * malformed decimal string that reaches the op's `compareDecimal`) reaches `run`
  * as a NON-AppError and becomes an opaque 500 — the same typeof-only posture `catalogue-api.ts` takes
  * for a malformed `unitPrice`. A registered code absent from this table defaults to 400 via `run`.
  */

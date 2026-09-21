@@ -1,13 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { decimal, decimalToCents } from "@waitron/shared";
+import {
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+  decimalToThousandths,
+} from "@waitron/shared";
 import type { RecordSaleLine } from "./record-sale.js";
 
 /**
  * Every issuance path preserves the same saved facts and resolves child links within its new sale.
  *
- * This builds the `sale_lines` insert, so it is where a line's decimal amounts become the count of
- * whole cents the money columns store. `quantity` and `vatRate` are not money columns — they keep
- * their own scales and stay decimal strings.
+ * This builds the `sale_lines` insert, so it is where a line's decimal literals become the whole
+ * numbers those columns store — each at its own scale, which is why there are three converters and
+ * not one: an amount counts cents, `quantity` counts thousandths (0.005 kg is 5), `vatRate` counts
+ * basis points (21.00% is 2100).
+ *
+ * The conversion is this row and nothing above it. The line's own `quantity` and `vatRate` stay the
+ * decimal strings the caller supplied, and the breakdown the fiscal record is filed with comes from
+ * those: all three issuance paths hand `buildVatBreakdown` (`record-sale.ts`) their `input.lines`,
+ * never a row this returns.
  */
 export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
   const ids = lines.map(() => randomUUID());
@@ -22,9 +33,9 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     optionSnapshots: line.optionSnapshots ?? [],
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
-    quantity: line.quantity,
+    quantity: decimalToThousandths(decimal(line.quantity)),
     unitPrice: decimalToCents(decimal(line.unitPrice)),
-    vatRate: line.vatRate,
+    vatRate: decimalToBasisPoints(decimal(line.vatRate)),
     lineTotal: decimalToCents(decimal(line.lineTotal)),
     category: line.category ?? null,
     variantId: line.variantId ?? null,

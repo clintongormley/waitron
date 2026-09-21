@@ -46,7 +46,8 @@ export interface TopSeller {
   /** The frozen `sale_lines.name`/`variant_name` staff names, joined via `staffPresentationName` —
    * the same label a till button or the dashboard shows for this line. */
   name: string;
-  /** Σ line quantity over the range (numeric(12,3)); corrections net in, so it can fall. */
+  /** Σ line quantity over the range, at three decimal places; corrections net in, so it can
+   * fall. The column counts whole thousandths and the sum is converted once, on the way out. */
   quantity: Decimal;
   /** Σ line_total over the range, as an amount; corrections net in. */
   total: Decimal;
@@ -66,8 +67,9 @@ export interface VatReturnInput {
 export type PurchaseVatKind = "ordinary" | "capital";
 
 /** One deducible line, grouped by (rate, kind). `tax` is the deductible cuota (Σ of the filed
- * per-invoice cuotas × deductible_proportion/100, rounded per invoice line), never re-rounded on the
- * monthly base — the same exactness rule the output side follows. */
+ * per-invoice cuotas × deductible_proportion/10000 — the column counts whole basis points — rounded
+ * per invoice line), never re-rounded on the monthly base — the same exactness rule the output side
+ * follows. */
 export interface InputVatRateLine {
   rate: Decimal;
   base: Decimal;

@@ -240,12 +240,14 @@ describe("POST /api/tabs/:id/transfer", () => {
       quantity: string;
       unit_price_gross: number;
     }>(
-      // unit_price_gross counts whole cents, so 150 is the locked 1.50. The assertion is on that
-      // COUNT, not on an amount: ::int only normalises it to a number for the assertion.
-      sql`select line_no, product_id, quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+      // Both columns are whole numbers at their own scales: `unit_price_gross` counts cents, so 150
+      // is the locked 1.50, and `quantity` counts thousandths, so "2000" is two units. The
+      // assertion is on those COUNTS, not on an amount or a quantity; `::int` and `::text` only
+      // normalise each for the assertion.
+      sql`select line_no, product_id, quantity::text as quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([
-      { line_no: 1, product_id: cafeId, quantity: "2.000", unit_price_gross: 150 },
+      { line_no: 1, product_id: cafeId, quantity: "2000", unit_price_gross: 150 },
     ]);
   });
 
@@ -260,13 +262,14 @@ describe("POST /api/tabs/:id/transfer", () => {
     expect(await res.text()).toBe("");
 
     const a = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
-    expect(a.rows).toEqual([{ quantity: "2.000" }]); // 3 − 1 = 2 remain on the source
+    expect(a.rows).toEqual([{ quantity: "2000" }]); // 3 − 1 = 2 units remain on the source
     const b = await suite.db.execute<{ quantity: string; unit_price_gross: number }>(
-      sql`select quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+      sql`select quantity::text as quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
-    expect(b.rows).toEqual([{ quantity: "1.000", unit_price_gross: 150 }]); // same locked 1.50
+    // one unit carved off, at the same locked 1.50
+    expect(b.rows).toEqual([{ quantity: "1000", unit_price_gross: 150 }]);
   });
 
   it("400 tab.transfer_self when transferring a tab to itself", async () => {

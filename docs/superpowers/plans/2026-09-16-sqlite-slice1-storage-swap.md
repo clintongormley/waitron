@@ -1593,7 +1593,10 @@ column, `split_shift_premium` (`packages/workforce-es/src/schema/convenio-config
 `night_premium_pct`, alone — checked against
 `packages/workforce-es/drizzle/0002_money_in_cents.sql`, whose one statement names
 `split_shift_premium` and nothing else. So the table no longer holds `numeric` in two shapes:
-`night_premium_pct` is the only `numeric` column left in it._
+`night_premium_pct` is the only `numeric` column left in it._ _(2026-09-21, task P6: that last one
+has gone too — `night_premium_pct` is an `integer` counting basis points, and
+`packages/workforce-es` now holds no `numeric` column at all. The paragraph below about `rate()`
+being the column's "exact equivalent" describes the tree as P1b left it.)_
 _Two superlatives were cut from this paragraph in review._ It is not "the smallest conversion in the rollout", and it is false in both
 directions: four packages still unconverted are smaller, `packages/credentials` being one table of
 six columns, and behind it P1b's third pull request (#396) converted a single column. And it is not
@@ -3279,8 +3282,37 @@ Two quantity columns at scale 3 become whole thousandths; five rate columns at s
 **Files:**
 
 - Modify: `packages/db/src/schema/columns.ts` (`quantity` and `rate`)
-- Create: `packages/db/src/schema/columns.scale.test.ts`
+- Create: `packages/shared/src/scales.ts` and `packages/shared/src/scales.test.ts` (corrected
+  2026-09-21 from `packages/db/src/schema/columns.scale.test.ts`; see correction 1 below)
 - Modify: the read and write paths that do arithmetic on quantities and rates
+
+**Corrected while building it, 2026-09-21. Five things this section got wrong, and the steps below
+are corrected in place to match what was built.**
+
+1. **The conversions are not in `columns.ts`.** They are `packages/shared/src/scales.ts`, beside
+   the money crossing `packages/shared/src/cents.ts` that task P5 created — which is where root
+   `CLAUDE.md` §3 now records the money conversion living, and the sibling convention a reader
+   greps for. `columns.ts` is the engine vocabulary and stays free of conversions. The names follow
+   `cents.ts`'s: `decimalToThousandths`/`thousandthsToDecimal` and
+   `decimalToBasisPoints`/`basisPointsToDecimal`, not the shorter pair sketched below.
+2. **Two more functions were needed than this section names**, and nothing here anticipated them:
+   `rawThousandthsToDecimal` and `rawBasisPointsToDecimal`, for a RAW SQL read where the count
+   arrives as text. `packages/reporting` has three such reads and the compiler cannot see any of
+   them. P5 met the same need and its `rawCentsToDecimal` carries the measurements.
+3. **The bodies sketched in step 3 cannot be written that way.** `Number(value) * 1000`,
+   `Math.round` and `.toFixed(3)` are float operations, and `packages/shared/src/conventions.test.ts`
+   reads this family of files as text and fails on every one of them. The rounding is `toScale`'s,
+   in BigInt, which is also the rule the decimal columns applied on the way in — so the conversion
+   is exact rather than merely close.
+4. **A quantity is `bigint`, not `integer`.** `numeric(12, 3)` admitted 999999999.999, which is
+   999999999999 thousandths and past `integer`'s 2147483647. A rate is `integer`: `numeric(5, 2)`
+   admitted 999.99, which is 99999 basis points.
+5. **Four check constraints compare a rate against 100 and had to be re-derived against 10000.**
+   `ALTER COLUMN ... SET DATA TYPE` keeps a check and casts it, so left alone they would have
+   refused every rate above one percent. Changing the checks' SQL text made drizzle generate the
+   DROP/ADD itself; the two quantity checks say `<> 0` in either scale, so drizzle saw nothing and
+   PostgreSQL kept them describing a decimal — those two are rebuilt by hand in a second migration.
+   Both were found by `packages/db/src/schema/schema-conformance.test.ts`.
 
 **Interfaces:**
 
@@ -3296,7 +3328,9 @@ so P6 reaches past `packages/db`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/db/src/schema/columns.scale.test.ts`. The case that matters is the one a blanket conversion gets wrong:
+Corrected 2026-09-21: the file is `packages/shared/src/scales.test.ts`, beside the conversions, and
+the imports below are the shorter names this section sketched before correction 1 renamed them. The
+case that matters is unchanged, and it is the one a blanket conversion gets wrong:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -3306,7 +3340,9 @@ describe("quantity and rate keep their own scales", () => {
   it("holds three decimal places of quantity without loss", () => {
     expect(toThousandths("0.005")).toBe(5);
     expect(fromThousandths(5)).toBe("0.005");
-    // The failure a cents-shaped conversion produces: 0.005 truncated to 0.00.
+    // The failure a cents-shaped conversion produces — corrected 2026-09-21, having been written
+    // here as "0.005 truncated to 0.00": the money conversion ROUNDS the third place, so 0.005 kg
+    // reads as 1 cent, not as nothing. Five times too small, and it refuses nothing on the way.
     expect(toThousandths("0.005")).not.toBe(0);
   });
 
@@ -3321,30 +3357,29 @@ describe("quantity and rate keep their own scales", () => {
 - [ ] **Step 2: Run it and watch it fail**
 
 ```bash
-pnpm --filter @waitron/db test -- columns.scale
+pnpm --filter @waitron/shared test -- scales
 ```
 
-Expected: FAIL — the four conversion functions do not exist.
+Expected: FAIL — the conversion functions do not exist. What it printed, 2026-09-21:
+`Cannot find module './scales.js'`.
 
 - [ ] **Step 3: Change the helpers and add the conversions**
 
+Corrected 2026-09-21 — the helpers move as below, and the conversions go in
+`packages/shared/src/scales.ts` on BigInt, not here on floats (see correction 1 and 3 above).
+
 ```ts
-/** A quantity, in whole thousandths. 1.5 kg is 1500. */
-export const quantity = (name: string) => integer(name);
+/** A quantity, counted in whole thousandths: 1.5 kg is the number 1500. */
+export const quantity = (name: string) => bigint(name, { mode: "number" });
 
-/** A percentage rate, in whole basis points. 21% is 2100. */
+/** A percentage rate, counted in whole basis points: a 21.00% rate is the number 2100. */
 export const rate = (name: string) => integer(name);
-
-export const toThousandths = (value: string): number => Math.round(Number(value) * 1000);
-export const fromThousandths = (value: number): string => (value / 1000).toFixed(3);
-export const toBasisPoints = (value: string): number => Math.round(Number(value) * 100);
-export const fromBasisPoints = (value: number): string => (value / 100).toFixed(2);
 ```
 
 - [ ] **Step 4: Run the test and watch it pass**
 
 ```bash
-pnpm --filter @waitron/db test -- columns.scale
+pnpm --filter @waitron/shared test -- scales
 ```
 
 - [ ] **Step 5: Convert the callers**
@@ -3357,14 +3392,24 @@ pnpm --filter @waitron/fiscal-verifactu test -- money-conversion.huella
 
 Expected: PASS, against the same literals. A failure means a rate rounding changed a filed amount.
 
+**What it did, 2026-09-21: PASS, 2 tests, same literals.** Worth knowing WHY, because the test is
+weaker evidence than it looks for this task: the breakdown a sale files is built by
+`buildVatBreakdown` from the sale's own `RecordSaleLine.vatRate`, a domain value, and never from a
+stored row — so on the converted tree the rate reaching the fiscal record does not cross the
+storage boundary at all. The test would have caught a conversion placed ABOVE the row; it cannot
+see one placed below it.
+
 - [ ] **Step 6: Generate the migrations and run the suites**
 
+Corrected 2026-09-21: the packages listed here were a guess and two of them are not touched at
+all. What the change actually reaches — enumerated by `pnpm -r --no-bail typecheck` plus a grep for
+raw SQL, not by reading — is `shared`, `db`, `core`, `purchasing`, `reporting`, `workforce-es`,
+`catalogue`, `venue-service` and `apps/server`. `@waitron/catalogue` and `@waitron/workforce` carry
+no quantity or rate column.
+
 ```bash
-pnpm --filter <package> exec drizzle-kit generate --name scaled_integers
-pnpm --filter @waitron/catalogue test:coverage && \
-pnpm --filter @waitron/workforce test:coverage && \
-pnpm --filter @waitron/workforce-es test:coverage && \
-pnpm --filter @waitron/purchasing test:coverage
+pnpm --filter @waitron/db db:generate --name scaled_integers
+pnpm --filter @waitron/workforce-es db:generate --name scaled_integers
 ```
 
 - [ ] **Step 7: Commit and open the pull request — do not land it**
@@ -3372,10 +3417,11 @@ pnpm --filter @waitron/purchasing test:coverage
 ```bash
 git commit -s -m "Hold quantities in thousandths and rates in basis points
 
-Quantities carry three decimal places and rates carry two, so neither can
-become cents: a blanket conversion would turn 0.005 kg into nothing. Each keeps
-its own scale as a whole number, with conversions named after the scale so a
-caller cannot mix them up.
+Quantities carry three decimal places, so a quantity cannot become cents: a
+blanket conversion does not empty 0.005 kg, it misreads it as 1 cent, which is
+five times too small and refuses nothing. (Corrected 2026-09-21: this paragraph
+said "turn 0.005 kg into nothing".) Each scale keeps its own whole number, with
+conversions named after the scale so a caller cannot mix them up.
 
 One rate feeds the tax record, so the byte-identical fixture test from the money
 change is re-run here and passes against the same recorded values."

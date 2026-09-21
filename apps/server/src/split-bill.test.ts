@@ -240,12 +240,14 @@ describe("splitOffCheck", () => {
     // The check holds the moved items. Order follows the landed move/split core (TS-4): WHOLE lines are
     // moved first (moveTabLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
     // appended at check line 2) — not the transfers-array order.
+    // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
+    // 0.300 kg of jamón and 1000 is one agua.
     expect(state.checkLines).toEqual([
-      { productId: jamonId, quantity: "0.300" },
-      { productId: aguaId, quantity: "1.000" },
+      { productId: jamonId, quantity: 300 },
+      { productId: aguaId, quantity: 1000 },
     ]);
     // …and the origin holds only the remainder (quantity conserved: 3 − 1 = 2 aguas; jamón moved whole).
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: "2.000" }]);
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 2000 }]);
   });
 
   it("refuses to split off a check from a non-open tab (tab.not_open)", async () => {
@@ -306,8 +308,9 @@ describe("splitOffCheck", () => {
       const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
-    // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: "3.000" }]);
+    // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to two). Read
+    // straight off the column, so 3000 is those three units as a count of thousandths.
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 3000 }]);
     // No stray check minted — only the origin tab exists.
     expect(state.orderCount).toBe(1);
   });
@@ -352,8 +355,8 @@ describe("splitOffCheck", () => {
       const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
-    // Origin untouched — still the whole agua×3.
-    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: "3.000" }]);
+    // Origin untouched — still the whole agua×3, as a count of thousandths off the column.
+    expect(state.originLines).toEqual([{ lineNo: 1, productId: aguaId, quantity: 3000 }]);
     // No orphan check minted — only the origin tab exists.
     expect(state.orderCount).toBe(1);
   });
@@ -395,7 +398,8 @@ describe("unjoinTable", () => {
     expect(state.detached?.tabId).toBe(newTabId); // the table now runs its OWN bill (re-anchored)
     expect(state.stillJoined?.tabId).toBe(tabId); // the origin table is unaffected
     expect(state.newTab?.status).toBe("open");
-    expect(state.newTabLines).toEqual([{ productId: aguaId, quantity: "1.000" }]);
+    // One agua, read off the column as a count of thousandths.
+    expect(state.newTabLines).toEqual([{ productId: aguaId, quantity: 1000 }]);
   });
 
   it("with items: refuses to un-join a table that SOLELY anchors its tab (table.not_shared), minting nothing", async () => {

@@ -21,10 +21,14 @@ import {
   isZeroDecimal,
   locationId,
   MAX_MONEY_INTEGER_DIGITS,
+  MAX_QUANTITY_INTEGER_DIGITS,
+  MAX_RATE_INTEGER_DIGITS,
   MONEY_SCALE,
   multiplyDecimal,
   negateDecimal,
   resolveActiveLocale,
+  QUANTITY_SCALE,
+  RATE_SCALE,
   saleId,
   saleLineId,
   seriesId,
@@ -90,6 +94,10 @@ describe("package public surface (./index.js)", () => {
     expect(assertMoney(a)).toBe("1.10");
     expect(MONEY_SCALE).toBe(2);
     expect(MAX_MONEY_INTEGER_DIGITS).toBe(12);
+    expect(QUANTITY_SCALE).toBe(3);
+    expect(MAX_QUANTITY_INTEGER_DIGITS).toBe(9);
+    expect(RATE_SCALE).toBe(2);
+    expect(MAX_RATE_INTEGER_DIGITS).toBe(3);
   });
 
   it("re-exports every locale binding", () => {

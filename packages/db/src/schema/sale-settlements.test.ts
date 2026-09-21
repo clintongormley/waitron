@@ -158,9 +158,9 @@ async function recordSale(
       lineNo: 1,
       name: "Café solo",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
-      quantity: "1.000",
+      quantity: 1000,
       unitPrice: total,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: total,
     });
     await tx.insert(tenders).values(

@@ -880,8 +880,8 @@ export class TillStationQueue extends LitElement {
   }
 
   /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name is the
-   *  server-resolved kitchen label and is rendered as sent; the quantity is the line's numeric(_,3)
-   *  trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
+   *  server-resolved kitchen label and is rendered as sent; the quantity is the line's three-place
+   *  decimal string trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
   #dish(item: StationQueueItem): string {
     const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
     return `${trimQuantity(item.quantity)}${unit}× ${item.name}`;

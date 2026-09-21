@@ -73,10 +73,10 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
       variantDescriptions: { es: "Café solo", ca: "Cafè sol" },
       variantKitchenName: "CAFE GR",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
-      quantity: "1.000",
+      quantity: 1000,
       unitPrice: 130,
       unitPriceGross: 143,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: 143,
       ...overrides,
     };

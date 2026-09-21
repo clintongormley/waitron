@@ -38,7 +38,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { perDishOptionQuantity } from "@waitron/shared";
+import { perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
@@ -168,7 +168,7 @@ async function buildTicketItems(
   // lines. The customer-facing `descriptions` is deliberately NOT read: the cook's name falls back to
   // the STAFF name, never to the receipt text — that is `kitchenPresentationName`'s rule, and the
   // station queue reads the same one, so a cook sees one name on paper and on screen.
-  const lineRows = await tx
+  const storedLineRows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
@@ -186,12 +186,19 @@ async function buildTicketItems(
     })
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.id, lineIds));
+  // `working_order_lines.quantity` stores a count of whole thousandths; it becomes the decimal
+  // string the rest of this file works in here, at the row, so `perDishOptionQuantity` below and
+  // the `qty` the ticket formats both see exactly what they saw before the column changed.
+  const lineRows = storedLineRows.map((row) => ({
+    ...row,
+    quantity: thousandthsToDecimal(row.quantity),
+  }));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
 
   // The CHILD extra lines of the fired parents — one grouped read, keyed by `parent_line_id` over
   // the fired parents' ids, printed as indented `+ <name>` sub-text beneath each dish. Ordered by
   // `line_no` so the picks print in the order they were offered.
-  const childRows = await tx
+  const storedChildRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       lineNo: workingOrderLines.lineNo,
@@ -201,6 +208,11 @@ async function buildTicketItems(
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
+  // The same crossing as the parents' above, for the same reason.
+  const childRows = storedChildRows.map((row) => ({
+    ...row,
+    quantity: thousandthsToDecimal(row.quantity),
+  }));
   // parent line id → its extras strings in line_no order. The per-dish pick count is recovered from the
   // stored COMBINED child quantity (see perDishOptionQuantity); a count > 1 appends an ASCII " xN"
   // suffix, matching kitchen-ticket.ts's `qty x name` convention. Every child's parent is in `lineById`.

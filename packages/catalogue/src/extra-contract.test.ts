@@ -367,9 +367,9 @@ describe("extra selections at order time", () => {
     // every integer in this contract to is a bad shape, so it is refused with a field path like any
     // other malformed value. That ceiling is the contract's, not this field's own: `minPicks`,
     // `maxPicks` and `maxQuantity` are `integer` columns (schema/extras.ts) and an order-time
-    // `quantity` is not a column at all — the child `working_order_lines` row an extra is designed to
-    // become holds its quantity as `numeric(12, 3)` (packages/db/src/schema/orders.ts:164,
-    // columns.ts:73).
+    // `quantity` is not a column at all — the child `working_order_lines` row an extra is designed
+    // to become holds its quantity as a count of whole thousandths (packages/db/src/schema/orders.ts,
+    // columns.ts `quantity`).
     expect(() =>
       validateExtraSelections(
         [breads({ minPicks: 0, maxPicks: null })],

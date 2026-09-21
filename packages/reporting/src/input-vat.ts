@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { addDecimal, compareDecimal, decimal, rawCentsToDecimal } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  rawBasisPointsToDecimal,
+  rawCentsToDecimal,
+} from "@waitron/shared";
 import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
@@ -26,10 +32,11 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
  * (rate, kind).
  *
  * `base` is summed in full; the deductible `tax` (cuota) is `Σ round(filed cuota ×
- * deductible_proportion/100)` — rounded PER invoice line, then summed, never re-rounded on the monthly
- * base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`" exactness
- * rule the output side follows (#76/#66); with the default proportion 100 it collapses to `Σ` of the
- * filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
+ * deductible_proportion/10000)` — the divisor is ten thousand because the column counts whole BASIS
+ * POINTS, so a full proportion is 10000 — rounded PER invoice line, then summed, never re-rounded on
+ * the monthly base. That is the same "sum the filed per-invoice cuotas, never `round(Σ base × rate)`"
+ * exactness rule the output side follows (#76/#66); with the default full proportion it collapses to
+ * `Σ` of the filed cuotas verbatim. It spans every node in the database: one tenant per database, so no tenant
  * predicate is needed (mirrors `aggregateVatByRate`).
  *
  * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31
@@ -45,21 +52,29 @@ export async function computeInputVat(
 
   const dateFilter = periodDateFilter(sql`p.received_on`, input.year, input.period);
 
-  // `purchase_invoice_vat.base` and `.tax` count whole cents; `deductible_proportion` is a
-  // `numeric(5, 2)` percentage and did NOT move, so the product below is a numeric count of cents
-  // with a fraction, and the rounding that used to go to 2 decimal places of EUROS now goes to 0
-  // decimal places of CENTS — the same granularity (one cent) and the same rule (Postgres
-  // `round(numeric, …)` is half away from zero, matching `@waitron/shared`'s `percentOf`), so every
-  // amount this reports is the amount it reported before. It is still rounded PER invoice line and
-  // only then summed, which is the per-invoice exactness rule the output side follows.
+  // `purchase_invoice_vat.base` and `.tax` count whole cents, and `deductible_proportion` counts
+  // whole basis points — 10000 of them is the whole of the tax. The divisor below moved from 100
+  // to 10000 with the scale, so the product is the same numeric count of cents with a fraction it
+  // was before, and every amount this reports is the amount it reported before. The rounding goes
+  // to 0 decimal places of CENTS — the same granularity (one cent) and the same rule (Postgres
+  // `round(numeric, …)` is half away from zero, matching `@waitron/shared`'s `percentOf`). It is
+  // still rounded PER invoice line and only then summed, which is the per-invoice exactness rule
+  // the output side follows.
+  //
+  // The proportion is cast `::numeric` because it is an `integer` column now: `bigint * integer`
+  // is a `bigint`, and dividing that by 10000 would TRUNCATE rather than leave a fraction for
+  // `round` to decide. The cast is what keeps the whole expression in numeric arithmetic, as it
+  // was when the column itself was a `numeric`.
   //
   // Each sum is a count of whole cents read raw, cast `::text` and converted by
   // `rawCentsToDecimal` — see its doc comment. `round(numeric, 0)` renders no decimal point, so
   // the tax sum's text is a plain integer like the base's (measured on both engines, 2026-09-20).
   //
-  // The rate is grouped as `numeric(5,2)::text` so two spellings of one rate cannot split into two
-  // lines (defensive; production rates are already 2-dp literals), exactly as `aggregateVatByRate`
-  // does on the output side.
+  // The rate is grouped on the column itself. The `numeric(5,2)` cast this replaced was there so
+  // that two spellings of one rate could not split into two lines; a whole number of basis points
+  // has one spelling, so there is nothing left to normalise — the normalisation moved to
+  // `decimalToBasisPoints` on the way in. The output side still reads its rate out of a jsonb
+  // document, where two spellings ARE possible, so `aggregateVatByRate` keeps its cast.
   const { rows } = await tx.execute<{
     rate: string;
     kind: PurchaseVatKind;
@@ -67,20 +82,20 @@ export async function computeInputVat(
     tax: string;
   }>(sql`
     select
-      (v.rate)::numeric(5, 2)::text as rate,
+      v.rate::text as rate,
       v.kind as kind,
       sum(v.base)::text as base,
-      sum(round(v.tax * p.deductible_proportion / 100, 0))::text as tax
+      sum(round(v.tax * p.deductible_proportion::numeric / 10000, 0))::text as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
     where p.regime = 'general'
       and ${dateFilter}
-    group by (v.rate)::numeric(5, 2)::text, v.kind
+    group by v.rate, v.kind
   `);
 
   const lines: InputVatRateLine[] = rows
     .map((r) => ({
-      rate: decimal(r.rate),
+      rate: rawBasisPointsToDecimal(r.rate),
       base: rawCentsToDecimal(r.base),
       tax: rawCentsToDecimal(r.tax),
       kind: r.kind,

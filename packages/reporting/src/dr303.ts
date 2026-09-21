@@ -33,8 +33,9 @@ import { parsePeriodToken } from "./period.js";
  *     AEAT sede "por fichero" uploader accepts a file with página 2 absent — that can only be
  *     established by uploading a real file to the real sede — so the generated file MUST be validated
  *     once against that uploader before any live submission.
- *  2. Under prorrata (deductible_proportion < 100), the deducible BASE (casilla 28/30) is emitted in
- *     FULL and only the cuota (29/31) is scaled by the proportion (upstream, in computeInputVat).
+ *  2. Under prorrata (a `deductible_proportion` below the full 10000 basis points), the deducible
+ *     BASE (casilla 28/30) is emitted in FULL and only the cuota (29/31) is scaled by the
+ *     proportion (upstream, in computeInputVat).
  *     Whether AEAT expects the base unscaled under prorrata is NOT confirmed here; it is the documented
  *     spec §9 seam and an asesor-fiscal must confirm it before a live prorrata filing.
  *

@@ -51,14 +51,48 @@ describe("saleLineRows", () => {
       optionSnapshots: [cookedRare],
       unitName: { "en-GB": "cup" },
       unitPrecision: 0,
-      quantity: "1",
-      // The money columns hold whole cents, so the row this builds carries 300 for "3.00";
-      // `quantity` and `vatRate` are not money columns and keep their decimal literals.
+      // Every one of these columns holds a whole number, at its own scale: 1000 thousandths for
+      // the "1" quantity, 300 cents for "3.00", 1000 basis points for the "10.00" rate. The
+      // discriminating case — where a quantity and a rate could not be swapped unnoticed — is the
+      // five-gram line below.
+      quantity: 1000,
       unitPrice: 300,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: 300,
       category: "Drinks",
     });
+  });
+
+  it("counts a quantity in whole thousandths and a rate in whole basis points", () => {
+    // Five grams is the case that separates the quantity scale from the money scale: at two places
+    // 0.005 rounds to 0.01 and at three it is exactly 5 thousandths, so only 5 here shows the third
+    // place survived. The four expected numbers differ from each other and from the amounts on the
+    // same rows, so a conversion at the wrong scale for either column cannot produce this set.
+    const lines: RecordSaleLine[] = [
+      {
+        lineNo: 1,
+        name: "Jamón",
+        descriptions: { "es-ES": "Jamón" },
+        quantity: "1.5",
+        unitPrice: "20.00",
+        vatRate: "21.00",
+        lineTotal: "30.00",
+      },
+      {
+        lineNo: 2,
+        name: "Azafrán",
+        descriptions: { "es-ES": "Azafrán" },
+        quantity: "0.005",
+        unitPrice: "2000.00",
+        vatRate: "10.50",
+        lineTotal: "10.00",
+      },
+    ];
+
+    const rows = saleLineRows("sale-1", lines);
+
+    expect(rows.map((row) => row.quantity)).toEqual([1500, 5]);
+    expect(rows.map((row) => row.vatRate)).toEqual([2100, 1050]);
   });
 
   it("defaults the variant names to null and the options answers to an empty list when the line omits them", () => {
@@ -89,9 +123,9 @@ describe("saleLineRows", () => {
       optionSnapshots: [],
       unitName: null,
       unitPrecision: null,
-      quantity: "1",
+      quantity: 1000,
       unitPrice: 100,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: 100,
       category: null,
     });

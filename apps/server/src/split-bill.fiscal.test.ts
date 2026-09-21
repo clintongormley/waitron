@@ -15,9 +15,11 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
+  basisPointsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -335,7 +337,7 @@ describe("split-bill: pay each check files its own registro", () => {
       // carries NO product_id (packages/db/src/schema/sales.ts) — so partition by vat_rate (the single
       // 10% jamón line vs the three 21% agua lines), never by product. These are the REAL filed rows,
       // not a recompute of the inputs.
-      const filed = await tx
+      const filedRows = await tx
         .select({
           workingOrderId: sales.workingOrderId,
           vatRate: saleLines.vatRate,
@@ -343,6 +345,14 @@ describe("split-bill: pay each check files its own registro", () => {
         })
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId));
+      // `sale_lines.vat_rate` is a count of whole basis points and `quantity` a count of whole
+      // thousandths; both become the decimal literals the partition and the conservation sum below
+      // work in, here at the row, so neither of those reads a count.
+      const filed = filedRows.map((row) => ({
+        ...row,
+        vatRate: basisPointsToDecimal(row.vatRate),
+        quantity: thousandthsToDecimal(row.quantity),
+      }));
       const filedForOrigin = await tx
         .select({ id: sales.id })
         .from(sales)

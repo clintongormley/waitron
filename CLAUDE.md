@@ -312,6 +312,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
   scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
+  **A `/*` inside a `//` comment breaks it and blames the wrong lines** — a glob path such as
+  `drizzle/meta/` followed by `*_snapshot.json` opens a block comment as far as its scrubber is
+  concerned, which then blanks everything to the next real `*/` and reports Spanish words in
+  UNRELATED comments hundreds of lines further down. Reword the path; the reported lines are not
+  the offender.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
@@ -403,7 +408,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
   IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it,
   and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `bigserial`,
-  met on the change-log table — is in no forbidden set and passes anywhere.
+  met on the change-log table — is in no forbidden set and passes anywhere. A builder the
+  vocabulary STOPS importing would leave the set the same day, which `numeric` did; retired
+  builders are held by a hand-written list beside the derived one.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
   (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
   for a raw-SQL read of an AMOUNT, which casts the expression `::text`, never `::int` — a test
@@ -411,12 +418,27 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   amount stays the exact `Decimal`. Money held as decimal strings inside `jsonb` is not a cents
   column and is still summed as `numeric` (`packages/reporting/src/vat-summary.ts`). **Nothing
   guards the boundary itself** — a bare whole number written into a money column by raw SQL now
-  silently means CENTS (a quoted decimal still fails loudly, `22P02`). Guards, both narrower than their names:
+  silently means CENTS (a QUOTED decimal still fails loudly, `22P02`; an UNQUOTED one does not —
+  `25.00` takes PostgreSQL's assignment cast and stores 25, measured 2026-09-21). Guards, both narrower than their names:
   `packages/db/src/schema/columns.test.ts` (`money` and `bigCount` emit the SAME SQL type, so only
   its read-mode case separates them) and `packages/shared/src/conventions.test.ts` (reads
   `cents.ts` as TEXT, and nothing outside `packages/shared/src`, so a second file crossing into the
   number type is seen by nobody). Receipts:
   [conventions-data.md](docs/developers/conventions-data.md).
+- **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
+  money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`, with the same two raw-SQL
+  readers and the same `::text` rule). A blanket "every numeric becomes cents" does not EMPTY a
+  quantity, it misreads one — `decimalToCents` rounds the third place rather than dropping it, so
+  0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale.
+  A quantity is `bigint` and a rate `integer`, because the decimal columns they replace
+  differed in width. The bound each of those enforced — nine integer digits for a quantity, three
+  for a rate — moved into the converters, since an integer column takes silently what `numeric`
+  refused with a `22003`. The money rule's two guards and both its hedges apply unchanged, and
+  `quantity` emits the same SQL type as `money` and `bigCount`, so only the caller separates them.
+  A rate's CHECK constraint is the one thing that does NOT follow the column:
+  `ALTER COLUMN ... SET DATA TYPE` keeps it and casts it, so a `rate <= 100` left alone refuses
+  every rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core
+  set only.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — a replication
   apply worker skips ordinary triggers. No PRODUCT code replicates today (2026-09-19) — some test

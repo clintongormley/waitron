@@ -379,10 +379,11 @@ describe("venue service routing", () => {
         productId: ham.id,
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
-        quantity: "0.250",
+        // 250 g, counted in whole thousandths, beside a rate in whole basis points.
+        quantity: 250,
         unitPrice: 2264,
         unitPriceGross: 2490,
-        vatRate: "10.00",
+        vatRate: 1000,
         lineTotal: 623,
         category: "Cold cuts",
       });
@@ -479,10 +480,11 @@ describe("venue service routing", () => {
         productId: ham.id,
         name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
-        quantity: "0.100",
+        // 100 g, in thousandths like the line above.
+        quantity: 100,
         unitPrice: 2264,
         unitPriceGross: 2490,
-        vatRate: "10.00",
+        vatRate: 1000,
         lineTotal: 249,
         category: "Cold cuts",
       });
@@ -578,10 +580,10 @@ describe("venue service routing", () => {
         productId: sweets.id,
         name: "Loose sweets",
         descriptions: { "en-GB": "Loose sweets" },
-        quantity: "1.000",
+        quantity: 1000,
         unitPrice: 109,
         unitPriceGross: 120,
-        vatRate: "10.00",
+        vatRate: 1000,
         lineTotal: 120,
         category: "Uncategorised",
       });

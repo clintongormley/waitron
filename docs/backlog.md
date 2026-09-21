@@ -2805,6 +2805,28 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
+  (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
+  pattern that looks for a slash-star opener anywhere in the raw text, so a glob path written
+  inside an ordinary LINE comment opens one as far as the scrubber is concerned. It then blanks
+  everything up to the next real block-comment terminator — measured at about 390 lines in
+  `packages/db/src/schema/sales.test.ts` — and pairs backtick-citation blanking across that whole
+  span, which made it report three pre-existing, untouched Spanish words as fresh violations. The
+  reported lines are not the offender, which is the expensive part: the author looks where the
+  guard points. Worked around on that branch by rewording the path. Fixing it properly needs a
+  scanner that knows a comment opener inside a string or a line comment is not a comment opener,
+  which is the same care `scripts/column-vocabulary.test.ts` already documents for its own
+  comment handling. Until then the hedge is in `CLAUDE.md` §3.
+
+- **No guard holds a MODULE migration set to its declared schema — still OPEN
+  (restated 2026-09-21, task P6).** `packages/db/src/schema/schema-conformance.test.ts` builds a
+  database from the CORE migrations and compares every check expression with the drizzle schema's;
+  it named both of P6's stale quantity checks immediately. The module sets have nothing equivalent,
+  which is why #475 had to find nine instances by hand. P6 got away with a one-off probe —
+  `workforce-es`'s only scaled column has no default and appears in none of its table's
+  constraints, established by applying the migrations and reading `pg_get_constraintdef` back — but
+  a probe is not a guard and the next type change will need the same by hand.
+
 - **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
   `scripts/` when it arrived in #407, which was recorded at the time as a real gap rather than a
   reasoned exemption: 22 of the 48 main Vitest configs under `packages/` and `apps/` (three more are suffixed) set no `testTimeout`
@@ -3074,6 +3096,49 @@ image constraints under *Detail → Box image*.
 
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
+
+**A blank amount posted at the purchase-invoice routes is stored as a zero — OPEN (found
+2026-09-21, task P6).** Nothing on the path screens these strings through `@waitron/shared`'s
+`decimal()`. `apps/server/src/purchasing-api.ts` takes each amount through `requireString`, which
+checks `typeof` and nothing else, and then casts it `as Decimal`. Measured in `packages/shared` on
+2026-09-21: `compareDecimal`, `decimalToCents` and `decimalToBasisPoints` all return **0** for `""`
+and for `"  "`, and all three throw a bare `SyntaxError` ("Cannot convert 121,00 to a BigInt") for a
+Spanish comma-decimal or letters. So `validateLines` compares a blank against zero, passes it, and
+the row is stored with zeros; a comma-decimal becomes an opaque 500 the route cannot classify. These
+rows are the deductible (IVA soportado) side of modelo 303, so the quiet case is a wrong return with
+nothing red. The only thing refusing a blank today is the dashboard's own `DECIMAL` regex in
+`apps/dashboard/src/widgets/purchase-form.ts`; a direct POST walks past it. **The fix is one line
+deep:** `decimal(...)` in place of each `as Decimal` cast, with `shared.invalid_decimal` mapped to a
+400 — write the failing test first (a POST with `base: ""` must not store a row).
+`apps/server/src/catalogue-api.ts`'s `unitPrice` takes the same unscreened posture and deserves the
+same pass. Not fixed in P6 because it is outside that task's plan, and the loud half was already
+gone before it: #475 made `base`/`tax`/`total` count cents, and P6 widened the silence to `rate` and
+`deductible_proportion`.
+
+**The PGlite throughput bench no longer matches the shape it says it matches — OPEN (found
+2026-09-21, task P6).** `bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
+match" of the write path, and its `create table` statements are three landed storage decisions
+behind: `quantity numeric(12, 3)` and `total`/`unit_price`/`line_total numeric(12, 2)` where the
+real columns are now whole-number counts (#475 and task P6), and a `tenant_id` column the real
+schema no longer has (2026-09-14). Writing a `numeric` is not the same cost as writing a `bigint`,
+so the numbers it produces are about a schema nothing runs. Nobody swept it because it is neither
+`packages/` nor `apps/` — which is the path-set hedge `CLAUDE.md` §1 already carries, hit again.
+Either bring the three decisions across and re-baseline, or change the sentence to say what it is.
+
+**The two storage codecs are a copy of each other — OPEN (found 2026-09-21, task P6).**
+`packages/shared/src/cents.ts` and `packages/shared/src/scales.ts` between them hold every crossing
+between a scaled-integer column and the exact decimal type, and their PRIVATE bodies are the same
+code twice: the sign-strip/`BigInt` block, the `padStart` rendering block, and a raw-text pattern
+that is character-for-character identical. `scales.ts` already parameterises its own by scale, so
+`cents.ts` could call the same two helpers while every public name in both files stays exactly where
+it is — and they are worth keeping separate, which `scales.test.ts` pins well. The merge is NOT purely mechanical, which is why it
+was left: `rawCentsToDecimal` bounds with `Number.isSafeInteger` while `scales.ts`'s `rawCount`
+bounds on a digit count, and for money those two disagree — the digit count stops at 10^14 (twelve
+integer digits, exactly `assertMoney`'s bound) while `Number.isSafeInteger` lets through
+9007199254740991, about ninety times more. So the digit count is the TIGHTER of the two, and
+`rawCentsToDecimal("123456789012345")` returns `1234567890123.45` today, an amount `assertMoney`
+refuses with `shared.decimal_overflow` (both measured 2026-09-21). Merging them tightens money's
+raw bound, which is a decision to take deliberately, not a deletion.
 
 **Left behind by the TypeScript 7 upgrade (#460, 2026-09-20).** Two follow-ups.
 
@@ -4247,7 +4312,8 @@ column NAME and the 2026-07-22 workforce design said percentage, while two comme
 and its paraphrase on `WorkTimeRuleset.nightPremiumPct`) said fraction. The comments were the wrong
 ones and are corrected. No schema change: `rate()` is `numeric(5, 2)`, which holds a half-point
 premium (`12.50`) exactly — the representability worry (a fraction in `numeric(5, 2)` cannot express
-12.5%, storing `0.13`) only ever arose under the fraction reading, now retired. Nothing computes with
+12.5%, storing `0.13`) only ever arose under the fraction reading, now retired. (That column type is
+itself retired as of P6, 2026-09-21: it counts whole basis points, and 12.50% is 1250.) Nothing computes with
 the value yet, which is why it was cheap to settle now and would have been expensive once a venue had
 written a row. P6 (rates to basis points) now treats it like the other percentage rate columns.
 

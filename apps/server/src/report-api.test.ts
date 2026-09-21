@@ -13,7 +13,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { addDecimal, decimal, decimalToCents } from "@waitron/shared";
+import { addDecimal, decimal, decimalToBasisPoints, decimalToCents } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -109,14 +109,15 @@ async function seedPurchase(db: Database): Promise<void> {
       supplierInvoiceNumber: "2026/501",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-05",
-      // `total`, `base` and `tax` all store a count of whole cents; `rate` is not a money column.
+      // `total`, `base` and `tax` all store a count of whole cents; `rate` below is a whole number
+      // at its OWN scale, a count of basis points, so it gets its own converter.
       total: decimalToCents(decimal("121.00")),
       regime: "general",
     })
     .returning({ id: purchaseInvoices.id });
   await db.insert(purchaseInvoiceVat).values({
     purchaseInvoiceId: row!.id,
-    rate: "21.00",
+    rate: decimalToBasisPoints(decimal("21.00")),
     base: decimalToCents(decimal("100.00")),
     tax: decimalToCents(decimal("21.00")),
     kind: "ordinary",

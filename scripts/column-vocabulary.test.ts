@@ -195,9 +195,28 @@ function importedFromPgCore(text: string): string[] {
   return names;
 }
 
-/** What the vocabulary itself takes from the engine — the rule, read from the vocabulary. */
+/**
+ * Builders the vocabulary once imported and does not any more.
+ *
+ * The derived set has one failure mode, and it is the quiet one: when the vocabulary stops using a
+ * builder, that builder leaves the forbidden set, so it becomes legal in every table file on the
+ * same day it stops being used in the vocabulary. `numeric` is the first name that happened to —
+ * the `quantity` and `rate` helpers were the last decimal columns in the tree, and task P6 turned
+ * both into integers. A decimal column is still exactly what the SQLite switch has no equivalent
+ * for, so the name is kept forbidden by hand.
+ *
+ * This list GROWS as builders are retired, where `ALLOWED` above only shrinks. It cannot cover the
+ * names the vocabulary never imported at all — `bigserial` is the standing example, and root
+ * `CLAUDE.md` §3 states that gap.
+ */
+const RETIRED: ReadonlySet<string> = new Set(["numeric"]);
+
+/** What the vocabulary takes from the engine, plus what it has taken in the past. */
 function engineNames(): Set<string> {
-  return new Set(importedFromPgCore(readFileSync(join(repoRoot, VOCABULARY), "utf8")));
+  return new Set([
+    ...importedFromPgCore(readFileSync(join(repoRoot, VOCABULARY), "utf8")),
+    ...RETIRED,
+  ]);
 }
 
 /**
@@ -236,6 +255,30 @@ describe("the column vocabulary is the only place the engine's column and table 
     for (const root of ROOTS) {
       expect(files.some((file) => file.startsWith(`${root}/`))).toBe(true);
     }
+  });
+
+  it("still forbids a builder the vocabulary has stopped importing", () => {
+    // A set derived from the vocabulary's imports alone shrinks when the vocabulary stops using a
+    // builder, and the builder becomes legal everywhere on the same day it stops being used
+    // anywhere. `numeric` is the first one that happened to: the quantity and rate helpers were
+    // the last decimal columns, and when they became integers the import went with them.
+    expect(engineNames().has("numeric")).toBe(true);
+  });
+
+  it("rejects a decimal column written the way the retired ones were", () => {
+    // The case above can only go red if the `RETIRED` literal itself goes, because it asks
+    // `engineNames()` for the very name that constant puts there. This one runs a real IMPORT of
+    // `numeric` — the builder the quantity column used until task P6 — through the same function
+    // the tree-wide check at the top of this block uses, so it is the case that goes red if
+    // `numeric` ever becomes legal again in a table file. It is the import line that is checked:
+    // `offendingImports` never looks at the declaration below it, which is there to show what the
+    // import was for.
+    const fixture = [
+      `import { numeric } from "drizzle-orm/pg-core";`,
+      `export const qty = numeric("qty", { precision: 12, scale: 3 });`,
+    ].join("\n");
+    const file = "packages/x/src/schema/x.ts";
+    expect(offendingImports(file, fixture, engineNames())).toEqual([`${file} imports numeric`]);
   });
 
   it("the one allowance is still earned", () => {

@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, decimalToCents } from "@waitron/shared";
+import {
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+  decimalToThousandths,
+} from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
@@ -89,8 +94,12 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   // The DaySeed figures are the AMOUNTS the route's response carries, and the assertions read them
   // unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price` and
   // `sale_lines.line_total` all store a count of whole cents, so each is converted on the way into
-  // the row; `vat_breakdown` is jsonb, and `quantity`/`vat_rate` are not money columns.
+  // the row. `vat_breakdown` is jsonb and keeps its decimal literals; `sale_lines.quantity` and
+  // `sale_lines.vat_rate` are whole numbers too, at their own scales — a count of thousandths and a
+  // count of basis points — so each gets its own converter here.
   const cents = (value: string): number => decimalToCents(decimal(value));
+  const thousandths = (value: string): number => decimalToThousandths(decimal(value));
+  const basisPoints = (value: string): number => decimalToBasisPoints(decimal(value));
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
       till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
@@ -109,7 +118,8 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
       (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
     values (${saleId}, 1, ${d.line.name},
             ${JSON.stringify(d.line.descriptions)}::jsonb,
-            ${d.line.quantity}, ${cents("3.50")}, ${d.rate}, ${cents(d.line.total)})`);
+            ${thousandths(d.line.quantity)}, ${cents("3.50")}, ${basisPoints(d.rate)},
+            ${cents(d.line.total)})`);
 }
 
 const suite = useVenueDb({

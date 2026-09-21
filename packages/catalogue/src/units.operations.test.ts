@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { decimal, decimalToThousandths } from "@waitron/shared";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -189,11 +190,17 @@ describe("unit operations", () => {
     });
   });
 
-  it("rejects excess precision before numeric(12,3) can round it", async () => {
+  it("rejects excess precision before anything downstream can round it", async () => {
+    // The rounding this guards against used to belong to the column, a `numeric(12, 3)`. The column
+    // counts whole thousandths now, so the rounding moved to `decimalToThousandths` — and the two
+    // agree, which is why the storage change did not move this boundary. The SQL cast stays as the
+    // control for the half it used to be: both readings round 1.2345 to three places the same way,
+    // half away from zero.
     const rounded = await suite.db.execute<{ value: string }>(
       sql`select 1.2345::numeric(12,3)::text as value`,
     );
     expect(rounded.rows).toEqual([{ value: "1.235" }]);
+    expect(decimalToThousandths(decimal("1.2345"))).toBe(1235);
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );

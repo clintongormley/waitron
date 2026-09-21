@@ -64,7 +64,9 @@ export interface LockedLine {
   grossUnitPrice: string;
   /** The stored quantity, validated against the snapshotted unit precision. */
   quantity: string;
-  /** The stored `working_order_lines.vat_rate`, a percentage literal e.g. "21.00" meaning 21%. */
+  /** The rate locked onto `working_order_lines.vat_rate` at add-time, as a percentage literal
+   * e.g. "21.00" meaning 21%. The column counts basis points; the caller reading the row converts,
+   * so nothing in this file sees the count. */
   vatRate: string;
   /** The staff-facing name snapshotted at add-time; copied onto the sale line's `name` verbatim. */
   name: string;

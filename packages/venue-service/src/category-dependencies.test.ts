@@ -76,15 +76,29 @@ it("an open order keeps its copied category label after the category is deleted"
       insert into working_orders (till_id, order_number, label) values (${till.rows[0]!.id}, 1, 'Historical') returning id
     `);
     await tx.execute(sql`
-      insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, category) values (${order.rows[0]!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}'::jsonb, 1,
-         2, 2, 10, 2, 'Bakery')
+      insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, category) values (${order.rows[0]!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}'::jsonb, 1000,
+         200, 200, 1000, 200, 'Bakery')
     `);
 
     await deleteCategory(tx, category.id);
-    const snapshot = await tx.execute<{ category: string | null }>(sql`
-      select category from working_order_lines where working_order_id = ${order.rows[0]!.id}
+    // The counts come back beside the snapshot this case is about, because every number in the
+    // insert above is a count at its own scale and the columns refuse none of the wrong ones:
+    // one loaf is 1000 thousandths, 10.00% is 1000 basis points, and the 2.00 the product was
+    // priced at is 200 cents. Written as `1` and `10` this case still passed, measured by doing
+    // exactly that.
+    const snapshot = await tx.execute<{
+      category: string | null;
+      quantity: string;
+      vat_rate: string;
+      line_total: string;
+    }>(sql`
+      select category, quantity::text as quantity, vat_rate::text as vat_rate,
+             line_total::text as line_total
+        from working_order_lines where working_order_id = ${order.rows[0]!.id}
     `);
-    expect(snapshot.rows).toEqual([{ category: "Bakery" }]);
+    expect(snapshot.rows).toEqual([
+      { category: "Bakery", quantity: "1000", vat_rate: "1000", line_total: "200" },
+    ]);
   });
 });
 

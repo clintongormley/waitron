@@ -70,8 +70,9 @@ export const convenioConfig = table(
     nightWindowEndMinute: count("night_window_end_minute").notNull().default(360),
 
     // Provincial premiums (plan §3.2) — asesor-blocked, default null so no figure is ever invented.
-    /** plus de nocturnidad, as a PERCENTAGE (e.g. 25.00 = 25%); null until the convenio's figure is
-     * known. */
+    /** plus de nocturnidad, a PERCENTAGE and not a fraction — 25% is twenty-five, not 0.25 (owner,
+     * 2026-09-18) — which `rate` stores as its count of whole basis points, so 25% is the number
+     * 2500. Null until the convenio's figure is known. */
     nightPremiumPct: rate("night_premium_pct"),
     /** plus de turno partido, per-day amount in tenant currency; null until known. */
     splitShiftPremium: money("split_shift_premium"),

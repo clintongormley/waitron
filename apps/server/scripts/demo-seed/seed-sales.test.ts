@@ -326,7 +326,9 @@ describe("seedSales", () => {
     for (const child of children) {
       const desc = child.descriptions[invoiceLocale];
       expect(OPTION_NAMES.has(desc as string)).toBe(true);
-      expect(child.vatRate).toBe(desc === "Extra shot" ? "10.00" : "21.00");
+      // `sale_lines.vat_rate` is read straight off the column, so it is a count of whole basis
+      // points: 1000 is the reduced 10% and 2100 the general 21%.
+      expect(child.vatRate).toBe(desc === "Extra shot" ? 1000 : 2100);
     }
 
     // Every child's parent id resolves to a real top-level line in the SAME sale (proper linkage, not

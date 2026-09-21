@@ -2878,7 +2878,7 @@ describe("till-app", () => {
 
     const store = c.store;
     expect(store.lines).toHaveLength(2);
-    // each: numeric(_,3) "2.000" is cleaned to "2" for display; re-pricing is unaffected
+    // each: the three-place "2.000" is cleaned to "2" for display; re-pricing is unaffected
     expect(store.lines[0]!.quantity).toBe("2");
     // weight: decimals are kept verbatim
     expect(store.lines[1]!.quantity).toBe("0.320");

@@ -94,9 +94,11 @@ async function recordCompleteSale(
       lineNo: 1,
       name: "Café solo",
       descriptions: { es: "Café solo", ca: "Cafè sol" },
-      quantity: "1.000",
+      // One unit and a 10.00% rate, counted in whole thousandths and whole basis points
+      // (`quantity()` and `rate()` in packages/db/src/schema/columns.ts).
+      quantity: 1000,
       unitPrice: 100,
-      vatRate: "10.00",
+      vatRate: 1000,
       lineTotal: 100,
     });
     await tx.insert(tenders).values(
@@ -228,9 +230,9 @@ describeEachTarget("sales — the commercial record", (target) => {
           // package's own English-only build. "Café solo"/"Cafè sol" is the
           // placeholder description this file already uses elsewhere.
           descriptions: { es: "Café solo", ca: "Cafè sol" },
-          quantity: "1.000",
+          quantity: 1000,
           unitPrice: amount,
-          vatRate: "10.00",
+          vatRate: 1000,
           lineTotal: amount,
         })),
       );
@@ -250,13 +252,22 @@ describeEachTarget("sales — the commercial record", (target) => {
     expect(summed.total).toBe("100");
   });
 
-  it("returns money as JS numbers and the numeric columns beside it as strings", async () => {
-    // Two halves of one contract. Money is an integer count of cents, so it arrives as a JS
-    // number and no value passes through binary64 at all. `quantity` and `vat_rate` on the same
-    // row are still numeric, which node-postgres renders as a STRING precisely so they do not:
-    // a registered type parser that "helpfully" converts those to Number would reintroduce the
-    // drift with nothing else changing. Before the money columns became integers, the money
-    // columns were what carried that second half.
+  it("returns money and the two scaled counts beside it as JS numbers", async () => {
+    // Three scales, one read mapping. Money counts whole cents, a quantity whole thousandths and
+    // a rate whole basis points, and every one arrives from the driver as a JS number — so a
+    // column that slipped back to `numeric`, which the driver renders as a STRING, fails here.
+    // That is the same rendering the two line assertions below relied on before this change,
+    // when they read the other way round.
+    //
+    // The second half this test used to carry has nowhere left to live. It said that `quantity`
+    // and `vat_rate` arrived as STRINGS because a decimal rendered as text is a decimal that
+    // never passed through a float — and scanned on 2026-09-21, no column in any package's latest
+    // snapshot under `drizzle/meta` is `numeric`, `double precision` or `real` any more. That
+    // reading is of drizzle's GENERATED snapshots, so a column added by hand-written migration
+    // SQL alone would not appear in it. What keeps a count exact now is the integer-digit bound
+    // its converter enforces on the way in (`packages/shared/src/scales.ts` and `cents.ts`),
+    // which holds every stored count inside the integers a double represents exactly. A raw-SQL
+    // write goes around those converters, and nothing checks that.
     const id = await recordCompleteSale(db, {}, [{ method: "card", amount: 150, tipAmount: 50 }]);
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
     expect(typeof row.total).toBe("number");
@@ -265,10 +276,10 @@ describeEachTarget("sales — the commercial record", (target) => {
     const [tender] = await db.select().from(tenders).where(eq(tenders.saleId, id));
     expect(typeof tender.amount).toBe("number");
     expect(typeof tender.tipAmount).toBe("number");
-    // The numeric columns on the sale line, which is where the no-binary64 rule now lives.
+    // The two non-money scales on the sale line, each read through its own column helper.
     const [line] = await db.select().from(saleLines).where(eq(saleLines.saleId, id));
-    expect(typeof line.quantity).toBe("string");
-    expect(typeof line.vatRate).toBe("string");
+    expect(typeof line.quantity).toBe("number");
+    expect(typeof line.vatRate).toBe("number");
   });
 
   it("stores issued_at with its offset alongside", async () => {
@@ -811,8 +822,8 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', 100,
-             '10.00', 100, ${opts.parentLineId}
+      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, 1000, 100,
+             1000, 100, ${opts.parentLineId}
            ) returning id`,
     );
   }
@@ -820,11 +831,18 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
   it("links a child line to its parent line", async () => {
     const [parent] = await db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
     const [child] = await insertLine({ saleId, lineNo: 2, parentLineId: parent.id });
-    const [row] = await rows<{ parent_line_id: string }>(
+    const [row] = await rows<{ parent_line_id: string; quantity: string; vat_rate: string }>(
       db,
-      sql`select parent_line_id from sale_lines where id = ${child.id}::uuid`,
+      // The counts are read back so the raw helper above is pinned: a quantity of one written as
+      // `1` stores one thousandth and a 10.00% rate written as `10` a hundredth of a percent,
+      // and `sale_lines_quantity_ck` and `sale_lines_vat_rate_ck` (sales.ts) refuse neither. Cast
+      // to text so the assertion does not turn on how the driver renders each integer width.
+      sql`select parent_line_id, quantity::text as quantity, vat_rate::text as vat_rate
+            from sale_lines where id = ${child.id}::uuid`,
     );
     expect(row.parent_line_id).toBe(parent.id);
+    expect(row.quantity).toBe("1000");
+    expect(row.vat_rate).toBe("1000");
   });
 
   it("leaves parent_line_id null on a top-level line", async () => {

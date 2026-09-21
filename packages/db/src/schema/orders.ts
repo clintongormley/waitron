@@ -194,7 +194,10 @@ export const workingOrderLines = table(
     ),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
-    check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 100`),
+    // 10000 basis points is 100%. `ALTER COLUMN ... SET DATA TYPE` keeps a check and casts it, so
+    // the bound had to be re-derived in the same migration that changed the type — left at 100 it
+    // would refuse every rate above one percent.
+    check("working_order_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 10000`),
     check("working_order_lines_line_no_ck", sql`${t.lineNo} >= 1`),
   ],
 );
