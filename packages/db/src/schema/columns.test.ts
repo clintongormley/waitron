@@ -78,8 +78,13 @@ describe("the column vocabulary emits today's PostgreSQL types", () => {
     // rather than four because the money bound stated elsewhere is twelve integer digits, which
     // a four-byte column cannot hold (see the helper's own comment for the measurement).
     expect(c.amount.getSQLType()).toBe("bigint");
-    expect(c.qty.getSQLType()).toBe("numeric(12, 3)");
-    expect(c.vat.getSQLType()).toBe("numeric(5, 2)");
+    // A quantity is a count of whole thousandths and a rate a count of whole basis points, for
+    // the same reason money is a count of cents. Their WIDTHS differ, and that is not decoration:
+    // the quantity column's old numeric(12, 3) admitted 999999999.999, which is 999999999999
+    // thousandths and past a four-byte integer, while the rate column's numeric(5, 2) admitted
+    // 999.99, which is 99999 basis points and fits one.
+    expect(c.qty.getSQLType()).toBe("bigint");
+    expect(c.vat.getSQLType()).toBe("integer");
     expect(c.kind.getSQLType()).toBe("text");
     expect(c.on.getSQLType()).toBe("boolean");
     expect(c.name.getSQLType()).toBe("text");

@@ -22,6 +22,13 @@
       "when": 1789930582739,
       "tag": "0002_money_in_cents",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789960020259,
+      "tag": "0003_scaled_integers",
+      "breakpoints": true
     }
   ]
 }

@@ -6,7 +6,6 @@ import {
   date,
   integer,
   jsonb,
-  numeric,
   pgTable,
   smallint,
   text,
@@ -85,11 +84,41 @@ export const json = <T>(name: string) => jsonb(name).$type<T>();
  */
 export const money = (name: string) => bigint(name, { mode: "number" });
 
-/** A quantity: three decimal places, so 0.005 kg is representable. */
-export const quantity = (name: string) => numeric(name, { precision: 12, scale: 3 });
+/**
+ * A quantity, counted in whole thousandths: 1.5 kg is the number 1500, and 5 grams is 5.
+ *
+ * An integer for the same reason `money` above is one, and a SEPARATE scale for a reason of its
+ * own: a quantity carries three decimal places, so reading one at the money scale turns 0.005 kg
+ * into nothing. The conversions are named after the scale — `decimalToThousandths` and
+ * `thousandthsToDecimal` in `@waitron/shared`'s scales module — so a call site cannot reach for
+ * the money pair by autocomplete.
+ *
+ * EIGHT bytes, and unlike `rate` below that is not arbitrary. The decimal column this replaces was
+ * `numeric(12, 3)`, whose widest value is 999999999.999 — 999999999999 thousandths, past the
+ * 2147483647 an `integer` holds (the measurement is in `money`'s comment above). The nine-integer-
+ * digit bound the old column enforced now lives in the converter, as
+ * `MAX_QUANTITY_INTEGER_DIGITS`.
+ *
+ * This emits the same SQL type as `money` and `bigCount`, so picking the wrong one of the three is
+ * invisible to the generated schema and to any migration diff — the same trap `ts`/`tsString`
+ * carries, and the reason those three are asserted together in `columns.test.ts`. What separates
+ * them is what a caller does with the number, which nothing checks.
+ */
+export const quantity = (name: string) => bigint(name, { mode: "number" });
 
-/** A percentage rate: two decimal places, e.g. a 21.00 VAT rate. */
-export const rate = (name: string) => numeric(name, { precision: 5, scale: 2 });
+/**
+ * A percentage rate, counted in whole basis points: a 21.00% VAT rate is the number 2100.
+ *
+ * FOUR bytes, where `quantity` above needs eight: the decimal column this replaces was
+ * `numeric(5, 2)`, whose widest value is 999.99, and that is 99999 basis points. The three-
+ * integer-digit bound moves to the converter as `MAX_RATE_INTEGER_DIGITS`.
+ *
+ * A check constraint written against the decimal form does NOT follow the column across.
+ * `ALTER COLUMN ... SET DATA TYPE` keeps the constraint and casts it, so a `rate <= 100` left
+ * alone would refuse every rate above one percent. The four such constraints in the tree are
+ * re-derived against 10000 in the same migration that changes the type.
+ */
+export const rate = (name: string) => integer(name);
 
 /**
  * A closed vocabulary: a text column whose permitted values are listed in a `check()` constraint.

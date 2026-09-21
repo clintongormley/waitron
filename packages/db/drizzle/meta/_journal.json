@@ -330,6 +330,20 @@
       "when": 1789947646337,
       "tag": "0046_change_log_grants_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1789960008904,
+      "tag": "0047_scaled_integers",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789960048043,
+      "tag": "0048_scaled_integers_sql",
+      "breakpoints": true
     }
   ]
 }

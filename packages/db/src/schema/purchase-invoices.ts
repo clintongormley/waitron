@@ -56,10 +56,10 @@ export const purchaseInvoices = table(
     // Gross total, in the venue's currency (one currency — no currency column, spec §D7).
     total: money("total").notNull(),
     regime: purchaseRegime("regime").notNull().default("general"),
-    // The prorrata / partial-deductibility seam (spec §9): the percentage of the input VAT that is
-    // deductible, 0–100, default 100 (fully deductible). The RULE that sets it below 100 is
-    // asesor-driven and out of scope; this column is only the seam.
-    deductibleProportion: rate("deductible_proportion").notNull().default("100.00"),
+    // The prorrata / partial-deductibility seam (spec §9): the share of the input VAT that is
+    // deductible, in basis points — 0 to 10000, default 10000 (fully deductible). The RULE that
+    // sets it below the whole is asesor-driven and out of scope; this column is only the seam.
+    deductibleProportion: rate("deductible_proportion").notNull().default(10000),
     note: label("note"),
     createdAt: ts("created_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
@@ -76,7 +76,7 @@ export const purchaseInvoices = table(
     index("purchase_invoices_tenant_received_idx").on(t.receivedOn),
     check(
       "purchase_invoices_deductible_proportion_ck",
-      sql`${t.deductibleProportion} >= 0 and ${t.deductibleProportion} <= 100`,
+      sql`${t.deductibleProportion} >= 0 and ${t.deductibleProportion} <= 10000`,
     ),
   ],
 );
@@ -95,7 +95,7 @@ export const purchaseInvoiceVat = table(
   {
     id: id("id").primaryKey().defaultRandom(),
     purchaseInvoiceId: id("purchase_invoice_id").notNull(),
-    // The VAT percentage as stored, e.g. "21.00".
+    // The VAT rate, in basis points: 2100 is 21%.
     rate: rate("rate").notNull(),
     // Taxable base (base imponible).
     base: money("base").notNull(),
@@ -110,6 +110,7 @@ export const purchaseInvoiceVat = table(
       name: "purchase_invoice_vat_invoice_fk",
     }).onDelete("cascade"),
     index("purchase_invoice_vat_invoice_idx").on(t.purchaseInvoiceId),
-    check("purchase_invoice_vat_rate_ck", sql`${t.rate} >= 0 and ${t.rate} <= 100`),
+    // 10000 basis points is 100%; see the twin on `working_order_lines` for why it was re-derived.
+    check("purchase_invoice_vat_rate_ck", sql`${t.rate} >= 0 and ${t.rate} <= 10000`),
   ],
 );
