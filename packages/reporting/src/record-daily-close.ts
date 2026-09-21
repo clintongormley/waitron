@@ -118,8 +118,9 @@ export async function recordDailyClose(
 
 /**
  * The table and columns a second close of the same day collides on: `daily_closes_business_day_key`,
- * declared `UNIQUE("node_id","business_day")` in `packages/db/drizzle/0033_drop_tenant_id.sql:236`
- * (the baseline's three-column version, which still carried `tenant_id`, was dropped at `:17`).
+ * declared `UNIQUE("node_id","business_day")` in migration `0033` line 236, in `packages/db/drizzle/`
+ * (the baseline's three-column version, which carried the retired tenant column, was dropped
+ * at line 17 of the same file).
  * Its sibling `daily_closes_sequence_key` differs in the second column alone.
  */
 const BUSINESS_DAY_KEY: ConstraintTarget = {

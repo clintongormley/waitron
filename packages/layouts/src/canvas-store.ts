@@ -33,11 +33,11 @@ import { validateCanvas } from "./validate-canvas.js";
 const RESTRICT_VIOLATION = "23001";
 
 /** `canvases_tenant_name_key`: UNIQUE (name) on canvases,
- * `packages/db/drizzle/0033_drop_tenant_id.sql:229`. */
+ * migration `0033` line 229, in `packages/db/drizzle/`. */
 const CANVAS_NAME = { table: "canvases", columns: ["name"] } as const;
 
 /** What a delete refused by `device_profiles_canvas_fk` reports — device_profiles.canvas_id →
- * canvases.id ON DELETE RESTRICT, `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:36`. The
+ * canvases.id ON DELETE RESTRICT, migration `0034` line 36, in `packages/db/drizzle/`. The
  * REFERENCING table paired with the REFERENCED table's key columns, which is how PostgreSQL reports
  * a restrict_violation (measured 2026-09-21; the refusal itself is driven in
  * `canvas-store.pg.test.ts`). Not the same target as that FK's 23503, which names `canvas_id`. */

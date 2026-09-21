@@ -86,17 +86,17 @@ const FOREIGN_KEY_VIOLATION = "23503";
 const RESTRICT_VIOLATION = "23001";
 
 /** `device_profiles_tenant_name_key`: UNIQUE (name) on device_profiles,
- * `packages/db/drizzle/0033_drop_tenant_id.sql:230`. */
+ * migration `0033` line 230, in `packages/db/drizzle/`. */
 const PROFILE_NAME = { table: "device_profiles", columns: ["name"] } as const;
 
 /** What a `canvas_id` naming no canvas reports — the referencing column of
- * `device_profiles_canvas_fk`, `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:36`. It is the
+ * `device_profiles_canvas_fk`, migration `0034` line 36, in `packages/db/drizzle/`. It is the
  * only foreign key a client value can trip on these writes. */
 const PROFILE_CANVAS_REF = { table: "device_profiles", columns: ["canvas_id"] } as const;
 
 /** What a delete refused by `devices_device_profile_fk` reports — devices.device_profile_id →
  * device_profiles.id ON DELETE RESTRICT,
- * `packages/db/drizzle/0034_drop_tenant_id_after_sql.sql:32`. The REFERENCING table paired with the
+ * migration `0034` line 32, in `packages/db/drizzle/`. The REFERENCING table paired with the
  * REFERENCED table's key columns, which is how PostgreSQL reports a restrict_violation (measured
  * 2026-09-21; the refusal itself is driven in `device-profile-store.pg.test.ts`). `devices` is the
  * ONLY table that references a profile. */
