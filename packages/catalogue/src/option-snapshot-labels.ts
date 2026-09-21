@@ -107,11 +107,17 @@ export function customerOptionSnapshotLabels(
  * builders above.
  *
  * Like {@link optionSnapshotLabels} it takes no locale and calls no resolver, and for the same
- * reason: a staff map holds one entry, so any value in it is the name. `buildLineExtras`
- * (`apps/server/src/modifier-selection.ts`) is the only place an `OptionSnapshot` is built, and it
- * writes `listName: { [defaultLanguage]: list.name }` from a plain `string` — checked by grepping
- * every non-test `listName:` under `apps/` and `packages/`, which finds that one line and the type
- * declaration in `packages/shared/src/option-selection.ts`.
+ * reason: a staff map holds one entry, so any value in it is the name.
+ *
+ * TWO places build an `OptionSnapshot`, and each writes exactly one entry from a plain `string`:
+ * `buildLineExtras` (`apps/server/src/modifier-selection.ts`) on the order path, under the venue's
+ * default content language, and `#selectedSnapshots`
+ * (`apps/till/src/widgets/modifier-picker.ts`) at the till, under the content language the browser
+ * resolved, so the basket draws a just-answered line through this same reader. Re-checked by
+ * grepping every non-test `listName:` under `apps/` and `packages/`, which returns those two
+ * builders, the type declaration in `packages/shared/src/option-selection.ts`, and prose in this
+ * docblock and in `apps/till/src/state/held-options.ts`. Each key is whichever language ITS builder
+ * resolved, which is why every reader here takes the map's VALUE and never its key.
  */
 export function staffOptionSnapshotLabels(snapshots: readonly OptionSnapshot[]): string[] {
   const side = (staffNames: Record<string, string>) => Object.values(staffNames)[0] ?? "";

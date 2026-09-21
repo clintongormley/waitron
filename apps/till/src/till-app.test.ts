@@ -2218,8 +2218,127 @@ describe("till-app", () => {
 
     const line = counter.store.lines[0]!;
     expect(line.optionSnapshots).toEqual([snapshot]);
-    // The frozen answer names no list and no label, so there is nothing to put back on the wire.
+    // This dish offers no options list today (`cafe` carries no `offeredModifiers`), so there is no
+    // list for the frozen wording to be matched back to and the wire carries no answer. A dish that
+    // still offers the list is the next case.
     expect(line.options).toBeUndefined();
+  });
+
+  // A frozen answer carries six names and no ids (spec §2.3), so a retrieved line re-derives the
+  // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
+  // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
+  // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §4).
+  const puntoList = {
+    kind: "options" as const,
+    id: "list-punto",
+    name: "Punto",
+    customerName: { es: "¿Cómo lo quiere?" },
+    kitchenName: "PTO",
+    defaultLabelId: null,
+    labels: [
+      {
+        id: "label-rare",
+        name: "Poco hecho",
+        customerName: { es: "Poco hecho para el cliente" },
+        kitchenName: "PH",
+        available: true,
+      },
+      {
+        id: "label-medium",
+        name: "Al punto",
+        customerName: { es: "Al punto para el cliente" },
+        kitchenName: "AP",
+        available: true,
+      },
+    ],
+  };
+
+  /** The answer as the server froze it: the list's three names and the chosen label's three. */
+  const frozenPunto = {
+    listName: { es: "Punto" },
+    listCustomerName: { es: "¿Cómo lo quiere?" },
+    listKitchenName: "PTO",
+    labelName: { es: "Al punto" },
+    labelCustomerName: { es: "Al punto para el cliente" },
+    labelKitchenName: "AP",
+  };
+
+  /** A retrieved order whose one line froze `answer` against a dish offering `puntoList`. */
+  function answeredOrder(answer: Record<string, unknown>) {
+    return {
+      id: "wo-answered",
+      orderNumber: 11,
+      label: "Mesa 2",
+      lines: [
+        {
+          workingOrderLineId: "line-answered",
+          menuItemId: "menu-item-cafe-0",
+          productId: "cafe",
+          quantity: "2.000",
+          product: cafe,
+          optionSnapshots: [answer],
+        },
+      ],
+    };
+  }
+
+  it("re-sends a retrieved line's options answer, matched to the list its dish still offers", async () => {
+    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(frozenPunto)),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    expect(counter.store.lines[0]!.options).toEqual([
+      { listId: "list-punto", labelId: "label-medium" },
+    ]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("held.options_changed"));
+
+    // Without that answer on the wire the server refuses the whole edit with
+    // `options.label_required` — pinned by "refuses a quantity-only edit that names no answer for an
+    // active options list" (`apps/server/src/working-order.test.ts`).
+    counter.store.setLineQuantity(0, "3");
+    await el.updateComplete;
+    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
+      label: "Mesa 2",
+      lines: [
+        {
+          workingOrderLineId: "line-answered",
+          productId: "cafe",
+          quantity: "3",
+          options: [{ listId: "list-punto", labelId: "label-medium" }],
+        },
+      ],
+    });
+  });
+
+  it("tells the operator when a still-offered list's frozen answer no longer matches it", async () => {
+    // The label was renamed between the park and the retrieve, so the six frozen names name nothing
+    // on offer. Substituting the list's default would change what the diner asked for on a line
+    // about to be billed, so the answer is left off and the operator is told to choose again.
+    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValue(answeredOrder({ ...frozenPunto, labelName: { es: "Muy hecho" } })),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-answered" });
+    await flush(el);
+
+    const line = counter.store.lines[0]!;
+    expect(line.options).toBeUndefined();
+    // The wording the order holds stays on screen — it is what the diner asked for.
+    expect(line.optionSnapshots).toEqual([{ ...frozenPunto, labelName: { es: "Muy hecho" } }]);
+    expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
   });
 
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {

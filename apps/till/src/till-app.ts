@@ -13,6 +13,7 @@ import type { ServerRouter } from "./api/server-router.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
 import { deriveExtraSelections } from "./state/held-extras.js";
+import { deriveOptionSelections } from "./state/held-options.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
@@ -1659,6 +1660,11 @@ export class TillApp extends LitElement {
    *
    * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
    * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
+   * A line's extras picks and its options answers both come back as VALUES carrying none of the ids
+   * the wire names, so both are matched back to the dish's live offer here (`deriveExtraSelections`
+   * and `deriveOptionSelections`, `./state/`). A still-offered options list that nothing matched
+   * surfaces `held.options_changed`: the operator has to choose again, and the list's own default is
+   * never substituted for what the diner asked for.
    *
    * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans a
    * precision-zero count's trailing zeros without touching re-pricing.
@@ -1684,6 +1690,7 @@ export class TillApp extends LitElement {
       const order = await this.api.retrieveWorkingOrder(id);
       const lines: OrderLine[] = [];
       let droppedAProduct = false;
+      let mustChooseAgain = false;
       for (const line of order.lines) {
         // The stored snapshot is what the line was written with, so it keeps the names and the price
         // the order holds. The dish's OFFERED lists are not in it — the snapshot carries none — so
@@ -1712,6 +1719,16 @@ export class TillApp extends LitElement {
         // same notice as a dropped line reports.
         const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
         if (picks.dropped.length > 0) droppedAProduct = true;
+        // An answer comes back as six frozen names and no ids, so the ids the wire wants are
+        // re-derived from the same offer. A still-offered list that nothing matched cannot be
+        // answered from here at all — the server refuses the whole edit until it is answered again,
+        // so the operator is told rather than given the list's default, which would change what the
+        // diner asked for.
+        const answers = deriveOptionSelections(
+          product.offeredModifiers ?? [],
+          line.optionSnapshots,
+        );
+        if (answers.unanswered.length > 0) mustChooseAgain = true;
         lines.push({
           product,
           quantity: displayQuantity(product, line.quantity),
@@ -1719,11 +1736,15 @@ export class TillApp extends LitElement {
             ? {}
             : { workingOrderLineId: line.workingOrderLineId }),
           ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
+          ...(answers.options.length === 0 ? {} : { options: answers.options }),
           ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
         });
       }
+      // One banner, so a DROPPED product is reported first: it has already changed what the basket
+      // will bill, where a stale answer changes nothing until the operator edits the order.
       if (droppedAProduct) this.errorKey = "held.product_gone";
+      else if (mustChooseAgain) this.errorKey = "held.options_changed";
       this.#store.loadFrom(order.id, lines, order.label ?? undefined);
       this.cardOutcome = undefined;
     } catch {

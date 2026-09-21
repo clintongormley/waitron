@@ -5844,4 +5844,82 @@ describe("what a held-order edit preserves and what it replaces", () => {
       listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
     });
   });
+
+  /**
+   * The body a till line sends is the same one an edit sends, so an edit that carries no `options`
+   * key is refused exactly as a first order would be — `validateOptionSelections`
+   * (`packages/catalogue/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
+   * first one no answer names, whether the line is new or being changed. That is what a RETRIEVED
+   * till line used to send, because the server hands its answers back as six frozen names and no
+   * ids.
+   *
+   * The next case is the control: the same edit body against a dish carrying NO options list, which
+   * succeeds — so the refusal below is the options list and not the shape of the edit.
+   */
+  it("refuses a quantity-only edit that names no answer for an active options list", async () => {
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
+    const punto = await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return addOptionList(tx, cafeId, "Punto", ["Solo"]);
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        {
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          options: [{ listId: punto.listId, labelId: punto.labelIds[0]! }],
+        },
+      ],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCafeOfferId,
+            quantity: "2",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: punto.listId },
+    });
+  });
+
+  it("accepts the same quantity-only edit on a dish carrying no options list", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
+    });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [{ workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity: "2" }],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: "2.000" });
+  });
 });

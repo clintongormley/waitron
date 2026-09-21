@@ -87,8 +87,11 @@ export interface OrderLine {
   extras?: SelectedExtra[];
   /**
    * The line's answers to its dish's options lists, as the wire names them — one entry per answered
-   * list. ABSENT when the dish answered none, and absent on a RETRIEVED line: what comes back from a
-   * held order is the frozen wording below, which carries no ids to re-send.
+   * list. ABSENT when the dish answered none. A RETRIEVED line has these too, but not from the
+   * server: a held order hands its answers back as the frozen wording below, which names no ids, so
+   * the ids are re-derived from the dish's live offer (`deriveOptionSelections`,
+   * `./held-options.ts`) — and a still-offered list whose wording nothing matches leaves this key
+   * short, which is what the retrieve path's notice is about.
    */
   options?: OptionSelection[];
   /**
