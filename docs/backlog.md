@@ -3251,15 +3251,10 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**The verifactu extraction left stale references in two compliance docs — Small.** PR #486
-(2026-09-21) extracted `@waitron/verifactu` to its own repository and repointed every live code and
-developer-doc reference to the external package, but deliberately left two compliance records for a
-separate change: `docs/compliance/implementation-provenance.md` (around lines 3, 56, 106, 126, 134)
-still names the in-repo `packages/verifactu` when it states the provenance rules, and
-`docs/compliance/first-aeat-contact.md:35` records a past AEAT-contact event through
-`packages/verifactu`'s serializer. The provenance file is a living policy record and should read
-`@waitron/verifactu`; first-aeat-contact is a dated historical event and can stay as written (it was
-true then) — decide per file. Lightweight docs change, no PR ceremony. Separately, the library's own
+**The verifactu extraction's compliance-doc references — DONE (2026-09-21).**
+`docs/compliance/implementation-provenance.md` (a living policy doc) now reads `@waitron/verifactu`
+and notes the extraction; `docs/compliance/first-aeat-contact.md:35` was deliberately left as-is — it
+is a dated "written as it happens" record and was true when written. Separately, the library's own
 follow-ups live on the OSS repo, not here: the differential-test spike against `inoguerols/verifactu`,
 the convenience facade, a documented QR-image recipe (rendering the payload is ~five lines of
 `qrcode-generator`, so it ships as a README recipe, not a package), and porting NIF/NIE/CIF

@@ -1,7 +1,8 @@
 # Implementation provenance and licensing discipline
 
-Decided **2026-07-18**. Applies to `packages/verifactu` and anything else implementing the
-RRSIF / Veri\*Factu specification.
+Decided **2026-07-18**. Applies to `@waitron/verifactu` — extracted to its own open-source
+repository on 2026-09-21 (`github.com/waitron-io/verifactu`, published to npm), where its
+`PROVENANCE.md` now lives — and anything else implementing the RRSIF / Veri\*Factu specification.
 
 ---
 
@@ -53,7 +54,7 @@ submission and the event log.
 languages is a derivative work; copyleft does not launder through a language change. A TS port
 would have to be AGPL, which would (a) infect the POS through linking, (b) trigger AGPL §13's
 network clause for any hosted tenant, and (c) defeat the purpose of publishing
-`packages/verifactu` as a reusable library.
+`@waitron/verifactu` as a reusable library.
 
 **Legitimate use — differential testing.** Running the binary and comparing outputs (huellas, QR
 payloads, XML) against ours is comparing *behaviour*, not copying *expression*, and needs no
@@ -103,7 +104,7 @@ licence), and what the change does not protect.
 
 ## Provenance record
 
-Keep a short `PROVENANCE.md` in `packages/verifactu` stating:
+Keep a short `PROVENANCE.md` in `@waitron/verifactu` stating:
 
 - which AEAT documents and versions the implementation was written from;
 - which MIT-licensed references were consulted;
@@ -123,7 +124,7 @@ questions about what our distribution model actually is.
 - Does running an AGPL binary to generate test-comparison vectors carry any obligation? (Expected
   no — AGPL obligations attach to conveying and to network interaction with *modified* versions,
   not to running an unmodified program locally. Unverified.)
-- ~~Does a permissive licence on `packages/verifactu` interact with the declaración responsable —
+- ~~Does a permissive licence on `@waitron/verifactu` interact with the declaración responsable —
   i.e. can a DR meaningfully cover a library that anyone may fork and modify?~~ **Closed
   2026-07-27.** The licence is not the operative fact; what the recipient *does* is. A faithful
   build of our source is our product and our DR covers it; a fork that modifies it is a new
@@ -131,5 +132,5 @@ questions about what our distribution model actually is.
   our certification to it — the two questions are orthogonal. See
   [asesor-questions.md Q9(b)](asesor-questions.md).
 - **Carried over from that reasoning:** a version-scoped DR is only meaningful if the version
-  identifies a determinate artifact. `packages/verifactu` needs pinned dependencies and a
+  identifies a determinate artifact. `@waitron/verifactu` needs pinned dependencies and a
   reproducible build for its declaration to mean anything.
