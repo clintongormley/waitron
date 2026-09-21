@@ -4618,9 +4618,26 @@ For each, decide and record in a table in the pull request description: **conver
 
 Nothing is deleted silently, and nothing is kept in a form that passes without asserting anything.
 
-- [ ] **Step 26: Make `asAppUser` a no-op**
+- [x] **Step 26: Make `asAppUser` a no-op**
 
 Not deleted — reduced to a function that does nothing, so the flip does not also edit 266 files. T1 deletes the call sites afterwards. Leave a comment saying it is inert and which task removes it.
+
+_Done 2026-09-21. `packages/db/src/testing/roles.ts` is an empty body; the comment says what it used
+to do, why there is nothing to switch to, and that T1 removes the call sites. Two figures in this
+step and in T1 were re-measured rather than carried over:
+`grep -rn "asAppUser" packages apps --include='*.ts' | grep -v node_modules | wc -l` is 1,354 on
+this tree, where T1 says 1,285 across 266 files._
+
+_It needed a test, because `packages/db`'s coverage config includes `src/testing/**` deliberately
+and the file had none. `src/testing/roles.test.ts` has two cases, and only the second
+discriminates: the first would also pass if the function sent some statement this engine happened
+to accept, so the second passes a handle that throws from every method and asserts the call still
+resolves. Both were watched failing first — the old body reached that handle
+(`Error: asAppUser reached the database`)._
+
+_One lint detail worth a line, since it reads like carelessness otherwise: the unread parameter
+carries a one-line `eslint-disable-next-line`, not an underscore prefix. This configuration sets no
+`argsIgnorePattern`, so `_tx` is refused in exactly the same words — measured, not assumed._
 
 - [ ] **Step 27: Delete the PostgreSQL test harness**
 
