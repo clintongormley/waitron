@@ -2029,6 +2029,21 @@ targets for 30 seconds and each agent works out the remaining time against its o
   the existing floor editor and transfer operations before deciding what needs changing, and retain
   order and kitchen progress when moving items (see A9's KDS correction). This operational floor
   editor is distinct from the general screen-layout canvas editor under reconsideration.
+- **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
+  text.** Found beside the layout pass above, on the same branch, and older than it. The token is
+  `--wt-color-warning-text`, and `grep -rn -- "--wt-color-warning-text:" packages/ui/src apps`
+  returns NOTHING, so it has no definition in any theme. What DOES exist in
+  `packages/ui/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`), which
+  `wt-count-badge` uses. Every one of the four call sites writes the fallback form
+  `color: var(--wt-color-warning-text, var(--wt-color-text))` — `apps/till/src/widgets/basket.ts`,
+  `station-queue.ts`, `diet-badges.ts` and `apps/till/src/screens/till-expo-screen.ts` — so nothing
+  is broken and nothing looks wrong; the emphasis those four rows were written to carry simply never
+  appears, and a green suite cannot tell the two apart. That is why it took a colour MEASURED in the
+  shadow root to find it, and why the same shape can hide anywhere a fallback is written.
+  **Next action:** whoever takes the till layout pass above decides whether these four want
+  `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
+  `--wt-color-danger` the dish picker's refusals now use — and then check every OTHER `var(--wt-*, …)`
+  fallback in the tree the same way, because this one was found by accident.
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found by looking at the real screens on branch
   `feat/modifiers-till-surfaces` (B1 Task 12), then each checked against `main` rather than assumed
