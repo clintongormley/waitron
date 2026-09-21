@@ -1821,8 +1821,9 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 - **The cold-restore operator surface** (promote Slice 4): connection rebinding, advertised origin,
   an authenticated entry.
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
-  `artifact-cipher.ts` holds the whole dump in memory and is restorable only by Waitron code, where
-  `pg_dump | age` into a tar is the obvious alternative.
+  `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
+  code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
+  alternative. (Reworded 2026-09-21: this line named `pg_dump`, which the storage switch removed.)
 - Carry-forwards under *Detail → Backup*.
 
 ### B3. The bootable USB installer

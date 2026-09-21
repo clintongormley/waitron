@@ -198,8 +198,8 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 /** True if any captured line's `event` is EXACTLY `event`. Exact, not prefix: `backup.disabled` and
- * `backup.disabled_probe_failed` must be told apart — a non-primary logs the former (the duty is
- * skipped before the probe), a primary that runs and fails the probe logs the latter. */
+ * `backup.disabled_open_failed` must be told apart — a non-primary logs the former (the duty is
+ * skipped before the venue is ever opened), a primary whose venue will not open logs the latter. */
 function hasEvent(lines: readonly string[], event: string): boolean {
   return lines.some((line) => {
     try {
@@ -227,14 +227,21 @@ function dutyEnv(port: number) {
 
 // The backup config goes through the RAW `base` arg (2nd `startServer` param), not the merged `env`:
 // the supervisor re-reads its config off `loadBoxEnv(base, stateDir)` each reload, so a value only in
-// `env` would never reach it. The backup DB is unreachable (port 1) on purpose so the read-privilege
-// probe fails fast on the primary — the WIRING assertion, never a live connection.
+// `env` would never reach it.
+//
+// **A LEVER THIS PAIR OF CASES LOST, stated rather than quietly worked around.** It used to point
+// the backup duty at an unreachable database (`WAITRON_BACKUP_DATABASE_URL`, port 1) so that a
+// primary — and only a primary — emitted a loud `backup.disabled_probe_failed`. That setting is
+// gone with PostgreSQL: the supervisor opens the box's own venue directory, and there is no way to
+// make THAT open fail without breaking the whole server the suite is booting. The primary case's
+// assertion below is therefore the weaker (but true) one — the primary does NOT take the
+// non-primary branch — instead of the stronger "it reached the probe and failed it". Re-founding it
+// belongs with whoever converts this suite's two-node harness; nothing in it runs today.
 function backupBase() {
   return {
     WAITRON_BACKUP_DIR: backupDir,
-    WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
-    // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig throws
-    // backup.recovery_key_missing before either boot reaches the wiring this suite asserts.
+    // Required since BR-1 Task 4 — without it loadBackupConfig throws backup.recovery_key_missing
+    // before either boot reaches the wiring this suite asserts.
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
   };
 }
@@ -259,12 +266,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
     });
     try {
       // 1. Backup — the supervisor is built and `reload()` runs on every boot, but a NON-PRIMARY takes
-      // the disabled branch BEFORE the read-privilege probe: `backup.disabled` is logged and the
-      // probe-failure line (only a primary that RUNS the probe emits it) is ABSENT. The primary control
-      // below emits `backup.disabled_probe_failed` for the identical config, so this split is the gate
-      // (duty skipped on the secondary, entered on the primary), not a missing config.
+      // the disabled branch before the venue is ever opened: `backup.disabled` is logged. The primary
+      // control below does NOT log it for the identical config, so this split is the gate (duty
+      // skipped on the secondary, entered on the primary), not a missing config.
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
-      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(false);
+      expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
       // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
@@ -295,10 +301,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so
-      // `backup.disabled_probe_failed` is emitted. The positive twin of the secondary's absence
-      // assertion — the probe is entered on the singleton primary, skipped on the secondary.
-      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(true);
+      // 1. Backup — the gate RAN: a singleton primary does not take the non-primary branch, so
+      // `backup.disabled` is ABSENT here where the secondary above logs it. The positive twin of the
+      // secondary's assertion. See `backupBase` for the stronger assertion this replaced and why its
+      // lever no longer exists.
+      expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
       // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);

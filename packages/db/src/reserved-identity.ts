@@ -1,8 +1,9 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import "./errors.js";
+import { now } from "./schema/columns.js";
 import { nodes } from "./schema/nodes.js";
 import { invoiceSeries } from "./schema/series.js";
 import { withTransaction } from "./tenancy.js";
@@ -102,7 +103,7 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
 }
 
 /**
- * Retire every LIVE series of a node (`retired_at = now()`), returning how many were retired.
+ * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
  * Owner-role only: `app_user`'s UPDATE on this table is column-scoped to `next_number`
  * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
  * privileged connection, before opening the node's replacement series.
@@ -110,7 +111,10 @@ export function readStandardSeriesId(db: Database, nodeId: string): Promise<stri
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx
     .update(invoiceSeries)
-    .set({ retiredAt: sql`now()` })
+    // A JavaScript `Date`, the way every other converted writer in this package stamps a `ts`
+    // column: `sql`now()`` is a PostgreSQL function this engine does not have, and the statement
+    // failed outright with `no such function: now` (errcode ERR_SQLITE_ERROR).
+    .set({ retiredAt: now() })
     .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
   return rows.length;

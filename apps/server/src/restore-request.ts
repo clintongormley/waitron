@@ -35,7 +35,8 @@ export async function stageRestoreRequest(
 
 export interface StagedRestoreDeps {
   stateDir: string;
-  databaseUrl: string;
+  /** The directory holding `venue.db` and `node.db` — what the restore places the archive into. */
+  venueDir: string;
   migrationsRoot: string | null;
   log: Logger;
 }
@@ -78,7 +79,7 @@ export async function runStagedRestore(
     await restore({
       artifact,
       recoveryKey,
-      databaseUrl: deps.databaseUrl,
+      venueDir: deps.venueDir,
       stateDir: deps.stateDir,
       stagingDir: join(deps.stateDir, "restore-staging"),
       migrationsRoot: deps.migrationsRoot,

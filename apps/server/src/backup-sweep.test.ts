@@ -1,12 +1,13 @@
-// Real PostgreSQL: runs pg_dump against the migrated database and checks the custom-format artifact.
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+// The backup sweep: archive assembly, encryption, fan-out and the dual-retention prune, plus the
+// loop shell around them. Every case here injects the archive step (`archive`), which is the seam
+// the supervisor binds to the venue store's own `archiveTo`.
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -18,13 +19,10 @@ import {
   runOnce,
 } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
-import { backupArchiveKey } from "./pg-dump.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
-import { locateSharedContainer } from "./testing/locate-shared-container.js";
-
-const execFileAsync = promisify(execFile);
 
 // A `db` handle is required by the deps type but never touched under an injected manifest
 // builder, so the pure-DI fan-out/assembly tests hand in this inert stand-in.
@@ -39,11 +37,10 @@ const FIXED_MANIFEST: BackupManifest = {
 };
 const fixedManifest: ManifestBuilder = async () => FIXED_MANIFEST;
 
-// A fresh injectable `runDump` spy that writes the sentinel dump bytes — used by the fail-visible
-// tests to assert the dump was NEVER called (a throw in the cheap collection must fail the tick
-// before the dump). One per test so the call-count assertions stay isolated.
-const dumpSpy = () =>
-  vi.fn(async ({ outFile }: { outFile: string }) => writeFile(outFile, "DUMP-BYTES"));
+// A fresh injectable `archive` spy that writes the sentinel bytes — used by the fail-visible tests
+// to assert the archive step was NEVER reached (a throw in the cheap collection must fail the tick
+// before it). One per test so the call-count assertions stay isolated.
+const archiveSpy = () => vi.fn(async (outFile: string) => writeFile(outFile, "DUMP-BYTES"));
 
 // Write the full RECOVERY_FILES set under a fresh temp state dir, so `collectStateSecrets` succeeds.
 // Omit one path (`skip`) to drive the fail-visible "incomplete state" case.
@@ -110,7 +107,6 @@ describe("runOnce (fan-out)", () => {
     resolvers: { media: mediaDir },
     stateDir,
     buildManifest: fixedManifest,
-    databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
     retain: 7,
@@ -121,7 +117,7 @@ describe("runOnce (fan-out)", () => {
     sleep: vi.fn(),
     log,
     now: () => new Date("2026-09-05T00:00:00Z"),
-    runDump: async ({ outFile }: { outFile: string }) => {
+    archive: async (outFile: string) => {
       await writeFile(outFile, "DUMP-BYTES");
     },
   });
@@ -200,23 +196,23 @@ describe("runOnce (fan-out)", () => {
     const failingManifest: ManifestBuilder = async () => {
       throw boom;
     };
-    const runDump = dumpSpy();
-    await expect(runOnce({ ...deps([a]), buildManifest: failingManifest, runDump })).rejects.toBe(
+    const archive = archiveSpy();
+    await expect(runOnce({ ...deps([a]), buildManifest: failingManifest, archive })).rejects.toBe(
       boom,
     );
     // The throw happens before the first `put`, so nothing lands anywhere.
     expect(a.objects.size).toBe(0);
     // Fail-fast: the manifest is collected BEFORE the expensive dump, so the dump never ran.
-    expect(runDump).not.toHaveBeenCalled();
+    expect(archive).not.toHaveBeenCalled();
   });
 
   it("fail-visible: an incomplete state dir (missing a recovery file) ships NO partial archive and never dumps", async () => {
     const a = new FakeBackend("a");
     const incompleteState = await makeStateDir("secrets.env"); // omit the vault key
-    const runDump = dumpSpy();
+    const archive = archiveSpy();
     try {
       await expect(
-        runOnce({ ...deps([a]), stateDir: incompleteState, runDump }),
+        runOnce({ ...deps([a]), stateDir: incompleteState, archive }),
       ).rejects.toMatchObject({
         code: "recovery.state_incomplete",
         params: { missing: "secrets.env" },
@@ -224,7 +220,7 @@ describe("runOnce (fan-out)", () => {
       // collectStateSecrets throws before the fan-out — no partial archive is written.
       expect(a.objects.size).toBe(0);
       // Fail-fast: the secrets read happens BEFORE the expensive dump, so the dump never ran.
-      expect(runDump).not.toHaveBeenCalled();
+      expect(archive).not.toHaveBeenCalled();
     } finally {
       await rm(incompleteState, { recursive: true, force: true });
     }
@@ -297,12 +293,12 @@ describe("runOnce (fan-out)", () => {
     expect(a.objects.has("waitron-20260905T000000Z.backup.enc")).toBe(true);
   });
 
-  it("chmods the staging plaintext dump to 0600 before it is read/encrypted", async () => {
-    // pg_dump writes with the process umask, which can leave the whole-DB plaintext
-    // group/other-readable. runOnce chmods it to 0600 (owner-only) right after the dump and before
-    // the encrypt/fan-out. The rm is in a `finally`, so we observe the mode from inside a backend's
-    // `put` — the staged file still exists there, after the chmod. The runDump writes 0o644 so an
-    // absent chmod would leave it 0o644 and fail this.
+  it("chmods the staged plaintext copy to 0600 before it is read/encrypted", async () => {
+    // The staged file is the whole venue database in plaintext, and it is written with the process
+    // umask, which can leave it group/other-readable. runOnce chmods it to 0600 (owner-only) right
+    // after the copy and before the encrypt/fan-out. The rm is in a `finally`, so we observe the
+    // mode from inside a backend's `put` — the staged file still exists there, after the chmod. The
+    // injected archive writes 0o644 so an absent chmod would leave it 0o644 and fail this.
     const staged = join(staging, "waitron-20260905T000000Z.dump");
     let observedMode = -1;
     const probe: StorageBackend = {
@@ -320,7 +316,7 @@ describe("runOnce (fan-out)", () => {
     };
     await runOnce({
       ...deps([probe]),
-      runDump: async ({ outFile }: { outFile: string }) => {
+      archive: async (outFile: string) => {
         await writeFile(outFile, "DUMP-BYTES", { mode: 0o644 });
       },
     });
@@ -341,7 +337,7 @@ describe("runOnce (fan-out)", () => {
 // `runBackupSweep` suite pinned: one tick fans to every backend, a per-tick throw is logged as
 // `backup.failed` and swallowed (the loop keeps going), and a non-`AppError` throw's code comes
 // through as `"unknown"` rather than as a raw message that could carry the connection string.
-describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
+describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
   let staging: string;
   let stateDir: string;
   beforeEach(async () => {
@@ -356,7 +352,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   // Mirrors the `deps()` helper in the runOnce block: the constant loop fields in one place
   // (including the BR-2 archive deps — a `db` stand-in for backup reads, the module set, the
   // state directory, and the injected manifest builder so the loop never needs a
-  // real journal), with the per-test signal/sleep/log (and optional runDump/now) supplied as
+  // real journal), with the per-test signal/sleep/log (and optional archive/now) supplied as
   // overrides. `signal`/`sleep`/`log` are required here because every loop test drives its own
   // AbortController through them.
   type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
@@ -368,7 +364,6 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     resolvers: {},
     stateDir,
     buildManifest: fixedManifest,
-    databaseUrl: "postgres://x",
     recoveryKey: "recovery-key-1",
     stagingDir: staging,
     // The loop now waits to a schedule, not a fixed `intervalMs`; a short interval keeps `nextFireMs`
@@ -379,6 +374,11 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
     jitterSeed: "loop-node",
     // Only consulted for a wall-clock schedule; the interval loop tests never call it.
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+    // The archive step is required on the deps, so it needs a default here; every case that cares
+    // about it overrides it below.
+    archive: async (outFile: string) => {
+      await writeFile(outFile, "DUMP-BYTES");
+    },
     ...overrides,
   });
 
@@ -391,7 +391,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event) => logged.push([level, event]),
-        runDump: async ({ outFile }) => {
+        archive: async (outFile) => {
           await writeFile(outFile, "DUMP-BYTES");
         },
         now: () => new Date("2026-09-05T00:00:00Z"),
@@ -423,9 +423,9 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
         signal: controller.signal,
         log: (level, event) => logged.push([level, event]),
         now: () => new Date(nowMs),
-        runDump: async () => {
+        archive: async () => {
           dumpCalls += 1;
-          throw new Error("pg_dump exploded");
+          throw new Error("the archive copy exploded");
         },
         sleep: async (chunk: number) => {
           ticks += 1;
@@ -449,7 +449,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
       loopDeps(backend, {
         signal: controller.signal,
         log: (level, event, fields) => logged.push([level, event, fields]),
-        runDump: async () => {
+        archive: async () => {
           throw new Error("plain error, not an AppError");
         },
         sleep: async () => {
@@ -476,7 +476,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
         log: vi.fn(),
         // Aborts DURING the dump itself, not in `sleep` — pins the loop's second abort check
         // (immediately after the tick, before the sleep it would otherwise take).
-        runDump: async ({ outFile }) => {
+        archive: async (outFile) => {
           controller.abort();
           await writeFile(outFile, "DUMP-BYTES");
         },
@@ -501,9 +501,9 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
         signal: controller.signal,
         log,
         // Abort first, THEN throw — so the catch sees `signal.aborted === true`.
-        runDump: async () => {
+        archive: async () => {
           controller.abort();
-          throw new Error("pg_dump killed by SIGTERM during shutdown");
+          throw new Error("the archive copy was interrupted by shutdown");
         },
         sleep: vi.fn(),
       }),
@@ -515,17 +515,17 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   it("an already-aborted signal ends the loop without a dump or a backup.failed", async () => {
     const backend = new FakeBackend("only");
     const log = vi.fn();
-    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+    const archive = vi.fn(async (outFile: string) => {
       await writeFile(outFile, "DUMP-BYTES");
     });
 
     // A signal aborted before the loop even starts (shutdown raced boot) must not fire a dump into a
     // shutting-down box (M15), and must not log a spurious backup.failed.
     await runBackupSweep(
-      loopDeps(backend, { signal: AbortSignal.abort(), log, sleep: vi.fn(), runDump }),
+      loopDeps(backend, { signal: AbortSignal.abort(), log, sleep: vi.fn(), archive }),
     );
 
-    expect(runDump).not.toHaveBeenCalled();
+    expect(archive).not.toHaveBeenCalled();
     expect(backend.objects.size).toBe(0);
     expect(log).not.toHaveBeenCalledWith("warn", "backup.failed", expect.anything());
   });
@@ -533,7 +533,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
   it("takes one dump immediately on start, then waits for the next fire", async () => {
     const controller = new AbortController();
     const backend = new FakeBackend("only");
-    const runDump = vi.fn(async ({ outFile }: { outFile: string }) => {
+    const archive = vi.fn(async (outFile: string) => {
       await writeFile(outFile, "DUMP-BYTES");
     });
 
@@ -545,15 +545,15 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
         signal: controller.signal,
         log: vi.fn(),
         now: () => new Date("2026-09-05T00:00:00Z"),
-        runDump,
+        archive,
         sleep: async () => {
-          expect(runDump).toHaveBeenCalledTimes(1); // dumped once already, before this first wait
+          expect(archive).toHaveBeenCalledTimes(1); // dumped once already, before this first wait
           controller.abort();
         },
       }),
     );
 
-    expect(runDump).toHaveBeenCalledTimes(1);
+    expect(archive).toHaveBeenCalledTimes(1);
     expect(backend.objects.size).toBe(1);
   });
 
@@ -581,7 +581,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
           if (clockCalls === 1) throw new Error("clock read failed");
           return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
         },
-        runDump: async ({ outFile }) => {
+        archive: async (outFile) => {
           dumpCalls += 1;
           await writeFile(outFile, "DUMP-BYTES");
         },
@@ -617,7 +617,7 @@ describe("runBackupSweep (loop logic, injected runDump + sleep)", () => {
           clockReads += 1;
           return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
         },
-        runDump: async ({ outFile }) => {
+        archive: async (outFile) => {
           await writeFile(outFile, "DUMP-BYTES");
         },
         sleep: async () => {
@@ -672,23 +672,20 @@ describe("pruneBackend (dual count + age retention)", () => {
     expect(backend.objects.has(freshKey)).toBe(true);
   });
 });
+// The DEFAULT (non-injected) manifest path against a REAL migrated venue: proves runOnce's archive
+// carries a real BackupManifest read off the database's own drizzle journals
+// (`appliedSchemaVersion`), not the injected fixture the tests above use. A pure-DI test would never
+// notice the default builder being wrong, so this drives it end to end.
+//
+// It replaces a `useTemplateDb({ template: "manifest" })` suite: the journals are the same journals,
+// and there is no longer a separate role that can or cannot read them.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-// A real pg_dump against the shared test container — proves the custom-format invocation realPgDump
-// issues actually produces a valid dump against postgres:18-alpine. The host here (macOS/CI) has no
-// pg18 `pg_dump` on PATH, so we run the IDENTICAL argv realPgDump uses INSIDE the container via
-// `docker exec`, then copy the file out and assert it is a non-empty custom-format dump (PGDMP magic).
-// A skipped smoke proves nothing (CLAUDE.md §2), so this only degrades to a loud skip when the `docker`
-// CLI or the container id genuinely cannot be resolved. Unchanged by BR-1 Task 5 — realPgDump itself
-// did not change — carried over from the pre-fan-out version of this file (Task 4) rather than dropped
-// in the rewrite, since it is the ONLY coverage of the real shell-out (pg-dump.ts says so explicitly).
-const suite = useTemplateDb({ template: "manifest" });
-
-// The DEFAULT (non-injected) manifest path against a REAL journal: proves runOnce's archive
-// carries a real BackupManifest built off `suite.admin` (the owner connection —
-// `appliedSchemaVersion` reads the `__drizzle_migrations_*` journal `app_user` cannot). A pure-DI
-// test would never notice the default builder being wrong, so this drives it end to end. Needs
-// `TESTCONTAINERS_RYUK_DISABLED=true` (§4).
-describe("runOnce with the real buildManifest (useTemplateDb)", () => {
+describe("runOnce with the real buildManifest (a migrated venue)", () => {
   let staging: string;
   let stateDir: string;
   beforeEach(async () => {
@@ -704,13 +701,12 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
     const a = new FakeBackend("a");
     await runOnce({
       backends: [a],
-      db: suite.admin, // owner read of the drizzle journal, which has no app_user SELECT grant
+      db: suite.db,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},
       stateDir,
       // buildManifest intentionally OMITTED so the real default runs.
-      databaseUrl: suite.pg.uri,
       recoveryKey: "recovery-key-1",
       stagingDir: staging,
       retain: 7,
@@ -718,7 +714,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
       signal: new AbortController().signal,
       log: vi.fn(),
       now: () => new Date("2026-09-05T00:00:00Z"),
-      runDump: async ({ outFile }) => {
+      archive: async (outFile) => {
         await writeFile(outFile, "DUMP-BYTES");
       },
     });
@@ -732,52 +728,7 @@ describe("runOnce with the real buildManifest (useTemplateDb)", () => {
     const manifest = JSON.parse(entries.get("manifest.json")!.toString()) as BackupManifest;
     expect(manifest.environment).toBe("preproduction");
     expect(manifest.createdAt).toBe("2026-09-05T00:00:00.000Z");
-    // `core` is mandatory and migrated by the `manifest` template, so its applied version is positive.
+    // `core` is mandatory and migrated by every manifest set, so its applied version is positive.
     expect(manifest.modules.core).toBeGreaterThan(0);
   });
-});
-
-describe("realPgDump custom-format invocation (real container, docker exec)", () => {
-  it("produces a non-empty PGDMP custom-format dump against postgres:18-alpine", async () => {
-    const uri = new URL(suite.pg.uri);
-
-    // Find the shared container by its published host port + the harness label.
-    const containerId = await locateSharedContainer(uri, {
-      tag: "backup-sweep smoke",
-      unproven: "realPgDump's real invocation is UNPROVEN in this run.",
-    });
-    if (containerId === undefined) return;
-
-    // Inside the container the server listens on localhost:5432; the clone db + superuser creds come
-    // from the suite uri. This is the exact argv realPgDump builds (pg-dump.ts): custom format, --file,
-    // connstring last.
-    const dbName = uri.pathname.replace(/^\//, "");
-    const internalConn = `postgresql://${uri.username}:${uri.password}@localhost:5432/${dbName}`;
-    const inContainerFile = `/tmp/waitron-smoke-${process.pid}.dump`;
-
-    await execFileAsync("docker", [
-      "exec",
-      containerId,
-      "pg_dump",
-      "--format=custom",
-      "--file",
-      inContainerFile,
-      internalConn,
-    ]);
-
-    const outDir = await mkdtemp(join(tmpdir(), "backup-smoke-"));
-    const hostFile = join(outDir, "smoke.dump");
-    try {
-      await execFileAsync("docker", ["cp", `${containerId}:${inContainerFile}`, hostFile]);
-      const bytes = await readFile(hostFile);
-      expect(bytes.length).toBeGreaterThan(0);
-      // Custom-format archives begin with the 5-byte magic "PGDMP".
-      expect(bytes.subarray(0, 5).toString("latin1")).toBe("PGDMP");
-    } finally {
-      await rm(outDir, { recursive: true, force: true });
-      await execFileAsync("docker", ["exec", containerId, "rm", "-f", inContainerFile]).catch(
-        () => {},
-      );
-    }
-  }, 180_000);
 });

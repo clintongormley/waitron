@@ -1,7 +1,12 @@
-// Real PostgreSQL: the backup admin routes under the manager-login gate, plus the supervisor's real
-// enable/rotate lifecycle (a hermetic fake `pg_dump`, so no host binary is needed). The NON-superuser
-// owner probe is proven separately in `backup-supervisor.pg.test.ts`; here the supervisor's read
-// connection is the clone's own admin url because these tests exercise the ROUTES, not the probe.
+// The backup admin routes under the manager-login gate, plus the supervisor's real enable/rotate
+// lifecycle. The supervisor is pointed at a throwaway venue directory because these tests exercise
+// the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
+// `backup-supervisor.test.ts`.
+//
+// **STILL BLOCKED, and not by this seam.** Everything below rests on `useTemplateDb` and a shared
+// PostgreSQL container, which the storage switch removed — the suite fails at collection today. The
+// edits here are only the mechanical ones the archive seam forced (no `pg_dump` runner, no backup
+// connection string); converting the harness belongs to whoever converts this file.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,7 +27,6 @@ import { loadBoxEnv } from "./box-env.js";
 import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
-import type { PgDumpRunner } from "./pg-dump.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const LOCALE = "es-ES";
@@ -32,7 +36,6 @@ const MANAGER_EMAIL = "manager@x.com";
 const BACKUP_KEYS = [
   "WAITRON_BACKUP_DIR",
   "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_DATABASE_URL",
   "WAITRON_BACKUP_RECOVERY_KEY",
   "WAITRON_BACKUP_SCHEDULE_DAYS",
   "WAITRON_BACKUP_AT",
@@ -52,11 +55,10 @@ function nextNif(): string {
   return `${String(76_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-// A hermetic pg_dump: writes a placeholder so the archive assembles + encrypts + fans out WITHOUT a
-// host `pg_dump` binary (same shape backup-supervisor.pg.test.ts uses).
-const fakeDump: PgDumpRunner = async ({ outFile }) => {
-  await writeFile(outFile, "PGDMP-fake-dump");
-};
+// The venue the supervisor opens. Unmigrated, so every module's applied schema version reads 0 and
+// the manifest is a valid one describing an empty box — enough for routes that never look inside an
+// archive.
+const venueDir = mkdtempSync(join(tmpdir(), "backup-api-venue-"));
 
 const cleanup: (() => Promise<void>)[] = [];
 
@@ -82,14 +84,13 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(sc.base, sc.stateDir)),
     isManagedByEnvironment: () => BACKUP_KEYS.some((k) => !isUnset(sc.base[k])),
     readSingletonRole: () => sc.role,
-    adminDatabaseUrl: suite.pg.uri,
+    venueDir,
     modules: ALL_MODULES,
     environment: "production",
     stateDir: sc.stateDir,
     jitterSeed: "seed",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
     log: () => {},
-    runDump: fakeDump,
   });
   cleanup.push(() => sup.stop());
   return sup;
@@ -429,7 +430,6 @@ describe("backup admin routes (real postgres)", () => {
     const mismatch: BackupConfig = {
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
       recoveryKey: "effective-key-differs-from-request",
-      databaseUrl: undefined,
       schedule: DAILY_AT_0330,
       retain: 7,
       retainDays: 30,
@@ -440,14 +440,13 @@ describe("backup admin routes (real postgres)", () => {
       buildConfig: async () => mismatch, // ignores the file the route writes
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
-      adminDatabaseUrl: suite.pg.uri,
+      venueDir,
       modules: ALL_MODULES,
       environment: "production",
       stateDir,
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: () => {},
-      runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
     const app = buildApp(sup, stateDir);
@@ -560,14 +559,13 @@ describe("backup admin routes (real postgres)", () => {
       },
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
-      adminDatabaseUrl: suite.pg.uri,
+      venueDir,
       modules: ALL_MODULES,
       environment: "production",
       stateDir,
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: () => {},
-      runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
     const app = buildApp(sup, stateDir);

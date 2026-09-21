@@ -1,14 +1,5 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  backupArchiveKey,
-  backupArchiveTimestamp,
-  dumpAtomic,
-  dumpFileName,
-  type PgDumpRunner,
-} from "./pg-dump.js";
+import { describe, expect, it } from "vitest";
+import { backupArchiveKey, backupArchiveTimestamp, dumpFileName } from "./backup-keys.js";
 
 describe("dumpFileName", () => {
   it("produces a sortable, colon-free, .dump-suffixed name", () => {
@@ -64,50 +55,5 @@ describe("backupArchiveTimestamp", () => {
     expect(() => backupArchiveTimestamp("waitron-notastamp.backup.enc")).toThrow(
       /no parseable timestamp/,
     );
-  });
-});
-
-describe("dumpAtomic", () => {
-  let dir: string;
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "waitron-dump-atomic-"));
-  });
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  it("renames the .partial onto the final name only on success", async () => {
-    const outFile = join(dir, "waitron-20260829T000000Z.dump");
-    // The inner runner writes to whatever outFile it is handed — which dumpAtomic sets to `<final>.partial`.
-    const inner: PgDumpRunner = async (args) => {
-      expect(args.outFile).toBe(`${outFile}.partial`); // never writes the final name directly
-      await writeFile(args.outFile, "PGDMP-bytes");
-    };
-    await dumpAtomic({ databaseUrl: "postgres://x", outFile }, inner);
-    expect(await readFile(outFile, "utf8")).toBe("PGDMP-bytes"); // final exists, fully written
-    expect((await readdir(dir)).sort()).toEqual(["waitron-20260829T000000Z.dump"]); // no .partial left
-  });
-
-  it("leaves NO final file and NO .partial when the inner dump fails mid-write", async () => {
-    const outFile = join(dir, "waitron-20260829T000000Z.dump");
-    // Simulate a dump killed mid-write: it wrote a partial, then threw (SIGTERM / disk-full).
-    const inner: PgDumpRunner = async (args) => {
-      await writeFile(args.outFile, "half-written");
-      throw new Error("aborted");
-    };
-    await expect(dumpAtomic({ databaseUrl: "postgres://x", outFile }, inner)).rejects.toThrow(
-      "aborted",
-    );
-    // Neither the final dump nor the .partial survives → readBackupStatus can never read it as fresh.
-    expect(await readdir(dir)).toEqual([]);
-  });
-
-  it("rethrows and cleans up even when the inner never wrote a partial", async () => {
-    const outFile = join(dir, "waitron-20260829T000000Z.dump");
-    const inner: PgDumpRunner = () => Promise.reject(new Error("connect failed"));
-    await expect(dumpAtomic({ databaseUrl: "postgres://x", outFile }, inner)).rejects.toThrow(
-      "connect failed",
-    );
-    expect(await readdir(dir)).toEqual([]);
   });
 });

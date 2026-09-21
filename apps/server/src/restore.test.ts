@@ -1,11 +1,21 @@
+import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
+  tenants,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
@@ -17,7 +27,6 @@ import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import type { BackupManifest } from "./backup-manifest.js";
-import type { PgRestoreRunner } from "./pg-restore.js";
 import type { Logger } from "./logger.js";
 import {
   type RestoreDeps,
@@ -28,7 +37,8 @@ import {
   writeValidated,
 } from "./restore.js";
 
-// PGlite exercises transaction rollback here; these tests make no privilege or concurrency claim.
+// One real SQLite venue directory for the hook phase: these tests exercise transaction rollback and
+// the series settlement, and make no concurrency claim.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -52,22 +62,22 @@ const TRADING_ENV = formatEnvFile({
 });
 
 beforeAll(async () => {
+  // Through the table definitions, not raw SQL: every one of these tables defaults `id` and
+  // `created_at` with a `$defaultFn`, which drizzle runs per insert and a hand-written INSERT does
+  // not get (`packages/db/src/schema/columns.ts`).
   const db = suite.db;
-  await db.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')`,
-  );
-  await db.execute(
-    sql`insert into locations (id, name, invoice_locales, operation_description) values (${T.locationId}, 'Local', array['es'], 'Venta')`,
-  );
-  await db.execute(
-    sql`insert into tills (id, location_id, name) values (${T.tillId}, ${T.locationId}, 'Caja 1')`,
-  );
-  await db.execute(
-    sql`insert into nodes (id, location_id, name) values (${T.nodeId}, ${T.locationId}, 'Node 1')`,
-  );
-  await db.execute(
-    sql`insert into invoice_series (id, node_id, code) values (${T.seriesId}, ${T.nodeId}, 'FA')`,
-  );
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
+  await db.insert(locations).values({
+    id: T.locationId,
+    name: "Local",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
+  await db.insert(tills).values({ id: T.tillId, locationId: T.locationId, name: "Caja 1" });
+  await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
+  await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
 });
 
 /** Re-arm the node's series between tests: FA live, anything a hook opened removed. */
@@ -75,7 +85,26 @@ async function resetSeries(): Promise<void> {
   await suite.db.execute(
     sql`delete from invoice_series where node_id = ${T.nodeId} and id <> ${T.seriesId}`,
   );
-  await suite.db.execute(sql`update invoice_series set retired_at = null where id = ${T.seriesId}`);
+  await suite.db
+    .update(invoiceSeries)
+    .set({ retiredAt: null })
+    .where(eq(invoiceSeries.id, T.seriesId));
+}
+
+/** The node's series as the assertions below read them, oldest code first. */
+async function seriesOfNode(): Promise<{ code: string; retired: boolean; next: number }[]> {
+  const rows = await suite.db
+    .select({
+      code: invoiceSeries.code,
+      retiredAt: invoiceSeries.retiredAt,
+      next: invoiceSeries.nextNumber,
+    })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.nodeId, T.nodeId))
+    .orderBy(invoiceSeries.code);
+  // `retired_at is not null` in SQL would come back as 0/1 here; the mapping is in JavaScript so the
+  // assertion reads the boolean the column means.
+  return rows.map(({ code, retiredAt, next }) => ({ code, retired: retiredAt !== null, next }));
 }
 
 const openDb = async () => ({ db: suite.db, close: async () => {} });
@@ -99,7 +128,16 @@ const MANIFEST: BackupManifest = {
   modules: {},
 };
 
-const DUMP = Buffer.from("PGDMP-fake-custom-format-dump");
+/**
+ * Stands in for the archive's database entry in every case below that does not OPEN it.
+ *
+ * The orchestration cases inject `migrate` and `openDb`, so nothing here ever opens what
+ * `restoreDatabase` placed — which is exactly what makes these bytes enough: the assertion is that
+ * the archive's bytes reached `venue.db` unchanged, or that they never did. The cases that DO open
+ * the restored file build a real database (see `a real SQLite venue file` and
+ * `restore-fiscal-receipt.test.ts`).
+ */
+const VENUE_BYTES = Buffer.from("SQLite format 3\u0000 — placed, never opened by this suite");
 const MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); // jpeg-ish binary
 const SECRET = "WAITRON_VAULT_MASTER_KEY=deadbeef\n";
 
@@ -116,7 +154,7 @@ function buildArtifact(
 }
 
 const FULL_ENTRIES: ArchiveEntry[] = [
-  { name: "db.dump", bytes: DUMP },
+  { name: "db.dump", bytes: VENUE_BYTES },
   { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },
   { name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) },
 ];
@@ -124,18 +162,38 @@ const FULL_ENTRIES: ArchiveEntry[] = [
 // Each describe registers its own temp-directory lifecycle while sharing these path bindings.
 let stateDir: string;
 let stagingDir: string;
+let venueDir: string;
+
+/** The file `openVenueStore` opens, and the working name `restoreDatabase` writes through. */
+const venueFile = (): string => join(venueDir, "venue.db");
+const incomingFile = (): string => `${venueFile()}.incoming`;
+
+/**
+ * What every case that used to assert `runRestore` was not called asserts instead.
+ *
+ * The injected runner is gone (`restore.ts`), so "the database was not restored" is now a claim
+ * about the venue directory rather than about a mock — which is what those cases always meant.
+ */
+async function expectVenueUntouched(): Promise<void> {
+  await expect(stat(venueFile())).rejects.toMatchObject({ code: "ENOENT" });
+}
+
+/** The archive's database entry landed at `venue.db`, byte for byte, with no working file left. */
+async function expectVenueRestored(bytes: Uint8Array = VENUE_BYTES): Promise<void> {
+  expect(await readFile(venueFile())).toEqual(Buffer.from(bytes));
+  await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
+}
 
 function makeRestoreDeps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
   return {
     artifact: buildArtifact(FULL_ENTRIES),
     recoveryKey: KEY,
-    databaseUrl: "postgres://admin@localhost/fresh",
+    venueDir,
     stateDir,
     stagingDir,
     migrationsRoot: null,
     modules: withHooks({}),
     environment: "preproduction",
-    runRestore: vi.fn(async () => {}),
     openDb,
     migrate: vi.fn(async () => {}),
     log: noopLog,
@@ -147,9 +205,14 @@ function useTempDirs(prefix: string): void {
   beforeEach(async () => {
     stateDir = await mkdtemp(join(tmpdir(), `${prefix}state-`));
     stagingDir = await mkdtemp(join(tmpdir(), `${prefix}staging-`));
+    // Made by `mkdtemp` and then REMOVED, so each case starts with the venue directory absent —
+    // the shape a cold-recovery box is in, and the one where a leftover `venue.db` could not be
+    // mistaken for the one this restore placed.
+    venueDir = await mkdtemp(join(tmpdir(), `${prefix}venue-`));
+    await rm(venueDir, { recursive: true, force: true });
   });
   afterEach(async () => {
-    for (const dir of [stateDir, stagingDir]) {
+    for (const dir of [stateDir, stagingDir, venueDir]) {
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -157,19 +220,9 @@ function useTempDirs(prefix: string): void {
 
 describe("restoreFromArtifact", () => {
   useTempDirs("waitron-restore-");
-  let restored: { databaseUrl: string; inFile: string; bytes: Uint8Array } | undefined;
-  let runRestore: PgRestoreRunner;
-
-  beforeEach(() => {
-    restored = undefined;
-    runRestore = vi.fn(async ({ databaseUrl, inFile }) => {
-      // Read the staged file AT restore time — the orchestrator cleans staging afterwards.
-      restored = { databaseUrl, inFile, bytes: await readFile(inFile) };
-    });
-  });
 
   function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
-    return makeRestoreDeps({ runRestore, ...overrides });
+    return makeRestoreDeps(overrides);
   }
 
   it("rejects filesystem image entries before restoring the database or secrets", async () => {
@@ -178,60 +231,61 @@ describe("restoreFromArtifact", () => {
       code: "restore.unexpected_entry",
       params: { name: "media/abc123.jpg" },
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("restores db dump and secrets, then cleans staging", async () => {
+  it("places the archive's database at venue.db and writes the secrets", async () => {
     await restoreFromArtifact(deps());
 
-    // DB dump reached the runner, byte-for-byte, under the target connection.
-    expect(runRestore).toHaveBeenCalledTimes(1);
-    expect(restored?.databaseUrl).toBe("postgres://admin@localhost/fresh");
-    expect(restored?.bytes).toEqual(DUMP);
+    // The archive's database entry reached `venue.db`, byte-for-byte, with nothing left over.
+    await expectVenueRestored();
+    // The venue directory holds the whole database and is created for the operator alone.
+    expect((await stat(venueDir)).mode & 0o777).toBe(0o700);
+    expect((await stat(venueFile())).mode & 0o777).toBe(0o600);
 
     // Secret landed in stateDir (prefix stripped).
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
 
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
-
-    // Staging cleaned in finally.
-    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("creates its own destination roots (staging/state) when they do not yet exist", async () => {
-    // Both protected roots must exist before their first path guard runs.
+  it("creates its own destination roots (staging/state/venue) when they do not yet exist", async () => {
+    // Both protected roots must exist before their first path guard runs, and the venue directory
+    // before the database is placed in it.
     const newStaging = join(stagingDir, "restore-staging");
     const newState = join(stateDir, "state-store");
-    await restoreFromArtifact(deps({ stagingDir: newStaging, stateDir: newState }));
+    const newVenue = join(venueDir, "nested", "venue");
+    await restoreFromArtifact(
+      deps({ stagingDir: newStaging, stateDir: newState, venueDir: newVenue }),
+    );
 
-    expect(runRestore).toHaveBeenCalledTimes(1); // db restored — staging dir was created
+    expect(await readFile(join(newVenue, "venue.db"))).toEqual(VENUE_BYTES); // venue dir was created
     expect(await readFile(join(newState, "secrets.env"), "utf8")).toBe(SECRET); // state dir was created
-    await expect(stat(join(newStaging, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" }); // cleaned
-    // stagingDir (whole-DB plaintext dump) and stateDir (secrets) are created 0700 — a group/world
-    // -readable dir would expose the 0600 files inside by traversal.
+    // stagingDir, stateDir (secrets) and the venue directory (the whole database) are created 0700 —
+    // a group/world-readable dir would expose the 0600 files inside by traversal.
     expect((await stat(newStaging)).mode & 0o777).toBe(0o700);
     expect((await stat(newState)).mode & 0o777).toBe(0o700);
+    expect((await stat(newVenue)).mode & 0o777).toBe(0o700);
   });
 
   it("skips secrets when skipSecrets is true (keeps own identity), still restores the database", async () => {
     await restoreFromArtifact(deps({ skipSecrets: true }));
     // The database is restored, while the node keeps its own secrets.
-    expect(runRestore).toHaveBeenCalledTimes(1);
+    await expectVenueRestored();
     // … but the secret was NOT written — the node keeps its own identity
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    // staging still cleaned
-    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("cleans staging even when pg_restore throws", async () => {
-    const boom: PgRestoreRunner = vi.fn(async () => {
-      throw new Error("pg_restore failed");
-    });
-    await expect(restoreFromArtifact(deps({ runRestore: boom }))).rejects.toThrow(
-      "pg_restore failed",
+  it("leaves no working file behind when the database cannot be placed", async () => {
+    // A venue directory that cannot be made: its parent is a FILE, so `mkdir` fails ENOTDIR before
+    // a byte is written. The whole restore fails with it, and the state dir keeps no half-restore.
+    const blocker = join(stagingDir, "not-a-directory");
+    await writeFile(blocker, "");
+    await expect(restoreFromArtifact(deps({ venueDir: join(blocker, "venue") }))).rejects.toThrow(
+      /ENOTDIR|ENOENT/,
     );
-    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("refuses an incompatible manifest BEFORE any restore or write", async () => {
@@ -239,7 +293,7 @@ describe("restoreFromArtifact", () => {
     await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
       code: "restore.environment_mismatch",
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -250,18 +304,18 @@ describe("restoreFromArtifact", () => {
     await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
       code: "restore.schema_too_new",
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
   });
 
   it("refuses a traversal entry name BEFORE any restore or write", async () => {
     const evil: ArchiveEntry[] = [
-      { name: "db.dump", bytes: DUMP },
+      { name: "db.dump", bytes: VENUE_BYTES },
       { name: "secrets/../../evil.env", bytes: Buffer.from(SECRET) },
     ];
     await expect(
       restoreFromArtifact(deps({ artifact: buildArtifact(evil) })),
     ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
   });
 
   it("throws archive_incomplete when manifest.json is absent", async () => {
@@ -270,7 +324,7 @@ describe("restoreFromArtifact", () => {
       code: "restore.archive_incomplete",
       params: { missing: "manifest.json" },
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
   });
 
   it("throws archive_incomplete when db.dump is absent", async () => {
@@ -279,7 +333,7 @@ describe("restoreFromArtifact", () => {
       code: "restore.archive_incomplete",
       params: { missing: "db.dump" },
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
   });
 
   it("rejects an unrecognised top-level entry (fail-visible) BEFORE any restore or write", async () => {
@@ -287,28 +341,23 @@ describe("restoreFromArtifact", () => {
     // route. Today it must fail LOUD rather than silently drop the entry (CLAUDE.md §5) — proven
     // here with a `documents/x` entry alongside a valid `db.dump`.
     const artifact = buildArtifact([
-      { name: "db.dump", bytes: DUMP },
+      { name: "db.dump", bytes: VENUE_BYTES },
       { name: "documents/x", bytes: Buffer.from("orphan") },
     ]);
     await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
       code: "restore.unexpected_entry",
       params: { name: "documents/x" },
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
 describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", () => {
   useTempDirs("waitron-validate-");
-  let runRestore: PgRestoreRunner;
-
-  beforeEach(() => {
-    runRestore = vi.fn(async () => {});
-  });
 
   function deps(overrides: Partial<RestoreDeps> = {}): RestoreDeps {
-    return makeRestoreDeps({ runRestore, ...overrides });
+    return makeRestoreDeps(overrides);
   }
 
   it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
@@ -317,7 +366,7 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     await expect(validateArtifact(deps({ recoveryKey: "the-wrong-key" }))).rejects.toMatchObject({
       code: "recovery.passphrase_invalid",
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -326,19 +375,19 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     await expect(validateArtifact(deps({ artifact }))).rejects.toMatchObject({
       code: "restore.environment_mismatch",
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("validateArtifact throws on a traversal entry (guard) and writes NOTHING", async () => {
     const evil: ArchiveEntry[] = [
-      { name: "db.dump", bytes: DUMP },
+      { name: "db.dump", bytes: VENUE_BYTES },
       { name: "secrets/../../evil.env", bytes: Buffer.from(SECRET) },
     ];
     await expect(validateArtifact(deps({ artifact: buildArtifact(evil) }))).rejects.toMatchObject({
       code: "restore.unsafe_entry_path",
     });
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -346,57 +395,39 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     // The two halves compose to exactly restoreFromArtifact's behaviour: validate returns the pieces,
     // write consumes them. writeValidated is the ONLY writer — the gate/guard live solely in validate,
     // so the security pass is single-sourced.
-    let staged: Uint8Array | undefined;
-    const capturing = vi.fn(async ({ inFile }: { inFile: string }) => {
-      staged = await readFile(inFile);
-    }) as unknown as PgRestoreRunner;
-
     const validated = await validateArtifact(deps());
-    expect(validated.dumpEntry.bytes).toEqual(DUMP);
+    expect(validated.dumpEntry.bytes).toEqual(VENUE_BYTES);
     expect(validated.secretEntries.map((e) => e.name)).toEqual([
       "secrets/secrets.env",
       "secrets/trading.env",
     ]);
 
-    await writeValidated(validated, deps({ runRestore: capturing }));
-    expect(staged).toEqual(DUMP);
+    await writeValidated(validated, deps());
+    await expectVenueRestored();
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
-    await expect(stat(join(stagingDir, "db.dump"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
 describe("restore steps (R3 composition)", () => {
   useTempDirs("waitron-step-");
 
-  it("restoreDatabase stages the dump and feeds it to the runner", async () => {
-    let seen: Uint8Array | undefined;
-    const runRestore: PgRestoreRunner = async ({ inFile }) => {
-      seen = await readFile(inFile);
-    };
-    const staged = await restoreDatabase({
-      dumpBytes: DUMP,
-      stagingDir,
-      databaseUrl: "postgres://x",
-      runRestore,
-      log: noopLog,
-    });
-    expect(seen).toEqual(DUMP);
-    expect(staged).toBe(join(stagingDir, "db.dump"));
+  it("restoreDatabase writes the archive's bytes to venue.db and returns that path", async () => {
+    const placed = await restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog });
+    expect(placed).toBe(venueFile());
+    expect(await readFile(placed)).toEqual(VENUE_BYTES);
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("restoreDatabase rejects a runner but leaves the staged file for the caller to clean", async () => {
-    const runRestore: PgRestoreRunner = async () => {
-      throw new Error("nope");
-    };
+  it("restoreDatabase leaves the EXISTING database alone when the incoming write cannot start", async () => {
+    // The bytes are written to the working file BEFORE anything is removed, so a placement that
+    // never gets going leaves the box where it was rather than with no database at all.
+    await mkdir(venueDir, { recursive: true });
+    await writeFile(venueFile(), "THE-DATABASE-THAT-WAS-ALREADY-THERE");
+    await mkdir(incomingFile(), { recursive: true });
     await expect(
-      restoreDatabase({
-        dumpBytes: DUMP,
-        stagingDir,
-        databaseUrl: "postgres://x",
-        runRestore,
-        log: noopLog,
-      }),
-    ).rejects.toThrow("nope");
+      restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog }),
+    ).rejects.toMatchObject({ code: "ERR_FS_EISDIR" });
+    expect(await readFile(venueFile(), "utf8")).toBe("THE-DATABASE-THAT-WAS-ALREADY-THERE");
   });
 
   it("restoreSecrets guards traversal before writing", async () => {
@@ -442,6 +473,120 @@ describe("restore steps (R3 composition)", () => {
   });
 });
 
+/**
+ * The two ways putting a venue file in place goes silently wrong, each against a REAL SQLite file.
+ *
+ * Neither is visible to a case whose writer was CLOSED rather than killed or left open: a clean
+ * `close()` checkpoints the write-ahead file and deletes both sidecars, so the broken implementation
+ * and the correct one behave identically. That is why these two cases exist and why they are built
+ * the awkward way — a killed child process, and a connection deliberately left open. Delete the
+ * `rm` loop in `restoreDatabase` and both fail; the readings are in `restore.ts`'s own comment and
+ * in `docs/handoffs/2026-09-21-f1-the-flip.md`.
+ */
+describe("restoreDatabase places a REAL venue file (the two silent failures)", () => {
+  useTempDirs("waitron-place-");
+
+  /** One self-contained SQLite database holding a marker row nothing else has. */
+  async function archiveBytes(marker: string): Promise<Buffer> {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-archive-"));
+    try {
+      const path = join(dir, "archive.db");
+      const db = new DatabaseSync(path);
+      db.exec("create table marker (id integer primary key, v text)");
+      db.exec(`insert into marker (v) values ('${marker}')`);
+      // No write-ahead mode: the archive comes out as one file with no sidecar, which is what
+      // `archiveTo`'s `VACUUM INTO` produces (`packages/store/src/archive.ts`).
+      db.close();
+      return await readFile(path);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** What the venue directory answers with, opened by the product's own opener. */
+  async function markersIn(directory: string): Promise<string[]> {
+    const store = await openVenueDatabase(directory);
+    try {
+      const rows = store.venue.all<{ v: string }>(sql`select v from marker order by id`);
+      return rows.map((row) => row.v);
+    } finally {
+      await store.close();
+    }
+  }
+
+  /**
+   * A child commits a row in write-ahead mode and is SIGKILLed — a box losing power mid-service.
+   * The committed row is then in `venue.db-wal` and NOT in `venue.db`, and both sidecars are left
+   * behind. `-e` runs CommonJS, which is why this is `require` rather than an import.
+   */
+  async function killedWriter(path: string): Promise<void> {
+    const script = `
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(${JSON.stringify(path)});
+      db.exec("pragma journal_mode = wal");
+      db.exec("create table marker (id integer primary key, v text)");
+      db.exec("insert into marker (v) values ('CRASHED-TAIL')");
+      process.stdout.write("ready");
+      setInterval(() => {}, 1000);
+    `;
+    const child = spawn(process.execPath, ["-e", script], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    let ready = false;
+    await new Promise<void>((resolve, reject) => {
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (chunk.toString("utf8").includes("ready")) {
+          ready = true;
+          resolve();
+        }
+      });
+      child.once("error", reject);
+      child.once("exit", () => {
+        if (!ready) reject(new Error("the writer exited before it committed"));
+      });
+    });
+    child.kill("SIGKILL");
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  }
+
+  it("removes the STALE SIDECARS a killed writer left, so its tail is not replayed over the archive", async () => {
+    await mkdir(venueDir, { recursive: true });
+    await killedWriter(venueFile());
+    // The crashed writer's row is in the write-ahead file. Replacing `venue.db` alone leaves that
+    // file to be recovered on the next open, and the archive's rows are simply absent — with no
+    // error raised in either direction.
+    expect((await stat(`${venueFile()}-wal`)).size).toBeGreaterThan(0);
+
+    await restoreDatabase({
+      dumpBytes: await archiveBytes("FROM-ARCHIVE"),
+      venueDir,
+      log: noopLog,
+    });
+
+    expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
+  });
+
+  it("UNLINKS the venue file rather than renaming over it, so an open connection cannot undo the restore", async () => {
+    const live = await openVenueDatabase(venueDir);
+    live.venue.run(sql`create table marker (id integer primary key, v text)`);
+    live.venue.run(sql`insert into marker (v) values ('LIVE')`);
+
+    await restoreDatabase({
+      dumpBytes: await archiveBytes("FROM-ARCHIVE"),
+      venueDir,
+      log: noopLog,
+    });
+
+    // The stale handle is on an orphaned inode now. Nothing here stops it writing — refusing to
+    // restore under a running server is a separate guard — but neither its write nor the
+    // checkpoint its close performs may reach the file the next boot opens.
+    live.venue.run(sql`insert into marker (v) values ('WRITTEN-AFTER-RESTORE')`);
+    await live.close();
+
+    expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
+  });
+});
+
 describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
@@ -455,8 +600,9 @@ describe("restore hooks (identity phase)", () => {
         idSistemaInformatico: "WT",
       });
       expect(sif.numeroInstalacion).toBe(1);
-      await tx.execute(sql`insert into invoice_series (node_id, code, purpose)
-        values (${T.nodeId}, 'FA-1', 'rectificative')`);
+      await tx
+        .insert(invoiceSeries)
+        .values({ nodeId: T.nodeId, code: "FA-1", purpose: "rectificative" });
     });
     await restoreFromArtifact(
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": FISCAL_RESTORE }) }),
@@ -502,20 +648,18 @@ describe("restore hooks (identity phase)", () => {
 
   it("rejects duplicate identity destinations during validation before set-aside", async () => {
     await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
-    const runRestore = vi.fn(async () => {});
     const migrate = vi.fn(async () => {});
     const deps = makeRestoreDeps({
       artifact: buildArtifact([
         ...FULL_ENTRIES,
         { name: "secrets/./trading.env", bytes: Buffer.from(TRADING_ENV) },
       ]),
-      runRestore,
       migrate,
     });
     const error = { code: "restore.unsafe_entry_path" };
     await expect(validateArtifact(deps)).rejects.toMatchObject(error);
     await expect(restoreFromArtifact(deps)).rejects.toMatchObject(error);
-    expect(runRestore).not.toHaveBeenCalled();
+    await expectVenueUntouched();
     expect(migrate).not.toHaveBeenCalled();
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
@@ -538,9 +682,13 @@ describe("restore hooks (identity phase)", () => {
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("migrates after pg_restore and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
+  it("migrates AFTER the venue file is in place and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
+    // The database restore has no callback to record any more, so its position in the order is read
+    // off the filesystem instead: `migrate` asserts that `venue.db` already holds the archive's
+    // bytes at the moment it runs, which is a stronger claim than the call order it replaces.
     const order: string[] = [];
     const migrate = vi.fn(async () => {
+      expect(await readFile(venueFile())).toEqual(VENUE_BYTES);
       order.push("migrate");
     });
     const hook: RestoreHook = async () => {
@@ -549,16 +697,11 @@ describe("restore hooks (identity phase)", () => {
       return { report: "ok" };
     };
     await restoreFromArtifact(
-      makeRestoreDeps({
-        migrate,
-        modules: withHooks({ "fiscal-verifactu": hook }),
-        runRestore: vi.fn(async () => {
-          order.push("pg_restore");
-        }),
-      }),
+      makeRestoreDeps({ migrate, modules: withHooks({ "fiscal-verifactu": hook }) }),
     );
-    expect(order).toEqual(["pg_restore", "migrate", "hook"]);
-    expect(migrate).toHaveBeenCalledWith("postgres://admin@localhost/fresh", expect.any(Array));
+    expect(order).toEqual(["migrate", "hook"]);
+    // The venue DIRECTORY, not a connection string: `applyMigrations` opens the two files itself.
+    expect(migrate).toHaveBeenCalledWith(venueDir, expect.any(Array));
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
   });
 
@@ -595,32 +738,42 @@ describe("restore hooks (identity phase)", () => {
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV); // the artifact's, restored over the stale one
   });
 
-  it("a pre-existing VALID identity is set aside BEFORE pg_restore runs, so a failed hook leaves NO trading.env", async () => {
-    // The target already holds a bootable identity (the artifact's own shape, with a different node).
+  it("a pre-existing VALID identity is set aside BEFORE the venue file is replaced", async () => {
+    // Proven by stopping the restore AT the placement: the venue directory cannot be made (its
+    // parent is a file), so nothing after `restoreDatabase` runs at all. The identity being gone by
+    // then is what "set aside before the first irreversible step" means.
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
       WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
     await writeFile(join(stateDir, "trading.env"), existing);
-    let goneWhenRestoreRan = false;
-    const runRestore: PgRestoreRunner = vi.fn(async () => {
-      goneWhenRestoreRan = await stat(join(stateDir, "trading.env")).then(
-        () => false,
-        () => true,
-      );
+    const blocker = join(stagingDir, "not-a-directory");
+    await writeFile(blocker, "");
+    const migrate = vi.fn(async () => {});
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ venueDir: join(blocker, "venue"), migrate })),
+    ).rejects.toThrow(/ENOTDIR|ENOENT/);
+    expect(migrate).not.toHaveBeenCalled();
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
+  });
+
+  it("a failed hook leaves NO trading.env, neither the target's nor the artifact's", async () => {
+    const existing = formatEnvFile({
+      ...parseEnvFile(TRADING_ENV),
+      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
+    await writeFile(join(stateDir, "trading.env"), existing);
     const boom: RestoreHook = async () => {
       throw new AppError("restore.unexpected_entry", { name: "boom" });
     };
     await expect(
-      restoreFromArtifact(
-        makeRestoreDeps({ runRestore, modules: withHooks({ "fiscal-verifactu": boom }) }),
-      ),
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": boom }) })),
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "fiscal-verifactu", code: "restore.unexpected_entry" },
     });
-    expect(goneWhenRestoreRan).toBe(true); // set aside before the first irreversible step
+    await expectVenueRestored();
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
   });
@@ -643,10 +796,7 @@ describe("restore hooks (identity phase)", () => {
     await restoreFromArtifact(
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
     );
-    const rows = await suite.db.execute<{ code: string; retired: boolean; next: number }>(
-      sql`select code, retired_at is not null as retired, next_number as next from invoice_series where node_id = ${T.nodeId} order by code`,
-    );
-    expect(rows.rows).toEqual([
+    expect(await seriesOfNode()).toEqual([
       { code: "FA", retired: true, next: 1 },
       { code: "FA-9", retired: false, next: 1 },
     ]);
@@ -667,9 +817,10 @@ describe("restore hooks (identity phase)", () => {
     );
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     // The restored node has NO live standard series (retired in the backup) → refuse, no identity written.
-    await suite.db.execute(
-      sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
-    );
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(eq(invoiceSeries.id, T.seriesId));
     await expect(
       restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) })),
     ).rejects.toMatchObject({
@@ -680,24 +831,22 @@ describe("restore hooks (identity phase)", () => {
   });
 
   it("no series returned but the artifact's series id is not the live standard one → env is corrected", async () => {
-    await suite.db.execute(
-      sql`insert into invoice_series (node_id, code) values (${T.nodeId}, 'FB')`,
-    );
-    await suite.db.execute(
-      sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
-    );
+    await suite.db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FB" });
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(eq(invoiceSeries.id, T.seriesId));
     await restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }));
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
-    const [fb] = (
-      await suite.db.execute<{ id: string }>(sql`select id from invoice_series where code = 'FB'`)
-    ).rows;
+    const [fb] = await suite.db
+      .select({ id: invoiceSeries.id })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.code, "FB"));
     expect(written.WAITRON_TILL_SERIES_ID).toBe(fb!.id);
   });
 
   it("no series returned and TWO live standard series in the restored db → refused (loud), no identity written", async () => {
-    await suite.db.execute(
-      sql`insert into invoice_series (node_id, code) values (${T.nodeId}, 'FB')`,
-    );
+    await suite.db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FB" });
     await expect(restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }))).rejects.toThrow(
       /more than one standard series/,
     );
@@ -717,10 +866,7 @@ describe("restore hooks (identity phase)", () => {
     await expect(
       restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) })),
     ).rejects.toThrow(/more than one standard series/);
-    const rows = await suite.db.execute<{ code: string; retired: boolean }>(
-      sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId} order by code`,
-    );
-    expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
+    expect(await seriesOfNode()).toEqual([{ code: "FA", retired: false, next: 1 }]);
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -737,10 +883,7 @@ describe("restore hooks (identity phase)", () => {
       code: "restore.hook_failed",
       params: { module: "fiscal-verifactu", code: "series.code_collision" },
     });
-    const rows = await suite.db.execute<{ code: string; retired: boolean }>(
-      sql`select code, retired_at is not null as retired from invoice_series where node_id = ${T.nodeId}`,
-    );
-    expect(rows.rows).toEqual([{ code: "FA", retired: false }]);
+    expect(await seriesOfNode()).toEqual([{ code: "FA", retired: false, next: 1 }]);
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -788,11 +931,9 @@ describe("restore hooks (identity phase)", () => {
           ),
         });
       }
-      const runRestore = vi.fn(async () => {});
       const migrate = vi.fn(async () => {});
       const restoreDeps = makeRestoreDeps({
         artifact: buildArtifact(entries),
-        runRestore,
         migrate,
       });
       const error = {
@@ -801,7 +942,7 @@ describe("restore hooks (identity phase)", () => {
       };
 
       await expect(restoreFromArtifact(restoreDeps)).rejects.toMatchObject(error);
-      expect.soft(runRestore).not.toHaveBeenCalled();
+      await expectVenueUntouched();
       expect.soft(migrate).not.toHaveBeenCalled();
       await expect(readFile(join(stateDir, "trading.env"), "utf8")).resolves.toBe(existing);
       await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
@@ -854,7 +995,8 @@ describe("restore hooks (identity phase)", () => {
 // These pin that round-trip and the two exceptions that matter: `skipSecrets` (rejoin) restores
 // neither, and a restore that MISSES `modules.json` makes the box REFUSE TO BOOT rather than silently
 // flip regime. PGlite is the right target here (CLAUDE.md §4): the two files are disk-only config —
-// this suite makes no privilege, trigger or concurrency claim; the DB restore is the mocked `runRestore`.
+// this suite makes no privilege, trigger or concurrency claim, and never opens what the restore
+// placed — `migrate` and `openDb` are both injected.
 describe("optional state (backup.env + modules.json) round-trip", () => {
   useTempDirs("waitron-optstate-");
   beforeEach(resetSeries); // the round-trips run the identity phase; re-arm the node's one live series

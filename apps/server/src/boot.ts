@@ -266,7 +266,6 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
 const BACKUP_ENV_KEYS = [
   "WAITRON_BACKUP_DIR",
   "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_DATABASE_URL",
   "WAITRON_BACKUP_RECOVERY_KEY",
   "WAITRON_BACKUP_SCHEDULE_DAYS",
   "WAITRON_BACKUP_AT",
@@ -1031,13 +1030,11 @@ export async function startServer(
               await validateArtifact({
                 artifact: candidate.artifact,
                 recoveryKey: candidate.recoveryKey,
-                databaseUrl: config.migrationsDatabaseUrl,
                 stateDir: config.stateDir,
                 stagingDir: join(config.stateDir, "restore-staging"),
                 migrationsRoot: config.migrationsRoot,
                 modules: ALL_MODULES,
                 environment: candidate.environment,
-                log,
               });
             }),
           stageConfiguration: (artifact, passphrase) =>
@@ -2009,12 +2006,14 @@ export async function startServer(
     log,
   );
   // The backup duty's lifecycle owner (BR-1 Task 4). It re-reads the box-env files from DISK on every
-  // `reload()` (so the wizard's `backup.env` takes effect without a restart), derives the read
-  // connection — the config's explicit `WAITRON_BACKUP_DATABASE_URL` or, when unset, the box's own
-  // OWNER connection (`config.adminDatabaseUrl`) — probes it, and starts the sweep ONLY on a singleton
-  // primary whose probe passes. A probe failure or a non-primary role leaves backup off and is logged,
-  // never stopping sales (§5). Provenance and the disk re-read both read the RAW `base` env, not the
-  // merged `env`, so a file-sourced value is distinguishable from an env-sourced one (spec §3.2).
+  // `reload()` (so the wizard's `backup.env` takes effect without a restart), opens the venue
+  // directory on its OWN connection — not this one — and starts the sweep ONLY on a singleton
+  // primary. A venue it cannot open, or a non-primary role, leaves backup off and is logged, never
+  // stopping sales (§5). Why a second connection rather than this handle is measured and recorded in
+  // `backup-supervisor.ts`'s header: the archive is `VACUUM INTO`, which SQLite refuses on a
+  // connection with a transaction open. Provenance and the disk re-read both read the RAW `base`
+  // env, not the merged `env`, so a file-sourced value is distinguishable from an env-sourced one
+  // (spec §3.2).
   // The in-process record of each backup destination's last sweep outcome. The sweep the supervisor
   // starts fills it and the backups alert source (assembled just below, once the supervisor exists)
   // reads this same holder — so both refer to one map. It is process-lived and empty until the first
@@ -2024,7 +2023,7 @@ export async function startServer(
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
     isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
     readSingletonRole: () => holders.singletonRole.current,
-    adminDatabaseUrl: config.adminDatabaseUrl,
+    venueDir: config.venueDir,
     modules: ALL_MODULES,
     environment: config.environment,
     stateDir: config.stateDir,

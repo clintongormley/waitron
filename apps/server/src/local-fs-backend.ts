@@ -5,9 +5,9 @@ import type { BackupDestination, StorageBackend, StoredObject } from "./storage-
 
 /**
  * v1 storage backend: a local directory. `put` writes to `<target>.tmp` then `rename`s onto the final
- * key via `writeFileAtomic` (`fs-atomic.ts`) — the same temp-then-rename idiom as `dumpAtomic`
- * (`pg-dump.ts`), so a fan-out write that dies mid-write never leaves a half-written key visible under
- * its real name. `list` therefore excludes that helper's `.tmp` suffix (below) so a leftover temp is
+ * key via `writeFileAtomic` (`fs-atomic.ts`) — the same temp-then-rename idiom the archive copy
+ * uses (`archiveTo`, `packages/store/src/archive.ts`), so a fan-out write that dies mid-write never
+ * leaves a half-written key visible under its real name. `list` therefore excludes that helper's `.tmp` suffix (below) so a leftover temp is
  * never returned as a backup.
  */
 export class LocalFsBackend implements StorageBackend {

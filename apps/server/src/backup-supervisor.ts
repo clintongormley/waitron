@@ -1,10 +1,21 @@
 // The backup duty's lifecycle owner. It sits between boot and the scheduled sweep (`backup-sweep.ts`)
 // so the duty can be (re)configured at runtime — enable from off, change destination, rotate the
 // recovery key, or follow a promotion — WITHOUT restarting the process. `reload()` is the single
-// entry point: it stops the running duty, closes its DB pool, RE-READS the config from disk (the box
-// env files, via the injected `buildConfig`), derives the read connection, probes it, and — only on a
-// singleton primary with a valid config that passes the probe — starts a fresh sweep whose immediate
-// first tick takes a dump under the new config.
+// entry point: it stops the running duty, closes its own database handle, RE-READS the config from
+// disk (the box env files, via the injected `buildConfig`), opens the venue again, and — only on a
+// singleton primary with a valid config it could open — starts a fresh sweep whose immediate first
+// tick takes a copy under the new config.
+//
+// **It opens its OWN connection to the venue directory rather than reusing boot's, and that is a
+// correctness requirement, not tidiness.** The archive is `VACUUM INTO`, which SQLite refuses on a
+// connection that has a transaction open. Measured on Node v26.7.0, `/tmp/f1-restore-probe/
+// vacuum-concurrency.mjs`, re-run 2026-09-21: a SECOND connection archiving while the first holds
+// an open `begin immediate` with an uncommitted insert SUCCEEDS, and the archive holds the
+// committed row and not the uncommitted one; the control — the SAME connection that holds the
+// transaction — answers `cannot VACUUM from within a transaction`, errcode 1, and writes no file.
+// On boot's handle, then, every backup that fired while a sale was mid-transaction would fail,
+// intermittently. This is also the answer `packages/store/src/archive.ts` left open for the app
+// layer: no queueing, a second connection.
 //
 // `current()` is a SYNC, config-derived snapshot (no I/O) for the routes and the status shell.
 // `status()` adds the async freshness read (`readBackupStatus`) and `archiveUnderCurrentKey`, which
@@ -18,11 +29,10 @@
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { createPostgresDb, type Database, type SingletonRole } from "@waitron/db";
+import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
-import { assertBackupCanReadFiscal } from "./backup-probe.js";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
@@ -32,7 +42,6 @@ import type { DeploymentEnvironment } from "./config.js";
 import { buildBackend } from "./local-fs-backend.js";
 import { realSleep } from "./loop.js";
 import type { Logger } from "./logger.js";
-import { realPgDump, type PgDumpRunner } from "./pg-dump.js";
 import "./errors.js";
 
 /** A SYNC, config-derived snapshot of the backup duty — no I/O. The routes and the box-status shell
@@ -59,9 +68,10 @@ export interface BackupSupervisorDeps {
   isManagedByEnvironment: () => boolean;
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
-  /** The fallback backup read connection: the box's own OWNER connection, used when the config names
-   * no explicit `WAITRON_BACKUP_DATABASE_URL`. */
-  adminDatabaseUrl: string;
+  /** The venue directory holding `venue.db` and `node.db` (`config.venueDir`). The supervisor opens
+   * it ITSELF, on its own connection — see this file's header for the measurement that makes that a
+   * requirement rather than a preference. */
+  venueDir: string;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   stateDir: string;
@@ -72,11 +82,11 @@ export interface BackupSupervisorDeps {
    * sweep so each destination's tick result is recorded; optional so tests that ignore alerts omit it. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
-  /** DI for tests; defaults to `createPostgresDb`. */
-  openDb?: (url: string) => Promise<Database>;
+  /** DI for tests; defaults to `openVenueDatabase`. A test supplies this to count the handles the
+   * supervisor opens and closes, or to hand back one whose `archiveTo` fails. */
+  openVenue?: (directory: string) => Promise<VenueDatabase>;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-  runDump?: PgDumpRunner;
 }
 
 /** Short hash prefix of a recovery key — an identity for "which key is running" that reveals nothing
@@ -89,13 +99,13 @@ export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
   #controller: AbortController | undefined;
   #worker: Promise<void> | undefined;
-  #db: Database | undefined;
+  #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. Without it a
    * shutdown `stop()` that interleaves with a route-triggered `reload()` at an await point could tear
-   * down BEFORE `reload()` assigned a fresh worker/pool, leaving a sweep running after `stop()`
+   * down BEFORE `reload()` assigned a fresh worker/handle, leaving a sweep running after `stop()`
    * returned (Task 4 review carry, step 8b). */
   #stopped = false;
   /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
@@ -108,10 +118,10 @@ export class BackupSupervisor {
   }
 
   /**
-   * (Re)configure the duty: stop the running sweep, close its pool, re-read the config from disk,
-   * derive + probe the read connection, and — only on a singleton primary with a config that passes
-   * the probe — start a fresh sweep (whose immediate first tick dumps under the new config). Latched:
-   * a concurrent reload throws `backup.reload_in_progress` rather than racing two teardowns.
+   * (Re)configure the duty: stop the running sweep, close its database handle, re-read the config
+   * from disk, open the venue again, and — only on a singleton primary whose venue opened — start a
+   * fresh sweep (whose immediate first tick copies under the new config). Latched: a concurrent
+   * reload throws `backup.reload_in_progress` rather than racing two teardowns.
    */
   async reload(): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
@@ -122,53 +132,57 @@ export class BackupSupervisor {
       this.#storedUnderCurrentKey = false;
       await this.#teardown();
       // A `stop()` may have run (fully, or concurrently) while we awaited the teardown. Bail before
-      // reading config or starting anything — `#teardown` above already left no worker/pool.
+      // reading config or starting anything — `#teardown` above already left no worker/handle.
       if (this.#stopped) return;
       const cfg = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       this.#config = cfg;
       if (cfg === undefined || this.#deps.readSingletonRole() !== "primary") {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
-        // because `#db` is undefined (no probe passed) — a non-primary reads disabled.
+        // because `#db` is undefined (nothing was opened) — a non-primary reads disabled.
         this.#deps.log("info", "backup.disabled", {});
         return;
       }
-      // No explicit backup URL → derive the read connection from the box's own OWNER connection.
-      const url = cfg.databaseUrl ?? this.#deps.adminDatabaseUrl;
-      const openDb = this.#deps.openDb ?? createPostgresDb;
-      let db: Database | undefined;
+      const openVenue = this.#deps.openVenue ?? openVenueDatabase;
+      let db: VenueDatabase | undefined;
       try {
-        // Opening the pool AND the probe are both inside the guard: a refused/unreachable connection
-        // (openDb throws, `db` still undefined) is as much a "backup can't read" case as a probe that
-        // rejects (db open). Either leaves backup OFF without aborting boot — a bad backup role must
-        // never brick the till (§5) — and never ships a partial dump as recovery-ready.
-        db = await openDb(url);
-        await assertBackupCanReadFiscal(db);
+        // A venue directory that will not open — missing, unreadable, or holding a file that is not
+        // a database — leaves backup OFF without aborting boot: a broken backup duty must never
+        // brick the till (§5), and a tick that cannot read the database must never ship a partial
+        // archive as recovery-ready.
+        //
+        // There is no privilege probe here any longer, and the log tag says so. The probe this
+        // replaced asked PostgreSQL's catalogue whether the connecting role could read the fiscal
+        // tables; SQLite has no roles and no catalogue to ask, so that question has no subject.
+        // What survives is the open, and `backup.disabled_open_failed` names exactly that.
+        db = await openVenue(this.#deps.venueDir);
       } catch (err) {
         if (db !== undefined) await db.close().catch(() => {});
-        this.#deps.log("error", "backup.disabled_probe_failed", { errorCode: codeOf(err) });
+        this.#deps.log("error", "backup.disabled_open_failed", { errorCode: codeOf(err) });
         this.#config = undefined;
         return;
       }
-      // A `stop()` landed while we opened the pool / ran the probe. Close the pool we just opened and
-      // bail WITHOUT assigning `#db` or starting a worker — otherwise the sweep we are about to start
-      // would outlive the `stop()` that already returned.
+      // A `stop()` landed while we opened the venue. Close what we just opened and bail WITHOUT
+      // assigning `#db` or starting a worker — otherwise the sweep we are about to start would
+      // outlive the `stop()` that already returned.
       if (this.#stopped) {
         await db?.close().catch(() => {});
         return;
       }
-      this.#db = db;
+      const venue = db;
+      this.#db = venue;
       const controller = new AbortController();
       this.#controller = controller;
       this.#worker = runBackupSweep({
         backends: cfg.destinations.map(buildBackend),
-        db,
+        db: venue.venue,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
         resolvers: {},
         stateDir: this.#deps.stateDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
-        databaseUrl: url,
+        // The copy runs on THIS handle — the one this supervisor opened — never on boot's.
+        archive: (outFile) => venue.venue.archiveTo(outFile),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,
         retain: cfg.retain,
@@ -184,7 +198,6 @@ export class BackupSupervisor {
           this.#storedUnderCurrentKey = true;
         },
         sleep: this.#deps.sleep ?? realSleep,
-        runDump: this.#deps.runDump ?? realPgDump,
         now: this.#deps.now,
         log: this.#deps.log,
       });
@@ -237,8 +250,8 @@ export class BackupSupervisor {
     await this.#teardown();
   }
 
-  /** Abort the sweep, await its settle, and close its pool — the reload-safe teardown, so a reconfigure
-   * never leaks the old pool nor leaves a tick running against a closing connection. */
+  /** Abort the sweep, await its settle, and close its database handle — the reload-safe teardown, so
+   * a reconfigure never leaks the old connection nor leaves a tick running against a closing one. */
   async #teardown(): Promise<void> {
     this.#controller?.abort();
     if (this.#worker !== undefined) await this.#worker.catch(() => {});

@@ -4568,10 +4568,62 @@ branch rather than package by package, so no document is left describing a half-
 - `apps/server/src/pg-dump.ts`: `dumpAtomic`, `BACKUP_KEY_PREFIX`, `dumpFileName`,
   `backupArchiveKey` and `backupArchiveTimestamp` are engine-neutral and SURVIVE. Only
   `pgDumpShellOut` and `realPgDump` go.
+
+  **CORRECTED IN PLACE 2026-09-21 night, when the backup half of this step ran: `dumpAtomic` does
+  NOT survive, and the file does not keep its name.** `archiveTo`
+  (`packages/store/src/archive.ts`, landed in step group 6) already performs the identical
+  `<path>.partial`-then-`rename`, its own tests cover it, and it additionally clears a stale working
+  file — which `dumpAtomic` never had to, because `pg_dump` overwrites its target and `VACUUM INTO`
+  refuses a non-empty one. Keeping both would nest two temp-then-rename layers over one copy, so
+  `dumpAtomic`, `PgDumpRunner`, `pgDumpShellOut` and `realPgDump` are all deleted. The three
+  `dumpAtomic` cases in `pg-dump.test.ts` lose their SUBJECT rather than their coverage: the same
+  discipline is proven in `packages/store/src/archive.test.ts`, whose two comments now say so.
+
+  What is left is the key-naming convention alone, so the file is renamed to
+  `apps/server/src/backup-keys.ts` (`pg-dump.test.ts` → `backup-keys.test.ts`, all seven naming
+  cases kept). **The artifact key format is unchanged** — `waitron-<basic-ISO>.backup.enc` — because
+  the sweep's prune and `backup-status.ts` both scan `list(BACKUP_KEY_PREFIX)` and artifacts written
+  before the switch must stay readable and prunable.
+
+  **The step group 6 question this answers.** `archive.ts`'s docstring left open "whether the backup
+  sweep needs any queueing". It does not: `BackupSupervisor` opens its OWN connection to the venue
+  directory. Measured on Node v26.7.0, `/tmp/f1-restore-probe/vacuum-concurrency.mjs`, re-run
+  2026-09-21 before this was written — a SECOND connection archiving while the first holds an open
+  `begin immediate` with an uncommitted insert succeeds and copies the COMMITTED state; the control,
+  the same connection that holds the transaction, answers `cannot VACUUM from within a transaction`,
+  errcode 1, and writes no file. The same refusal was then reproduced through the product's own
+  `archiveTo` (`backup-supervisor.test.ts` run with `openVenue` returning boot's handle:
+  `cause: cannot VACUUM from within a transaction | errcode 1`). Reusing boot's handle would make
+  every backup that fires mid-sale fail, intermittently.
+
+  `runBackupSweep`'s `databaseUrl` and `runDump` are replaced by one injected
+  `archive: (outFile: string) => Promise<void>`, which the supervisor binds to that handle's
+  `archiveTo`. `WAITRON_BACKUP_DATABASE_URL` is deleted outright rather than deprecated: with one
+  venue directory there is no second connection to name, and `backup-env-writer.ts` never wrote it.
 - `PgRestoreRunner` must be REHOMED, not deleted: `restore.ts` and three test files type against it.
 - `apps/server/src/backup-probe.ts` asks PostgreSQL's catalogue whether a role can read the fiscal
-  tables. With grants gone it has no subject — and deleting it makes `backup.role_rls_fenced`
-  unreachable, which `scripts/errors-reachable.test.ts` pins. Delete the code and the error together.
+  tables. With grants gone it has no subject. Delete the code and the error together.
+
+  **CORRECTED IN PLACE 2026-09-21 night: `scripts/errors-reachable.test.ts` does NOT pin this, and
+  the sentence that said so was wrong.** That guard walks `packages/` only and says so at its own
+  `packagesWithBarrelAndErrors` — `apps/*` are excluded by construction, having no public barrel —
+  so it passes identically with `backup.role_rls_fenced` declared and unthrown. Checked further:
+  `apps/server/src/errors.test.ts` has no `backup.*` case, and `scripts/alert-codes.test.ts` /
+  `scripts/ongoing-alert-codes.test.ts` read only the codes scanned out of `alert-sources.ts` and
+  `submission-alerts.ts`. **Nothing in this repository guards that a declared error code has a
+  thrower**, so the declaration had to be removed by hand and a green suite is no evidence either
+  way.
+
+  Two real-container bodies die with it, named so neither disappears inside an import fix:
+  `backup-probe.test.ts` whole (it hard-fails rather than skipping without a container), and the two
+  probe cases in `backup-supervisor.pg.test.ts`. **LOST: the only cover in either direction for a
+  backup read-privilege check** — because there is no longer such a check. The supervisor's
+  surviving log tag is renamed `backup.disabled_probe_failed` → `backup.disabled_open_failed`, since
+  no probe runs; it is a LOG EVENT, not a registry error code, so CLAUDE.md §3's never-rename rule
+  does not reach it.
+
+  A third body loses its subject the same way, in `backup-sweep.test.ts`: the `docker exec` smoke
+  that asserted a real `pg_dump` produced `PGDMP` magic bytes. Deleted with `realPgDump`.
 - The two real-container fiscal receipts — `apps/server/src/pg-restore.test.ts`'s single container
   case and `restore-fiscal-e2e.test.ts`'s four — are the only end-to-end proof that a RESTORED
   database is fiscally correct. This step's stated bar ("a test takes an archive, opens it, and reads

@@ -90,9 +90,10 @@ describe("archiveTo", () => {
   });
 
   /**
-   * The discipline `apps/server/src/pg-dump.ts`'s `dumpAtomic` holds, reproduced: bytes land under
-   * a working name and reach the final one only when the whole copy succeeded, so nothing a reader
-   * would take for a finished archive appears until there is one.
+   * Temp-then-rename: bytes land under a working name and reach the final one only when the whole
+   * copy succeeded, so nothing a reader would take for a finished archive appears until there is
+   * one. These cases are where that discipline is now proven — it used to be held (and tested)
+   * beside the `pg_dump` shell-out in `apps/server`, which the storage switch deleted.
    *
    * The failure is forced at the rename by pointing the final path at a directory. That makes the
    * case discriminating in both directions: the copy has already written its bytes by then, so a
@@ -162,8 +163,8 @@ describe("archiveTo", () => {
 
   /**
    * Re-archiving over yesterday's file. The engine refuses this on its own — `output file already
-   * exists`, errcode 1 — and the rename is what makes it work, the same way `dumpAtomic`'s rename
-   * replaces the previous dump.
+   * exists`, errcode 1 — and the rename is what makes it work: the copy goes to the working name,
+   * which no finished archive occupies, and only then takes the final one.
    */
   it("replaces an archive already at that path", async () => {
     const { directory, db } = open();

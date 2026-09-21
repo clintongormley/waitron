@@ -1503,13 +1503,10 @@ declare module "@waitron/shared" {
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };
-    /** The boot probe found missing schema access or SELECT on a user table or sequence the
-     * dump needs, including migration journals. Ownership or effective read grants suffice.
-     * Refused at boot so a recurring backup failure has one clear cause. No params. */
-    "backup.role_rls_fenced": Record<string, never>;
     /** A `BackupSupervisor.reload()` was called while another reload was still in flight. The
-     * lifecycle is latched (stop→close→re-read→probe→start), so two concurrent reloads would race two
-     * teardowns of the same pool; the second is refused rather than allowed to interleave. No params. */
+     * lifecycle is latched (stop→close→re-read→open→start), so two concurrent reloads would race two
+     * teardowns of the same open venue; the second is refused rather than allowed to interleave.
+     * No params. */
     "backup.reload_in_progress": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
@@ -1632,8 +1629,8 @@ declare module "@waitron/shared" {
     /**
      * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
      * `environment` differs from the restoring binary's own target environment. Refusing this here,
-     * before `pg_restore` touches anything, is what stops a preproduction dump landing on a
-     * production database (or the reverse) — CLAUDE.md §5's "one database per environment": a
+     * before the venue file is replaced, is what stops a preproduction archive landing on a
+     * production venue (or the reverse) — CLAUDE.md §5's "one database per environment": a
      * cross-environment restore would leave `invoice_series.next_number` inherited from the wrong
      * series, a permanent hole once real sales resume. `backup`/`target` are both a
      * `DeploymentEnvironment` string (`"production"`/`"preproduction"`), never a secret, so echoing
@@ -1664,7 +1661,8 @@ declare module "@waitron/shared" {
      * outside `destRoot`, where `realpath` reveals the escape the string comparison alone would miss.
      * GCM/tar integrity proves the archive's BYTES are authentic, never that its entry NAMES are the
      * well-behaved `db.dump`/`media/*`/`secrets/*` set BR-3 expects, so a crafted-but-authentic
-     * archive still has to be refused here before `pg_restore` or any file write touches disk.
+     * archive still has to be refused here before the venue file is replaced or any other file
+     * write touches disk.
      *
      * `name` is the archive's own entry name — attacker-influenced, but not a secret, so echoing it
      * is what makes the refusal actionable, the same as `backup.source_kind_unsupported`'s `kind`.
@@ -1676,7 +1674,8 @@ declare module "@waitron/shared" {
     /**
      * BR-3's restore orchestrator (`restore.ts`) refused: the decrypted archive is missing a
      * structurally-required entry — the `manifest.json` index it must read to run the compatibility
-     * gate, or the `db.dump` it must feed to `pg_restore`. A backup without either is not a partial
+     * gate, or the `db.dump` entry it must put in place as the venue file — that name is kept from
+     * the PostgreSQL era and now holds a whole SQLite database. A backup without either is not a partial
      * backup to salvage, it is an archive this binary cannot restore from at all, so it fails LOUD
      * and names the absent entry rather than proceeding to a half-restore. `missing` is the fixed
      * entry name (`"manifest.json"` or `"db.dump"`), never attacker input or a secret. `restore.*`,

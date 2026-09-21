@@ -8,9 +8,10 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
 /** What the backup wizard writes to `<stateDir>/backup.env` — the box's PER-VENUE backup config only.
- * `WAITRON_BACKUP_DATABASE_URL` is DELIBERATELY absent: the supervisor derives the backup read
- * connection from the box's own owner connection, so the wizard never records a DB url (writing one
- * would let a stale wizard value point the dump at the wrong database, spec §3.4). */
+ * It records no database location, and never did: the supervisor opens the box's own venue
+ * directory. (It used to be a deliberate omission, because writing a connection string here would
+ * have let a stale wizard value point a dump at the wrong database — spec §3.4. There is no longer
+ * a setting that could carry one.) */
 export interface BackupEnvInput {
   destinationDir: string;
   recoveryKey: string;
@@ -48,8 +49,9 @@ export function backupEnvRecord(input: BackupEnvInput): Record<string, string> {
 /**
  * Refuse a record that would not survive the `KEY=value` env-file round-trip. Guards EVERY persisted
  * value, not only the recovery key: a free string carrying a newline/control char injects an extra
- * `KEY=value` line on read — a `destinationDir` of `"/mnt/usb\nWAITRON_BACKUP_DATABASE_URL=…"` would
- * plant a DB url that points the dump at the wrong database, an unrecoverable fiscal fault (§5). The
+ * `KEY=value` line on read — a `destinationDir` carrying a newline plants whatever the rest of the
+ * line spells as a real setting, which is how a wizard write reaches settings the operator never
+ * chose (§5). The
  * belt-and-braces second check asserts the WHOLE record parses back byte-for-byte before any write, so
  * no `backup.env` is ever written that does not round-trip.
  */

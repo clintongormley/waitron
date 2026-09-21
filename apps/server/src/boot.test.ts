@@ -2021,65 +2021,17 @@ describe("startServer, against a real container as the deployment role", () => {
     }
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
-
-  it("boots and TRADES when the backup DB is unreachable — the read-privilege probe failure disables backup, never aborts boot (§5)", async () => {
-    // The strict CLAUDE.md §5 case, driven through startServer rather than reasoned about: WAITRON_BACKUP_DIR
-    // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
-    // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).
-    // The probe's createPostgresDb therefore throws; boot's fail-safe catch swallows it, logs
-    // backup.disabled_probe_failed, and leaves backup OFF. What must hold: startServer RESOLVES (a bad backup
-    // role must not brick the till), /health serves (the box trades), and box-status reports
-    // backup.configured:false (backup left off). Uses a real container for the MAIN db as every trading boot
-    // here does; only the backup URL is the dead one.
-    const port = await freePort();
-    const backupDir = mkdtempSync(join(tmpdir(), "waitron-boot-backup-"));
-    const [server, disabled] = await withCapturedStdout(async (lines) => {
-      const started = await startServer(
-        {
-          ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "production",
-        },
-        // The backup vars go through the RAW `base` arg, not the merged `env`: the supervisor re-reads
-        // its config off `loadBoxEnv(base, stateDir)` on every reload, so a value only in `env` would
-        // never reach it. `WAITRON_STATE_DIR` (TRADING_STATE_DIR) holds no `backup.env`, so `base` is
-        // the sole source here.
-        {
-          WAITRON_BACKUP_DIR: backupDir,
-          // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
-          WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
-          // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig
-          // throws backup.recovery_key_missing before the probe this test exercises ever runs.
-          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-        },
-      );
-      // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
-      // whose arrival also means startServer got past the probe rather than throwing out of it.
-      const event = await waitForEvent(lines, "backup.disabled_probe_failed");
-      // Then wait for the first pass to complete (loop.sleeping is logged strictly after onPass ->
-      // recordPass, same as the main boot test) so /health has flipped past its pre-first-pass 503 startup
-      // grace — the box genuinely trades, and with no due fiscal work seeded both duties report ok.
-      await waitForEvent(lines, "loop.sleeping");
-      return [started, event] as const;
-    });
-    try {
-      // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
-      expect(disabled.event).toBe("backup.disabled_probe_failed");
-      await fetchHealthOk(`http://127.0.0.1:${port}/health`);
-      // The captured backup.disabled_probe_failed line means the supervisor left backup off (no
-      // destinations backing its config), so box-status's `readBackup` — now the supervisor's async
-      // `status().backupStatus` — reports `backup: { configured: false }`. That configured:false
-      // report is asserted directly (over the management gate) in box-status.route.test.ts, so it is
-      // not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
-      // be the heavy scaffolding the slice brief says to avoid).
-    } finally {
-      await server.close();
-      rmSync(backupDir, { recursive: true, force: true });
-    }
-    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
-  }, 60_000);
+  // DELETED, not converted: "boots and TRADES when the backup DB is unreachable — the read-privilege
+  // probe failure disables backup, never aborts boot (§5)". It drove `startServer` with a good main
+  // database and a deliberately refused backup connection (`WAITRON_BACKUP_DATABASE_URL` at port 1),
+  // and asserted the box still traded with backup off.
+  //
+  // The lever is gone rather than moved: the backup duty no longer has a connection of its own to
+  // point somewhere bad — it opens the box's OWN venue directory — so there is no way to break the
+  // backup duty in a boot that is otherwise healthy. What survives is narrower and not through
+  // `startServer`: `backup-supervisor.test.ts`'s "a venue directory that will not open leaves backup
+  // off and never throws at the caller". So the §5 claim is still asserted, at the supervisor rather
+  // than at boot; nothing now proves boot ITSELF survives a backup duty that cannot start.
 
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
     const port = await freePort();

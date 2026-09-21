@@ -22,7 +22,10 @@ const workingName = (path: string) => `${path}.partial`;
  * the quotes that make a statement built as text a syntax error (`near "s": syntax error`,
  * errcode 1). Binding is what leaves no way for a path to be read as SQL at all.
  *
- * **Temp-then-rename, the discipline `apps/server/src/pg-dump.ts`'s `dumpAtomic` holds.** The final
+ * **Temp-then-rename: the discipline that used to live beside the `pg_dump` shell-out, and now
+ * lives only here.** (apps/server's pg-dump.ts and its `dumpAtomic` were deleted in the same
+ * change that made this the product's archive path; the cases that proved it are `archive.test.ts`'s.)
+ * The final
  * name appears only once the whole copy is written, so an interrupted archive leaves nothing a
  * later reader would take for a good one. `VACUUM INTO` refusing a target that already exists is
  * not that guarantee and does not replace it: it says nothing about a copy that died midway, and

@@ -41,8 +41,8 @@ describe("writeBackupEnv", () => {
       WAITRON_BACKUP_RETAIN_DAYS: "30",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-09T00:00:00.000Z",
     });
-    // NEVER the DB url — the box derives the read connection from its own owner connection.
-    expect(parsed.WAITRON_BACKUP_DATABASE_URL).toBeUndefined();
+    // The whole record is pinned by the `toEqual` above, so a key added here fails that, not a
+    // per-key absence check: the wizard writes these seven and nothing else.
     // Owner-only perms, like the other secret writers.
     expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
   });
@@ -66,9 +66,10 @@ describe("writeBackupEnv", () => {
   it("rejects a destinationDir with an embedded newline and injects NOTHING", async () => {
     // Security: only the recovery key was round-trip guarded, so a destinationDir carrying a newline
     // slipped through validation and `formatEnvFile` wrote it verbatim — the injected second line
-    // `WAITRON_BACKUP_DATABASE_URL=…` then parsed back as a REAL env var, pointing the dump at a
-    // wrong database. Every free string must be guarded, and no env file may be written that does not
-    // round-trip.
+    // then parsed back as a REAL env var. Every free string must be guarded, and no env file may be
+    // written that does not round-trip. The payload below is the variable the original fault
+    // planted; it names no live setting any more, which does not weaken the case — what is asserted
+    // is that NO file is written at all.
     const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
     await expect(
       writeBackupEnv(dir, {

@@ -7,22 +7,27 @@ describe("loadBackupConfig", () => {
     expect(loadBackupConfig({})).toBeUndefined();
     expect(loadBackupConfig({ WAITRON_BACKUP_DIR: "" })).toBeUndefined();
   });
-  it("loads with an undefined databaseUrl when the dir is set but no url (supervisor derives it)", () => {
-    const c = loadBackupConfig({
-      WAITRON_BACKUP_DIR: "/b",
-      WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-    });
-    expect(c).toBeDefined();
-    expect(c!.databaseUrl).toBeUndefined();
-  });
-  it("builds a config with defaults, passing an explicit databaseUrl through", () => {
+  it("names no database connection, even when the retired variable is set", () => {
+    // `WAITRON_BACKUP_DATABASE_URL` named a second PostgreSQL connection for `pg_dump`. There is one
+    // venue directory now and the supervisor opens it itself, so the config carries no connection
+    // field at all. Asserted as an ABSENT KEY rather than an undefined value, because
+    // `toMatchObject` would pass on a key it was never shown: re-adding the field to the returned
+    // object is what this fails on.
     const c = loadBackupConfig({
       WAITRON_BACKUP_DIR: "/b",
       WAITRON_BACKUP_DATABASE_URL: "postgres://x",
       WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+    })!;
+    expect(Object.keys(c)).not.toContain("databaseUrl");
+    // The rest of the config still loads — the retired variable is ignored, not a refusal.
+    expect(c.destinations).toHaveLength(1);
+  });
+  it("builds a config with defaults", () => {
+    const c = loadBackupConfig({
+      WAITRON_BACKUP_DIR: "/b",
+      WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
     });
     expect(c).toMatchObject({
-      databaseUrl: "postgres://x",
       recoveryKey: "twelve-chars!",
       retain: expect.any(Number),
       retainDays: expect.any(Number),
@@ -35,7 +40,6 @@ describe("loadBackupConfig", () => {
     expect(() =>
       loadBackupConfig({
         WAITRON_BACKUP_DIR: "/b",
-        WAITRON_BACKUP_DATABASE_URL: "postgres://x",
         WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
         WAITRON_BACKUP_RETAIN: "0",
       }),
@@ -57,7 +61,6 @@ describe("loadBackupConfig schedule + dual retention", () => {
       WAITRON_BACKUP_AT: "04:30",
     })!;
     expect(c.schedule).toEqual({ kind: "wall-clock", days: "daily", at: { hour: 4, minute: 30 } });
-    expect(c.databaseUrl).toBeUndefined(); // derived by the supervisor, not required here
   });
 
   it("parses a weekday subset and 'auto' time", () => {
@@ -138,7 +141,6 @@ describe("loadBackupConfig schedule + dual retention", () => {
 });
 
 const base = {
-  WAITRON_BACKUP_DATABASE_URL: "postgres://x",
   WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
 };
 
@@ -162,16 +164,15 @@ describe("loadBackupConfig destinations + recovery key", () => {
   });
 
   it("requires the recovery key when a destination is set", () => {
-    expect(() =>
-      loadBackupConfig({ WAITRON_BACKUP_DIR: "/mnt/a", WAITRON_BACKUP_DATABASE_URL: "x" }),
-    ).toThrow(new AppError("backup.recovery_key_missing", {}));
+    expect(() => loadBackupConfig({ WAITRON_BACKUP_DIR: "/mnt/a" })).toThrow(
+      new AppError("backup.recovery_key_missing", {}),
+    );
   });
 
   it("rejects a too-short recovery key", () => {
     expect(() =>
       loadBackupConfig({
         WAITRON_BACKUP_DIR: "/mnt/a",
-        WAITRON_BACKUP_DATABASE_URL: "x",
         WAITRON_BACKUP_RECOVERY_KEY: "short",
       }),
     ).toThrow(new AppError("backup.recovery_key_too_short", { min: 12 }));

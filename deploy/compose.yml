@@ -38,11 +38,9 @@ services:
       WAITRON_MANAGEMENT_RP_ID: ${WAITRON_MANAGEMENT_RP_ID:-waitron.local}
       WAITRON_MANAGEMENT_ORIGIN: ${WAITRON_MANAGEMENT_ORIGIN:-https://waitron.local}
       # Local backups: a destination (the dir) needs a recovery key, or boot is refused rather than
-      # shipping unencrypted — set neither and no backup duty runs. WAITRON_BACKUP_DATABASE_URL is
-      # OPTIONAL: the box derives the backup read connection from its own owner connection when unset
-      # (BR-1 Task 2, 2026-09-09).
+      # shipping unencrypted — set neither and no backup duty runs. There is no backup connection
+      # setting: the backup duty opens the box's own venue directory itself.
       WAITRON_BACKUP_DIR: ${WAITRON_BACKUP_DIR:-}
-      WAITRON_BACKUP_DATABASE_URL: ${WAITRON_BACKUP_DATABASE_URL:-}
       WAITRON_BACKUP_RECOVERY_KEY: ${WAITRON_BACKUP_RECOVERY_KEY:-}
       # Prepare uses the local card simulator unless an operator deliberately enables a configured
       # provider whose credential is restricted to its test environment.
