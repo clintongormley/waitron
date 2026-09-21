@@ -6,14 +6,18 @@
 -- all go in the same commit. Dropped rather than left dormant because an unused table still carries
 -- grants and a classification row.
 --
+-- The state this migration applies to is `meta/0048_snapshot.json`; the receipts below were re-run
+-- against it. (Why this file is numbered 0049 rather than 0047 is in the commit message.)
+--
 -- Receipt — `grep -rn 'option_group\|optionGroup\|OptionGroup' packages apps scripts
 -- --exclude-dir=node_modules --exclude-dir=coverage --exclude-dir=dist` matches, outside this
 -- migration directory's own history (0000 created the tables and 0001 granted on them, then
--- 0021/0023/0024/0027/0028/0029/0033/0034/0040/0043/0044 reshaped them and the snapshots record them
--- as they then were), only text that is not the table — seven files, all of them listed here: the
--- retired `option.not_found` params in `apps/server/src/errors.ts`; a comment in
--- `apps/server/src/working-order.test.ts` about the column 0040 dropped; the legacy request key
--- `optionGroupIds` that `apps/server/src/catalogue-api.ts` and
+-- 0021/0023/0024/0027/0028/0029/0033/0034/0040/0043/0044 reshaped them, the snapshots record them as
+-- they then were, and `_journal.json` carries this file's tag — 0047/0048 do NOT name them), only
+-- text that is not the table — seven files, all of them listed here: the retired `option.not_found`
+-- params in `apps/server/src/errors.ts`, whose comment also names THIS file and is re-pointed to
+-- 0049 in the same commit; a comment in `apps/server/src/working-order.test.ts` about the column 0040
+-- dropped; the legacy request key `optionGroupIds` that `apps/server/src/catalogue-api.ts` and
 -- `packages/catalogue/src/product-editor-input.ts` strip out of an old client's payload, with the
 -- two suites that pin those strippers, `apps/server/src/catalogue-api.test.ts` and
 -- `packages/catalogue/src/product-editor-input.test.ts`; and one line of prose in
@@ -30,7 +34,7 @@
 -- The ORDER below is what removes the need for CASCADE. Exactly two foreign keys pointed INTO these
 -- tables and both came from inside the group: `option_group_items.group_id` and
 -- `product_option_groups.group_id` each referenced `option_groups.id`
--- (`option_group_items_group_fk` and `product_option_groups_group_fk` in `meta/0046_snapshot.json`,
+-- (`option_group_items_group_fk` and `product_option_groups_group_fk` in `meta/0048_snapshot.json`,
 -- the state this migration applies to — nothing else in the core set referenced any of the three,
 -- and the set has no views). So `option_groups` is dropped LAST, after both of its referrers.
 -- Drizzle emitted it second, which is why the generated file asked for CASCADE.
@@ -43,13 +47,16 @@
 -- neither, but a developer box migrated before this branch still does. CASCADE would drop those two
 -- foreign keys and leave the tables standing, silently. Without it PostgreSQL refuses the drop
 -- instead, with `2BP01` naming the dependent constraint and its table. What was MEASURED is the
--- INTRA-GROUP case, NOT the stale-box one: this file was run with `option_groups` put back second
--- and no CASCADE, against a database carrying neither `menu_item_option_groups` nor
--- `menu_item_options`, and it failed on
--- `constraint product_option_groups_group_fk on table product_option_groups`. That establishes what
--- PostgreSQL does without CASCADE; nobody has run this file against a database still carrying the
--- pre-regeneration catalogue baseline, so the two constraints named above are traced from that
--- baseline's SQL and not from a failure anyone has seen. Whether such a box can get here was
+-- INTRA-GROUP case, NOT the stale-box one: this file was run at 0049, with `option_groups` put back
+-- second and no CASCADE, against a database carrying neither `menu_item_option_groups` nor
+-- `menu_item_options` (`pnpm --filter @waitron/catalogue exec vitest run src/migrations.test.ts`,
+-- which migrates a virgin database through the core set and then the catalogue set). It exited 1 on
+-- `cannot drop table option_groups because other objects depend on it`, detail `constraint
+-- product_option_groups_group_fk on table product_option_groups depends on table option_groups`;
+-- the order below then took the same suite to 14 passed. That establishes what PostgreSQL does
+-- without CASCADE; nobody has run this file against a database still carrying the pre-regeneration
+-- catalogue baseline, so the two constraints named above are traced from that baseline's SQL and not
+-- from a failure anyone has seen. Whether such a box can get here was
 -- checked rather than assumed: `docs/backlog.md` records that it reads AHEAD of the catalogue set's
 -- journal (thirteen entries against two) until `wa-wt reset demo <name>` rebuilds it, but reading
 -- ahead is not a refusal — the only path that refuses an ahead database is the box's own boot
