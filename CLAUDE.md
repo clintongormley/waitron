@@ -478,6 +478,17 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   which reads text (and says so) for any cross-module `EXECUTE FUNCTION`, not one named function.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its grants travel with it.
+- **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
+  and nothing else in the tree notices.** Declare every foreign key and every unique index in the
+  TypeScript schema, so `drizzle-kit generate` carries it; where one genuinely cannot be declared,
+  say at the column what it cost and where the refusal moved to. Cost: regenerating the thirteen
+  sets for the storage switch dropped 33 foreign keys and 13 unique indexes, so an insert naming a
+  `device_profile_id` that exists nowhere was accepted and stored the dangling id; the first thing
+  that would have failed was a route test several step groups later. Guard:
+  `scripts/schema-constraints.test.ts`, weaker than its name in ways its header states — it reads
+  the schema the migrations BUILD rather than trying an offending insert, so it cannot tell a key
+  SQLite records from a key SQLite enforces, and it matches a unique index by NAME, so an index
+  whose columns changed under a kept name passes.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
   RUNNING the grant assertions and `inmutabilidad`.

@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { check, index } from "drizzle-orm/sqlite-core";
 import { bigCount, flag, id, json, label, money, newId, now, table, ts } from "./columns.js";
+import { kitchenCourses } from "./kitchen-courses.js";
+import { kitchenStations } from "./kitchen-stations.js";
 
 /**
  * The db-layer copy of the allergen-declaration shape: a per-code presence map with an optional
@@ -23,10 +25,17 @@ export const catalogues = table("catalogues", {
 
 /** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
+// The bracketed thunk below is resolved by `drizzle-kit generate` in its own CLI process,
+// never by `vitest run`, so v8 reports it as a never-invoked function. Same treatment, and
+// the same reason, as ./sales.ts.
 export const categories = table("categories", {
   id: id("id").primaryKey().$defaultFn(newId),
   name: json<Record<string, string>>("name").notNull(),
-  stationId: id("station_id"),
+  // The category-level kitchen route: a fired line with no product-level station falls back to
+  // this one. NULLABLE — a category need not name a station.
+  /* v8 ignore start */
+  stationId: id("station_id").references(() => kitchenStations.id),
+  /* v8 ignore stop */
   createdAt: ts("created_at").notNull().$defaultFn(now),
   updatedAt: ts("updated_at").notNull().$defaultFn(now),
 });
@@ -49,8 +58,15 @@ export const products = table(
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
     /* v8 ignore stop */
-    stationId: id("station_id"),
-    courseId: id("course_id"),
+    // The product-level kitchen route, and the product-level course. Both NULLABLE: a line with no
+    // station falls back to its category's and then to the venue's default station, and a line with
+    // no course fires earliest (spec §2b).
+    /* v8 ignore start */
+    stationId: id("station_id").references(() => kitchenStations.id),
+    /* v8 ignore stop */
+    /* v8 ignore start */
+    courseId: id("course_id").references(() => kitchenCourses.id),
+    /* v8 ignore stop */
     // Staff-facing product name — plain text, shown on the dashboard, till buttons/basket and reports.
     name: label("name").notNull(),
     // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,

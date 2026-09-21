@@ -22,6 +22,7 @@ CREATE TABLE `departments` (
 	CONSTRAINT "departments_service_mode_ck" CHECK("departments"."default_service_mode" in ('table_tab','prepay','invoice_first','ticket_then_pay'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `departments_one_default_per_location_key` ON `departments` (`location_id`) WHERE "departments"."is_default";--> statement-breakpoint
 CREATE UNIQUE INDEX `departments_location_name_key` ON `departments` (`location_id`,`name`);--> statement-breakpoint
 CREATE TABLE `device_zone_defaults` (
 	`device_id` text PRIMARY KEY NOT NULL,
@@ -60,6 +61,10 @@ CREATE TABLE `preparation_routes` (
 );
 --> statement-breakpoint
 CREATE INDEX `preparation_routes_lookup_idx` ON `preparation_routes` (`location_id`,`zone_id`,`product_id`,`category_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `preparation_routes_zone_product_key` ON `preparation_routes` (`location_id`,`zone_id`,`product_id`) WHERE "preparation_routes"."zone_id" is not null and "preparation_routes"."product_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `preparation_routes_zone_category_key` ON `preparation_routes` (`location_id`,`zone_id`,`category_id`) WHERE "preparation_routes"."zone_id" is not null and "preparation_routes"."category_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `preparation_routes_venue_product_key` ON `preparation_routes` (`location_id`,`product_id`) WHERE "preparation_routes"."zone_id" is null and "preparation_routes"."product_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `preparation_routes_venue_category_key` ON `preparation_routes` (`location_id`,`category_id`) WHERE "preparation_routes"."zone_id" is null and "preparation_routes"."category_id" is not null;--> statement-breakpoint
 CREATE TABLE `working_line_contexts` (
 	`working_order_line_id` text PRIMARY KEY NOT NULL,
 	`menu_item_id` text NOT NULL,
@@ -105,5 +110,8 @@ CREATE TABLE `zone_service_policies` (
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`default_menu_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`zone_id`,`default_menu_id`) REFERENCES `zone_menus`(`zone_id`,`menu_id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "zone_service_policies_mode_ck" CHECK("zone_service_policies"."service_mode" is null or "zone_service_policies"."service_mode" in ('table_tab','prepay','invoice_first','ticket_then_pay'))
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`location_id`) WHERE "zone_service_policies"."is_counter_default";

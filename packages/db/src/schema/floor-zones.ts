@@ -6,8 +6,8 @@ import { locations } from "./tenants.js";
  * A venue-configured floor-plan ZONE (FP-1) — "Comedor", "Terraza", "Barra". A grouping the live
  * floor renders tables under; the successor to the free-text `dining_tables.zone` string this task
  * drops, so a zone is now an authorable ROW (rename once, reorder, deactivate) rather than a value
- * re-typed onto every table. `dining_tables.zone_id` points at one of these (a single nullable
- * FK, added in the paired --custom migration).
+ * re-typed onto every table. `dining_tables.zone_id` points at one of these — a single nullable
+ * foreign key, declared in that table's extra-config callback.
  *
  * Location-scoped, unlike the venue-wide `table_service_statuses`: a floor plan belongs to one
  * venue, so the (location_id) → locations(id) FK ties a zone to its

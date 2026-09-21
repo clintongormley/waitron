@@ -13,6 +13,8 @@ import {
   timeOfDay,
   ts,
 } from "./columns.js";
+import { catalogues } from "./catalogue.js";
+import { printers } from "./printers.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -169,11 +171,11 @@ export const locations = table(
     // This location's DEFAULT catalogue (menu) — nullable (a venue may exist before a menu is
     // assigned). Not the only menu a location sells from: `location_catalogues` may add further
     // catalogues to the accessible set, resolved by `resolveAccessibleCatalogueIds`
-    // (`packages/catalogue/src/operations.ts`). The FK `(catalogue_id) → catalogues(id)` is
-    // hand-written in a custom migration rather than declared here as `.references()`, which keeps
-    // this file from importing `catalogue.ts` and closing an import cycle. `catalogue_id` is
-    // nullable, and a MATCH SIMPLE FK skips the check when it is NULL (no default).
-    catalogueId: id("catalogue_id"),
+    // (`packages/catalogue/src/operations.ts`). NULLABLE, and a foreign key does not check a NULL,
+    // so a location with no default catalogue is accepted.
+    /* v8 ignore start */
+    catalogueId: id("catalogue_id").references(() => catalogues.id),
+    /* v8 ignore stop */
   },
   (t) => [
     // json_array_length(), because `invoice_locales` is now a JSON array in a text column rather
@@ -224,20 +226,26 @@ export const locations = table(
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
 // the same reason, as ./sales.ts.
-export const tills = table("tills", {
-  id: id("id").primaryKey().$defaultFn(newId),
-  locationId: id("location_id")
-    .notNull()
+export const tills = table(
+  "tills",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    locationId: id("location_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => locations.id),
+    /* v8 ignore stop */
+    name: label("name").notNull(),
+    // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
+    // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
+    // NULLABLE (a till with no printer just doesn't print), and a foreign key does not check a NULL.
     /* v8 ignore start */
-    .references(() => locations.id),
-  /* v8 ignore stop */
-  name: label("name").notNull(),
-  // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
-  // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
-  // BARE uuid, NULLABLE (a till with no printer just doesn't print): the
-  // (receipt_printer_id) → printers(id) FK is hand-written in the
-  // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
-  // the FK check on a NULL.
-  receiptPrinterId: id("receipt_printer_id"),
-  createdAt: ts("created_at").notNull().$defaultFn(now),
-});
+    receiptPrinterId: id("receipt_printer_id").references(() => printers.id),
+    /* v8 ignore stop */
+    createdAt: ts("created_at").notNull().$defaultFn(now),
+  },
+  (t) => [
+    // No two tills share a name within a venue. The index keeps the name it was created under.
+    uniqueIndex("tills_tenant_location_name_key").on(t.locationId, t.name),
+  ],
+);

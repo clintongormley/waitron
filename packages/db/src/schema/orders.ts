@@ -1,5 +1,6 @@
 import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -17,6 +18,8 @@ import {
   tsString,
 } from "./columns.js";
 import { products } from "./catalogue.js";
+import { diningTables } from "./dining-tables.js";
+import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
@@ -83,10 +86,12 @@ export const workingOrders = table(
     settledAt: tsString("settled_at"),
     // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
     // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
-    // tab-membership column — only this delivery link. BARE column: its FK
-    // (delivery_table_id) → dining_tables(id) is hand-written in the mutual-FK
-    // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
-    deliveryTableId: id("delivery_table_id"),
+    // tab-membership column — only this delivery link. `dining_tables` carries the reverse key, so
+    // the two tables name each other; the `AnySQLiteColumn` annotation on the thunk is what stops
+    // TypeScript inferring each table's type from the other's (see dining-tables.ts).
+    /* v8 ignore start */
+    deliveryTableId: id("delivery_table_id").references((): AnySQLiteColumn => diningTables.id),
+    /* v8 ignore stop */
     collectedAt: tsString("collected_at"),
   },
   (t) => [
@@ -188,7 +193,12 @@ export const workingOrderLines = table(
     // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
     category: label("category"),
     servedAt: tsString("served_at"),
+    // The kitchen course this line was rung under, resolved from the product's default at ring
+    // time. NULLABLE: no course means the line fires earliest (spec §2b), and a foreign key does
+    // not check a NULL.
     courseId: id("course_id"),
+    // The dish line an extras pick belongs to; a top-level line leaves it NULL. The self-key is
+    // declared in the extra-config callback below, because the table cannot name itself here.
     parentLineId: id("parent_line_id"),
     note: label("note"),
   },
@@ -203,6 +213,16 @@ export const workingOrderLines = table(
       foreignColumns: [products.id],
       name: "working_order_lines_product_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.courseId],
+      foreignColumns: [kitchenCourses.id],
+      name: "working_order_lines_course_fk",
+    }),
+    foreignKey({
+      columns: [t.parentLineId],
+      foreignColumns: [t.id],
+      name: "working_order_lines_parent_fk",
+    }),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
     check(
       "working_order_lines_unit_precision_ck",

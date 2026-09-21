@@ -13,9 +13,9 @@ import { locations } from "./tenants.js";
  *
  * Location-scoped, exactly like `kitchen_stations` (KDS-1) and `floor_zones` (FP-1): a course belongs
  * to one venue, so the (location_id) → locations(id) FK ties it to its venue and
- * `kitchen_courses_name_key` makes a name unique within that venue. `products.course_id` /
- * `working_order_lines.course_id` / `ticket_items.course_id` carry the (course_id) →
- * kitchen_courses(id) FK, hand-written in the paired --custom migration. No default-course
+ * `kitchen_courses_name_key` makes a name unique within that venue. `products.course_id`,
+ * `working_order_lines.course_id` and `ticket_items.course_id` each reference this table's `id`.
+ * No default-course
  * concept and no partial unique — unlike `kitchen_stations`, which needs exactly-one-default; a null
  * course simply fires earliest (spec §2b).
  */

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d55f52b4-7c37-4fa0-b282-242d1dc994fc",
+  "id": "bddfb43f-e72e-4285-b43f-d890677a16ef",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "google_oidc_states": {
@@ -394,6 +394,22 @@
         }
       },
       "indexes": {
+        "persons_tenant_email_uq": {
+          "name": "persons_tenant_email_uq",
+          "columns": [
+            "lower(\"email\")"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"email\" is not null"
+        },
+        "persons_tenant_live_display_name_uq": {
+          "name": "persons_tenant_live_display_name_uq",
+          "columns": [
+            "lower(trim(\"display_name\"))"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"status\" <> 'suspended'"
+        },
         "persons_tenant_google_subject_uq": {
           "name": "persons_tenant_google_subject_uq",
           "columns": [
@@ -788,6 +804,20 @@
   },
   "internal": {
     "indexes": {
+      "persons_tenant_email_uq": {
+        "columns": {
+          "lower(\"email\")": {
+            "isExpression": true
+          }
+        }
+      },
+      "persons_tenant_live_display_name_uq": {
+        "columns": {
+          "lower(trim(\"display_name\"))": {
+            "isExpression": true
+          }
+        }
+      },
       "persons_tenant_pending_email_uq": {
         "columns": {
           "lower(\"pending_email\")": {

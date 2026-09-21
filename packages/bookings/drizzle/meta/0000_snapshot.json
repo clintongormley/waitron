@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f71d9990-2db8-421d-bb69-2317252d2bd5",
+  "id": "92321069-874f-4101-aebc-d543b40f6d59",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bookings": {
@@ -132,6 +132,32 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_table_fk": {
+          "name": "bookings_table_fk",
+          "tableFrom": "bookings",
+          "tableTo": "dining_tables",
+          "columnsFrom": [
+            "table_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bookings_tab_fk": {
+          "name": "bookings_tab_fk",
+          "tableFrom": "bookings",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "tab_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

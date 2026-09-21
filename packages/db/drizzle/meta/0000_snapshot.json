@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "94cfb2de-adc8-4fe1-aada-9d6137417306",
+  "id": "47b32456-ad55-4aa0-a4fd-292b60ad2d5c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "locations": {
@@ -143,7 +143,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "locations_catalogue_id_catalogues_id_fk": {
+          "name": "locations_catalogue_id_catalogues_id_fk",
+          "tableFrom": "locations",
+          "tableTo": "catalogues",
+          "columnsFrom": [
+            "catalogue_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -272,7 +286,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "tills_tenant_location_name_key": {
+          "name": "tills_tenant_location_name_key",
+          "columns": [
+            "location_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "tills_location_id_locations_id_fk": {
           "name": "tills_location_id_locations_id_fk",
@@ -280,6 +303,19 @@
           "tableTo": "locations",
           "columnsFrom": [
             "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tills_receipt_printer_id_printers_id_fk": {
+          "name": "tills_receipt_printer_id_printers_id_fk",
+          "tableFrom": "tills",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "receipt_printer_id"
           ],
           "columnsTo": [
             "id"
@@ -678,6 +714,32 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "working_order_lines_course_fk": {
+          "name": "working_order_lines_course_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "working_order_lines_parent_fk": {
+          "name": "working_order_lines_parent_fk",
+          "tableFrom": "working_order_lines",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "parent_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -797,6 +859,19 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "working_orders_delivery_table_id_dining_tables_id_fk": {
+          "name": "working_orders_delivery_table_id_dining_tables_id_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "dining_tables",
+          "columnsFrom": [
+            "delivery_table_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "working_orders_node_fk": {
@@ -1115,6 +1190,19 @@
         }
       },
       "foreignKeys": {
+        "dining_tables_tab_id_working_orders_id_fk": {
+          "name": "dining_tables_tab_id_working_orders_id_fk",
+          "tableFrom": "dining_tables",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "tab_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "dining_tables_location_fk": {
           "name": "dining_tables_location_fk",
           "tableFrom": "dining_tables",
@@ -1134,6 +1222,19 @@
           "tableTo": "table_service_statuses",
           "columnsFrom": [
             "status_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dining_tables_zone_fk": {
+          "name": "dining_tables_zone_fk",
+          "tableFrom": "dining_tables",
+          "tableTo": "floor_zones",
+          "columnsFrom": [
+            "zone_id"
           ],
           "columnsTo": [
             "id"
@@ -1309,6 +1410,14 @@
         }
       },
       "indexes": {
+        "kitchen_stations_default_key": {
+          "name": "kitchen_stations_default_key",
+          "columns": [
+            "location_id"
+          ],
+          "isUnique": true,
+          "where": "\"kitchen_stations\".\"is_default\""
+        },
         "kitchen_stations_name_key": {
           "name": "kitchen_stations_name_key",
           "columns": [
@@ -1335,7 +1444,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "kitchen_stations_thresholds_ordered": {
+          "name": "kitchen_stations_thresholds_ordered",
+          "value": "\"kitchen_stations\".\"warm_after_minutes\" < \"kitchen_stations\".\"overdue_after_minutes\" and \"kitchen_stations\".\"overdue_after_minutes\" < \"kitchen_stations\".\"forgotten_after_minutes\""
+        }
+      }
     },
     "kitchen_courses": {
       "name": "kitchen_courses",
@@ -1527,7 +1641,60 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "ticket_items_node_id_nodes_id_fk": {
+          "name": "ticket_items_node_id_nodes_id_fk",
+          "tableFrom": "ticket_items",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ticket_items_working_order_line_id_working_order_lines_id_fk": {
+          "name": "ticket_items_working_order_line_id_working_order_lines_id_fk",
+          "tableFrom": "ticket_items",
+          "tableTo": "working_order_lines",
+          "columnsFrom": [
+            "working_order_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_items_station_id_kitchen_stations_id_fk": {
+          "name": "ticket_items_station_id_kitchen_stations_id_fk",
+          "tableFrom": "ticket_items",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ticket_items_course_id_kitchen_courses_id_fk": {
+          "name": "ticket_items_course_id_kitchen_courses_id_fk",
+          "tableFrom": "ticket_items",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1642,6 +1809,58 @@
           "tableTo": "locations",
           "columnsFrom": [
             "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "devices_station_id_kitchen_stations_id_fk": {
+          "name": "devices_station_id_kitchen_stations_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "devices_till_id_tills_id_fk": {
+          "name": "devices_till_id_tills_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "devices_device_profile_id_device_profiles_id_fk": {
+          "name": "devices_device_profile_id_device_profiles_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "device_profiles",
+          "columnsFrom": [
+            "device_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "devices_receipt_printer_id_printers_id_fk": {
+          "name": "devices_receipt_printer_id_printers_id_fk",
+          "tableFrom": "devices",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "receipt_printer_id"
           ],
           "columnsTo": [
             "id"
@@ -1937,7 +2156,17 @@
           "default": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "printers_local_key_key": {
+          "name": "printers_local_key_key",
+          "columns": [
+            "location_id",
+            "local_key"
+          ],
+          "isUnique": true,
+          "where": "\"printers\".\"local_key\" is not null"
+        }
+      },
       "foreignKeys": {
         "printers_location_id_locations_id_fk": {
           "name": "printers_location_id_locations_id_fk",
@@ -1979,6 +2208,10 @@
         "printers_character_table_ck": {
           "name": "printers_character_table_ck",
           "value": "\"printers\".\"character_table\" between 0 and 255"
+        },
+        "printers_transport_fields_ck": {
+          "name": "printers_transport_fields_ck",
+          "value": "(\"printers\".\"transport\" = 'usb' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'bluetooth' and \"printers\".\"local_key\" is not null)\n          or (\"printers\".\"transport\" = 'network_tcp' and \"printers\".\"host\" is not null)\n          or (\"printers\".\"transport\" = 'cloud_poll' and \"printers\".\"poll_id\" is not null)"
         }
       }
     },
@@ -2096,6 +2329,32 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "print_jobs_printer_id_printers_id_fk": {
+          "name": "print_jobs_printer_id_printers_id_fk",
+          "tableFrom": "print_jobs",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "print_jobs_claimed_by_print_agents_id_fk": {
+          "name": "print_jobs_claimed_by_print_agents_id_fk",
+          "tableFrom": "print_jobs",
+          "tableTo": "print_agents",
+          "columnsFrom": [
+            "claimed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2130,7 +2389,34 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "station_printers_station_id_kitchen_stations_id_fk": {
+          "name": "station_printers_station_id_kitchen_stations_id_fk",
+          "tableFrom": "station_printers",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "station_printers_printer_id_printers_id_fk": {
+          "name": "station_printers_printer_id_printers_id_fk",
+          "tableFrom": "station_printers",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
         "station_printers_pk": {
           "columns": [
@@ -2205,7 +2491,34 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "drawer_opens_till_id_tills_id_fk": {
+          "name": "drawer_opens_till_id_tills_id_fk",
+          "tableFrom": "drawer_opens",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "drawer_opens_sale_id_sales_id_fk": {
+          "name": "drawer_opens_sale_id_sales_id_fk",
+          "tableFrom": "drawer_opens",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -2309,7 +2622,21 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "categories_station_id_kitchen_stations_id_fk": {
+          "name": "categories_station_id_kitchen_stations_id_fk",
+          "tableFrom": "categories",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -2524,6 +2851,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "products_station_id_kitchen_stations_id_fk": {
+          "name": "products_station_id_kitchen_stations_id_fk",
+          "tableFrom": "products",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "products_course_id_kitchen_courses_id_fk": {
+          "name": "products_course_id_kitchen_courses_id_fk",
+          "tableFrom": "products",
+          "tableTo": "kitchen_courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2558,7 +2911,34 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "location_catalogues_location_id_locations_id_fk": {
+          "name": "location_catalogues_location_id_locations_id_fk",
+          "tableFrom": "location_catalogues",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "location_catalogues_catalogue_id_catalogues_id_fk": {
+          "name": "location_catalogues_catalogue_id_catalogues_id_fk",
+          "tableFrom": "location_catalogues",
+          "tableTo": "catalogues",
+          "columnsFrom": [
+            "catalogue_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
         "location_catalogues_pk": {
           "columns": [
@@ -3052,7 +3432,21 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "device_profiles_canvas_id_canvases_id_fk": {
+          "name": "device_profiles_canvas_id_canvases_id_fk",
+          "tableFrom": "device_profiles",
+          "tableTo": "canvases",
+          "columnsFrom": [
+            "canvas_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -3404,6 +3798,19 @@
             "id"
           ],
           "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "sale_lines_parent_fk": {
+          "name": "sale_lines_parent_fk",
+          "tableFrom": "sale_lines",
+          "tableTo": "sale_lines",
+          "columnsFrom": [
+            "parent_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -4232,6 +4639,16 @@
             "acknowledged_at"
           ],
           "isUnique": false
+        },
+        "incidents_open_dedup": {
+          "name": "incidents_open_dedup",
+          "columns": [
+            "till_id",
+            "code",
+            "case when \"sale_id\" is null then '' else \"sale_id\" end"
+          ],
+          "isUnique": true,
+          "where": "\"incidents\".\"acknowledged_at\" is null"
         }
       },
       "foreignKeys": {
@@ -4363,6 +4780,10 @@
           "name": "deployment_singleton_ck",
           "value": "\"deployment\".\"id\" = 1"
         },
+        "deployment_environment_ck": {
+          "name": "deployment_environment_ck",
+          "value": "\"deployment\".\"environment\" in ('production', 'preproduction')"
+        },
         "deployment_mode_ck": {
           "name": "deployment_mode_ck",
           "value": "\"deployment\".\"mode\" in ('primary', 'mirror')"
@@ -4488,6 +4909,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "incidents_open_dedup": {
+        "columns": {
+          "case when \"sale_id\" is null then '' else \"sale_id\" end": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

@@ -3,7 +3,7 @@ import { check } from "drizzle-orm/sqlite-core";
 import { count, label, now, table, ts } from "./columns.js";
 
 /**
- * One row, id pinned to 1 — see 0001_db_baseline_sql.sql for why a second row must be impossible.
+ * One row, id pinned to 1 by the `deployment_singleton_ck` check below.
  *
  * Brought INTO `./schema/index.ts` by the SQLite flip. It used to be kept out of that barrel because
  * `0001_db_baseline_sql.sql`, a hand-written custom migration, created it and drizzle-kit had
@@ -39,19 +39,17 @@ export const deployment = table(
     singletonRole: label("singleton_role").notNull().default("primary"),
     // A scrypt verifier of the offline break-glass secret, set at promotion time by the owner.
     // Nullable: a node minted before this column, and the primary (which is never promoted), both
-    // hold `null`. Never the secret itself — only a verifier — and, like `mode`/`singleton_role`,
-    // added by a hand-written ALTER (this table is not in the drizzle schema barrel; see the header).
+    // hold `null`. Never the secret itself — only a verifier.
     breakGlassVerifier: label("break_glass_verifier"),
-    // DEAD: nothing reads or writes this column. It survives in SQL (0001_db_baseline_sql.sql's
-    // ALTER adds it as `pg_lsn`) and goes with the storage switch. Declared as text here because
-    // drizzle has no pg_lsn type — safe only because this table is outside the schema barrel, so no
-    // snapshot diff is derived from this declaration (see the header).
+    // DEAD: grepping `fenceLsn`/`fence_lsn` across `packages`, `apps` and `scripts` on 2026-09-21
+    // found this declaration and one test file, and no other code.
     fenceLsn: label("fence_lsn"),
     stampedAt: ts("stamped_at").notNull().$defaultFn(now),
   },
   /* v8 ignore start */
   (t) => [
     check("deployment_singleton_ck", sql`${t.id} = 1`),
+    check("deployment_environment_ck", sql`${t.environment} in ('production', 'preproduction')`),
     check("deployment_mode_ck", sql`${t.mode} in ('primary', 'mirror')`),
     check("deployment_singleton_role_ck", sql`${t.singletonRole} in ('primary', 'secondary')`),
     check(

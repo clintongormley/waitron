@@ -17,6 +17,7 @@ CREATE TABLE `locations` (
 	`receipt_print_mode` text DEFAULT 'auto' NOT NULL,
 	`drawer_open_policy` text DEFAULT 'gated' NOT NULL,
 	`catalogue_id` text,
+	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "locations_invoice_locales_len" CHECK(json_array_length("locations"."invoice_locales") between 1 and 2),
 	CONSTRAINT "locations_order_flow_ck" CHECK("locations"."order_flow" in ('prepay', 'invoice_first', 'ticket_then_pay')),
 	CONSTRAINT "locations_bump_mode_ck" CHECK("locations"."bump_mode" in ('line', 'ticket')),
@@ -41,9 +42,11 @@ CREATE TABLE `tills` (
 	`name` text NOT NULL,
 	`receipt_printer_id` text,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`receipt_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `tills_tenant_location_name_key` ON `tills` (`location_id`,`name`);--> statement-breakpoint
 CREATE TABLE `nodes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
@@ -97,6 +100,8 @@ CREATE TABLE `working_order_lines` (
 	`note` text,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`parent_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_order_lines_unit_precision_ck" CHECK("working_order_lines"."unit_precision" is null or "working_order_lines"."unit_precision" between 0 and 3),
 	CONSTRAINT "working_order_lines_quantity_ck" CHECK("working_order_lines"."quantity" <> 0),
 	CONSTRAINT "working_order_lines_vat_rate_ck" CHECK("working_order_lines"."vat_rate" >= 0 and "working_order_lines"."vat_rate" <= 10000),
@@ -117,6 +122,7 @@ CREATE TABLE `working_orders` (
 	`delivery_table_id` text,
 	`collected_at` text,
 	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "working_orders_status_ck" CHECK("working_orders"."status" in ('open', 'placed', 'settled', 'abandoned')),
 	CONSTRAINT "working_orders_settled_at_ck" CHECK(("working_orders"."status" = 'settled') = ("working_orders"."settled_at" is not null))
@@ -165,8 +171,10 @@ CREATE TABLE `dining_tables` (
 	`pos_y` integer,
 	`shape` text,
 	`rotation` integer,
+	FOREIGN KEY (`tab_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`status_id`) REFERENCES `table_service_statuses`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "dining_tables_shape_ck" CHECK("dining_tables"."shape" in ('round', 'square', 'rect'))
 );
 --> statement-breakpoint
@@ -193,9 +201,11 @@ CREATE TABLE `kitchen_stations` (
 	`is_default` integer DEFAULT false NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "kitchen_stations_thresholds_ordered" CHECK("kitchen_stations"."warm_after_minutes" < "kitchen_stations"."overdue_after_minutes" and "kitchen_stations"."overdue_after_minutes" < "kitchen_stations"."forgotten_after_minutes")
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `kitchen_stations_default_key` ON `kitchen_stations` (`location_id`) WHERE "kitchen_stations"."is_default";--> statement-breakpoint
 CREATE UNIQUE INDEX `kitchen_stations_name_key` ON `kitchen_stations` (`location_id`,`name`);--> statement-breakpoint
 CREATE TABLE `kitchen_courses` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -222,6 +232,10 @@ CREATE TABLE `ticket_items` (
 	`fired_at` text,
 	`away_at` text,
 	`note` text,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "ticket_items_state_ck" CHECK("ticket_items"."state" in ('queued', 'preparing', 'ready'))
 );
 --> statement-breakpoint
@@ -241,7 +255,11 @@ CREATE TABLE `devices` (
 	`last_seen_at` text,
 	`enrolled_at` text NOT NULL,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`receipt_printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
 CREATE TABLE `join_requests` (
@@ -292,9 +310,14 @@ CREATE TABLE `printers` (
 	CONSTRAINT "printers_paper_width_ck" CHECK("printers"."paper_width" in ('58mm', '80mm')),
 	CONSTRAINT "printers_resolution_ck" CHECK("printers"."resolution" in ('180dpi', '203dpi')),
 	CONSTRAINT "printers_character_set_ck" CHECK("printers"."character_set" in ('wpc1252', 'pc858', 'plain')),
-	CONSTRAINT "printers_character_table_ck" CHECK("printers"."character_table" between 0 and 255)
+	CONSTRAINT "printers_character_table_ck" CHECK("printers"."character_table" between 0 and 255),
+	CONSTRAINT "printers_transport_fields_ck" CHECK(("printers"."transport" = 'usb' and "printers"."local_key" is not null)
+          or ("printers"."transport" = 'bluetooth' and "printers"."local_key" is not null)
+          or ("printers"."transport" = 'network_tcp' and "printers"."host" is not null)
+          or ("printers"."transport" = 'cloud_poll' and "printers"."poll_id" is not null))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `printers_local_key_key` ON `printers` (`location_id`,`local_key`) WHERE "printers"."local_key" is not null;--> statement-breakpoint
 CREATE TABLE `print_jobs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`location_id` text NOT NULL,
@@ -309,6 +332,8 @@ CREATE TABLE `print_jobs` (
 	`claimed_at` text,
 	`delivered_at` text,
 	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`claimed_by`) REFERENCES `print_agents`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer')),
 	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed'))
 );
@@ -317,7 +342,9 @@ CREATE INDEX `print_jobs_pull_idx` ON `print_jobs` (`printer_id`,`status`);--> s
 CREATE TABLE `station_printers` (
 	`station_id` text NOT NULL,
 	`printer_id` text NOT NULL,
-	PRIMARY KEY(`station_id`, `printer_id`)
+	PRIMARY KEY(`station_id`, `printer_id`),
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `drawer_opens` (
@@ -329,6 +356,8 @@ CREATE TABLE `drawer_opens` (
 	`sale_id` text,
 	`authorized_by` text,
 	`via_override` integer DEFAULT false NOT NULL,
+	FOREIGN KEY (`till_id`) REFERENCES `tills`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual'))
 );
 --> statement-breakpoint
@@ -346,7 +375,8 @@ CREATE TABLE `categories` (
 	`name` text NOT NULL,
 	`station_id` text,
 	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `products` (
@@ -376,6 +406,8 @@ CREATE TABLE `products` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "products_pricing_unit_ck" CHECK("products"."pricing_unit" in ('each','weight')),
 	CONSTRAINT "products_vat_class_ck" CHECK("products"."vat_class" in ('general','reduced','super_reduced','zero'))
 );
@@ -384,7 +416,9 @@ CREATE INDEX `products_catalogue_id_idx` ON `products` (`catalogue_id`);--> stat
 CREATE TABLE `location_catalogues` (
 	`location_id` text NOT NULL,
 	`catalogue_id` text NOT NULL,
-	PRIMARY KEY(`location_id`, `catalogue_id`)
+	PRIMARY KEY(`location_id`, `catalogue_id`),
+	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `ingredients` (
@@ -460,6 +494,7 @@ CREATE TABLE `device_profiles` (
 	`inactivity_timeout_seconds` integer,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
+	FOREIGN KEY (`canvas_id`) REFERENCES `canvases`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "device_profiles_form_factor_ck" CHECK("device_profiles"."form_factor" in ('till', 'phone-portrait', 'tablet-landscape', 'kds'))
 );
 --> statement-breakpoint
@@ -515,6 +550,7 @@ CREATE TABLE `sale_lines` (
 	`category` text,
 	`parent_line_id` text,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`parent_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "sale_lines_unit_precision_ck" CHECK("sale_lines"."unit_precision" is null or "sale_lines"."unit_precision" between 0 and 3),
 	CONSTRAINT "sale_lines_quantity_ck" CHECK("sale_lines"."quantity" <> 0),
 	CONSTRAINT "sale_lines_vat_rate_ck" CHECK("sale_lines"."vat_rate" >= 0 and "sale_lines"."vat_rate" <= 10000),
@@ -646,6 +682,7 @@ CREATE TABLE `incidents` (
 --> statement-breakpoint
 CREATE INDEX `incidents_till_open_idx` ON `incidents` (`till_id`,`detected_at`);--> statement-breakpoint
 CREATE INDEX `incidents_handled_idx` ON `incidents` (`acknowledged_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `incidents_open_dedup` ON `incidents` (`till_id`,`code`,case when "sale_id" is null then '' else "sale_id" end) WHERE "incidents"."acknowledged_at" is null;--> statement-breakpoint
 CREATE TABLE `change_log` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payload` text NOT NULL
@@ -660,6 +697,7 @@ CREATE TABLE `deployment` (
 	`fence_lsn` text,
 	`stamped_at` text NOT NULL,
 	CONSTRAINT "deployment_singleton_ck" CHECK("deployment"."id" = 1),
+	CONSTRAINT "deployment_environment_ck" CHECK("deployment"."environment" in ('production', 'preproduction')),
 	CONSTRAINT "deployment_mode_ck" CHECK("deployment"."mode" in ('primary', 'mirror')),
 	CONSTRAINT "deployment_singleton_role_ck" CHECK("deployment"."singleton_role" in ('primary', 'secondary')),
 	CONSTRAINT "deployment_role_valid_ck" CHECK(not ("deployment"."mode" = 'mirror' and "deployment"."singleton_role" = 'primary'))

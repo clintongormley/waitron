@@ -258,12 +258,11 @@ export const saleLines = table(
     // the dish it was picked for; a top-level line leaves it NULL. Presentation/reporting metadata
     // ONLY — `backend.recordSale` is handed the sale's own header fields and never `sale_lines` at
     // all (the twelve are named at `packages/core/src/record-sale.ts:389-408`), so this never
-    // reaches the fiscal fingerprint (design §4). Bare NULLABLE uuid: the
-    // self-FK (parent_line_id) → sale_lines(id) is
-    // hand-written in the --custom migration (the same split sales_corrects_fk uses). MATCH SIMPLE
-    // means a NULL parent satisfies it. Nothing here points at the extras or options list the pick
-    // or the answer came from: a filed line carries frozen names only, so a catalogue edit cannot
-    // reach it. Write-once at sale time and immutable table-wide like every other column here.
+    // reaches the fiscal fingerprint (design §4). NULLABLE, and a foreign key does not check a
+    // NULL; the self-key is declared in the extra-config callback below, because the table cannot
+    // name itself on the column. Nothing here points at the extras or options list the pick or the
+    // answer came from: a filed line carries frozen names only, so a catalogue edit cannot reach
+    // it. Write-once at sale time and immutable table-wide like every other column here.
     parentLineId: id("parent_line_id"),
   },
   (t) => [
@@ -272,6 +271,11 @@ export const saleLines = table(
       foreignColumns: [sales.id],
       name: "sale_lines_sale_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.parentLineId],
+      foreignColumns: [t.id],
+      name: "sale_lines_parent_fk",
+    }),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
     check(
       "sale_lines_unit_precision_ck",

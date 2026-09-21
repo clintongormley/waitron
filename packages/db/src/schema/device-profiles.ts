@@ -11,6 +11,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { canvases } from "./canvases.js";
 
 /**
  * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
@@ -26,9 +27,9 @@ export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-
  * database, keyed by name; a device (Task 5) points at one by its `id`. NOT location-scoped (like
  * canvases).
  *
- * `canvas_id` is a BARE uuid (nullable): the `canvas_id` → canvases FK is
- * hand-written --custom (0107), the devices.station_id idiom. NULL ⇒ the resolver falls back to the
- * form-factor default canvas (design §5.3). MATCH SIMPLE skips the FK check on NULL.
+ * `canvas_id` references `canvases(id)` with `onDelete restrict`, so a canvas a profile points at
+ * cannot be deleted. NULLABLE: NULL ⇒ the resolver falls back to the form-factor default canvas
+ * (design §5.3), and a foreign key does not check a NULL.
  *
  * `capabilities` is PLAIN jsonb (a CapabilityFlag[]) carrying no @waitron/layouts type —
  * @waitron/layouts depends on @waitron/db, so importing its type here is circular; the store
@@ -41,7 +42,9 @@ export const deviceProfiles = table(
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
-    canvasId: id("canvas_id"),
+    /* v8 ignore start */
+    canvasId: id("canvas_id").references(() => canvases.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     capabilities: json("capabilities").notNull().default([]),
     // Auto-logout idle timeout in seconds; NULL = never (KDS is always NULL — it is a display, not a
     // logged-in operator). Nullable because most profiles opt out; @waitron/layouts validates it on

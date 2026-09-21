@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a9a32df6-316b-49a5-99b1-b72da743d8d2",
+  "id": "6a1f8d42-14d4-425d-a1bf-9bdb22e10349",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "department_hours": {
@@ -142,6 +142,14 @@
         }
       },
       "indexes": {
+        "departments_one_default_per_location_key": {
+          "name": "departments_one_default_per_location_key",
+          "columns": [
+            "location_id"
+          ],
+          "isUnique": true,
+          "where": "\"departments\".\"is_default\""
+        },
         "departments_location_name_key": {
           "name": "departments_location_name_key",
           "columns": [
@@ -380,6 +388,44 @@
             "category_id"
           ],
           "isUnique": false
+        },
+        "preparation_routes_zone_product_key": {
+          "name": "preparation_routes_zone_product_key",
+          "columns": [
+            "location_id",
+            "zone_id",
+            "product_id"
+          ],
+          "isUnique": true,
+          "where": "\"preparation_routes\".\"zone_id\" is not null and \"preparation_routes\".\"product_id\" is not null"
+        },
+        "preparation_routes_zone_category_key": {
+          "name": "preparation_routes_zone_category_key",
+          "columns": [
+            "location_id",
+            "zone_id",
+            "category_id"
+          ],
+          "isUnique": true,
+          "where": "\"preparation_routes\".\"zone_id\" is not null and \"preparation_routes\".\"category_id\" is not null"
+        },
+        "preparation_routes_venue_product_key": {
+          "name": "preparation_routes_venue_product_key",
+          "columns": [
+            "location_id",
+            "product_id"
+          ],
+          "isUnique": true,
+          "where": "\"preparation_routes\".\"zone_id\" is null and \"preparation_routes\".\"product_id\" is not null"
+        },
+        "preparation_routes_venue_category_key": {
+          "name": "preparation_routes_venue_category_key",
+          "columns": [
+            "location_id",
+            "category_id"
+          ],
+          "isUnique": true,
+          "where": "\"preparation_routes\".\"zone_id\" is null and \"preparation_routes\".\"category_id\" is not null"
         }
       },
       "foreignKeys": {
@@ -747,7 +793,16 @@
           "default": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "zone_service_policies_one_counter_default_key": {
+          "name": "zone_service_policies_one_counter_default_key",
+          "columns": [
+            "location_id"
+          ],
+          "isUnique": true,
+          "where": "\"zone_service_policies\".\"is_counter_default\""
+        }
+      },
       "foreignKeys": {
         "zone_service_policies_location_fk": {
           "name": "zone_service_policies_location_fk",
@@ -797,6 +852,21 @@
           ],
           "columnsTo": [
             "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "zone_service_policies_default_allowed_fk": {
+          "name": "zone_service_policies_default_allowed_fk",
+          "tableFrom": "zone_service_policies",
+          "tableTo": "zone_menus",
+          "columnsFrom": [
+            "zone_id",
+            "default_menu_id"
+          ],
+          "columnsTo": [
+            "zone_id",
+            "menu_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"

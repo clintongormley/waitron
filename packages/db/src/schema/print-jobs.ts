@@ -12,6 +12,8 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { printAgents } from "./print-agents.js";
+import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -29,10 +31,8 @@ export const printJobStatus = enumType(["queued", "printing", "done", "failed"])
  * `printing` → `done`/`failed` asynchronously. Any node (local or cloud) may enqueue; the agent that
  * pulls it delivers it.
  *
- * `payload` is OPAQUE bytes (`bytea`): Slice B fills it with ESC/POS, and this subsystem never
- * inspects them — it only moves bytes. `printer_id` is a BARE uuid whose
- * (printer_id) → printers (id) FK is hand-written in the paired
- * --custom migration (a bare column carries no FK), exactly as `devices.station_id`.
+ * `payload` is OPAQUE bytes: Slice B fills it with ESC/POS, and this subsystem never inspects
+ * them — it only moves bytes.
  */
 export const printJobs = table(
   "print_jobs",
@@ -43,14 +43,18 @@ export const printJobs = table(
       /* v8 ignore start */
       .references(() => locations.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    // The target printer. Bare column: the (printer_id) → printers
-    // FK is hand-written in the --custom migration.
-    printerId: id("printer_id").notNull(),
-    // The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare
-    // column: the (claimed_by) → print_agents FK is hand-written
-    // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
-    // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
-    claimedBy: id("claimed_by"),
+    // The target printer.
+    printerId: id("printer_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => printers.id),
+    /* v8 ignore stop */
+    // The agent currently holding this job (set on claim, overwritten by a lease reclaim).
+    // Authorises the report — only the claimer reports its own job (runtime.ts). NULL while queued
+    // and after the job leaves `printing`; a foreign key does not check a NULL.
+    /* v8 ignore start */
+    claimedBy: id("claimed_by").references(() => printAgents.id),
+    /* v8 ignore stop */
     // OPAQUE ESC/POS bytes (Slice B fills them; the subsystem never inspects them). Bytes rather
     // than base64 text, so nothing sits between the caller and the row. A read THROUGH this column
     // hands back a `Uint8Array`, which is what `enqueuePrintJob` already passes in. The agent pull

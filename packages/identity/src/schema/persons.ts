@@ -50,8 +50,8 @@ export const persons = table(
     passkeyOfferedAt: tsString("passkey_offered_at"),
     /** The person's login email — required at every human-account boundary and used for dashboard
      * sign-in, activation, and recovery. The column stays nullable for internal principals and
-     * low-level fixtures. Unique case-insensitively, through the custom migration's functional
-     * partial index. */
+     * low-level fixtures. Unique case-insensitively among the rows that have one, through
+     * `persons_tenant_email_uq` below. */
     email: label("email"),
     /** A requested replacement address. It does not become a login identifier until the person
      * proves they control it. */
@@ -67,6 +67,21 @@ export const persons = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    // One login address across the venue, case-insensitively, among the people who have one. The
+    // predicate holds every person without an email out of the index.
+    uniqueIndex("persons_tenant_email_uq")
+      .on(sql`lower(${t.email})`)
+      .where(sql`${t.email} is not null`),
+    // One live display name, case- and whitespace-insensitively, among the people who can still
+    // log in. A suspended person keeps their row and their name, outside this index, so the name
+    // is free for someone else. SQLite has no `btrim` (`no such function`) and spells it `trim`.
+    // Run on BOTH engines rather than reasoned about — node:sqlite (Node v26.7.0),
+    // /tmp/f1-ddl-probe/trim.mjs, and PostgreSQL through PGlite, /tmp/f1-ddl-probe/btrim-pg.mjs:
+    // each strips SPACES from both ends and leaves a tab in place, so the pair agree on the one
+    // argument form this index uses.
+    uniqueIndex("persons_tenant_live_display_name_uq")
+      .on(sql`lower(trim(${t.displayName}))`)
+      .where(sql`${t.status} <> 'suspended'`),
     uniqueIndex("persons_tenant_google_subject_uq")
       .on(t.googleSubject)
       .where(sql`${t.googleSubject} is not null`),

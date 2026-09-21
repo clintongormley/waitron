@@ -9,8 +9,8 @@ import "./errors.js";
  * `apps/server`'s identically-shaped `DeploymentEnvironment` type — this package must never import
  * from `apps/server` — but a union all the same, not a bare `string`: narrowing this at compile
  * time is what makes an unrepresentable value (e.g. `"staging"`, a stray `process.env.NODE_ENV`) a
- * `tsc` error instead of a runtime `deployment_environment_ck` violation (SQLSTATE 23514) discovered
- * only once `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
+ * `tsc` error instead of a runtime `deployment_environment_ck` violation discovered only once
+ * `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
  * `Entorno` (`registro-row.ts`) closes one layer down.
  */
 export type DeploymentEnvironment = "production" | "preproduction";
@@ -28,7 +28,7 @@ export type DeploymentEnvironment = "production" | "preproduction";
  * caller may still need.
  *
  * The return type is narrowed to `DeploymentEnvironment | null`, not a bare `string`, because
- * `0001_db_baseline_sql.sql`'s `deployment_environment_ck` is the thing that makes this honest: no
+ * the `deployment_environment_ck` check in `./schema/deployment.js` is what makes this honest: no
  * row can exist in this column outside `'production'`/`'preproduction'`, so a value read back here
  * is one of those two by construction, never a value merely assumed to be safe.
  */

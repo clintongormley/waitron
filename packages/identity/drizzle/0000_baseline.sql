@@ -73,6 +73,8 @@ CREATE TABLE `persons` (
 	CONSTRAINT "persons_status_ck" CHECK("persons"."status" in ('pending', 'active', 'suspended'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `persons_tenant_email_uq` ON `persons` (lower("email")) WHERE "persons"."email" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `persons_tenant_live_display_name_uq` ON `persons` (lower(trim("display_name"))) WHERE "persons"."status" <> 'suspended';--> statement-breakpoint
 CREATE UNIQUE INDEX `persons_tenant_google_subject_uq` ON `persons` (`google_subject`) WHERE "persons"."google_subject" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `persons_tenant_pending_email_uq` ON `persons` (lower("pending_email")) WHERE "persons"."pending_email" is not null;--> statement-breakpoint
 CREATE TABLE `recovery_codes` (

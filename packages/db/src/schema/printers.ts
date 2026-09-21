@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/sqlite-core";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, flag, id, label, newId, table } from "./columns.js";
 import { locations } from "./tenants.js";
 
@@ -38,12 +38,12 @@ export const printCharacterSet = enumType(["wpc1252", "pc858", "plain"]);
  *
  * No stored agent binding: which agent serves a printer is discovered at run time from the devices an
  * agent can see, so the connection columns describe the DEVICE, not an agent. They are transport-
- * specific and all NULLABLE at the column level; which ones must be present is enforced by the
- * `printers_transport_fields_ck` CHECK hand-written in the paired --custom migration (usb/bluetooth
- * need local_key; network_tcp needs host; cloud_poll needs poll_id). The partial UNIQUE
- * `printers_local_key_key` on (location_id, local_key) WHERE local_key IS NOT NULL — one
- * registered printer per physical USB/BT device per venue — is likewise hand-written there, as is
- * `print_jobs_printer_fk`, which targets this table's primary key.
+ * specific and all NULLABLE at the column level; which one a row must carry is the
+ * `printers_transport_fields_ck` check below — usb and bluetooth need `local_key`, network_tcp needs
+ * `host`, cloud_poll needs `poll_id`.
+ *
+ * The partial UNIQUE `printers_local_key_key` below — on (location_id, local_key) WHERE local_key
+ * IS NOT NULL — is one registered printer per physical USB/BT device per venue.
  */
 export const printers = table(
   "printers",
@@ -83,11 +83,27 @@ export const printers = table(
     active: flag("active").notNull().default(true),
   },
   (t) => [
+    // One registered printer per physical USB/BT device per venue. Partial, so the network_tcp and
+    // cloud_poll rows, which carry no local_key, are unconstrained. The index keeps the name it was
+    // created under.
+    uniqueIndex("printers_local_key_key")
+      .on(t.locationId, t.localKey)
+      .where(sql`${t.localKey} is not null`),
     check("printers_transport_ck", enumCheck(t.transport)),
     check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),
     check("printers_paper_width_ck", enumCheck(t.paperWidth)),
     check("printers_resolution_ck", enumCheck(t.resolution)),
     check("printers_character_set_ck", enumCheck(t.characterSet)),
     check("printers_character_table_ck", sql`${t.characterTable} between 0 and 255`),
+    // Each transport needs the connection column it is reached by; the columns are nullable so that
+    // the other three transports need not carry it. A transport outside the four satisfies no arm,
+    // so this check refuses such a row as well as `printers_transport_ck` above does.
+    check(
+      "printers_transport_fields_ck",
+      sql`(${t.transport} = 'usb' and ${t.localKey} is not null)
+          or (${t.transport} = 'bluetooth' and ${t.localKey} is not null)
+          or (${t.transport} = 'network_tcp' and ${t.host} is not null)
+          or (${t.transport} = 'cloud_poll' and ${t.pollId} is not null)`,
+    ),
   ],
 );

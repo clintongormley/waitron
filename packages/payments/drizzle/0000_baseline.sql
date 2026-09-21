@@ -72,6 +72,7 @@ CREATE TABLE `payments` (
 	CONSTRAINT "payments_state_ck" CHECK("payments"."state" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'accepted_offline', 'settled', 'declined', 'initiated'))
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `payments_provider_external_ref_key` ON `payments` (`provider`,`external_ref`) WHERE "payments"."external_ref" is not null and "payments"."provider" <> 'manual';--> statement-breakpoint
 CREATE INDEX `payments_working_order_idx` ON `payments` (`working_order_id`);--> statement-breakpoint
 CREATE INDEX `payments_sale_idx` ON `payments` (`sale_id`);--> statement-breakpoint
 CREATE INDEX `payments_reconcile_idx` ON `payments` (`provider`,`settled_at`);--> statement-breakpoint

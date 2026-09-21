@@ -5,6 +5,7 @@ import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
+  diningTables,
   enumCheck,
   enumType,
   id,
@@ -15,6 +16,7 @@ import {
   table,
   timeOfDay,
   tsString,
+  workingOrders,
 } from "@waitron/db";
 
 /**
@@ -33,9 +35,9 @@ export const bookingStatus = enumType(["booked", "seated", "completed", "no_show
  * matters (the reserved-on-floor imminence read, FP-1) computes the venue wall-clock from
  * `locations.time_zone` at read time.
  *
- * `table_id` (optional table assignment) and `tab_id` (set on seat) are BARE uuid columns: their FKs,
- * table_id → dining_tables(id) and tab_id → working_orders(id), are hand-written in the custom
- * migrations rather than declared here.
+ * `table_id` (optional table assignment) and `tab_id` (set on seat) point INTO core — table_id →
+ * dining_tables(id), tab_id → working_orders(id) — and both keys are declared below. Both columns
+ * are nullable, and a null satisfies its key.
  *
  * `created_by` is the identity person who took the booking — a plain uuid with NO FK, the same
  * `drawer_opens.person_id` / `daily_closes.closed_by` / `sales.operator_id` seam: the person/identity
@@ -58,11 +60,11 @@ export const bookings = table(
     // Free-text contact (design §0) — no customer/CRM entity exists. Both nullable.
     contactPhone: label("contact_phone"),
     notes: label("notes"),
-    // Optional table assignment (TS-1). BARE column — its FK to dining_tables is hand-written in the
-    // custom migration, and skips the check while NULL.
+    // Optional table assignment (TS-1). Its key to dining_tables is declared below and is
+    // satisfied while the column is null.
     tableId: id("table_id"),
-    // Set on seat: the tab opened for the arriving party (TS-1). BARE column — its FK to
-    // working_orders is hand-written in the custom migration.
+    // Set on seat: the tab opened for the arriving party (TS-1). Its key to working_orders is
+    // declared below and is satisfied while the column is null.
     tabId: id("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),
     // The identity person who took the booking. Plain uuid, NO FK — the drawer_opens.person_id seam.
@@ -78,6 +80,18 @@ export const bookings = table(
       foreignColumns: [locations.id],
       name: "bookings_location_fk",
     }).onDelete("restrict"),
+    // Both point at the parent's primary key, and both columns are nullable, so an unassigned
+    // booking and an unseated one each satisfy their key.
+    foreignKey({
+      columns: [t.tableId],
+      foreignColumns: [diningTables.id],
+      name: "bookings_table_fk",
+    }),
+    foreignKey({
+      columns: [t.tabId],
+      foreignColumns: [workingOrders.id],
+      name: "bookings_tab_fk",
+    }),
     // The day-list scan: the location's bookings for a given date.
     index("bookings_location_date_idx").on(t.locationId, t.bookingDate),
     // The reserved-on-floor read filters on (table_id, status, booking_date) then orders/ranges on

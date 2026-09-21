@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bd9e4944-0775-4c97-b512-3012114f1522",
+  "id": "7a151f34-c17b-4603-be27-ebad425a39b2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_readers": {
@@ -418,6 +418,15 @@
         }
       },
       "indexes": {
+        "payments_provider_external_ref_key": {
+          "name": "payments_provider_external_ref_key",
+          "columns": [
+            "provider",
+            "external_ref"
+          ],
+          "isUnique": true,
+          "where": "\"payments\".\"external_ref\" is not null and \"payments\".\"provider\" <> 'manual'"
+        },
         "payments_working_order_idx": {
           "name": "payments_working_order_idx",
           "columns": [
