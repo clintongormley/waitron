@@ -966,7 +966,7 @@ export interface MyAbsence {
 // `@waitron/purchasing`'s ops), deliberately NOT imported from `@waitron/purchasing`/`@waitron/db` — a
 // runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as
 // the staff/catalogue/layout/shift shapes above do). These are the CONTRACT the purchase screen +
-// form build on; every `Decimal` is a `numeric` decimal STRING browser-side (never a number), and the
+// form build on; every `Decimal` is a decimal STRING browser-side (never a number), and the
 // two enums are re-declared as local unions. If the server shapes change these follow, and a mismatch
 // surfaces as a runtime shape error a view test catches, not a compile break.
 
@@ -979,7 +979,7 @@ export type PurchaseRegime = "general" | "equivalence_surcharge";
 export type PurchaseVatKind = "ordinary" | "capital";
 
 /** One per-rate VAT line of a received invoice — mirrors purchasing's `PurchaseInvoiceLine`. `tax` is
- * the cuota (IVA soportado); `rate`/`base`/`tax` are `numeric` decimal STRINGS. */
+ * the cuota (IVA soportado); `rate`/`base`/`tax` are decimal STRINGS. */
 export interface PurchaseInvoiceLine {
   rate: string;
   base: string;

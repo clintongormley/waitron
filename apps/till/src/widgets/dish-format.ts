@@ -4,8 +4,8 @@ import { currentLocale } from "../i18n/t.js";
 
 /**
  * Shared display formatting for a till line: the pure string transforms several surfaces were
- * duplicating. Text is DATA keyed by locale (spec §9) and a quantity is `numeric(_,3)` carried as
- * text, so neither is UI chrome.
+ * duplicating. Text is DATA keyed by locale (spec §9) and a quantity is a three-place decimal
+ * string, so neither is UI chrome.
  *
  * A line's DISH NAME is not one of them: the kitchen queue and the expo screen render the
  * server-resolved `item.name` as sent, and the table order screen reads the line's frozen `name`,
@@ -17,7 +17,7 @@ import { currentLocale } from "../i18n/t.js";
  */
 
 /**
- * Trim a `numeric(_,3)` quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
+ * Trim a three-place quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
  * unit-agnostic: the regex only touches zeros AFTER a decimal point, so a bare integer is untouched.
  */
 export function trimQuantity(quantity: string): string {

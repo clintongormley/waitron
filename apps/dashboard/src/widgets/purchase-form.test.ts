@@ -244,10 +244,13 @@ describe("purchase-form", () => {
     );
   });
 
-  // ── Empty / non-decimal amounts must be caught client-side, not slipped through to an opaque 500 ──
-  // A blank line (the create form's default) and a Spanish comma-decimal both pass `typeof === string`
-  // at the server boundary and reach the `numeric` column as a `22P02` → opaque `server.internal` 500.
-  // The form must mirror the op's checks so these show the friendly `amounts_invalid` instead.
+  // ── Empty / non-decimal amounts must be caught client-side, because the server catches neither ──
+  // Both pass `typeof === string` at the server boundary (`requireString`, then a bare `as Decimal`
+  // cast) and are never screened through `decimal()`. What each then does is written out on the
+  // `DECIMAL` pattern in `purchase-form.ts`: a Spanish comma-decimal throws a bare `SyntaxError` out
+  // of the conversion helpers and becomes an opaque `server.internal` 500, and a blank line (the
+  // create form's default) is read as ZERO and stored. The form must mirror the op's checks so both
+  // show the friendly `amounts_invalid` instead.
 
   it("blocks confirm on the default single BLANK VAT line (amounts_invalid, not an opaque 500)", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());

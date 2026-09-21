@@ -43,9 +43,14 @@ function blankLine(): LineDraft {
 /**
  * A well-formed non-negative decimal literal: one or more digits, an optional fractional part, and a
  * leading-dot form (`.5`) allowed. Browser-local by design — the dashboard never imports `@waitron/shared`
- * at runtime. Deliberately looser than the server's `decimal()` (it also accepts leading zeros): its only
- * job is to reject the inputs that would otherwise reach the `numeric` column as an opaque 500 — empty,
- * whitespace, a Spanish comma-decimal (`121,00`), or letters. Exact-format edge cases stay the server's.
+ * at runtime. Deliberately looser than `@waitron/shared`'s `decimal()` (it also accepts leading zeros),
+ * whose refusal these routes never get: `purchasing-api.ts` casts each amount `as Decimal` without
+ * screening it, and the op converts it at the row (`packages/purchasing/src/operations.ts:158`). So
+ * what this pattern rejects is what the server mishandles, measured in `packages/shared` on the
+ * conversion helpers themselves: `121,00` and letters throw a bare `SyntaxError` ("Cannot convert
+ * 121,00 to a BigInt") out of `compareDecimal`/`decimalToCents`/`decimalToBasisPoints`, which `run`
+ * answers as an opaque 500; an empty or whitespace value throws nothing at all — all three helpers
+ * read it as ZERO, so the invoice would be STORED with a zero amount.
  */
 const DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
@@ -82,9 +87,9 @@ function inRange(value: string, min: number, max: number): boolean {
  * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
  * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
  * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
- * That last check is what keeps a blank desglose line or a Spanish `121,00` from reaching the `numeric`
- * column as a `22P02` → opaque 500; the server's exact-format check (`decimal()`) stays authoritative
- * for the edge cases the browser-local `DECIMAL` pattern leaves through. A failing check blocks confirm
+ * That last check is the only thing standing between a blank desglose line and a stored zero, and
+ * between a Spanish `121,00` and an opaque 500 — see `DECIMAL` above for what each one does on the
+ * server, and why no server-side format check catches either today. A failing check blocks confirm
  * and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
  * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
  */
