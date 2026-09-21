@@ -103,6 +103,18 @@ target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
+Writing to that database from outside the server, with `psql` or a seeding script, no longer puts
+your change on an open dashboard at the moment you write it. The change trigger writes a row into
+`change_log`, and the transaction that caused the change takes that row out again and hands it to
+the dashboard once it has committed. What decides delivery is therefore `withTransaction` in the
+process serving the dashboard, not "the server": promotion and deployment stamping write in a bare
+`db.transaction`, and provisioning, the cold restore and the dev scripts write a venue database from
+their own process. A write outside `withTransaction` is late rather than lost, because the drain
+takes every row it finds — for an open dashboard, at worst the fifteen seconds between its event
+stream's session re-checks (`apps/server/src/live-api.test.ts`, "delivers a write made outside
+withTransaction"). A write through `withTransaction` in a DIFFERENT process is the one that is lost:
+it drains the rows into a process with no dashboard attached.
+
 What does NOT wipe that volume is the common case: switching between worktrees on the same target.
 A target change wipes it, and so does `wa-wt reset` (read the script before assuming that is the
 whole list — `ensure_env` has a third path). The volume is seeded, so between wipes it keeps demo

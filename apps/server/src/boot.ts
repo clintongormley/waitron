@@ -2,7 +2,6 @@ import { liveResourceTypes } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
 import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -10,7 +9,7 @@ import {
   asAppUser,
   createPostgresDb,
   installChangeFeed,
-  startChangeListener,
+  subscribeToChanges,
   persistNodeMembershipIfNewer,
   readDeploymentAxes,
   readMembershipTrustSet,
@@ -22,7 +21,7 @@ import {
 } from "@waitron/db";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
-import { LiveEvents, mountLiveApi } from "./live-api.js";
+import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
@@ -222,8 +221,11 @@ export interface StartedServer {
  * `close()` rejects; a signal-initiated shutdown then logs `server.shutdown_failed`, unless the
  * shutdown deadline has already exited the process. Setup's `stopWork` is a no-op;
  * adoption-pending's AWAITS the adoption worker — `runFinishAdoption` takes no abort signal, so there
- * is nothing to cancel; trading's stops the main loop, the live change listener, the outbound tunnel
- * and the backup sweep.
+ * is nothing to cancel; trading's stops the main loop, the outbound tunnel and the backup sweep, and
+ * closes the live event bus after dropping its change-feed subscription. That unsubscribe is itself
+ * synchronous — it returns nothing to await, the feed being in-process and holding no connection.
+ * The awaits later in trading's `stopWork` belong to the main loop, the tunnel worker and
+ * `backupSupervisor.stop()`, not to it.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -2404,23 +2406,10 @@ export async function startServer(
   // minted leaf via the shared fallback (see `startTradingListener`), HTTPS like setup and recovery.
   const server = startTradingListener(config, app, now, log);
 
-  const liveController = new AbortController();
-  let liveListener: Awaited<ReturnType<typeof startChangeListener>> | undefined;
-  const liveStartup = (async () => {
-    while (!liveController.signal.aborted) {
-      try {
-        liveListener = await startChangeListener(config.databaseUrl, {
-          onChange: (change) => liveEvents.publish(change),
-          onReset: () => liveEvents.reset(),
-          onError: (error) => log("warn", "live.listener_failed", { errorCode: codeOf(error) }),
-        });
-        return;
-      } catch (error) {
-        log("warn", "live.listener_failed", { errorCode: codeOf(error) });
-        await liveRetryDelay(1000, undefined, { signal: liveController.signal }).catch(() => {});
-      }
-    }
-  })();
+  // The change feed is in-process: the transaction that wrote the change hands it over once it has
+  // committed (`@waitron/db`'s `withTransaction`). Nothing connects, so nothing can drop and there
+  // is no batch of changes to miss, which is why no snapshot refresh is broadcast on startup.
+  const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
 
   const controller = new AbortController();
   const loop = runLoop({
@@ -2540,10 +2529,8 @@ export async function startServer(
     {
       stopWork: async () => {
         controller.abort();
-        liveController.abort();
+        unsubscribeFromChanges();
         liveEvents.close();
-        await liveStartup;
-        await liveListener?.close();
         // Stop the outbound tunnel client — its own controller, aborted here so close() never leaves it
         // dialing; runTunnelClient resolves promptly on abort (it destroys every live socket and
         // cancels every pending backoff nap). Aborted alongside the others, awaited below.

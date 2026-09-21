@@ -6,8 +6,11 @@ and real PostgreSQL use one dialect; there is no SQLite path. See
 
 Each database holds one taxpayer, as the single row of `tenants` (`id` pinned to 1). No table
 carries a tenant column and no query filters by one: a read that wants "this tenant's rows" reads
-the table. `withTransaction(db, fn)` runs your work in one transaction and nothing else — it sets no
-session variable — and a write path takes the `tx` it opens rather than opening its own.
+the table. `withTransaction(db, fn)` runs your work in one transaction and sets no session
+variable, and a write path takes the `tx` it opens rather than opening its own. It does one thing of
+its own: after your callback returns it empties the `change_log` table inside the same transaction,
+and once the commit has returned it hands those rows to this process's change listeners
+(`./src/change-log.ts`).
 
 ## Commands
 

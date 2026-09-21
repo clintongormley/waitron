@@ -4,6 +4,17 @@ The [design](../specs/2026-09-11-dashboard-live-updates-design.md) makes subscri
 resources. Implement from the shared data boundary outward, with a failing behavioral test before
 each feature change.
 
+**2026-09-21: the database half of this plan has been replaced.** `LISTEN`/`NOTIFY` is gone. The
+trigger writes a row into a `change_log` table, and the transaction that caused the change takes it
+out again and hands it to listeners inside this server process once the commit has returned
+(`packages/db/src/change-log.ts`). Step 3's reconnects, and the notifications the summary below
+counts among what this work proved, are therefore no longer part of the system, and
+`packages/db/src/change-listener.ts`, which held those tests, was deleted. Everything else the plan
+describes stands: the browser event bus, the event transport and its session handling, and the
+screens bound to observed resources. The
+[design](../specs/2026-09-11-dashboard-live-updates-design.md) carries the same note with the
+detail.
+
 1. Specify object and collection identities, dependencies and module extension contracts. Inventory
    each dashboard data source, including derived fields and process-local sources.
 2. Build the browser event bus and observed resource cache. Test shared consumers, matching,

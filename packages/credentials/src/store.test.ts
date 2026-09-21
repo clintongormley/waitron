@@ -201,7 +201,11 @@ describe("putCredential and getCredential", () => {
     // end at 0 rows once the transaction unwinds. `captured` here catches the AppError itself
     // (rather than letting it escape `withTransaction`'s callback), so the transaction commits
     // normally; the SELECT below observes whatever `putCredential` actually did before failing,
-    // not what a rollback erased on its behalf.
+    // not what a rollback erased on its behalf. Carrying on inside the transaction is safe HERE
+    // for one reason: `credentials.invalid_payload` is a JavaScript throw raised BEFORE any
+    // statement reaches the database (`putCredential` calls `validatePayload` first), which is the
+    // property this test is about. Catching a refusal PostgreSQL itself issued is a different
+    // shape — that transaction is already aborted and needs a savepoint (CLAUDE.md §3).
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {

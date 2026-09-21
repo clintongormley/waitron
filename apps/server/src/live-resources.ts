@@ -1,6 +1,12 @@
 import type { ChangeSource } from "@waitron/shared";
 
-/** Process-local queries use timers even when no database notification can be emitted. */
+/**
+ * The resource names the events endpoint accepts as subscription interests: every type a module's
+ * `ChangeSource` declares, plus the extras added below. None of those extras is a table, so no row
+ * change can ever produce one and the screens naming them refresh on their query's own timer
+ * instead (`refreshMs` in `apps/dashboard/src/api/live-queries.ts`). They are listed here anyway
+ * because one unrecognised name makes `parseInterests` (`live-api.ts`) refuse the WHOLE stream.
+ */
 export function liveResourceTypes(sources: readonly ChangeSource[]): string[] {
   return [
     ...new Set([

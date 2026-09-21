@@ -314,11 +314,11 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
           registerId,
         });
       });
-      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT. `withTransaction` IS the transaction
-      // (`packages/db/src/tenancy.ts:15`), so an AppError raised inside it rolls the consuming delete
-      // back into existence and a wrong tap becomes an unlimited retry — the exact opposite of the
-      // property that makes one-in-three an acceptable guess rate. The verb returns the mismatch as a
-      // RESULT for this reason; the route commits it, then answers.
+      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT. The `withTransaction` call
+      // above owns the transaction (`packages/db/src/tenancy.ts`), so an AppError raised inside it
+      // rolls the consuming delete back into existence and a wrong tap becomes an unlimited retry —
+      // the exact opposite of the property that makes one-in-three an acceptable guess rate. The
+      // verb returns the mismatch as a RESULT for this reason; the route commits it, then answers.
       if (!result.ok) throw new AppError("device.join_mismatch", {});
       return c.json(
         { deviceId: result.deviceId, name: result.name, formFactor: result.formFactor },

@@ -286,14 +286,25 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    await tx.insert(scheduledRuns).values({
-      duty: params.duty,
-      periodFrom,
-      periodTo: params.period.to.toISOString(),
-      generation: Number(state.highest) + 1,
-      state: "pending",
-      attempts: 0,
-      nextAttemptAt: params.dueAt.toISOString(),
+    // A SAVEPOINT around the insert, not a bare insert: a statement PostgreSQL rejects aborts the
+    // whole transaction, so catching the violation without one leaves every LATER statement failing
+    // with 25P02. `completeRun` is not one of those — the caller completes first and enqueues second
+    // (`run.ts`) — so what a lost race cost it was not a refusal but its own already-executed write,
+    // discarded when the aborted transaction ended as a ROLLBACK, leaving the run to be reclaimed
+    // as stale. Drizzle emits a nested `tx.transaction` as SAVEPOINT / ROLLBACK TO, which clears
+    // the abort and leaves the enclosing transaction usable. Same shape as `appendToChain` in
+    // `packages/fiscal-verifactu/src/chain.ts` and `insertClose` in
+    // `packages/reporting/src/record-daily-close.ts`.
+    await tx.transaction(async (attempt) => {
+      await attempt.insert(scheduledRuns).values({
+        duty: params.duty,
+        periodFrom,
+        periodTo: params.period.to.toISOString(),
+        generation: Number(state.highest) + 1,
+        state: "pending",
+        attempts: 0,
+        nextAttemptAt: params.dueAt.toISOString(),
+      });
     });
     return true;
   } catch (error) {

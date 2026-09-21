@@ -298,8 +298,12 @@ describe("purchase-invoice operations", () => {
     // eight bytes, so the widest amount `assertMoney` accepts (twelve integer digits) is far inside
     // what the column holds. There is no longer any amount this system admits that the column
     // refuses — which is the property the width was chosen for.
-    const error = await asApp((tx) =>
-      captureThrown(() =>
+    //
+    // Caught OUTSIDE the transaction. A statement PostgreSQL refuses aborts the transaction, so a
+    // capture INSIDE it would leave every later statement failing with 25P02 — `withTransaction`
+    // runs one of its own after the callback returns, draining the change log (CLAUDE.md §3).
+    const error = await captureThrown(() =>
+      asApp((tx) =>
         createPurchaseInvoice(tx, {
           header: { ...baseInput().header, issuedOn: "2026-02-30" },
           lines: baseInput().lines,
@@ -310,10 +314,12 @@ describe("purchase-invoice operations", () => {
   });
 
   it("maps a duplicate supplier invoice to purchase.duplicate", async () => {
-    const error = await asApp(async (tx) => {
-      await createPurchaseInvoice(tx, baseInput());
-      return captureAppError(() => createPurchaseInvoice(tx, baseInput()));
-    });
+    // Two transactions, not one, and the refusal is caught outside the second: the duplicate is
+    // refused by the database, which aborts whatever transaction it is in (see the case above).
+    await asApp((tx) => createPurchaseInvoice(tx, baseInput()));
+    const error = await captureAppError(() =>
+      asApp((tx) => createPurchaseInvoice(tx, baseInput())),
+    );
     expect(hasCode(error, "purchase.duplicate") && error.params.supplierInvoiceNumber).toBe(
       "F-2026/001",
     );

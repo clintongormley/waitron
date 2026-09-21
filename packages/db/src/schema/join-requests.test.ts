@@ -36,14 +36,19 @@ describe("join_requests", () => {
   });
 
   it("refuses an unknown kind", async () => {
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      const e = await captureError(() =>
-        tx.execute(sql`
-          insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers) values (${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', array['01', '02'])`),
-      );
-      expect(pgErrorCode(e)).toBe("22P02"); // invalid_text_representation — not a valid enum label
-    });
+    // The refusal is caught OUTSIDE the transaction, not inside it. A rejected statement puts
+    // PostgreSQL's transaction in the aborted state, where every later command fails with 25P02 —
+    // and `withTransaction` runs one of its own after the callback returns, draining the change log
+    // (`../change-log.ts`). Catching it inside would therefore hide this assertion behind that
+    // failure. The transaction rolls back either way: an aborted one commits as a ROLLBACK.
+    const e = await captureError(() =>
+      withTransaction(suite.admin, async (tx) => {
+        await asAppUser(tx);
+        await tx.execute(sql`
+          insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers) values (${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', array['01', '02'])`);
+      }),
+    );
+    expect(pgErrorCode(e)).toBe("22P02"); // invalid_text_representation — not a valid enum label
   });
 
   it("grants app_user SELECT, INSERT and DELETE but not UPDATE", async () => {

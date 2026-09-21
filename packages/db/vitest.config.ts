@@ -10,13 +10,14 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // Vitest's 5s default is too short for this package's database-backed tests: each `it` runs
     // real SQL, against PGlite in-process or a clone of the shared container. Not every test here
-    // is one: 15 of the package's 70 test files call none of the five helpers
-    // (`grep -rLE "useVenueDb|useTemplateDb|useRealPostgres|describeEachTarget|createPgliteDb"
-    // --include="*.test.ts" src`). That grep measures which DOOR a suite uses, not whether it
-    // touches a database: SEVEN of those fifteen reach a real PostgreSQL anyway, by starting or
+    // is one: a minority of the package's test files call none of the five helpers, and which ones
+    // is a property to recompute rather than a number to remember —
+    // `grep -rLE "useVenueDb|useTemplateDb|useRealPostgres|describeEachTarget|createPgliteDb"
+    // --include="*.test.ts" src` lists them. That grep measures which DOOR a suite uses, not whether
+    // it touches a database: the ones named here reach a real PostgreSQL anyway, by starting or
     // connecting to a container themselves — `migrate-upgrade.pg`, `change-feed-replication.pg`,
     // `testing/networked-postgres`, `testing/shared-container`, `testing/postgres`,
-    // `testing/two-node` and `testing/two-node-wireguard`. Eight files open no database at all.
+    // `testing/two-node` and `testing/two-node-wireguard`. The rest open no database at all.
     //
     // What this setting does NOT bound is the PGlite boot and migrations. `usePgliteDb` hands its
     // own `beforeAll` a 60s default (`src/testing/lifecycle.ts:22` and `:146`), and a timeout

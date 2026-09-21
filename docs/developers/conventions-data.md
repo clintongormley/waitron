@@ -676,6 +676,49 @@ a query is already waiting behind the running one. `computeDailyClose`
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
 The missing guard is a Track C item in `docs/backlog.md`.
 
+## A statement PostgreSQL refuses aborts the whole transaction, so catching it and carrying on needs a SAVEPOINT
+
+PostgreSQL will not let a transaction continue once it has refused a statement. Everything sent
+afterwards fails with `25P02`, and the `COMMIT` at the end is carried out as a rollback. A
+`try`/`catch` that swallows a constraint violation and keeps writing on the same `tx` is therefore
+not recovering from anything: it is throwing away every write the transaction had already made, and
+it does so without raising an error anywhere.
+
+Measured on PostgreSQL 18.6 (`postgres:18-alpine`, 2026-09-21). In one transaction: an insert into a
+second table, then a duplicate key on a primary key. The next statement answered
+`ERROR: current transaction is aborted, commands ignored until end of transaction block`, `COMMIT`
+printed `ROLLBACK`, and the second table held 0 rows afterwards. The control is the same sequence
+without the duplicate key, which leaves 1 row.
+
+What makes the recovery real is a savepoint. Wrap the statement that may be refused in a nested
+`tx.transaction(...)`. Drizzle emits that as `savepoint spN`, then `release savepoint` on success
+and `rollback to savepoint` on a throw — both the node-postgres and the PGlite session do it, at
+`node-postgres/session.cjs:248` and `pglite/session.cjs:171` of `drizzle-orm@0.45.2`. Rolling back
+to the savepoint clears the abort and leaves the enclosing transaction usable. `appendToChain`
+(`packages/fiscal-verifactu/src/chain.ts`) and `insertClose`
+(`packages/reporting/src/record-daily-close.ts`) already have that shape.
+
+Cost: `enqueueSuccessor` (`packages/scheduler/src/store.ts`) caught the duplicate key a lost race
+produces and returned `false`, with no savepoint. Its only caller writes the run completion first
+and enqueues second on the same transaction — `completeRun` at `packages/scheduler/src/run.ts:217`,
+`enqueueSuccessor` at `:231` — so the completion was already written when the abort happened, and
+it went away when the transaction committed as a rollback. The run stayed `running` with a
+`started_at` that never cleared, which is the state another runner reclaims as stale once it is
+older than `staleAfterMs` (one hour by default, `DEFAULTS` in `packages/scheduler/src/derive.ts`).
+Nothing raised an error at any point. The guard is the loser's second enqueue in
+`packages/scheduler/src/store.concurrency.test.ts`.
+
+Since 2026-09-21 this particular mistake is at least loud. `withTransaction` now ends every
+transaction with a drain of `change_log` (`packages/db/src/tenancy.ts`), so a transaction that has
+already aborted fails on that drain rather than committing quietly as a rollback.
+
+**The test corollary, which nothing guards.** A test for a refusal catches it around the whole
+`withTransaction` call, never inside the callback: inside, the expectation itself runs in an aborted
+transaction. Two test files had it the other way round and were changed by hand on the branch that
+added the drain (`packages/purchasing/src/operations.test.ts` and
+`packages/db/src/schema/join-requests.test.ts`). No guard reads for this shape, so the production
+path can be right and the next test still wrong.
+
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
 > **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is

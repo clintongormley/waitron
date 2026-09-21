@@ -284,6 +284,16 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       // resolution is the host's job (Task 6), so passing the raw key here is correct for both.
       devicePath: job.local_key,
     };
+    // HAZARD, deliberately left: if it is the `reportPrintJob` INSIDE this `try` that PostgreSQL
+    // refuses, rather than `transport.send`, the transaction aborts and the catch's write on the
+    // same `tx` fails `25P02` with no SAVEPOINT to clear it — one job's refusal takes the whole
+    // batch down instead of marking that job failed (CLAUDE.md §3). No caller in the tree today
+    // reaches it: `apps/server/src/print-api.ts` calls the split `claimPrintJobs`/`reportPrintJob`,
+    // and `runAgentOnce`'s only callers are this package's `runtime.test.ts`, `runtime.race.test.ts`
+    // and `runtime.reclaim.test.ts`. That is a fact about today's tree, not a property of the API —
+    // `runAgentOnce` is exported from `index.ts`, so any package may start calling it. Whoever
+    // wires up a local agent host fixes it with a SAVEPOINT around the report (a nested
+    // `tx.transaction`) or by moving the report out of the `try`.
     try {
       // `claimPrintJobs` reads this row with raw SQL through `tx.execute`, so no column mapping
       // runs over it and the DRIVER's own value arrives, not the column's: a `Buffer` under

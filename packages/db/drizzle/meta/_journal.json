@@ -316,6 +316,20 @@
       "when": 1789930589305,
       "tag": "0044_money_in_cents_sql",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1789947644878,
+      "tag": "0045_change_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1789947646337,
+      "tag": "0046_change_log_grants_sql",
+      "breakpoints": true
     }
   ]
 }

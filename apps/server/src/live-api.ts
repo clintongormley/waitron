@@ -7,7 +7,7 @@ import { createErrorBoundary, requireManagementSession, codeOf } from "@waitron/
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-type BusEvent = { kind: "change"; change: ResourceChange } | { kind: "reset" } | { kind: "close" };
+type BusEvent = { kind: "change"; change: ResourceChange } | { kind: "close" };
 
 export class LiveEvents {
   #listeners = new Set<(event: BusEvent) => void>();
@@ -25,14 +25,27 @@ export class LiveEvents {
   publish(change: ResourceChange): void {
     for (const listener of this.#listeners) listener({ kind: "change", change });
   }
-  reset(): void {
-    for (const listener of this.#listeners) listener({ kind: "reset" });
-  }
   close(): void {
     this.#closed = true;
     for (const listener of this.#listeners) listener({ kind: "close" });
     this.#listeners.clear();
   }
+}
+
+/**
+ * Publishes a change onto the bus, absorbing whatever a subscriber does with it.
+ *
+ * The change feed runs on the writing request's own call stack, after its transaction has
+ * committed, so a throw here would fail a request whose write already succeeded.
+ */
+export function changeSubscriber(bus: LiveEvents, log: Logger): (change: ResourceChange) => void {
+  return (change) => {
+    try {
+      bus.publish(change);
+    } catch (error) {
+      log("warn", "live.publish_failed", { errorCode: codeOf(error) });
+    }
+  };
 }
 
 const run = createErrorBoundary(
@@ -99,7 +112,6 @@ export function mountLiveApi(
         let wake = (): void => {};
         const unsubscribe = deps.bus.subscribe((event) => {
           if (event.kind === "close") closed = true;
-          else if (event.kind === "reset") reset = true;
           else {
             for (const resource of event.change.resources) {
               if (

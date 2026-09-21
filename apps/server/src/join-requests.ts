@@ -323,8 +323,9 @@ export type AcceptResult =
  * not exist, the register insert) rolls the consumption back too — the request survives for a
  * genuine retry, only a wrong number or a successful accept ever makes the delete stick.
  *
- * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTransaction` IS the
- * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
+ * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. This function writes on
+ * the `tx` it is handed and never opens its own; the caller's `withTransaction`
+ * (`packages/db/src/tenancy.ts`) owns that transaction, so an `AppError`
  * thrown from here rolls the (already-consumed) row back into existence and a wrong tap becomes an
  * unlimited retry — the exact opposite of the property that makes one-in-three an acceptable guess
  * rate (design §1.2). The caller commits this result and throws `device.join_mismatch` AFTER the

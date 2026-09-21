@@ -2630,6 +2630,16 @@ rather than every call site."
 
 **Runner:** autonomous. **Depends on:** nothing.
 
+**LANDED on 2026-09-21, on branch `feat/sqlite-slice1-change-log`.** The steps below are ticked
+against what that branch contains, and each note says where the shipped code differs from the sketch
+beside it. A tick means the step was carried out ON THAT BRANCH, by the implementation and fix
+waves; it does not mean this note re-did it.
+
+**What P3 leaves for F1 to decide.** `change_log` is classified `local`, and after the flip the
+class also picks the database FILE — which would put this table on the far side of the split from
+the triggers that write it. Stated in full, with the replication argument on the other side and the
+one thing to check first, in `docs/backlog.md` under this task.
+
 `LISTEN`/`NOTIFY` goes. The triggers that compute what changed stay; instead of signalling out of the database, they write a row, and the transaction publishes those rows after it commits.
 
 This shape is deliberate. Having write paths publish their own events would touch hundreds of call sites and would drift the moment one forgot. Keeping the trigger and changing only where it puts its output keeps the existing contract and lands green on PostgreSQL today.
@@ -2645,11 +2655,27 @@ This shape is deliberate. Having write paths publish their own events would touc
 
 **Interfaces:**
 
-- Produces, consumed by F1 and by `apps/server`:
-  - `createChangePublisher(): ChangePublisher` with `subscribe(fn: (change: ResourceChange) => void): () => void` and `publishPending(tx: Transaction): Promise<void>`
+**Corrected in place on 2026-09-21, after the branch landed.** This section named a
+`createChangePublisher(): ChangePublisher` factory with `subscribe` and `publishPending`. No such
+function exists. `withTransaction` takes a database and a callback and has nowhere to receive a
+publisher object, so what shipped is three module-level functions in `packages/db/src/change-log.ts`
+and a listener set that is process-global rather than one per database. F1 codes against these.
+
+All three live in `packages/db/src/change-log.ts`, but only ONE of them is the package's public
+surface. `packages/db/src/index.ts` re-exports `subscribeToChanges` and nothing else from that file,
+and `@waitron/db`'s `exports` map is enumerated (`.` plus seven `./testing/*` entries) with no route
+to `change-log.js` — so the other two cannot be reached from outside the package at all. They are
+internal to `packages/db`, which is where F1 does its work anyway.
+
+- Produces, the public one, consumed by `apps/server` (`boot.ts`, and its `live-api` and `print-api`
+  tests):
+  - `subscribeToChanges(fn: (change: ResourceChange) => void): () => void` — adds a listener and returns the function that removes it again
+- Internal to `packages/db`, imported by `packages/db/src/tenancy.ts` and by nothing else:
+  - `drainChangeLog(tx: Transaction): Promise<ResourceChange[]>` — takes every pending row out of the log, in one statement, inside the caller's transaction
+  - `deliverChanges(changes: readonly ResourceChange[]): void` — hands drained changes to every listener; called only once the commit has returned
 - Consumes: `ResourceChange` from `@waitron/shared`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test** — done 2026-09-21 as `packages/db/src/change-log.test.ts`, with four cases rather than the sketch's two. The differences, each for a reason: the fixture inserts a `locations` row instead of a `dining_tables` one, because `locations` is a change source the application role may INSERT into, so one fixture serves the grant case as well; the assertions compare the whole `ResourceChange` rather than a `change.resource` string, which the payload does not carry; and two cases were added — the application role writing and draining under `asAppUser`, and an unsubscribed listener with the still-subscribed one as its control.
 
 Create `packages/db/src/change-log.test.ts`:
 
@@ -2697,7 +2723,7 @@ describe("the change log", () => {
 
 The second case is the control. A publisher that fired inside the transaction would pass the first case and fail this one.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail** — done 2026-09-21.
 
 ```bash
 pnpm --filter @waitron/db test -- change-log.test.ts
@@ -2705,37 +2731,44 @@ pnpm --filter @waitron/db test -- change-log.test.ts
 
 Expected: FAIL — `Cannot find module './change-log.js'`.
 
-- [ ] **Step 3: Add the change-log table to the core migration set**
+- [x] **Step 3: Add the change-log table to the core migration set** — done 2026-09-21 as `packages/db/src/schema/change-log.ts`, with TWO columns rather than four. The sketch below has been corrected to what shipped.
+
+`seq` went because a `bigserial` would have had to come straight from `drizzle-orm/pg-core`, which
+`CLAUDE.md` §3's column-vocabulary rule forbids. The RULE is the reason, not the guard: the guard
+would not have caught it. `scripts/column-vocabulary.test.ts` derives its forbidden set from the
+names `packages/db/src/schema/columns.ts` itself imports from `drizzle-orm/pg-core` (`engineNames()`,
+and the guard's own header says so), and `bigserial` is not one of them — so a `bigserial` imported
+in another table file passes it silently.
+`resource` and `written_at` went because nothing reads them: on the path every writer takes, a row
+is inserted, delivered and deleted inside one transaction, so there is nothing to order and nothing
+to age out. The shipped file's header states what stops holding for a row a direct writer leaves
+behind.
 
 In `packages/db/src/schema/`, add:
 
 ```ts
-import { sql } from "drizzle-orm";
-import { bigserial } from "drizzle-orm/pg-core";
-import { json, label, table, ts } from "./columns.js";
 import type { ResourceChange } from "@waitron/shared";
+import { id, json, table } from "./columns.js";
 
 /**
- * What changed, written by the change trigger and drained by the transaction that caused it.
+ * What changed, written by the change trigger and taken out again by the transaction that caused
+ * it (`../change-log.ts`).
  *
- * Classified `local`: it is this node's outbound signal to its own dashboard, not venue data, and it
- * must never travel in a backup or a stream. Rows are deleted as they are published.
+ * Classified `local`: this node's own signal to its own dashboard, never venue data.
  */
 export const changeLog = table("change_log", {
-  seq: bigserial("seq", { mode: "number" }).primaryKey(),
-  resource: label("resource").notNull(),
+  id: id("id").primaryKey().defaultRandom(),
   payload: json<ResourceChange>("payload").notNull(),
-  writtenAt: ts("written_at").notNull().defaultNow(),
 });
 ```
 
 Classify it in the core classification list as `local` (`CLAUDE.md` §3 requires every new table be classified; `scripts/classification-complete.test.ts` fails otherwise).
 
-- [ ] **Step 4: Change the trigger to write a row**
+- [x] **Step 4: Change the trigger to write a row** — done 2026-09-21. The function was RENAMED in the same change, to `waitron_record_change()` (`packages/db/src/change-feed.ts`), because it no longer notifies anything; the trigger it backs is still `waitron_change`.
 
-In `packages/db/src/change-feed.ts`, replace the `pg_notify(...)` call in `waitron_notify_change()` with an insert into `change_log`. Leave everything the function computes exactly as it is — the payload shape is what `apps/server`'s live API already understands, and changing it here would break subscriptions for a reason unrelated to this task.
+In `packages/db/src/change-feed.ts`, replace the `pg_notify(...)` call in `waitron_record_change()` with an insert into `change_log`. Leave everything the function computes exactly as it is — the payload shape is what `apps/server`'s live API already understands, and changing it here would break subscriptions for a reason unrelated to this task.
 
-- [ ] **Step 5: Write the publisher**
+- [x] **Step 5: Write the publisher** — done 2026-09-21 as `packages/db/src/change-log.ts`, as the three module-level functions the Interfaces section above now names. The factory and the `ChangePublisher` interface in the sketch below did not ship; read the file rather than the sketch.
 
 Create `packages/db/src/change-log.ts`:
 
@@ -2774,7 +2807,7 @@ export function createChangePublisher(): ChangePublisher {
 }
 ```
 
-- [ ] **Step 6: Drain after the commit**
+- [x] **Step 6: Drain after the commit** — done 2026-09-21 in `packages/db/src/tenancy.ts`, as the split this step asks for. The line after the commit is `deliverChanges(pending)`, not the sketch's `publisher.deliver(pending)`.
 
 `withTransaction` must read the rows inside the transaction (so the delete is atomic with the write) but hand them to listeners only once the commit has returned. Change `packages/db/src/tenancy.ts`:
 
@@ -2796,29 +2829,33 @@ export async function withTransaction<T>(
 
 Split `publishPending` into `drainChangeLog(tx)` (inside) and `deliver(changes)` (after) so the ordering is visible in the code rather than held in a comment.
 
-- [ ] **Step 7: Run the tests and watch them pass**
+- [x] **Step 7: Run the tests and watch them pass** — done 2026-09-21, four cases rather than two.
 
 ```bash
 pnpm --filter @waitron/db test -- change-log.test.ts
 ```
 
-Expected: PASS, both cases.
+Expected: PASS — all four cases, the sketch's two plus the two Step 1 records adding.
 
-- [ ] **Step 8: Rewire the server and delete the listener**
+- [x] **Step 8: Rewire the server and delete the listener** — done 2026-09-21. `apps/server/src/boot.ts` subscribes through `changeSubscriber`, a wrapper added to `apps/server/src/live-api.ts` that catches and logs whatever a subscriber throws, because delivery now runs on the writing request's own call stack after its transaction has committed. Deleting the listener also took `LiveEvents.reset()`, the `reset` bus event and the server's independent startup retry loop.
 
 In `apps/server/src/boot.ts`, replace the `startChangeListener` block with a subscription to the publisher. Delete `packages/db/src/change-listener.ts` and `change-listener.test.ts`, and remove their exports from `packages/db/src/index.ts`.
 
-- [ ] **Step 9: Record the behaviour change**
+- [x] **Step 9: Record the behaviour change** — done 2026-09-21, as a paragraph rather than a line, and the condition it states is `withTransaction` rather than "the server".
 
 Add one line to `docs/developers/workflow-guide.md` in the dev-stack section: a script that writes the database directly no longer shows up on a running dashboard, because the signal now comes from the process that did the write. Development only.
 
-- [ ] **Step 10: Run the affected suites**
+- [x] **Step 10: Run the affected suites** — done on the branch, 2026-09-21, by the implementation and
+fix waves. The first half was re-run while this section was being corrected:
+`pnpm --filter @waitron/db test:coverage` came back exit 0, 71 files and 732 tests passing (4
+skipped), at 99.76 statements / 96.02 branches / 98.78 functions / 100 lines against the package's
+98/98/98/95 bars. The server half below was not re-run at that point.
 
 ```bash
 pnpm --filter @waitron/db test:coverage && pnpm --filter @waitron/server test -- live
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit** — done 2026-09-21.
 
 ```bash
 git commit -s -m "Signal dashboard changes through a table instead of the database's notifications

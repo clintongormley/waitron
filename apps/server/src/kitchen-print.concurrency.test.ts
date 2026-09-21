@@ -24,7 +24,8 @@ import "./errors.js";
 
 // REAL Postgres, NOT PGlite: this proves a LOCK interaction between two concurrent backends, and PGlite
 // serialises every query onto one backend — it CANNOT reach the race and would be a false pass
-// (CLAUDE.md §4). The fire tx runs at READ COMMITTED (`withTransaction` = `db.transaction()`), so without the
+// (CLAUDE.md §4). The fire tx runs at READ COMMITTED: `withTransaction` opens it through
+// `db.transaction()` and asks for no isolation level, so the server's default stands. Without the
 // `FOR SHARE` lock a `deactivatePrinter` committing between enqueueKitchenTickets' mapping read and
 // `enqueuePrintJob`'s own `active = true` re-check would flip the printer inactive and throw
 // `printer.not_found`, aborting the fire (a §5 never-block violation). With the lock, the deactivation
