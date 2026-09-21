@@ -12,9 +12,10 @@ export interface ConstraintTarget {
 
 /**
  * How deep to follow `cause` before giving up. Drizzle wraps every failed query in a
- * `DrizzleQueryError` and a savepoint rollback can wrap it again, so the driver's own error is not
- * at the top. This is a BOUND, not a measurement of how deep the real error sits; it exists so a
- * self-referential or absurdly nested `cause` cannot spin.
+ * `DrizzleQueryError`, so the driver's own error is not at the top — measured at depth 1 for a
+ * `db.execute` on both drivers. This is a BOUND, not a claim about how deep the error sits on every
+ * path; it exists so a self-referential or absurdly nested `cause` cannot spin. It is the same bound
+ * `isPgError` uses (`./unique-violation.ts`).
  */
 const MAX_CAUSE_DEPTH = 5;
 
@@ -34,7 +35,7 @@ const KEY_COLUMNS = /^Key \((.*?)\)=\(/;
  * Returns `undefined` when nothing in the cause chain names a key: a refusal that names no key at
  * all (a CHECK violation reports `Failing row contains (…)`), an error from some other class
  * entirely, or a value that is not an error. `undefined` therefore means "this refusal named no
- * key", never "no violation" — pair it with {@link isPgError} when the SQLSTATE matters.
+ * key", never "no violation" — pair it with `isPgError` (`./unique-violation.ts`) when the SQLSTATE matters.
  *
  * What the two halves mean depends on the class, and each was measured on 2026-09-21 against PGlite
  * and a real PostgreSQL, through `describeEachTarget`, in `constraint-target.test.ts`:
@@ -66,11 +67,10 @@ export function constraintTarget(error: unknown): ConstraintTarget | undefined {
 /**
  * Is `target` the table and columns of `expected` — same table, same columns, same order?
  *
- * The replacement for comparing a constraint NAME with `===`. Order is part of the identity: an
- * index on `(location_id, name)` is a different index from one on `(name, location_id)`, and each
- * is reported in its own declared order. An absent `target` is never a match; a caller that wants
- * to translate an unidentified refusal anyway tests for `undefined` itself, so that the choice is
- * visible where it is made.
+ * The replacement for comparing a constraint NAME with `===`. Order is part of the identity, because
+ * an index on `(location_id, name)` is a different index from one on `(name, location_id)`. An absent
+ * `target` is never a match; a caller that wants to translate an unidentified refusal anyway tests
+ * for `undefined` itself, so that the choice is visible where it is made.
  */
 export function sameTarget(
   target: ConstraintTarget | undefined,
