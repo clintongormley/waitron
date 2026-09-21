@@ -103,6 +103,20 @@ target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
+Writing to that database from outside the server, with `psql` or a seeding script, no longer puts
+your change on an open dashboard at the moment you write it. Live updates used to leave PostgreSQL
+over its own notification channel, so a write from any session reached the server. They now stay
+inside the server process: the trigger writes a row into `change_log`, and the transaction that
+caused the change takes that row out again and hands it to the dashboard once it has committed. A
+direct write leaves its row sitting in the table, because no transaction inside the server wrote it.
+Nothing is lost, though. The drain takes every row it finds rather than only the ones its own
+transaction wrote, so the next piece of work the server does in a transaction carries your change
+along with it. For a dashboard that is already open, that is at worst the fifteen-second session
+check its event stream makes, which is what the "delivers a write made outside withTransaction" case
+in `apps/server/src/live-api.test.ts` pins. Expect a direct write to arrive late, and under another
+request's commit, rather than not at all. This is a development concern only, because in a venue
+every write goes through the server.
+
 What does NOT wipe that volume is the common case: switching between worktrees on the same target.
 A target change wipes it, and so does `wa-wt reset` (read the script before assuming that is the
 whole list — `ensure_env` has a third path). The volume is seeded, so between wipes it keeps demo

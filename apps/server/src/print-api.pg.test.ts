@@ -7,7 +7,7 @@ import {
   asAppUser,
   withTransaction,
   installChangeFeed,
-  startChangeListener,
+  subscribeToChanges,
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -863,9 +863,8 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
   const { agentId, token } = await joinAndAccept(app, "Live agent");
   const printerId = await createPrinter(app, agentId, "Live printer");
   await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);
-  const listener = await startChangeListener(suite.pg.uri, {
-    onChange: (event) => bus.publish(event),
-    onReset: () => bus.reset(),
+  const unsubscribe = subscribeToChanges((event) => {
+    bus.publish(event);
   });
   const url = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: printerId }]))}`;
   const response = await send(app, "GET", url, { cookie: managerCookie });
@@ -911,7 +910,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
   } finally {
     await reader.cancel();
     await reading;
-    await listener.close();
+    unsubscribe();
     bus.close();
   }
 });

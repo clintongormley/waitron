@@ -87,12 +87,23 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("mirror_config", "local", "this node's link to its cloud mirror; not copied"),
   classify("node_membership", "local", "this node's membership record; not copied"),
   classify("join_requests", "local", "this node's pending joins, device and agent; not copied"),
+  classify(
+    "change_log",
+    "local",
+    "this node's own signal to its own dashboard, drained as it is delivered; not copied",
+  ),
 ];
 
-export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.map(
-  ({ table }) => ({
-    table,
-    type: table,
-    related: table === "print_jobs" ? [{ type: "printers", column: "printer_id" }] : [],
-  }),
-);
+/**
+ * The tables whose row changes the dashboard is told about.
+ *
+ * `change_log` is filtered out because it is where the trigger PUTS its output: a change trigger on
+ * it would insert a row for every row it writes, and that row would trigger another.
+ */
+export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.filter(
+  ({ table }) => table !== "change_log",
+).map(({ table }) => ({
+  table,
+  type: table,
+  related: table === "print_jobs" ? [{ type: "printers", column: "printer_id" }] : [],
+}));

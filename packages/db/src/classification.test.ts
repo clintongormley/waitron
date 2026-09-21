@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { tablesCreatedBy } from "@waitron/sync-enrolment";
-import { CORE_CLASSIFICATION } from "./classification.js";
+import { CORE_CHANGE_SOURCES, CORE_CLASSIFICATION } from "./classification.js";
 
 const DRIZZLE = join(import.meta.dirname, "..", "drizzle");
 
@@ -32,5 +32,15 @@ describe("CORE_CLASSIFICATION", () => {
     const created = tablesInDrizzle();
     expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
     expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
+  });
+});
+
+describe("CORE_CHANGE_SOURCES", () => {
+  it("is not a change source for the table it writes into", () => {
+    // `change_log` is classified like every other core table, so the completeness check above
+    // passes — but a change trigger on it would insert a row for every row it writes, and that row
+    // would trigger another.
+    expect(CORE_CLASSIFICATION.map((c) => c.table)).toContain("change_log");
+    expect(CORE_CHANGE_SOURCES.map((s) => s.table)).not.toContain("change_log");
   });
 });

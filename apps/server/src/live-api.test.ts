@@ -2,7 +2,13 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import {
+  CORE_CHANGE_SOURCES,
+  CORE_MIGRATIONS,
+  installChangeFeed,
+  subscribeToChanges,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -12,7 +18,9 @@ import {
   resolveManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { LiveEvents, mountLiveApi } from "./live-api.js";
+import type { ResourceChange } from "@waitron/shared";
+import type { Logger } from "./logger.js";
+import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
@@ -110,14 +118,12 @@ it.each([
   expect(bus.subscriberCount).toBe(0);
 });
 
-it("refreshes snapshots after listener reset and closes streams during server shutdown", async () => {
+it("closes streams during server shutdown", async () => {
   const { app, path, cookie, bus } = await fixture();
   const response = await app.request(path, { headers: { cookie } });
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    bus.reset();
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: reset");
     bus.close();
     expect((await reader.read()).done).toBe(true);
     expect(bus.subscriberCount).toBe(0);
@@ -165,6 +171,67 @@ it("revalidates idle streams on the heartbeat without extending their session", 
     expect((await reader.read()).done).toBe(true);
   } finally {
     await reader.cancel();
+    vi.useRealTimers();
+  }
+});
+
+describe("the change subscriber", () => {
+  it("hands each change to the bus", () => {
+    const bus = new LiveEvents();
+    const seen: ResourceChange[] = [];
+    bus.subscribe((event) => {
+      if (event.kind === "change") seen.push(event.change);
+    });
+    changeSubscriber(bus, () => {})({ resources: [{ type: "printers", id: "p1" }] });
+    expect(seen).toEqual([{ resources: [{ type: "printers", id: "p1" }] }]);
+  });
+
+  it("logs and swallows a failing subscriber instead of failing the committed write", () => {
+    const bus = new LiveEvents();
+    bus.subscribe(() => {
+      throw new Error("a subscriber blew up");
+    });
+    const lines: [string, string, Record<string, unknown> | undefined][] = [];
+    const log: Logger = (level, event, fields) => lines.push([level, event, fields]);
+    expect(() =>
+      changeSubscriber(bus, log)({ resources: [{ type: "printers", id: "p1" }] }),
+    ).not.toThrow();
+    expect(lines).toEqual([["warn", "live.publish_failed", { errorCode: "unknown" }]]);
+  });
+});
+
+it("delivers a write made outside withTransaction on the next transaction the process runs", async () => {
+  // A development script writing the database directly leaves its change row behind: the trigger
+  // still fills `change_log`, but nothing in this process has a transaction open to take it out.
+  // The drain is unfiltered, so the next transaction that does run carries it — here the stream's
+  // own fifteen-second session check.
+  const { cookie, bus } = await fixture();
+  const app = new Hono();
+  mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["dining_tables"] }, () => {});
+  await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
+  const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
+  const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"dining_tables"}]')}`;
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    const location = await suite.db.execute<{ id: string }>(
+      sql`insert into locations (name, invoice_locales, operation_description) values ('Probe', array['es'], 'probe') returning id`,
+    );
+    await suite.db.execute(
+      sql`insert into dining_tables (location_id, label) values (${location.rows[0]!.id}, 'T9')`,
+    );
+    const waiting = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from change_log`,
+    );
+    expect(waiting.rows[0]!.n).toBe(2);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: change");
+  } finally {
+    await reader.cancel();
+    unsubscribe();
+    bus.close();
     vi.useRealTimers();
   }
 });

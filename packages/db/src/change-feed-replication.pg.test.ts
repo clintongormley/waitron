@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { quoteLiteral } from "@waitron/shared";
 import { createPostgresDb } from "./client.js";
 import { installChangeFeed } from "./change-feed.js";
-import { startChangeListener } from "./change-listener.js";
 import { startTwoNodeCluster, type TwoNodeCluster } from "./testing/two-node.js";
 
 import { startTwoNodeWireguardCluster } from "./testing/two-node-wireguard.js";
@@ -20,6 +19,13 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
         try {
           await db.execute(
             sql`create table live_replica_probe (id text primary key, tenant_id text not null, printer_id text)`,
+          );
+          // `change_log` by hand rather than by running the core migration set: this suite builds
+          // its own probe table too, and the two columns below are the whole of
+          // `packages/db/src/schema/change-log.ts`. What it must match is the column the trigger
+          // writes, `payload`.
+          await db.execute(
+            sql`create table change_log (id uuid primary key default gen_random_uuid(), payload jsonb not null)`,
           );
           await installChangeFeed(db, [
             {
@@ -47,8 +53,15 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
     await nodeB.run(
       `create subscription live_probe_subscription connection ${quoteLiteral(upstream.href)} publication live_probe_publication`,
     );
-    const changed = vi.fn();
-    const listener = await startChangeListener(nodeB.uri, { onChange: changed, onReset: () => {} });
+    // Read on node B, where the apply worker runs. Sorted by their rendered JSON: `change_log`
+    // carries no sequence column, so the order two rows written by one statement come back in is
+    // not something this design promises.
+    const changesOnB = async (): Promise<unknown[]> => {
+      const rows = (await nodeB.query("select payload from change_log")) as { payload: unknown }[];
+      return rows
+        .map((row) => row.payload)
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    };
     try {
       await vi.waitFor(
         async () =>
@@ -63,49 +76,48 @@ describe.each(["LAN", "WireGuard"] as const)("replicated change feed over %s", (
           expect(await nodeB.query("select id from live_replica_probe")).toEqual([{ id: "job" }]),
         { timeout: 15_000 },
       );
-      await vi.waitFor(() =>
-        expect(changed).toHaveBeenCalledWith({
-          resources: [
-            { type: "print_jobs", id: "job" },
-            { type: "printers", id: "printer" },
-          ],
-        }),
+      await vi.waitFor(async () =>
+        expect(await changesOnB()).toEqual([
+          {
+            resources: [
+              { type: "print_jobs", id: "job" },
+              { type: "printers", id: "printer" },
+            ],
+          },
+        ]),
       );
-      changed.mockClear();
+      await nodeB.run("delete from change_log");
       await nodeA.run("update live_replica_probe set printer_id = 'new-printer' where id = 'job'");
-      await vi.waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
-      expect(changed.mock.calls.map(([event]) => event)).toEqual([
-        {
-          resources: [
-            { type: "print_jobs", id: "job" },
-            { type: "printers", id: "printer" },
-          ],
-        },
-        {
-          resources: [
-            { type: "print_jobs", id: "job" },
-            { type: "printers", id: "new-printer" },
-          ],
-        },
-      ]);
-      changed.mockClear();
+      await vi.waitFor(async () =>
+        expect(await changesOnB()).toEqual([
+          {
+            resources: [
+              { type: "print_jobs", id: "job" },
+              { type: "printers", id: "new-printer" },
+            ],
+          },
+          {
+            resources: [
+              { type: "print_jobs", id: "job" },
+              { type: "printers", id: "printer" },
+            ],
+          },
+        ]),
+      );
+      await nodeB.run("delete from change_log");
       await nodeA.run("delete from live_replica_probe where id = 'job'");
-      await vi.waitFor(() =>
-        expect(changed).toHaveBeenCalledExactlyOnceWith({
-          resources: [
-            { type: "print_jobs", id: "job" },
-            { type: "printers", id: "new-printer" },
-          ],
-        }),
+      await vi.waitFor(async () =>
+        expect(await changesOnB()).toEqual([
+          {
+            resources: [
+              { type: "print_jobs", id: "job" },
+              { type: "printers", id: "new-printer" },
+            ],
+          },
+        ]),
       );
     } finally {
-      await listener.close();
       await nodeB.run("drop subscription live_probe_subscription");
     }
-    // 90s. This case makes five `vi.waitFor` calls, and they add up on ONE clock: two bounded at
-    // 15s and three on Vitest's 1s default, so a healthy worst case is 33s before counting the
-    // container and SQL work between them — past the 30s this used to allow. The spawn-timeout
-    // guard compares a bound against the LARGEST single wait and cannot see a sum, so this one is
-    // set by hand from the waits the case actually makes.
   }, 90_000);
 });

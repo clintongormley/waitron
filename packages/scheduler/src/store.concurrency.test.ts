@@ -149,6 +149,14 @@ describe("two runners racing one successor enqueue", () => {
     const dueAt = new Date("2026-07-26T00:00:00Z");
     const held = gate();
     const aHasInserted = gate();
+    // A second, unrelated period B enqueues AFTER it has read its violation. It is what says the
+    // refusal left B's transaction usable: `enqueueSuccessor` rolls the failed insert back to a
+    // savepoint, and without that the violation would have aborted the whole transaction, so this
+    // statement — and every later one, `withTransaction`'s own change-log drain included — would
+    // fail with 25P02 instead.
+    // A period no other test in this file touches — rows accumulate here (`resetPerTest: false`).
+    const sparePeriod = dayPeriod(new Date("2026-07-19T00:00:00Z"));
+    let loserKeptGoing = false;
 
     const first = withTransaction(a, async (tx) => {
       const inserted = await enqueueSuccessor(tx, { duty: DUTY, period, dueAt });
@@ -158,7 +166,11 @@ describe("two runners racing one successor enqueue", () => {
     });
 
     await aHasInserted.passed;
-    const second = withTransaction(b, (tx) => enqueueSuccessor(tx, { duty: DUTY, period, dueAt }));
+    const second = withTransaction(b, async (tx) => {
+      const refused = await enqueueSuccessor(tx, { duty: DUTY, period, dueAt });
+      loserKeptGoing = await enqueueSuccessor(tx, { duty: DUTY, period: sparePeriod, dueAt });
+      return refused;
+    });
     await waitForABlockedBackend();
     held.open();
 
@@ -174,5 +186,10 @@ describe("two runners racing one successor enqueue", () => {
     expect(
       rows.rows.filter((r) => new Date(r.periodFrom).getTime() === period.from.getTime()),
     ).toHaveLength(2);
+    // And B's transaction COMMITTED rather than being rolled back under the abort.
+    expect(loserKeptGoing).toBe(true);
+    expect(
+      rows.rows.filter((r) => new Date(r.periodFrom).getTime() === sparePeriod.from.getTime()),
+    ).toHaveLength(1);
   });
 });

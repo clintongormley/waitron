@@ -2,7 +2,17 @@ import type { Database, Transaction } from "./client.js";
 import { sql } from "drizzle-orm";
 import { quoteLiteral, type ChangeSource } from "@waitron/shared";
 
-/** Install as the table owner. Events identify changed resources; business values stay in the DB. */
+/**
+ * Install as the table owner. Events identify changed resources; business values stay in the DB.
+ *
+ * The trigger writes its event into `change_log` in the caller's own transaction; `withTransaction`
+ * takes the rows out again and hands them to this process's listeners once the commit has returned
+ * (`./change-log.ts`). It does not signal out of the database, so a change is never seen by anyone
+ * before the transaction that caused it has committed.
+ *
+ * `change_log` itself must never be one of `sources` — see `CORE_CHANGE_SOURCES` in
+ * `./classification.ts`, which filters it out, and the test that pins that.
+ */
 export async function installChangeFeed(
   db: Database | Transaction,
   sources: readonly ChangeSource[],
@@ -38,9 +48,8 @@ export async function installChangeFeed(
             ));
           end if;
         end loop;
-        perform pg_notify('waitron_changes', jsonb_build_object(
-          'resources', resources
-        )::text);
+        insert into public.change_log (payload)
+        values (jsonb_build_object('resources', resources));
       end loop;
       return null;
     end

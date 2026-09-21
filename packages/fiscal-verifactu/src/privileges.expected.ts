@@ -21,6 +21,7 @@ export const PRIVILEGES: Record<string, string> = {
   catalogues: "SIU",
   categories: "SIUD",
   category_details: "SIUD",
+  change_log: "SID",
   content_languages: "SIU",
   contadores_instalacion: "SIU",
   convenio_config: "SIU",

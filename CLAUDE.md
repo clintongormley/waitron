@@ -376,6 +376,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — pg 9 removes
   the queueing that makes it work; no guard enforces it (receipt in
   [conventions-data.md](docs/developers/conventions-data.md)).
+- **A statement PostgreSQL REFUSES aborts the whole transaction, so catching its error and carrying
+  on in the same `tx` needs a SAVEPOINT** — a nested `tx.transaction(...)`, which drizzle emits as
+  SAVEPOINT / ROLLBACK TO. Every later statement otherwise fails `25P02`, `withTransaction`'s own
+  change-log drain included, so what used to commit silently as a rollback is now loud. Cost:
+  `enqueueSuccessor` (`packages/scheduler/src/store.ts`) swallowed a lost race's duplicate key and
+  threw away the run completion written beside it; nothing failed. Guard: the loser's second enqueue
+  in `packages/scheduler/src/store.concurrency.test.ts`. **A TEST catches such a refusal OUTSIDE the
+  transaction**, around the whole `withTransaction` — the production path can be right and the test
+  still wrong.
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
   [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)
