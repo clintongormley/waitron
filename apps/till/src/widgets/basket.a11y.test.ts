@@ -72,7 +72,7 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       maxQuantity: 3,
       preselected: false,
       addAllergens: { milk: { presence: "contains" as const } },
-      suitableFor: ["halal"],
+      suitableFor: ["halal" as const],
     };
     const burger: TillProduct = {
       ...cafe,
