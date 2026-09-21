@@ -36,9 +36,10 @@ describe("claiming job rows", () => {
     },
   });
 
+  // No delete first: `useVenueDb` empties every data table between tests by default, probe tables
+  // included, and these inserts name their own primary keys — so a reset that did not happen would
+  // fail the next case with a duplicate key rather than passing quietly.
   const seed = async () => {
-    await suite.db.execute(sql`delete from probe_jobs`);
-    await suite.db.execute(sql`delete from probe_printers`);
     await suite.db.execute(sql`insert into probe_printers (id, host, active)
       values (1, 'front-of-house', true), (2, 'kitchen', false)`);
     await suite.db.execute(sql`insert into probe_jobs (position, status, printer_id)
@@ -58,6 +59,7 @@ describe("claiming job rows", () => {
     const claimed = await withTransaction(suite.db, (tx) =>
       claimRows<ClaimedProbe>(tx, {
         table: "probe_jobs",
+        key: "position",
         claimable: sql`j.status = 'pending'`,
         order: sql`j.position`,
         limit: 2,
@@ -77,6 +79,7 @@ describe("claiming job rows", () => {
     const claimed = await withTransaction(suite.db, (tx) =>
       claimRows<ClaimedProbe>(tx, {
         table: "probe_jobs",
+        key: "position",
         claimable: sql`j.status = 'pending'`,
         order: sql`j.position desc`,
         limit: 2,
@@ -95,6 +98,7 @@ describe("claiming job rows", () => {
     const claimed = await withTransaction(suite.db, (tx) =>
       claimRows<ClaimedProbe>(tx, {
         table: "probe_jobs",
+        key: "position",
         claimable: sql`j.status = 'gone'`,
         order: sql`j.position`,
         limit: 2,
@@ -113,7 +117,8 @@ describe("claiming job rows", () => {
     const claimed = await withTransaction(suite.db, (tx) =>
       claimRows<{ position: number; host: string }>(tx, {
         table: "probe_jobs",
-        claimableFrom: sql`probe_jobs j join probe_printers p on p.id = j.printer_id`,
+        key: "position",
+        claimableJoin: sql`join probe_printers p on p.id = j.printer_id`,
         claimable: sql`j.status = 'pending' and p.active = true`,
         order: sql`j.position`,
         limit: 4,

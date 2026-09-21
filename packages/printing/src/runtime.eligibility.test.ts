@@ -12,9 +12,9 @@ import type { PrintConfig } from "./printers.js";
 
 // Real PostgreSQL, NOT PGlite: eligibility is derived at claim time from the venue (network_tcp) and
 // the agent's reported visible device keys (usb/bluetooth) — schema-only logic that PGlite runs fine,
-// but this suite shares the `for update … skip locked` claim path with the race suite and runs as the
-// real deployment role (SET ROLE app_user) so the grant the claim/report needs is exercised, not
-// bypassed by PGlite's superuser connection (CLAUDE.md §4).
+// but this suite shares the claim path with the race suite and runs as the real deployment role
+// (SET ROLE app_user) so the grant the claim/report needs is exercised, not bypassed by PGlite's
+// superuser connection (CLAUDE.md §4).
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {

@@ -10,10 +10,9 @@ import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-ag
  * The three steps:
  *  1. PULL — atomically CLAIM a batch of this agent's due jobs (queued, under-cap failed, or a
  *     lease-expired stuck `printing` job — §5 Gap 1), stamping each `printing` with a fresh `claimed_at`.
- *     The claim is the double-print guard, and it is ONE statement: two agents (the two-boxes /
- *     reimaged-agent topology) never deliver the same job twice, because claiming a row moves it and
- *     the claim only stamps rows where its own locking selection found them. Proven with two agents
- *     contending in runtime.race.test.ts.
+ *     The claim is the double-print guard, and it is ONE statement, so two agents (the two-boxes /
+ *     reimaged-agent topology) never deliver the same job twice. Proven with two agents contending
+ *     in runtime.race.test.ts.
  *  2. PUSH — hand each claimed job's bytes to its printer via the injected transport.
  *  3. REPORT — mark each job `done`, or on a push failure `failed` with `attempts++` and the error.
  *
@@ -108,23 +107,12 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
  * mode) still calls this, then pushes+reports in the SAME transaction.
  *
- * ONE statement, built by `claimRows` in `@waitron/db` — the only place in the tree that spells
- * `ctid` or `for update … skip locked`, so the SQLite switch edits that file and not this call site.
- * Its two halves:
- *
- *  - The inner selection chooses this batch and LOCKS it, skipping any row another agent is already
- *    claiming. What the skip buys is that a second agent gets on with the rows it can have instead
- *    of waiting: measured 2026-09-21 against a real server, with `skip locked` taken out and nothing
- *    else changed, a second claimer had not returned 1.5s later and stood in `pg_locks` as one
- *    ungranted lock. It did NOT double-claim even so — once the first committed it returned the rows
- *    the first had not taken and never the claimed one.
- *  - The outer UPDATE stamps the batch and, through its join to `printers` on that table's id, reads
- *    each job's connection facts so the push step needs no second read. That join is not the
- *    authorization scope, and it excludes nothing the selection has not already excluded.
- *
- * So the double-claim guard is the statement's shape rather than the lock clause, and this package's
- * race suite no longer fails when the clause is deleted (it passed, same measurement). The clause's
- * own proof-by-deletion lives with the SQL, in `packages/db/src/job-claim.pg.test.ts`.
+ * ONE statement, built by `claimRows` in `@waitron/db`, which is where this claim's SQL and the
+ * receipts for its behaviour under two agents live. Its selection chooses and locks the batch, and
+ * its UPDATE stamps that batch and reads each job's connection facts through a join to `printers`
+ * on that table's id, so the push step needs no second read. The join appears in BOTH halves and
+ * both are needed — the selection's decides eligibility, the stamp's supplies the columns the agent
+ * pushes with — so neither is redundant, and neither is the authorization scope.
  *
  * All values bind as `$n` (Drizzle-parameterised), never concatenated. Eligibility is DERIVED
  * (design §3): a `network_tcp` printer is claimable by any
@@ -133,7 +121,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * the local branch to `false` (an `in ()` matches nothing — the drain.ts hazard). The claim stamps
  * `claimed_by = agentId`, which records the holder (a lease reclaim OVERWRITES it) and is what later
  * authorises the report. A `failed` job under the attempt cap is re-claimed here (the retry); at the
- * cap it is filtered out (the bound). `for update of j` locks only the `print_jobs` rows, not `printers`.
+ * cap it is filtered out (the bound).
  *
  * `p.active = true` makes a DEACTIVATED printer (`deactivatePrinter`) stop being served: the pull skips
  * ALL of its jobs — a queued job, an under-cap `failed` retry, AND a lease-expired stuck `printing` row
@@ -153,10 +141,9 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * `status='printing'`), but a `printing` row with no lease timestamp is by definition not a live claim —
  * a real claim always stamps `claimed_at` — so it is anomalous/stuck and must be reclaimed immediately
  * rather than stranded forever (SQL `claimed_at < …` is UNKNOWN for NULL, so the time bound alone would
- * never re-select it). A
- * committed stuck `printing` row is UNLOCKED, so `for update … skip locked` does not skip it once the
- * lease predicate makes it eligible; the reclaim then re-stamps `claimed_at = now()` below, treating it
- * exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
+ * never re-select it). A committed stuck `printing` row is held by nobody, so the claim does not pass
+ * over it once the lease predicate makes it eligible; the reclaim then re-stamps `claimed_at = now()`,
+ * treating it exactly like a fresh claim. AT-LEAST-ONCE by design (§5, PRINT_JOB_LEASE_MS): a reclaim may reprint a
  * job that printed but lost its `done` — a nuisance duplicate we accept over a dropped ticket. Proven by
  * deletion of the reclaim branch in runtime.reclaim.test.ts (the stuck job is not reclaimed without it).
  */
@@ -176,7 +163,8 @@ export async function claimPrintJobs(
       : sql`false`;
   return claimRows<ClaimedJob>(tx, {
     table: "print_jobs",
-    claimableFrom: sql`print_jobs j join printers p on p.id = j.printer_id`,
+    key: "id",
+    claimableJoin: sql`join printers p on p.id = j.printer_id`,
     claimable: sql`p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       and (
@@ -188,12 +176,7 @@ export async function claimPrintJobs(
       )`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
-    // The lease anchor: a fresh claim and a lease reclaim both restart it. `claimed_by` records the
-    // holder — a lease reclaim OVERWRITES it — and is the report's authorization key.
     set: sql`status = 'printing', claimed_at = now(), claimed_by = ${agentId}`,
-    // Joined so the claim reads each job's connection facts on the way out; the push step needs no
-    // second read. It is NOT the authorization scope, and it filters nothing the predicate above
-    // has not already filtered.
     join: { from: sql`printers p`, on: sql`print_jobs.printer_id = p.id` },
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
                    p.transport, p.host, p.port, p.local_key`,

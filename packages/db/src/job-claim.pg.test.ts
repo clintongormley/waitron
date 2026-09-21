@@ -1,152 +1,239 @@
-// Real PostgreSQL, not PGlite: both cases run a SECOND claimer while a first one still holds its
-// rows, and PGlite serialises every query onto its one backend, so the second claimer cannot exist
-// there at all and the suite would pass without proving anything (CLAUDE.md §4).
+// Real PostgreSQL, not PGlite: every case here runs a SECOND session against rows a first session
+// is holding, and PGlite serialises every query onto its one backend, so a second session cannot
+// exist there and the suite would pass without proving anything (CLAUDE.md §4). The claims run as
+// `app_user`, the deployment role, because the proof they hold came from a suite that ran that way
+// (`packages/printing/src/runtime.race.test.ts`). What that buys HERE is narrow, and worth saying
+// so nobody assumes more: the probe table's grants are the ones this file hands out, so the role
+// can only catch SQL a non-owner may not run at all — not a privilege missing on a real table.
 //
-// What each case establishes, rather than what PostgreSQL does in general: that the claim skips a
-// row another claimer holds instead of waiting for it, and that the two claimers between them take
-// each row once. The negative control was run rather than reasoned about — with `skip locked`
-// deleted from `job-claim.ts`, both cases stop returning and fail on the suite's timeout, because
-// the second claimer waits for the first one's transaction.
+// This is where the two properties of a claim statement are held, rather than at any one caller:
+// that a claimer does not WAIT for another claimer, and that a claim takes a row another
+// transaction rewrote underneath it. `packages/payments/src/forward.concurrency.test.ts` holds the
+// first property at its own call site and is deliberately untouched by the change that added this
+// file; the case below is the `packages/db` guard for it, so that this module's behaviour does not
+// depend on a suite in a package that depends on it.
+//
+// Running the negative control takes minutes, not seconds. Measured 2026-09-21 with `skip locked`
+// deleted from `job-claim.ts`: all three cases failed. The first fails on the 30s test timeout,
+// which IS the waiting the clause exists to avoid; its holder is then still parked, so the per-test
+// reset blocks on that holder's row locks (a 120s hook timeout) and the other two cases go with it.
+// Only the first case's failure is the control; the rest is collateral.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import type { Transaction } from "./client.js";
 import { claimLock, claimRows } from "./job-claim.js";
 import { count, label, table } from "./schema/columns.js";
 import { withTransaction } from "./tenancy.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
+import type { RealPostgres } from "./testing/postgres.js";
+import { asAppUser } from "./testing/roles.js";
 
 const probeJobs = table("probe_jobs", {
   position: count("position").primaryKey(),
   status: label("status").notNull(),
 });
 
-type ClaimedProbe = { position: number };
+/** The advisory lock the gate function below parks on. Any number nothing else uses. */
+const GATE = 7654321;
 
-describe("two claimers over one queue", () => {
+interface Held<T> {
+  /** What the holding transaction produced before it parked. */
+  readonly value: T;
+  /** Lets the holding transaction finish, and waits for it. */
+  readonly release: () => Promise<void>;
+}
+
+/**
+ * Runs `body` as `app_user` in a backend of its own and keeps that transaction OPEN afterwards, so
+ * a second claimer can be watched while the first still holds whatever `body` took.
+ *
+ * The same holder/waiter shape is hand-written in every real-PostgreSQL contention suite in this
+ * repository; this copy is local because making it shared is a change to `testing/lifecycle.ts`
+ * that reaches all of them, which is not this file's to make.
+ */
+async function holdOpen<T>(
+  pg: RealPostgres,
+  body: (tx: Transaction) => Promise<T>,
+): Promise<Held<T>> {
+  const db = await pg.connect();
+  let release!: () => void;
+  const parked = new Promise<void>((resolve) => (release = resolve));
+  let acquired!: (value: T) => void;
+  let failed!: (reason: unknown) => void;
+  const ready = new Promise<T>((resolve, reject) => {
+    acquired = resolve;
+    failed = reject;
+  });
+  const holding = withTransaction(db, async (tx) => {
+    await asAppUser(tx);
+    let value: T;
+    try {
+      value = await body(tx);
+    } catch (error) {
+      failed(error);
+      throw error;
+    }
+    acquired(value);
+    await parked;
+  }).finally(() => db.close());
+  holding.catch(() => undefined);
+  return {
+    value: await ready,
+    release: async () => {
+      release();
+      await holding;
+    },
+  };
+}
+
+/** Runs `body` while `held` is still holding, and releases it afterwards however `body` ends. */
+async function whileHolding<T>(held: Held<unknown>, body: () => Promise<T>): Promise<T> {
+  try {
+    return await body();
+  } finally {
+    await held.release();
+  }
+}
+
+/** Runs one claim as `app_user` on a backend of its own, and closes it again. */
+async function asClaimer<T>(pg: RealPostgres, body: (tx: Transaction) => Promise<T>): Promise<T> {
+  const db = await pg.connect();
+  try {
+    return await withTransaction(db, async (tx) => {
+      await asAppUser(tx);
+      return body(tx);
+    });
+  } finally {
+    await db.close();
+  }
+}
+
+describe("claiming job rows against another session", () => {
   const suite = useTemplateDb({
     template: "core",
     setup: async ({ admin }) => {
-      await admin.execute(
-        sql`create table probe_jobs (position integer primary key, status text not null)`,
-      );
+      await admin.execute(sql`create table probe_jobs (
+        position integer primary key, status text not null, payload text not null)`);
+      // Parks whatever statement evaluates it until the advisory lock is free, which is how a claim
+      // is held open in the middle of its own execution. `CREATE FUNCTION` takes no bind
+      // parameters, so the lock number goes in as text (`08P01` otherwise).
+      await admin.execute(sql`create function probe_gate() returns boolean language plpgsql as
+        $$ begin perform pg_advisory_xact_lock(${sql.raw(String(GATE))}); return true; end $$`);
+      await admin.execute(sql`grant select, insert, update, delete on probe_jobs to app_user`);
     },
   });
 
-  /** Four claimable rows, and a fresh pool for each claimer so the two are separate backends. */
-  const seed = async () => {
-    await suite.admin.execute(sql`delete from probe_jobs`);
-    await suite.admin.execute(
-      sql`insert into probe_jobs (position, status) select n, 'pending' from generate_series(1, 4) as n`,
-    );
+  /** Four claimable rows. The per-test reset empties the table between cases. */
+  const seed = async (rows = 4) => {
+    await suite.admin.execute(sql`insert into probe_jobs (position, status, payload)
+      select n, 'pending', 'original' from generate_series(1, ${rows}) as n`);
   };
+
+  const claimSpec = (limit: number) => ({
+    table: "probe_jobs",
+    key: "position",
+    claimable: sql`j.status = 'pending'`,
+    order: sql`j.position`,
+    limit,
+    set: sql`status = 'running'`,
+    returning: sql`probe_jobs.position`,
+  });
 
   it("hands the second claimer the rows the first did not take, and never the same row twice", async () => {
     await seed();
-    const holder = await suite.pg.connect();
-    const waiter = await suite.pg.connect();
-    let release: () => void = () => {};
-    let holding: Promise<unknown> | undefined;
-    try {
-      const held = new Promise<void>((resolve) => (release = resolve));
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
-      let first: number[] = [];
 
-      // The first claimer takes two rows and keeps its transaction open across the second claim.
-      holding = withTransaction(holder, async (tx) => {
-        const claimed = await claimRows<ClaimedProbe>(tx, {
-          table: "probe_jobs",
-          claimable: sql`j.status = 'pending'`,
-          order: sql`j.position`,
-          limit: 2,
-          set: sql`status = 'running'`,
-          returning: sql`probe_jobs.position`,
-        });
-        first = claimed.map((row) => row.position);
-        acquire();
-        await held;
-      });
-      await acquired;
+    // The first claimer takes two rows and keeps its transaction open across the second claim.
+    const first = await holdOpen(suite.pg, (tx) =>
+      claimRows<{ position: number }>(tx, claimSpec(2)).then((rows) => rows.map((r) => r.position)),
+    );
+    // Asking for all four while the first claimer holds two: it returns the other two straight
+    // away. Waiting instead would fail this case on the suite's timeout, never on an assertion.
+    const second = await whileHolding(first, () =>
+      asClaimer(suite.pg, (tx) =>
+        claimRows<{ position: number }>(tx, claimSpec(4)).then((rows) =>
+          rows.map((r) => r.position),
+        ),
+      ),
+    );
 
-      // Asking for all four while the first claimer holds two: it returns the other two straight
-      // away. Blocking instead would fail this case on the suite's timeout, never on an assertion.
-      const second = await withTransaction(waiter, (tx) =>
-        claimRows<ClaimedProbe>(tx, {
-          table: "probe_jobs",
-          claimable: sql`j.status = 'pending'`,
-          order: sql`j.position`,
-          limit: 4,
-          set: sql`status = 'running'`,
-          returning: sql`probe_jobs.position`,
+    // Sorted, because RETURNING's row order is not the `order by` the claim was taken in —
+    // measured 2026-09-21, a four-row claim returning 3, 2, 4. What the order DOES decide is which
+    // rows are claimed, and that is what these two assertions read.
+    expect([...first.value].sort()).toEqual([1, 2]);
+    expect([...second].sort()).toEqual([3, 4]);
+  });
+
+  it("takes a row another transaction rewrote while the claim was running", async () => {
+    await seed(1);
+    // Hold the gate, so the claim below parks inside its own statement.
+    const gate = await holdOpen(suite.pg, (tx) =>
+      tx.execute(sql`select pg_advisory_xact_lock(${GATE})`),
+    );
+
+    const claimed = await whileHolding(gate, async () => {
+      const claiming = asClaimer(suite.pg, (tx) =>
+        claimRows<{ position: number; payload: string }>(tx, {
+          ...claimSpec(1),
+          claimable: sql`j.status = 'pending' and (select probe_gate())`,
+          returning: sql`probe_jobs.position, probe_jobs.payload`,
         }),
       );
-      const secondPositions = second.map((row) => row.position);
+      claiming.catch(() => undefined);
+      await expect
+        .poll(
+          async () =>
+            (
+              await suite.admin.execute<{ n: number }>(sql`select count(*)::int as n
+                from pg_stat_activity
+                where datname = current_database() and wait_event = 'advisory'`)
+            ).rows[0]?.n,
+          { timeout: 5_000 },
+        )
+        .toBe(1);
 
-      // Sorted, because RETURNING's row order is not the `order by` the claim was taken in —
-      // measured 2026-09-21, a four-row claim returning 3, 2, 4. What the order DOES decide is
-      // which rows are claimed, and that is what these two assertions read.
-      expect([...first].sort()).toEqual([1, 2]);
-      expect([...secondPositions].sort()).toEqual([3, 4]);
+      // The claim's statement has begun and is parked. Change the row it is about to take.
+      await suite.admin.execute(
+        sql`update probe_jobs set payload = 'rewritten' where position = 1`,
+      );
+      await gate.release();
+      return claiming;
+    });
 
-      release();
-      await holding;
-    } finally {
-      release();
-      if (holding) await holding.catch(() => {});
-      await holder.close();
-      await waiter.close();
-    }
+    // Keyed on the row's `ctid` this returns nothing at all: the outer scan still sees the row
+    // where it used to be, while the selection has followed it to where it now is. Keyed on its
+    // primary key the claim takes it, carrying the other transaction's change.
+    expect(claimed).toEqual([{ position: 1, payload: "rewritten" }]);
   });
 
   it("does the same when the claim is the lock alone", async () => {
     await seed();
-    const holder = await suite.pg.connect();
-    const waiter = await suite.pg.connect();
-    let release: () => void = () => {};
-    let holding: Promise<unknown> | undefined;
-    try {
-      const held = new Promise<void>((resolve) => (release = resolve));
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
 
-      // The first claimer locks ONE row — the raw statement, so the case reads the helper's
-      // behaviour against a held lock rather than against itself.
-      let lockedPosition = 0;
-      holding = withTransaction(holder, async (tx) => {
-        const locked = await tx.execute<{ position: number }>(
-          sql`select position from probe_jobs where status = 'pending'
-              order by position limit 1 for update skip locked`,
-        );
-        lockedPosition = locked.rows[0].position;
-        acquire();
-        await held;
-      });
-      await acquired;
-
-      const second = await withTransaction(waiter, (tx) =>
+    // The first session locks ONE row with a raw statement, so the case reads the helper's
+    // behaviour against a held lock rather than against itself.
+    const first = await holdOpen(suite.pg, async (tx) => {
+      const locked = await tx.execute<{ position: number }>(
+        sql`select position from probe_jobs where status = 'pending'
+            order by position limit 1 for update skip locked`,
+      );
+      return locked.rows[0]?.position;
+    });
+    const second = await whileHolding(first, () =>
+      asClaimer(suite.pg, (tx) =>
         claimLock(
           tx
             .select({ position: probeJobs.position })
             .from(probeJobs)
             .where(sql`${probeJobs.status} = 'pending'`)
             .orderBy(probeJobs.position),
-        ),
-      );
-      const secondPositions = second.map((row) => row.position);
+        ).then((rows) => rows.map((r) => r.position)),
+      ),
+    );
 
-      expect(lockedPosition).toBe(1);
-      expect(secondPositions).not.toContain(lockedPosition);
-      // Exact order, not sorted: this claim is a SELECT with an ORDER BY, and a forward pass in
-      // `packages/payments` reads its queue oldest-first. The sibling case above sorts because an
-      // UPDATE's RETURNING carries no such promise.
-      expect(secondPositions).toEqual([2, 3, 4]);
-
-      release();
-      await holding;
-    } finally {
-      release();
-      if (holding) await holding.catch(() => {});
-      await holder.close();
-      await waiter.close();
-    }
+    expect(first.value).toBe(1);
+    expect(second).not.toContain(first.value);
+    // Exact order, not sorted: this claim is a SELECT with an ORDER BY, and a forward pass in
+    // `packages/payments` reads its queue oldest-first. The sibling cases sort because an UPDATE's
+    // RETURNING carries no such promise.
+    expect(second).toEqual([2, 3, 4]);
   });
 });
