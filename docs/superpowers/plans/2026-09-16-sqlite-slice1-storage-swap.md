@@ -4521,6 +4521,23 @@ path. Step 20 builds it and guards it; the caller that runs it after migrations 
 on the product's own boot path today no ledger table carries a trigger. It belongs with the
 migration-path conversion above, because that is the code that knows when migrations finished.
 
+**A THIRD GAP, and it is the largest — found 2026-09-21.** No step in this plan converts the code
+that OPENS a database on the product's own boot path. `createPostgresDb` is no longer exported by
+`@waitron/db`, and thirteen product source files still call it 37 times — `apps/server/src/`'s
+`boot.ts`, `restore.ts`, `rejoin-command.ts`, `instance-bootstrap.ts`, `node-entry.ts`,
+`backup-supervisor.ts`, `break-glass-command.ts` and `bin-break-glass.ts`, `packages/provisioning`'s
+`cli.ts`, `bin.ts` and `instance-apply.ts`, `packages/credentials/src/bin.ts`, and
+`packages/migrations/src/apply.ts`. `apps/server/src/config.ts` still reads three PostgreSQL
+connection strings out of the environment and has no setting for the venue directory the store
+needs. This belongs in step group 7 with the other two gaps.
+
+**Do not read `apps/server`'s typecheck count as a measure of how much is left.** It reports 186
+errors, two of them in `boot.ts`, and that is not evidence of near-completion: TypeScript reports a
+missing import ONCE and then types the binding `any`, so none of the 37 call sites is reported.
+Measured on a three-line scratch file compiled with this repository's own `tsc6` — importing a name
+a module does not export gives one `TS2305`, and the file then calls it with three arguments and
+chains three property accesses off the result with no error at all.
+
 **What else step 21 has to carry, from the survey taken on 2026-09-21** (call graph and file list in
 `docs/handoffs/2026-09-21-f1-the-flip.md`):
 
