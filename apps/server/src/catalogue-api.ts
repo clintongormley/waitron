@@ -143,6 +143,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
+  // A price string that is not a well-formed decimal literal, refused by `decimal()` inside the four
+  // catalogue writes that convert one: `createMenuItem`/`updateMenuItem`'s `grossPrice`
+  // (`packages/catalogue/src/operations.ts:355` and `:391`) and `createProduct`/`updateProduct`'s
+  // `unitPrice` (`:737` and `:898`). A CLIENT request fault -> 400. Listed explicitly as the house
+  // style requires; the `?? 400` default already covers it — measured 2026-09-21 with the entry
+  // absent, a `unitPrice` of `01.00` answered 400 `shared.invalid_decimal`.
+  "shared.invalid_decimal": 400,
+  // A price too wide for the money scale's twelve integer digits, thrown by `assertMoney` inside the
+  // `decimalToCents` that wraps each of those four `decimal()` calls — raised by the op, not by this
+  // file's screens. A CLIENT request fault -> 400. Listed explicitly as the house style requires; the
+  // `?? 400` default already covers it — measured 2026-09-21 with this entry absent, a `unitPrice` or
+  // `grossPrice` of `1234567890123.00` answered 400 `shared.decimal_overflow` on all four of
+  // `POST`/`PATCH /management-api/products` and `POST`/`PATCH /management-api/catalogues/:id/items`.
+  "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
   "category.not_found": 404,
   // A colour that is not `#rrggbb`, refused by `createCategory`/`updateCategory` before the write.

@@ -41,15 +41,19 @@ function blankLine(): LineDraft {
 }
 
 /**
- * A well-formed non-negative decimal literal: one or more digits, an optional fractional part, and a
- * leading-dot form (`.5`) allowed. Browser-local by design — the dashboard never imports `@waitron/shared`
- * at runtime. Deliberately looser than `@waitron/shared`'s `decimal()` (it also accepts leading zeros
- * and a leading dot), which is what `purchasing-api.ts` now screens every amount through, so a value
- * this pattern accepts and `decimal()` does not is refused by the server as `shared.invalid_decimal`
- * -> 400 rather than mishandled. This check is a UX mirror: it names the bad amount here instead of
- * making the operator wait for the round trip.
+ * A well-formed NON-NEGATIVE decimal literal: `0`, or a digit string with no leading zero, each with
+ * an optional fractional part. Browser-local by design — the dashboard never imports
+ * `@waitron/shared` at runtime — but written to accept exactly the literals that package's
+ * `decimal()` accepts (`packages/shared/src/money.ts:19`), which `purchasing-api.ts` screens every
+ * amount through, apart from the SIGN: `decimal()` also accepts a leading minus, and this pattern
+ * does not. Two consequences, both worth knowing before anyone relaxes it. A malformed shape — a
+ * blank, a comma-decimal, `.5`, `01.00` — is refused on both sides, so here it only saves the round
+ * trip: the server answers `shared.invalid_decimal` -> 400. A NEGATIVE is refused only here:
+ * measured 2026-09-21 through the real route, a POST carrying `total: "-121.00"` answered 201 and
+ * the row read back `-121.00`. The op checks the proportion and each line's base, tax and rate, so
+ * the header's gross total is the one amount nothing on the server screens for sign.
  */
-const DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 
 /**
  * True when `value` is a well-formed non-negative decimal literal within [min, max] — the form's amount
@@ -84,8 +88,11 @@ function inRange(value: string, min: number, max: number): boolean {
  * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
  * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
  * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
- * The server screens the same shapes through `decimal()` and answers `shared.invalid_decimal` -> 400,
- * so this check earns its keep on latency and wording, not on correctness. A failing check blocks
+ * `purchasing-api.ts` screens every amount through `decimal()` and answers `shared.invalid_decimal`
+ * -> 400, so on a malformed SHAPE this check buys latency and wording rather than correctness. On
+ * the SIGN it is the only check there is: `decimal()` accepts a leading minus and no server-side
+ * screen or column constraint refuses a negative gross total, so `inRange(this.total, 0, Infinity)`
+ * below is what refuses one (see `DECIMAL` above for the measurement). A failing check blocks
  * confirm and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
  * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
  */

@@ -287,11 +287,9 @@ describe("mountPurchasingApi — create request-shape screens", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "header" } } });
   });
 
-  // The amount screens. Every money and rate field arrives as a STRING, and `requireString` checks
-  // only its type: before these, a blank or a Spanish comma-decimal walked past the boundary. A
-  // blank then compared equal to zero in `validateLines` and was STORED as zero on the deductible
-  // (IVA soportado) side of modelo 303 — a wrong return with nothing red — while "121,00" threw a
-  // bare SyntaxError out of `BigInt` and became an opaque 500.
+  // The amount screens. Every money and rate field arrives as a STRING and `requireString` checks
+  // only its type, so each one goes through `decimal()` before any DB work: a malformed amount is
+  // refused, never stored. What it cost when nothing screened them: docs/backlog.md → Track C.
   it("POST with a blank base stores NO row", async () => {
     const app = mountApp();
     const res = await send(app, "POST", "/management-api/purchase-invoices", {
@@ -310,22 +308,23 @@ describe("mountPurchasingApi — create request-shape screens", () => {
     expect(rows.map((r) => r.supplierInvoiceNumber)).not.toContain("BLANKBASE-1");
   });
 
+  // Each case carries its OWN `supplierInvoiceNumber`, because this suite does not reset between
+  // tests: on a shared one, a regression in the amount screens lets the first case store its row and
+  // every later case with a well-formed header answer 409 `purchase.duplicate`, which sends whoever is
+  // chasing the regression to the duplicate index instead of the screen that stopped working.
   it.each([
-    ["a blank total", { total: "" }, undefined],
-    ["a whitespace total", { total: "   " }, undefined],
-    ["a comma-decimal total", { total: "121,00" }, undefined],
-    ["a blank deductibleProportion", { deductibleProportion: "" }, undefined],
-    ["a comma-decimal deductibleProportion", { deductibleProportion: "100,00" }, undefined],
-    ["a blank rate", {}, { rate: "", base: "1.00", tax: "0.21" }],
-    ["a whitespace base", {}, { rate: "21.00", base: "  ", tax: "0.21" }],
-    ["a letters tax", {}, { rate: "21.00", base: "1.00", tax: "abc" }],
-  ])("POST rejects %s → shared.invalid_decimal 400", async (label, headerOverride, line) => {
-    // A supplier invoice number unique to this case: a repeated one would answer 409 from the
-    // duplicate index, which is also not a 201 and would stand in for a screen that never ran.
-    const body = {
-      header: { ...goodHeader(), ...headerOverride, supplierInvoiceNumber: `DEC-${label}` },
-      lines: [line ?? { rate: "21.00", base: "100.00", tax: "21.00" }],
-    };
+    ["a blank total", withHeader({ total: "" }, "DEC-TOTAL-BLANK")],
+    ["a whitespace total", withHeader({ total: "   " }, "DEC-TOTAL-WS")],
+    ["a comma-decimal total", withHeader({ total: "121,00" }, "DEC-TOTAL-COMMA")],
+    ["a blank deductibleProportion", withHeader({ deductibleProportion: "" }, "DEC-PROP-BLANK")],
+    [
+      "a comma-decimal deductibleProportion",
+      withHeader({ deductibleProportion: "100,00" }, "DEC-PROP-COMMA"),
+    ],
+    ["a blank rate", withLine({ rate: "", base: "1.00", tax: "0.21" }, "DEC-RATE-BLANK")],
+    ["a whitespace base", withLine({ rate: "21.00", base: "  ", tax: "0.21" }, "DEC-BASE-WS")],
+    ["a letters tax", withLine({ rate: "21.00", base: "1.00", tax: "abc" }, "DEC-TAX-LETTERS")],
+  ])("POST rejects %s → shared.invalid_decimal 400", async (_label, body) => {
     const res = await send(mountApp(), "POST", "/management-api/purchase-invoices", { body });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -595,10 +594,20 @@ function goodHeader(): Record<string, unknown> {
 }
 
 /** A create body with one header field overridden to an invalid value (the rest well-formed), plus a
- * valid single line, for the request-shape screen table. */
-function withHeader(override: Record<string, unknown>): unknown {
+ * valid single line, for the request-shape screen table. `supplierInvoiceNumber` overrides
+ * `goodHeader`'s fixed one where a case must not collide with another case's stored row. */
+function withHeader(override: Record<string, unknown>, supplierInvoiceNumber?: string): unknown {
   return {
-    header: { ...goodHeader(), ...override },
+    header: {
+      ...goodHeader(),
+      ...(supplierInvoiceNumber === undefined ? {} : { supplierInvoiceNumber }),
+      ...override,
+    },
     lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
   };
+}
+
+/** The same, for a case whose invalid value is in the single VAT LINE rather than the header. */
+function withLine(line: Record<string, unknown>, supplierInvoiceNumber: string): unknown {
+  return { header: { ...goodHeader(), supplierInvoiceNumber }, lines: [line] };
 }

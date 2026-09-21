@@ -1,17 +1,19 @@
 // Side-effect only: loads this host's errors.ts augmentation for `management.request_invalid` — the
 // code the body/query screens below throw directly (declared in `./errors.js`), under the "every file
 // that throws one of these imports ./errors.js" convention. `shared.invalid_id` (thrown by
-// `requireUuidParam`) and `shared.invalid_decimal` (thrown by `decimal()` in the amount screens) are
-// declared in `@waitron/shared` and load via its value imports below; the
-// `purchase.*` codes this file throws (`purchase.not_found` in the GET/PATCH/DELETE routes, and
-// `purchase.duplicate`/`purchase.invalid` raised by the ops) are declared in `@waitron/purchasing`'s
-// own errors.ts and load transitively through the value imports of its CRUD ops below — the same
-// transitive-reachability shape `catalogue-api.ts` relies on for the `media.*` codes. So this one line
-// is all this file needs.
+// `requireUuidParam`), `shared.invalid_decimal` (thrown by `decimal()` in the amount screens) and
+// `shared.decimal_overflow` (answered by the STATUS map below, but raised downstream by the op's
+// cents conversion, not by this file) are declared in `@waitron/shared` and load via its
+// value imports below; the `purchase.*` codes this file throws (`purchase.not_found` in the
+// GET/PATCH/DELETE routes, and `purchase.duplicate`/`purchase.invalid` raised by the ops) are
+// declared in `@waitron/purchasing`'s own errors.ts and load transitively through the value imports
+// of its CRUD ops below — the same transitive-reachability shape `catalogue-api.ts` relies on for the
+// `media.*` codes. So this one line is all this file needs.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, decimal } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createPurchaseInvoice,
@@ -59,9 +61,9 @@ const PURCHASE_WRITE_PERMISSION: Permission = "purchase.manage";
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to — the purchase parallel of
- * `catalogue-api.ts`'s `STATUS`. CLIENT faults only: a genuine SERVER fault (a driver error) reaches
- * `run` as a NON-AppError and becomes an opaque 500. A registered code absent from this table
- * defaults to 400 via `run`.
+ * `catalogue-api.ts`'s `STATUS`. CLIENT faults only: anything reaching `run` as a NON-AppError —
+ * a driver error, a bug in this file, anything a dependency throws raw — becomes an opaque 500. A
+ * registered code absent from this table defaults to 400 via `run`.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -70,9 +72,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
-  // A money or rate field whose string is not a well-formed decimal literal, refused by `decimal()`
-  // in the screens below before any DB work. A client request fault -> 400.
+  // A malformed amount, refused by `decimal()` in the three screens below — `screenHeaderCreate`,
+  // `screenHeaderPatch` and `screenLines`, which is every screen that reads an amount.
   "shared.invalid_decimal": 400,
+  // An amount past the money scale's twelve integer digits, thrown by `assertMoney` inside the op's
+  // `decimalToCents` (`packages/purchasing/src/operations.ts`, for the header `total` and each line's
+  // `base` and `tax`, on create and update alike) — raised AFTER these screens, not by them. The op's
+  // basis-point conversion raises the same code on its own narrower bound, but nothing reaches it from
+  // here: a too-wide `rate` or `deductibleProportion` meets the op's 0–100 range check first.
+  // Measured 2026-09-21 through this route, with this entry ABSENT so the `?? 400` default answered:
+  // `total`, line `base` and line `tax` of `1234567890123.00` each answered 400
+  // `shared.decimal_overflow`; `rate: "1000.00"` answered `purchase.invalid` `rate_out_of_range` and
+  // `deductibleProportion: "1000.00"` answered `proportion_out_of_range`. Listed explicitly anyway, as
+  // the house style requires.
+  "shared.decimal_overflow": 400,
   "purchase.not_found": 404,
   "purchase.duplicate": 409,
   "purchase.invalid": 400,
@@ -107,13 +120,27 @@ function requireVatKind(v: unknown): PurchaseVatKind {
   return v;
 }
 
+/** Screen a money or rate field: a STRING (a non-string is `management.request_invalid` naming the
+ * field) whose characters form a well-formed decimal literal (anything else is
+ * `shared.invalid_decimal` -> 400). The pair every amount on this surface goes through, named once
+ * beside the two enum screens rather than written out at each one. */
+function requireDecimal(v: unknown, field: string): Decimal {
+  return decimal(requireString(v, field));
+}
+
 /**
  * Screen the create body's `header`: every REQUIRED scalar present and well-typed, the two dates a real
  * calendar day (`requirePeriod`), the optional `regime`/`deductibleProportion`/`note` screened only
- * when present. Money fields go through `requireString` (a non-string is `management.request_invalid`
- * naming the field) and then `decimal()`, which refuses anything that is not a well-formed decimal
- * literal with `shared.invalid_decimal` -> 400. Screening the LITERAL is this boundary's job; the op
- * still validates the RANGES it cares about (`purchase.invalid`).
+ * when present. Every amount goes through `requireDecimal`, so a value that is not a well-formed
+ * decimal literal is refused here with `shared.invalid_decimal` -> 400, before any DB work.
+ *
+ * Screening the LITERAL is this boundary's job. The RANGE checks are NOT symmetric, which is worth
+ * naming here because "the op re-validates" is not true of every field. The op
+ * (`packages/purchasing/src/operations.ts`) refuses a `deductibleProportion` outside 0–100 and, per
+ * line, a negative `base`, a negative `tax` and a `rate` outside 0–100, all as `purchase.invalid`.
+ * The header's `total` has no range check on either side and no column constraint: measured
+ * 2026-09-21 through this route, a POST carrying `total: "-121.00"` answered 201 and the row read
+ * back `-121.00`. The dashboard form is what refuses one today (docs/backlog.md → Track C).
  */
 function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
   if (!isPlainObject(v)) throw new AppError("management.request_invalid", { field: "header" });
@@ -123,13 +150,11 @@ function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
     supplierInvoiceNumber: requireString(v.supplierInvoiceNumber, "supplierInvoiceNumber"),
     issuedOn: requirePeriod(v.issuedOn, "issuedOn"),
     receivedOn: requirePeriod(v.receivedOn, "receivedOn"),
-    total: decimal(requireString(v.total, "total")),
+    total: requireDecimal(v.total, "total"),
   };
   if (v.regime !== undefined) header.regime = requireRegime(v.regime);
   if (v.deductibleProportion !== undefined) {
-    header.deductibleProportion = decimal(
-      requireString(v.deductibleProportion, "deductibleProportion"),
-    );
+    header.deductibleProportion = requireDecimal(v.deductibleProportion, "deductibleProportion");
   }
   if (v.note !== undefined) header.note = requireNullableString(v.note, "note");
   return header;
@@ -152,12 +177,10 @@ function screenHeaderPatch(v: unknown): Partial<PurchaseInvoiceHeaderInput> {
   }
   if (v.issuedOn !== undefined) header.issuedOn = requirePeriod(v.issuedOn, "issuedOn");
   if (v.receivedOn !== undefined) header.receivedOn = requirePeriod(v.receivedOn, "receivedOn");
-  if (v.total !== undefined) header.total = decimal(requireString(v.total, "total"));
+  if (v.total !== undefined) header.total = requireDecimal(v.total, "total");
   if (v.regime !== undefined) header.regime = requireRegime(v.regime);
   if (v.deductibleProportion !== undefined) {
-    header.deductibleProportion = decimal(
-      requireString(v.deductibleProportion, "deductibleProportion"),
-    );
+    header.deductibleProportion = requireDecimal(v.deductibleProportion, "deductibleProportion");
   }
   if (v.note !== undefined) header.note = requireNullableString(v.note, "note");
   return header;
@@ -166,17 +189,17 @@ function screenHeaderPatch(v: unknown): Partial<PurchaseInvoiceHeaderInput> {
 /**
  * Screen the VAT desglose: an array (an empty one passes the shape screen and reaches the op, which
  * throws `purchase.invalid` `no_lines`), each element an object with well-typed `rate`/`base`/`tax`
- * strings and an optional `kind` enum. Each amount takes the same `requireString` then `decimal()`
- * pair `screenHeaderCreate` describes.
+ * strings and an optional `kind` enum. Amounts go through `requireDecimal`, as `screenHeaderCreate`
+ * describes.
  */
 function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
   if (!Array.isArray(v)) throw new AppError("management.request_invalid", { field: "lines" });
   return v.map((line) => {
     if (!isPlainObject(line)) throw new AppError("management.request_invalid", { field: "lines" });
     const parsed: PurchaseInvoiceLineInput = {
-      rate: decimal(requireString(line.rate, "rate")),
-      base: decimal(requireString(line.base, "base")),
-      tax: decimal(requireString(line.tax, "tax")),
+      rate: requireDecimal(line.rate, "rate"),
+      base: requireDecimal(line.base, "base"),
+      tax: requireDecimal(line.tax, "tax"),
     };
     if (line.kind !== undefined) parsed.kind = requireVatKind(line.kind);
     return parsed;

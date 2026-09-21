@@ -582,9 +582,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the time-off dates",
     es: "Revisa las fechas de la ausencia",
   },
-  // Purchase invoices (facturas recibidas). The first three are the server codes the purchasing routes
-  // reject with; the last three are the form's own client-side validation messages (mirroring the op's
-  // checks for UX — the server stays authoritative).
+  // Purchase invoices (facturas recibidas). The first five are the server codes the purchasing routes
+  // reject with — `shared.invalid_decimal` and `shared.decimal_overflow` belong to `@waitron/shared`
+  // and reach here from the amount screens in `apps/server/src/purchasing-api.ts`, and from the
+  // catalogue's own price writes; the last three are the form's own client-side validation messages
+  // (mirroring the op's checks for UX — the server stays authoritative).
   "purchase.not_found": {
     en: "That purchase invoice could not be found",
     es: "No se ha encontrado esa factura recibida",
@@ -596,6 +598,17 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "purchase.invalid": {
     en: "Check the amounts and VAT breakdown",
     es: "Revisa los importes y el desglose de IVA",
+  },
+  // `shared.invalid_decimal` fires on anything `decimal()` does not accept, not only a comma: a blank,
+  // whitespace, letters, `.5` and `01.00` all reach it. The hint names the SHAPE that is accepted, so
+  // it is also true of a catalogue price write, which answers the same code.
+  "shared.invalid_decimal": {
+    en: "Check the amounts: digits with a dot only (21.00, not 21,00 or 021.00)",
+    es: "Revisa los importes: solo cifras con punto decimal (21.00, no 21,00 ni 021.00)",
+  },
+  "shared.decimal_overflow": {
+    en: "That amount is too large",
+    es: "Ese importe es demasiado grande",
   },
   "purchase.fields_required": {
     en: "Fill in the supplier, dates and total",
