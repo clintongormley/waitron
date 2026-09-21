@@ -172,6 +172,66 @@ divergence ever shows **ours** is wrong, that is a defect to fix.
   and the other lacks — their compliance lint, our SOAP client and validation rules — are out of the
   differential surface and stay covered by our own vector tests).
 
+### 2.9 An optional high-level convenience facade (ergonomics for external users)
+
+Our public surface is a **granular, stateless protocol kernel** — it hands the caller the pieces
+(build the cadena, hash it, build the record, serialise, submit, parse) and assumes the caller owns
+the sequencing. That is the right shape for Waitron, whose `fiscal-verifactu` module orchestrates the
+chain, series and timestamps against the database. But a first-time external user benefits from a
+batteries-included on-ramp, which is what makes `inoguerols/verifactu`'s API look simpler (its
+`crearAlta`/`enviar` shortcuts and its `SerieManager`).
+
+So the first release **adds a thin convenience facade over the existing exports** — for example a
+one-call "build an alta record from a plain input" and a "submit these records" wrapper around
+`createClient`. Constraints:
+
+- **Additive, never a rewrite.** It only *composes* existing, tested functions; it introduces no new
+  specification logic, and every granular export stays public. No behavioural change (§8).
+- **Covered by the library's own tests.** Waitron will keep consuming the granular kernel, not the
+  facade, so the facade would otherwise be untested surface. It must carry its own tests to hold the
+  coverage/mutation bars.
+- **Stateless by default — no in-memory chain manager.** A helper that sequences a chain in memory
+  (the `SerieManager` shape) is a fiscal footgun: a hash chain and its invoice numbers MUST be
+  persisted, and an in-memory manager that loses or duplicates state re-mints a number or breaks the
+  chain — exactly the unrecoverable class this whole regime guards against. So any sequencing
+  convenience we offer takes the previous huella (and next number) as explicit inputs and makes the
+  caller responsible for persistence; it does not hide ordering behind mutable in-process state.
+- **Informed by the §2.8 spike.** The surface-mapping against `inoguerols/verifactu` identifies which
+  conveniences are actually worth mirroring; YAGNI applies — add the few that clearly help, not a
+  speculative facade.
+
+This is not on the extraction's critical path (the move, build, publish and rewire are). It can land
+in `0.1.0` or a fast-follow, sequenced after the core extraction is green.
+
+### 2.10 An optional QR image renderer
+
+Today the library returns the QR **payload** (`buildQrPayload`); rendering the image is the caller's
+job (in Waitron, `apps/server` and `apps/till` render it with `qrcode`/`qrcode-generator`, and thermal
+printers often render the payload through a native QR command with no image at all). As an ergonomics
+addition, the library can also render the payload into an actual image so a simple consumer gets one in
+one call.
+
+- **Kept off the core entry.** It is exposed as a separate export subpath (e.g.
+  `@waitron/verifactu/qr-image`), so the root `.` entry keeps its single runtime dependency
+  (`fast-xml-parser`). The QR-rendering library is brought as an **optional/peer dependency** behind
+  that subpath — a user who renders themselves, or via a printer command, never has to install it. The
+  exact arrangement (regular vs optional-peer dependency) is settled in the plan; the goal is that the
+  base install stays dependency-light.
+- **Renders at AEAT's error-correction level M**, defaulting to an **SVG string** (print- and
+  web-friendly, no canvas or native dependency); optionally also expose the raw module matrix for
+  callers doing custom or thermal rendering.
+- **Correctness is encode-correctness, not print-correctness.** The one fiscally-relevant property is
+  that the image encodes the exact payload at a scannable level, so a **render→decode round-trip test**
+  asserts the rendered QR decodes back to the exact `buildQrPayload` string (the library carries it,
+  under the coverage bars). Physical print size (AEAT's millimetre range) and the quiet-zone margin
+  stay the caller's responsibility — documented, not enforced, because the library cannot control
+  millimetres.
+- **Library choice is a spike item** (criteria: permissive licence, SVG and matrix output, level M, no
+  native/canvas requirement). `qrcode` — already used in `apps/server` — is the natural candidate.
+
+Like the facade (§2.9), this is additive ergonomics off the critical path, and can land in `0.1.0` or a
+fast-follow.
+
 ## 3. How Waitron consumes it
 
 ### 3.1 Dependency wiring
