@@ -82,7 +82,7 @@ controller who was supposed to be watching for it. The instances:
 7. **"The two versions parse this repository's XML identically."** Said after two probes that both
    looked thorough. Moving `fast-xml-parser` from 4.5.7 to 5.11.1 was checked first by replaying 217
    real AEAT documents — captured by wrapping `parser.parse` while the suites ran — through both
-   versions under the four options `packages/verifactu/src/xml/parse-common.ts` sets: byte-identical.
+   versions under the four options `@waitron/verifactu`'s XML reader sets: byte-identical.
    The captured corpus is only what our own fixtures happen to contain, so 37 further cases were hand
    built from the changelog between the two versions, one per thing it said had changed. That set
    reported a single difference, and the sentence above was written.

@@ -178,6 +178,26 @@ the leaf during boot. Read the local public CA for dev trust; the unprivileged l
 can fail to bind port 80 (`landing.listen_failed`, `EACCES`). Regressions:
 `apps/print-agent/src/dev.test.ts`.
 
+## Iterating against a local checkout of `@waitron/verifactu`
+
+`@waitron/verifactu` is no longer a package in this workspace — it was extracted into its own
+repository and Waitron now installs the published release from the npm registry, the same as any
+other outside dependency. When you need to change the library and the change together, point Waitron
+at a local checkout instead of publishing a release for every edit. Two ways to do it, both purely
+local and neither committed:
+
+- **A pnpm link.** In the library checkout (`~/workspace/repos/verifactu`) run `pnpm link --global`
+  once, then in the Waitron worktree run `pnpm link --global @waitron/verifactu`. Waitron now
+  resolves the package to your checkout, so a rebuild there is picked up on the next run. Undo it
+  with `pnpm unlink --global @waitron/verifactu` followed by a plain `pnpm install`.
+- **A `pnpm.overrides` entry.** Add `"@waitron/verifactu": "file:../../repos/verifactu"` (a path to
+  your checkout) under `pnpm.overrides` in the root `package.json` and run `pnpm install`. This is
+  easier to see and to forget, so remove it before you commit.
+
+Whichever you use, keep it out of the commit: the manifests that land always reference the published
+version, and CI installs that version, so a link or an override left in a diff would make CI and the
+box build a version they cannot fetch.
+
 ## Model selection
 
 This paragraph is copied verbatim from the source `CLAUDE.md`. It summarises a rule that is defined

@@ -75,7 +75,7 @@ unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds are split by package
 
-Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` in `verifactu`,
+Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` in
 `fiscal-verifactu`, `core`, `db` and `payments` — the fiscal core and the data-layer
 foundations — and the `90/90/85/85` floor in every other package, browser packages included. The
 list is the owner's, not a rule that derives it (`apps/server` holds the AEAT transport and
@@ -93,8 +93,8 @@ an edit to that list, with the reason in the commit.
 
 A mutation run makes one small change to a source file at a time and reruns the tests; a change
 nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
-Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
-`packages/verifactu` and `packages/shared` since July 2026, `packages/fiscal` and `packages/ui`
+Three packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
+`packages/shared` since July 2026, `packages/fiscal` and `packages/ui`
 under the owner's 2026-09-19 decision that the target is 90 everywhere. `packages/db` carries none
 in its own config, deliberately: CI splits its run into ten shards, each passed its own `--mutate`
 list, so a `thresholds.break` there would gate one slice rather than the package. Its bar lives in
@@ -104,7 +104,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
-| `verifactu`, `shared` | `mutation-verifactu` / `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
+| `shared` | `mutation-shared` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package; on `main` the scope is `global`, so always |
 | `ui` | the `mutation` job in `.github/workflows/mutation.yml` | the weekly Monday run only — a branch that thins a UI test goes green and reddens on Monday |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
@@ -356,8 +356,9 @@ wedge every later publish identically until `:main` is deleted or retagged by ha
 
 ### A cheap job can still be the critical path
 
-`mutation-verifactu` was ungated because a mutant is cheap; on run 30650089655 it was 3m26s of a
-4m8s run. Sort a run's jobs by duration before calling a job cheap enough to leave ungated.
+The since-removed `mutation-verifactu` job was ungated because a mutant is cheap; on run 30650089655
+it was 3m26s of a 4m8s run. Sort a run's jobs by duration before calling a job cheap enough to leave
+ungated.
 
 ### The GHA cache is a shared per-repository budget and this repo sits AT it
 
@@ -379,8 +380,8 @@ them before adding the export.
 
 Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on
 this workspace that day, `time pnpm typecheck` went from 2:05.51 to 28.7s. It is doing the same
-work: a deliberate `const __probe: number = "not a number";` added to
-`packages/verifactu/src/index.ts` came back as `error TS2322`, and came back green when removed.
+work: a deliberate `const __probe: number = "not a number";` added to a package's `src/index.ts`
+came back as `error TS2322`, and came back green when removed.
 
 Version 7 does **not** ship the old JavaScript API. Its `.` export is a version stub, and the API
 it does ship sits under `./unstable/*` — a different API, which no tool here reads yet:
