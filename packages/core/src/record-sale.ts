@@ -53,8 +53,8 @@ export interface RecordSaleLine {
   unitPrecision?: number | null;
   quantity: string;
   unitPrice: string;
-  /** A percentage literal, e.g. "21.00" meaning 21% — matches `sale_lines.vat_rate`'s own
-   * convention. */
+  /** A percentage literal, e.g. "21.00" meaning 21%. `sale_lines.vat_rate` stores the same rate
+   * as a count of basis points; `saleLineRows` is where the two forms meet. */
   vatRate: string;
   /** The line's tax-EXCLUSIVE base amount. `buildVatBreakdown` below groups lines by `vatRate`
    * and derives each group's tax from this figure via `@waitron/shared`'s `percentOf` — plain
