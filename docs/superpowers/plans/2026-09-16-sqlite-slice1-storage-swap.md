@@ -4563,6 +4563,26 @@ git commit -s -m "Keep ledger tables append-only, and archive with the engine's 
 
 `packages/db/src/testing/venue-db.ts` opens a real temporary file, not an in-memory database, so write-ahead behaviour, file locking and the two-file split are the real ones. Its three tests from P2 must pass unmodified.
 
+**"Unmodified" was wrong, and the step corrected it in place when it ran (2026-09-21).** Two of the
+three statements those cases send are PostgreSQL-only, and neither is an assertion:
+
+- `select count(*)::int as n` is `unrecognized token: ":"`, errcode 1, on `node:sqlite`. The
+  replacement is `select cast(count(*) as int) as n`, which returns the same `{ n }` row.
+- the tenant insert omitted `created_at`, which defaulted to `now()` SERVER-side on PostgreSQL. The
+  regenerated SQLite column's default is `$defaultFn`, applied by Drizzle CLIENT-side, so a raw
+  insert never reaches it and the engine answers `NOT NULL constraint failed: tenants.created_at`.
+  The insert now states the column. This is the ledger's own step-group-4 consequence 1 arriving,
+  not a new fact.
+
+What each case asserts — `{ n: 0 }`, `{ n: 1 }`, `{ n: 0 }` — is untouched.
+
+**One more thing the step found that this paragraph did not anticipate: the PostgreSQL reset has no
+single-statement counterpart.** `TRUNCATE … RESTART IDENTITY CASCADE` becomes a `delete` per table
+inside one transaction, with `pragma defer_foreign_keys = on` (`TRUNCATE`'s `CASCADE`), an explicit
+`delete from sqlite_sequence` (`RESTART IDENTITY`), and each append-only trigger dropped and
+recreated from its own `sqlite_master.sql` text, because SQLite has no
+`ALTER TABLE … DISABLE TRIGGER`. The mechanism and its measurements are in that file's comments.
+
 **One thing this step inherits, raised by P2's convention reviewer and deliberately left to here.**
 The accessor's "read before the hook ran" error is thrown by `usePgliteDb` and says
 `usePgliteDb: database not started` (`packages/db/src/testing/lifecycle.ts`, and every sibling
@@ -4577,6 +4597,12 @@ counterexample, found by the fix wave's own reviewer; CLAUDE.md §1.) P2 left it
 belongs to `usePgliteDb`, not to the seam, and this step replaces that body anyway.
 `lifecycle.test.ts` matches only `/not started/i` — three occurrences, checked — so its cases stay
 green under any of these wordings.
+
+**Where the message actually landed (2026-09-21):** in `venue-db.ts`, not at `lifecycle.ts`'s throw
+site. The step gave `useVenueDb` its own body and its own accessor, so it no longer calls
+`usePgliteDb` at all and `lifecycle.ts`'s wording is nobody's business but that function's.
+`lifecycle.ts` is left untouched: `useRealPostgres` and `useTemplateDb` still call its
+`buildResetPlan`/`applyReset`, and all three are step 27's.
 
 - [ ] **Step 25: Work through the 66 PostgreSQL-only tests, one at a time**
 
