@@ -499,10 +499,11 @@ PostgreSQL logical replication itself is still exercised here, so a reader who w
 has one. `packages/db/src/change-feed-replication.pg.test.ts` and the "copies a row A→B over the
 network via a raw publication/subscription" case in `packages/db/src/testing/two-node.test.ts` each
 create a publication on one containerised node and a subscription on the other, then wait for the row
-to arrive. `packages/catalogue/src/units.pg.test.ts` creates a publication with no subscriber at all,
-so that `product_units` is PUBLISHED while the test reassigns a product's unit — the UPDATE
+to arrive. A third suite, in `packages/catalogue`, created a publication with no subscriber at all,
+so that `product_units` was PUBLISHED while the test reassigned a product's unit — the UPDATE
 PostgreSQL refuses with `55000` when a published table has only a UNIQUE and no primary key
-(CLAUDE.md §3; the test asserts the success path, not the refusal).
+(CLAUDE.md §3; it asserted the success path, not the refusal). **The SQLite flip deleted it on
+2026-09-21**, because SQLite has neither publications nor a replication identity.
 
 **Shelling out to git from a test**
 

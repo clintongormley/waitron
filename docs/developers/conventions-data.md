@@ -224,7 +224,7 @@ exchanging two items' products put both rows on the same product midway through 
 `extra_list_items_list_product_uq` refused the first update with
 `23505 duplicate key value violates unique constraint`, although the body's final product set was
 legal. Reproduced on real PostgreSQL by `saves a body that exchanges two retained items' products`
-(`packages/catalogue/src/extras.pg.test.ts`). It now deletes every one of the list's rows and
+(`packages/catalogue/src/extras.concurrency.test.ts`). It now deletes every one of the list's rows and
 inserts the body's fresh, each under the id the body sent or a new one, which removes the
 intermediate state rather than ordering around it.
 
@@ -252,7 +252,7 @@ same shape on a product row.
 The lock made explicit something the code was already doing by accident, which is why the test for
 it needed a control. `updateExtraList` updates the list's own row before it calls `writeItems`, and
 an `UPDATE` takes that row's lock, so the two saves were already serialised — `keeps the later of
-two overlapping saves of the same list` (`packages/catalogue/src/extras.pg.test.ts`) passed on the
+two overlapping saves of the same list` (`packages/catalogue/src/extras.concurrency.test.ts`) passed on the
 code as it stood. Removing the accident is what measured it: with the lock absent AND that `update`
 moved after `writeItems`, the test read `["saved", "23505"]`; with the lock restored and the
 `update` still moved, both saves succeeded. So what the lock buys is that `writeItems` no longer
@@ -736,10 +736,11 @@ the table now carries a primary key. It was created by the catalogue set's migra
 0000_catalogue_baseline, a file the SQLite flip (F1) deleted on 2026-09-21 when it regenerated every
 set as one baseline — named here without a backticked path for that reason. The primary key itself is
 declared in the schema and is in the regenerated baseline.
-No guard covers this: the defect passed every existing test because no test published the table
-(`packages/catalogue/src/units.pg.test.ts` now creates the publication to reproduce it), and a
-per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's
-primary keys.
+No guard covers this. The defect passed every existing test because no test published the table;
+one was written that did, and **the SQLite flip deleted it on 2026-09-21** — SQLite has neither
+publications nor a replication identity, so there is no statement left to make and nothing to
+reproduce. The reasoning above records what was true on PostgreSQL. A per-table check would have to
+read each module's `_CLASSIFICATION` list against its schema file's primary keys.
 
 ## `waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a plain admin
 
@@ -765,9 +766,11 @@ grants; the `case "migrate"` comment in
 admin connection string … that admin just created the database and owns it"). So replication is
 exactly why this changed. The failover deletion of 2026-09-19 (`8faa3033`) then took the last
 `CREATE PUBLICATION` out of shipped code:
-`grep -rniE "create (publication|subscription)" packages apps` now matches only test suites — two
-real-PostgreSQL ones in `packages/db`, and `packages/catalogue/src/units.pg.test.ts`, which creates
-its publication on its own container for the stated reason that "nothing in the tree does it today".
+`grep -rniE "create (publication|subscription)" packages apps` then matched only test suites — two
+real-PostgreSQL ones in `packages/db`, and one in `packages/catalogue` which created its publication
+on its own container for the stated reason that "nothing in the tree does it today". **The SQLite
+flip deleted that third one on 2026-09-21**; the two in `packages/db` are the flip's own to account
+for.
 
 **What holds the arrangement in place today** — three things, none of them "it could not be otherwise":
 
@@ -969,7 +972,7 @@ It compares the journal rows a set recorded against the entries the image ships 
 `migrations.incomplete` when fewer applied, so a boot against an old release point fails loudly
 instead of serving a half-migrated schema. Cost: a database at the core set's entry 1 reached HEAD
 with 10 of 15 applied and no error, and the wrong schema surfaced later as an unclassified driver
-failure. Pointer: `packages/migrations/src/apply-complete.pg.test.ts`.
+failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **Provisioning and boot**
 
