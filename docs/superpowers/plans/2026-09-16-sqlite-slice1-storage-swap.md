@@ -4538,6 +4538,30 @@ Measured on a three-line scratch file compiled with this repository's own `tsc6`
 a module does not export gives one `TS2305`, and the file then calls it with three arguments and
 chains three property accesses off the result with no error at all.
 
+**The third gap is SEVEN settings, not three — counted 2026-09-21 night.** The paragraph above
+names the three `config.ts` reads. Across `apps/`, `packages/`, `deploy/` and `scripts/` there are
+four more, all read outside `config.ts`: `WAITRON_BACKUP_DATABASE_URL` (25 occurrences),
+`WAITRON_RESTORE_DATABASE_URL` (18), `WAITRON_MAINTENANCE_DATABASE_URL` (8) and
+`WAITRON_BOOTSTRAP_DATABASE_URL` (7), against `DATABASE_URL`'s 192,
+`WAITRON_ADMIN_DATABASE_URL`'s 68 and `WAITRON_MIGRATIONS_DATABASE_URL`'s 51. Two of the four are
+not duplicates of the same connection and cannot be deleted by the same reasoning: the maintenance
+one deliberately names a DIFFERENT database on the same server, because the rejoin wipe DROPs the
+one `DATABASE_URL` names (`apps/server/src/rejoin-command.ts`), and the bootstrap one is the
+superuser `deploy/compose.yml` hands the box.
+
+**A FOURTH GAP — found 2026-09-21 night. This plan has no documentation step at all.** Step group 8
+is three steps: run the whole workspace, do not lower a coverage threshold, open the pull request.
+Nothing updates the operator-facing prose the flip retires, and that prose is not beside the code
+that changes: `apps/server/README.md` carries 18 references to the connection-string settings,
+including a section per role with its confirmed grant list; `packages/provisioning/README.md` 8;
+`deploy/README.md` 3; `apps/till/README.md` 2. CLAUDE.md §1's rule is that a behaviour change
+retires every receipt about the old behaviour, and that a sweep scoped to `packages/` and `apps/`
+cannot see a claim stated in prose somewhere else — so the path set for that sweep is every
+README in the tree, not the ones beside a converted package. The rewrite belongs at the END of the
+branch rather than package by package, so no document is left describing a half-converted state.
+`deploy/compose.yml`, `deploy/waitron.sh` and `deploy/Dockerfile` are NOT part of this gap; step
+21's survey above already names them.
+
 **What else step 21 has to carry, from the survey taken on 2026-09-21** (call graph and file list in
 `docs/handoffs/2026-09-21-f1-the-flip.md`):
 

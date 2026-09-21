@@ -19,30 +19,6 @@ export interface SchedulerConfig {
 }
 
 export interface ServerConfig {
-  databaseUrl: string;
-  /**
-   * The connection Drizzle's migrator runs over. Defaults to `databaseUrl` — same variable, same
-   * role — so a deployment that only sets `DATABASE_URL` keeps today's single-role behaviour.
-   * Set separately when `DATABASE_URL` is the least-privileged, non-superuser deployment role
-   * spec §10 requires: that role cannot run `CREATE SCHEMA IF NOT EXISTS "public"` or
-   * `CREATE TABLE IF NOT EXISTS` (Postgres checks the privilege before the `IF NOT EXISTS` even
-   * against an already-migrated database — `apps/server/README.md` has the confirmed grant list),
-   * so migrations need a role of their own. Read by `@waitron/migrations`'s `applyMigrations` and,
-   * before that, by `boot.ts`'s own deployment-stamp probe (`boot.ts:103`) — both run before the
-   * long-lived pool below is ever opened.
-   */
-  migrationsDatabaseUrl: string;
-  /**
-   * The table-OWNER connection the owner write (the promote's fenced demote) opens over, from
-   * `WAITRON_ADMIN_DATABASE_URL`. Distinct from `migrationsDatabaseUrl` only on a role-split
-   * appliance where the migrator role and the table owner differ; on today's single-role and dev/CI
-   * hosts it resolves to the same value. Unset → `migrationsDatabaseUrl` (which itself falls back to
-   * `databaseUrl`), so a misconfigured role-split appliance opens the LEAST-privileged connection and
-   * the owner write fails CLOSED (`42501`), never a silent no-op against a superuser pool. Env/config
-   * ONLY — never written into `trading.env` (the promote rewrites `trading.env` from a fixed field
-   * set and would drop it — spec §5).
-   */
-  adminDatabaseUrl: string;
   environment: DeploymentEnvironment;
   /**
    * Whether this host runs in DEV mode (`WAITRON_ENV=dev`) — the switch the dev per-tab device
@@ -91,6 +67,17 @@ export interface ServerConfig {
    * the dev default lives beside the bundle and is gitignored, because it holds secrets.
    */
   stateDir: string;
+  /**
+   * The directory holding this venue's databases — the `directory` `openVenueStore` creates
+   * `venue.db` and `node.db` in (`packages/store/src/index.ts:159`). Defaults to
+   * `join(stateDir, "venue")` so the databases live under the same durable, protected root as the
+   * box's other persisted state; `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls
+   * back to the default via `isUnset` — never `resolve("")`, which is cwd (the "empty value is a
+   * valid value" trap, CLAUDE.md §3). An override is `resolve`d, like `stateDir`'s and unlike
+   * `logDir`'s: these files are opened by path for the life of the process, so the path must not
+   * shift with the process's cwd.
+   */
+  venueDir: string;
   /**
    * The addresses this box advertises — the iPAddress SANs of its self-signed leaf, the IP-QR the
    * trust page encodes, and the A records its mDNS responder answers with. Undefined means "read the
@@ -681,12 +668,6 @@ export function loadConfig(
   // returned `stateDir` field carries — `join(stateDir, "logs")` must sit under whatever state root
   // actually won (the resolved override, or the boot-computed default), never a second derivation.
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
-  const databaseUrl = required(env, "DATABASE_URL");
-  const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
-  // Resolved ONCE here (the raw env var above may be undefined) so both the returned
-  // `migrationsDatabaseUrl` and `adminDatabaseUrl`'s fallback chain through the SAME concrete string —
-  // `adminDatabaseUrl` unset must resolve to `databaseUrl` when migrations is also unset, never `undefined`.
-  const resolvedMigrations = isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl;
   const httpHost = env.WAITRON_HTTP_HOST;
   // BOTH-or-NEITHER: a certificate with no private key cannot complete a TLS handshake, and a key
   // with no certificate has nothing to present — a half-configured pair is refused here rather than
@@ -706,10 +687,7 @@ export function loadConfig(
     });
   }
   // Resolved once here so the return object and the production-required RP guard below read the same
-  // value (rather than calling `deploymentEnvironment` three times inline). Placed AFTER the
-  // DATABASE_URL and TLS checks so the boot faults still surface in this file's existing order — a bad
-  // WAITRON_ENV throws `server.config_invalid` only once those two have passed, exactly as it did when
-  // this was `environment: deploymentEnvironment(env)` inline in the return below.
+  // value (rather than calling `deploymentEnvironment` three times inline).
   const environment = deploymentEnvironment(env);
   // `managementOrigin` is resolved before the literal because `advertisedOrigin` defaults to it and
   // an object literal cannot reference its own sibling. `managementRpId` comes with it, in this
@@ -745,14 +723,6 @@ export function loadConfig(
     }
   }
   return {
-    databaseUrl,
-    migrationsDatabaseUrl: resolvedMigrations,
-    // The owner write's table-owner connection — `WAITRON_ADMIN_DATABASE_URL` when set, else the
-    // resolved migrations URL (itself falling back to `databaseUrl`), so both-unset is a concrete
-    // string and a role-split appliance fails CLOSED rather than silently no-op'ing (see the field's doc).
-    adminDatabaseUrl: isUnset(env.WAITRON_ADMIN_DATABASE_URL)
-      ? resolvedMigrations
-      : env.WAITRON_ADMIN_DATABASE_URL,
     environment,
     devMode: isDevMode(env),
     onboardingIntent: onboardingIntent(env, environment),
@@ -770,6 +740,10 @@ export function loadConfig(
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     // Unset or empty values use the default, never the current working directory.
     stateDir: resolvedStateDir,
+    // Where `openVenueStore` creates `venue.db` and `node.db`. Defaults under whichever state root
+    // won above (`resolvedStateDir`), so the databases sit beside the box's other persisted state;
+    // `resolveConfigDir` applies the shared unset-or-empty fallback and resolves an override.
+    venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
     // The operator's override for the addresses the box advertises; undefined leaves every consumer
     // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
     // minting a certificate for an address that is not an address.
@@ -786,8 +760,7 @@ export function loadConfig(
     // trading boot may still resolve the persisted box leaf under `stateDir`.
     ...(tls === undefined ? {} : { tls }),
     // The till's own fiscal identity, resolved the same way every other caller does — see
-    // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
-    // still reports the DATABASE_URL fault first, matching this file's existing ordering.
+    // `till-config.ts`.
     // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the four ids set → undefined (setup mode),
     // ALL set → the loaded identity, a PARTIAL set → throws (a half-configured server is a bug).
     till: tryLoadTillConfig(env),
