@@ -710,12 +710,16 @@ describe("till-table-order-screen", () => {
     // A line the kitchen has already STARTED (fired + preparing/ready) — the cancel-only case.
     const preparingLine: TabLine = { ...pendingLine, lineNo: 1, state: "preparing" };
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
-    // A CHILD MODIFIER line (ordering modifiers): productId null, no ticket item of its own, so firedAt
-    // AND state are both null — the shape whose null firedAt would wrongly fall into the HELD/Send branch
-    // and whose held-shape would paint an editable course picker, if the child guard were absent.
+    // A CHILD EXTRAS line, in the shape the tab wire really sends one: it carries the PICKED product
+    // (spec §3.4) and names its parent dish by line number, which is the ONLY field telling the two
+    // apart. It has no ticket item of its own, so firedAt AND state are both null — the shape whose
+    // null firedAt would wrongly fall into the HELD/Send branch, and whose held shape would paint an
+    // editable course picker, if the child guard were absent. A fixture with `productId: null` would
+    // pass against a screen that still read a null product as "child", so it carries one on purpose.
     const childLine: TabLine = {
       lineNo: 2,
-      productId: null,
+      productId: "cafe",
+      parentLineNo: 1,
       quantity: "1.000",
       unitPriceGross: "0.50",
       servedAt: null,
@@ -724,7 +728,7 @@ describe("till-table-order-screen", () => {
       state: null,
     };
 
-    it("renders NO per-line action and NO course picker on a child modifier line (productId null)", async () => {
+    it("renders NO per-line action and NO course picker on a child extras line", async () => {
       // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
@@ -739,7 +743,10 @@ describe("till-table-order-screen", () => {
     });
 
     it("hides Send all on a fully-fired tab that merely contains a modifier'd dish (child excluded)", async () => {
-      // pendingLine: firedAt set (fired). childLine: firedAt null but productId null ⇒ NOT held.
+      // pendingLine: firedAt set (fired). childLine: firedAt null, so it is the held-LOOKING row — but
+      // it is not held. HONEST about what this pins: on the real wire a child never has a ticket item,
+      // so `state === null` refuses it here whether or not the parent-marker guard is in place. The
+      // guard itself is pinned by the course-picker assertion in the test above, which flips.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
@@ -1046,7 +1053,9 @@ describe("till-table-order-screen", () => {
     });
 
     it("split excludes modifier children and explains that dishes with options move together", async () => {
-      const modifier = { ...pendingLine, lineNo: 2, productId: null, quantity: "2.000" };
+      // A child extras row as the wire sends one: the picked product, plus the parent dish's line
+      // number. Keeping `productId` would let this pass against the old null-product child test.
+      const modifier = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "2.000" };
       const { el } = await mount({ lines: [pendingLine, modifier], orderId: "wo-7" });
       await toMenu(el);
       click(el, '[data-action="split"]');
@@ -1183,6 +1192,26 @@ describe("till-table-order-screen", () => {
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("transfer line-picker offers dishes only, never a child extras row", async () => {
+      // The server REFUSES a directly named child: `carveOffLines` throws `tab.transfer_modifier_line`
+      // for a line whose `parent_line_id` is set (apps/server/src/working-order.ts), and cascades a
+      // dish's children with the dish instead. So offering the row at all only buys a refusal.
+      const child = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "1.000" };
+      const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
+      const { el } = await mount({
+        lines: [pendingLine, child],
+        orderId: "wo-7",
+        tables: [other],
+      });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-9"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-transfer-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-transfer-line="2"]')).toBeNull();
     });
 
     it("shows an empty-state when there are no free tables to move to", async () => {

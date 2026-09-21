@@ -1291,11 +1291,18 @@ export interface TabLine {
    * (`working_order_lines.product_id`), NOT because a child line lacks a product: an extras child
    * carries the PICKED product, which is what the kitchen cooks and the diner is charged for
    * (spec §3.4, and the server's own note on `TabLine.productId`,
-   * `apps/server/src/working-order.ts`).
-   *
-   * So `productId === null` is NOT a child test, and the tab screen still uses it as one — see the
-   * gap recorded on `#isSendable` (`../screens/till-table-order-screen.ts`). */
+   * `apps/server/src/working-order.ts`). Tell a child from a dish by {@link parentLineNo}, never by
+   * this field. */
   productId: string | null;
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else `null` on a
+   * top-level dish — the one field on this wire that tells the two apart, mirroring the server's
+   * `TabLine.parentLineNo` (`apps/server/src/working-order.ts`) and the same shape
+   * {@link TillSaleLine.parentLineNo} already uses on the settled-sale wire.
+   *
+   * OPTIONAL here, like `TillSaleLine`'s: the server sets it on every line of every tab it sends
+   * (`readTabLines` resolves it from the stored `parent_line_id`), so an absent value means a
+   * fixture that predates the field, and reads as a dish. */
+  parentLineNo?: number | null;
   quantity: string;
   unitPriceGross: string;
   servedAt: string | null;
