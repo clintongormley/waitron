@@ -232,7 +232,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
-    testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11" }),
+    testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listTills: vi.fn().mockResolvedValue(tills),
@@ -2732,6 +2732,53 @@ it("does not show a previous pairing deadline after reopening before the next op
 });
 
 describe("printer layout settings", () => {
+  it("starts the finder at table zero and one printed code sets both text settings", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    const block = q(el, 'select[name="printer-table-block"]') as HTMLSelectElement;
+    expect(block.value).toBe("0");
+    expect(block.options[0]!.textContent).toContain("0–15");
+    expect(
+      q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!.hasAttribute("open"),
+    ).toBe(false);
+    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 0);
+    expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("áéíóú ÁÉÍÓÚ ñÑ üÜ");
+    expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("¿¡ € £ çÇ “ ” ‘ ’");
+    await chooseOption(el, "printer-table-block", "16");
+    expect(q(el, 'select[name="printer-matching-code"] option[value="T68"]')).toBeNull();
+    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 16);
+    expect(q(el, 'select[name="printer-matching-code"] option[value="T168"]')).not.toBeNull();
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
+    await chooseOption(el, "printer-table-block", "0");
+    q(el, '[data-test="print-character-tables-p1"]')!.click();
+    await flush(el);
+    await chooseOption(el, "printer-matching-code", "T68");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("T68");
+    expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
+      "pc858",
+    );
+    expect(
+      (q(el, 'wt-input[name="printer-character-table"]') as import("@waitron/ui").WtInput).value,
+    ).toBe("6");
+    q(el, '[data-test="save-printer-p1"]')!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        characterSet: "pc858",
+        characterTable: 6,
+      }),
+    );
+  });
+
   it("saves a changed paper width, resolution and character set with the connection fields", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -2771,6 +2818,9 @@ describe("printer layout settings", () => {
     ) as import("@waitron/ui").WtInput;
     expect(field.invalid).toBe(true);
     expect(field.error).toBe(t("printers.character_table_invalid"));
+    expect(
+      q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!.hasAttribute("open"),
+    ).toBe(true);
   });
 
   it("prints the test page, turns the three answers into settings, and prints a sample receipt", async () => {

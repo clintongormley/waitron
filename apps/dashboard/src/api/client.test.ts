@@ -2518,9 +2518,14 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   });
 
   it("testCharacterTables POSTs the first table in the diagnostic batch", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j11" }, true, 202));
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ jobId: "j11", calibrationLocale: "en-GB" }, true, 202));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.testCharacterTables("p1", 32)).toEqual({ jobId: "j11" });
+    expect(await api.testCharacterTables("p1", 32)).toEqual({
+      jobId: "j11",
+      calibrationLocale: "en-GB",
+    });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/character-table-test", {
       method: "POST",
       credentials: "include",

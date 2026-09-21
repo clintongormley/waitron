@@ -178,6 +178,7 @@ function stubApi(pairingOpen = false): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
+    testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listTills: vi.fn().mockResolvedValue(tills),
@@ -336,15 +337,36 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         q(el, '[data-test="cancel-new-printer"]')!.click();
         await flush(el);
         await openPrinter(el);
-        const fields = ["printer-paper-width", "printer-resolution", "printer-character-set"].map(
-          (name) => q(el, `[name="${name}"]`)!.getBoundingClientRect(),
+        const layoutFields = ["printer-paper-width", "printer-resolution"].map((name) =>
+          q(el, `[name="${name}"]`)!.getBoundingClientRect(),
         );
         if (width === 1280)
-          expect(new Set(fields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
+          expect(new Set(layoutFields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
+        q(el, '[data-test="print-character-tables-p1"]')!.click();
+        await flush(el);
+        expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
+        await expectNoA11yViolations(host);
+        q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!
+          .shadowRoot!.querySelector("button")!
+          .click();
+        await flush(el);
+        const fields = [
+          ...layoutFields,
+          ...[
+            "printer-table-block",
+            "printer-matching-code",
+            "printer-character-set",
+            "printer-character-table",
+          ].map((name) => q(el, `[name="${name}"]`)!.getBoundingClientRect()),
+        ];
         const dialog = q(el, '[data-test="edit-printer-modal"]')!
           .shadowRoot!.querySelector("dialog")!
           .getBoundingClientRect();
-        for (const field of fields) expect(field.right).toBeLessThan(dialog.right);
+        for (const field of fields) {
+          expect(field.right).toBeLessThan(dialog.right);
+          expect(field.left).toBeGreaterThanOrEqual(dialog.left);
+        }
+        await expectNoA11yViolations(host);
         q(el, '[data-test="print-test-page-p1"]')!.click();
         await flush(el);
         await expectNoA11yViolations(host);

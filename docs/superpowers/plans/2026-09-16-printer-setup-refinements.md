@@ -116,3 +116,18 @@ Instructions retain the operator's locale, while the site locale selects those s
 back to the dashboard with the queued job. English and Spanish intentionally share today's profile.
 Adding a future locale produces type errors until its printer calibration entry and setting labels
 are supplied; a Ukrainian entry must deliberately add and test its Cyrillic encoding path.
+
+## Calibration chooser follow-up, 2026-09-21
+
+The owner asked for one code that applies both text settings, fewer leading zeroes, a scan starting
+at table 0, a selectable range, and a stronger glyph sample. The finder now builds compact codes
+from the site's calibration profile and shares that mapping with the editor. The editor displays
+the site's expected lines after a finder page is queued, and keeps individual text settings under
+Advanced. The default block is 0–15; later blocks remain selectable through 255.
+
+The new finder helper first failed its test because it did not exist. The server formatter, queue
+response, and dashboard flow also failed their new focused assertions before implementation.
+Afterward, the printing suite passed 16 tests; the server formatter and print API passed 67 with
+host Docker access; the dashboard screen, accessibility and API-client suites passed 333 in
+Chromium. Typechecking passed for printing, server and dashboard. ESLint, `git diff --check`, and
+the production dashboard build passed. No physical printer was available for a paper check.

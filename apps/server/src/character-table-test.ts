@@ -2,17 +2,18 @@ import { esc, prepareText, wrapText } from "@waitron/printing";
 import {
   characterCalibration,
   characterEncodingName,
+  characterFinderOptions,
 } from "@waitron/printing/src/test-page-samples.js";
 import type { SupportedLocale } from "@waitron/shared";
 
 const CAPTIONS: Readonly<Record<SupportedLocale, { title: string; instruction: string }>> = {
   "en-GB": {
     title: "CHARACTER TABLE FINDER",
-    instruction: "Choose a fully correct line.",
+    instruction: "Choose the first code whose A and B lines match the screen.",
   },
   "es-ES": {
     title: "BUSCADOR DE TABLAS",
-    instruction: "Elige una linea correcta.",
+    instruction: "Elige el primer codigo cuyas lineas A y B coincidan con la pantalla.",
   },
 };
 
@@ -29,7 +30,6 @@ export function formatCharacterTableTest({
   if (!Number.isInteger(startTable) || startTable < 0 || startTable > 0xff) {
     throw new RangeError(`start table must be an integer in [0, 255], got ${startTable}`);
   }
-  const firstTable = Math.min(startTable, 0xf0);
   const captions = CAPTIONS[locale];
   const calibration = characterCalibration(calibrationLocale);
   const b = esc("plain").init();
@@ -40,11 +40,13 @@ export function formatCharacterTableTest({
     for (const line of wrapText(caption, 30)) b.line(line);
   }
   b.line();
-  for (let table = firstTable; table < firstTable + 16; table++) {
-    const label = `T${String(table).padStart(3, "0")}`;
-    for (const encoding of calibration.finderEncodings) {
-      b.charset(encoding.characterSet, table).line(
-        `${label} ${encoding.label}: ${prepareText(calibration.finderSampleText, encoding.characterSet)}`,
+  for (const { code, characterSet, characterTable } of characterFinderOptions(
+    calibrationLocale,
+    startTable,
+  )) {
+    for (const [index, sample] of calibration.finderSampleLines.entries()) {
+      b.charset(characterSet, characterTable).line(
+        `${code} ${String.fromCharCode(65 + index)}: ${prepareText(sample, characterSet)}`,
       );
     }
   }

@@ -107,3 +107,19 @@ are exhaustive records keyed by the shipped locales and database character-set v
 language forces an explicit calibration profile and localized setting labels. A Ukrainian profile
 must add its Cyrillic byte encoder, database enum value, representative glyph sample and finder
 candidates; the generic tests then exercise that new profile alongside every other shipped locale.
+
+## Calibration chooser follow-up, 2026-09-21
+
+Start the finder with printer tables 0–15, which includes the documented default table 0. Let the
+operator choose another sixteen-table range only if no printed candidate matches; keep the full
+0–255 byte range available for other firmware. Print two lines per candidate: accented Spanish
+letters and other receipt characters, including the euro sign, inverted punctuation and quotation
+marks. Compare both lines with the examples shown in the editor. A compact code such as `T6W`
+identifies one numeric printer table and one Waitron byte encoding; choosing it sets both fields.
+The editor keeps the individual fields in a collapsed Advanced section for manual correction.
+Multiple candidates may print the same tested glyphs; choosing the first matching code establishes
+that sample, not the whole 256-character table or every possible language. A sample receipt checks
+how the saved combination renders ordinary receipt content.
+
+This changes the generic finder, not the physical NT-806 result above. Without a printer on the
+current network, the new paper layout and its glyph matching have not been verified on hardware.

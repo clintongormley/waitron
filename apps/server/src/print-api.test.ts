@@ -1429,7 +1429,7 @@ describe("mountPrintApi — management: test-print", () => {
   });
 
   it("prints a sixteen-number character-table finder from the requested starting table", async () => {
-    const app = mountApp();
+    const app = mountApp({ venueLocale: "en-GB" });
     const printerId = await createNetworkPrinter(app, "10.0.0.45", 9100, "Table finder");
     const res = await app.request(`/management-api/printers/${printerId}/character-table-test`, {
       method: "POST",
@@ -1441,7 +1441,11 @@ describe("mountPrintApi — management: test-print", () => {
       body: JSON.stringify({ startTable: 32 }),
     });
     expect(res.status).toBe(202);
-    const { jobId } = (await res.json()) as { jobId: string };
+    const { jobId, calibrationLocale } = (await res.json()) as {
+      jobId: string;
+      calibrationLocale: SupportedLocale;
+    };
+    expect(calibrationLocale).toBe("en-GB");
     const [job] = await suite.db
       .select({ payload: printJobs.payload })
       .from(printJobs)
@@ -1450,7 +1454,7 @@ describe("mountPrintApi — management: test-print", () => {
       ...formatCharacterTableTest({
         startTable: 32,
         locale: "es-ES",
-        calibrationLocale: "es-ES",
+        calibrationLocale: "en-GB",
       }),
     ]);
   });
