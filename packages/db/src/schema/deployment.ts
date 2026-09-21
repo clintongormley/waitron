@@ -5,16 +5,15 @@ import { count, label, now, table, ts } from "./columns.js";
 /**
  * One row, id pinned to 1 — see 0001_db_baseline_sql.sql for why a second row must be impossible.
  *
- * Deliberately NOT re-exported from `./schema/index.ts` (the barrel `drizzle.config.ts` reads and
- * `client.ts` derives its `Schema` type from). `0001_db_baseline_sql.sql` is hand-written —
- * drizzle-kit never diffed this table into any snapshot, so `deployment` has zero representation
- * anywhere in `drizzle/meta/*.json`. Adding this table to the schema barrel would make
- * drizzle-kit's schema aware of a table its snapshot chain has never recorded; the next plain (non-`--custom`) `drizzle-kit generate` in
- * this package would then diff the two and could emit a second `CREATE TABLE "deployment"`, which
- * fails against any database that already created `deployment`. Bringing this table into the
- * schema barrel safely requires reconciling the snapshot chain at the same time, not just adding the export.
- * `deployment` and its accessors are still exported from the package's own public barrel
- * (`../index.ts`) — that surface is unaffected by this.
+ * Brought INTO `./schema/index.ts` by the SQLite flip. It used to be kept out of that barrel because
+ * `0001_db_baseline_sql.sql`, a hand-written custom migration, created it and drizzle-kit had
+ * therefore never diffed it into a snapshot — so a plain (non-`--custom`) generate could emit a
+ * second `CREATE TABLE` that failed against a database which had already run the baseline. Those
+ * files named reconciling the snapshot chain as the precondition for bringing the table in, and the
+ * flip did exactly that: every set is now one regenerated baseline. Until the barrel caught up, the
+ * table had NO creator at all — `scripts/classification-complete.test.ts` is what reported it,
+ * classified by core with no migration creating it.
+ * Its accessors stay exported from the package's own public barrel (`../index.ts`) as before.
  */
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and

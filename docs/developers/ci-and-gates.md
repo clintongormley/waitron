@@ -578,15 +578,25 @@ passed in Chromium. Check host execution before deferring browser testing to ano
 ### Only the `core` migration set has an upgrade test; every module set is still migrated from a VIRGIN database only
 
 So a green gate is no evidence that a module set can upgrade a box. Drizzle applies a set's
-PENDING migrations in one transaction, and PostgreSQL refuses to name a label added by
-`ALTER TYPE … ADD VALUE` in that same transaction unless the type was created there too — a virgin
-database, which creates the type in that batch, is the one shape where it is legal.
+PENDING migrations in one transaction, so a statement that is legal on a virgin database — where
+the same batch creates everything it then names — can be refused on a database that already
+carries the earlier migrations.
 
 Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidence.
 
-The static guard covers every set (`scripts/enum-add-value-safety.test.ts`); the upgrade
-regression that migrates real databases from each release point covers `core` alone
+The upgrade regression that migrates real databases from each release point covers `core` alone
 (`packages/db/src/migrate-upgrade.pg.test.ts`).
+
+**2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
+was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
+transaction that added it, and a root guard read every set's SQL for it —
+`enum-add-value-safety.test.ts`, written here without its `scripts/` directory on purpose, because
+a backticked path to a file that no longer exists fails `scripts/claude-md-pointers.test.ts`.
+SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carry a text column
+with a named `CHECK` instead, so no file in the tree can hold the statement that guard searched
+for. It was deleted rather than left green over a spelling that can no longer appear, which is a
+state it could only reach by having its anti-vacuity floor lowered. The general gap above is
+unaffected: it is about module sets never being upgrade-tested, not about enums.
 
 ## Check every command's exit status
 

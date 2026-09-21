@@ -650,3 +650,35 @@ CREATE TABLE `change_log` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payload` text NOT NULL
 );
+--> statement-breakpoint
+CREATE TABLE `deployment` (
+	`id` integer PRIMARY KEY NOT NULL,
+	`environment` text NOT NULL,
+	`mode` text DEFAULT 'primary' NOT NULL,
+	`singleton_role` text DEFAULT 'primary' NOT NULL,
+	`break_glass_verifier` text,
+	`fence_lsn` text,
+	`stamped_at` text NOT NULL,
+	CONSTRAINT "deployment_singleton_ck" CHECK("deployment"."id" = 1),
+	CONSTRAINT "deployment_mode_ck" CHECK("deployment"."mode" in ('primary', 'mirror')),
+	CONSTRAINT "deployment_singleton_role_ck" CHECK("deployment"."singleton_role" in ('primary', 'secondary')),
+	CONSTRAINT "deployment_role_valid_ck" CHECK(not ("deployment"."mode" = 'mirror' and "deployment"."singleton_role" = 'primary'))
+);
+--> statement-breakpoint
+CREATE TABLE `mirror_config` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`relay_url` text NOT NULL,
+	`box_hostname` text NOT NULL,
+	`box_ca_pem` text NOT NULL,
+	`origin_node_id` text NOT NULL,
+	`adopted_at` text NOT NULL,
+	CONSTRAINT "mirror_config_singleton_ck" CHECK("mirror_config"."id" = 1)
+);
+--> statement-breakpoint
+CREATE TABLE `node_membership` (
+	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`term` integer NOT NULL,
+	`document` text NOT NULL,
+	`updated_at` text NOT NULL,
+	CONSTRAINT "node_membership_singleton_ck" CHECK("node_membership"."id" = 1)
+);

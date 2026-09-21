@@ -175,8 +175,10 @@ export const timeEntries = table(
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
     // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`,
     // including the rewrite away from `~ '^[0-9A-F]{64}$'` and the NUL gap that rewrite does not
-    // carry — the measurement is stated once, over that constraint in
-    // packages/fiscal-verifactu/src/schema/registros.ts.
+    // carry — the measurement is stated once, on `registros_huella_ck` itself, in the
+    // fiscal-verifactu package's schema. Named by constraint rather than by file path on purpose:
+    // this is a generic package, and the path spells a fiscal term as a bare word, which
+    // `scripts/english-only.test.ts` refuses here (CLAUDE.md §3).
     check(
       "time_entries_entry_hash_ck",
       sql`length(${t.entryHash}) = 64 and ${t.entryHash} not glob '*[^0-9A-F]*'`,

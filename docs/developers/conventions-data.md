@@ -549,9 +549,18 @@ therefore saw nothing. The two QUANTITY checks are P5's case exactly: `quantity 
 same in either scale, so drizzle generated nothing and PostgreSQL kept
 `((quantity)::numeric <> (0)::numeric)`. Both were named by
 `packages/db/src/schema/schema-conformance.test.ts`, which builds a database from the migrations
-and compares every check expression with the schema's, and both are rebuilt by hand in
-`packages/db/drizzle/0048_scaled_integers_sql.sql`. That guard covers the CORE set only; the module
-sets have none, which is the same asymmetry P5 recorded.
+and compares every check expression with the schema's, and both were rebuilt by hand in the core
+set's hand-written migration 0048_scaled_integers_sql. That guard covers the CORE set only; the
+module sets have none, which is the same asymmetry P5 recorded.
+
+_Dated 2026-09-21, the SQLite flip (F1)._ That migration file no longer exists: the flip regenerated
+every set as ONE baseline, so the whole core history — the hand-written custom migrations included —
+was replaced. The file is named above without a backticked path deliberately, because
+`scripts/claude-md-pointers.test.ts` reads a backticked path under `packages/` as a live pointer and
+would fail on a deleted one. What survives the deletion is the measurement, not the file. The
+MECHANISM behind it does not survive either: there is no `ALTER COLUMN ... SET DATA TYPE` in a single
+baseline, so a check constraint has nothing to be carried across and cast by. Read this paragraph as
+the reason the guard exists, not as a description of the tree.
 
 **Three ways a raw-SQL site can be wrong, and only one of them is loud.** This is the sharpened
 version of the money rule's parenthetical, measured on this branch:
@@ -694,7 +703,10 @@ updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table
 unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
 sequence with `primary key (a, b)` instead reports `UPDATE 1`. Cost: `product_units` shipped with only
 a unique `(tenant_id, product_id)`, so creating a product worked and changing its unit answered 500;
-the table now carries a primary key, created by `packages/catalogue/drizzle/0000_catalogue_baseline.sql`.
+the table now carries a primary key. It was created by the catalogue set's migration
+0000_catalogue_baseline, a file the SQLite flip (F1) deleted on 2026-09-21 when it regenerated every
+set as one baseline — named here without a backticked path for that reason. The primary key itself is
+declared in the schema and is in the regenerated baseline.
 No guard covers this: the defect passed every existing test because no test published the table
 (`packages/catalogue/src/units.pg.test.ts` now creates the publication to reproduce it), and a
 per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's

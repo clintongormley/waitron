@@ -128,9 +128,12 @@ the login screen without a banner. The failure only becomes words at sign-in, wh
 back and the dashboard falls back to `server.internal` — "Something went wrong, try again"
 (`apps/dashboard/src/screens/login-screen.ts`, `apps/dashboard/src/i18n/codes.ts`; the fallback is
 carried both by the request primitive and by `codeOf`).
-`packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
-`categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
-satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
+The core set's migration 0020_category_names did exactly this on 2026-09-13: it dropped the old text
+`categories.name` and recreated it as `jsonb NOT NULL`, which the seeded demo categories cannot
+satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database. (That file was deleted by
+the SQLite flip on 2026-09-21, which regenerated every set as one baseline; it is named here without a
+backticked path because `scripts/claude-md-pointers.test.ts` would read one as a live pointer. The
+trap it illustrates is unchanged — a migration a shared seeded database cannot satisfy.)
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
 logs `migrations.dev_constraint_violation` with the SQLSTATE and that command, then re-throws the

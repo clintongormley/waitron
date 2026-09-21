@@ -32,12 +32,14 @@ import { describe, expect, it } from "vitest";
  *    the COLUMN spelling tested against non-test TypeScript as well as the identifier — so an
  *    `alter table … add column "tenant_id"` written inside a `sql` template is read too. What none of
  *    the three sees is SQL assembled from pieces that never spell the column out.
- * 3. **`HISTORICAL_TENANT_SQL` is a hand-written list of whole FILES.** It names the core migrations
- *    that created the column and later dropped it, and it exempts each one entirely — so a column
- *    re-added INSIDE one of those files is seen by nothing here. The mitigation is a convention
- *    rather than a check: drizzle migrations are append-only and are never edited, which is also why
- *    the list can only go stale in the safe direction (a regeneration deletes a baseline, and a name
- *    that has gone is tolerated rather than reported).
+ * 3. **`HISTORICAL_TENANT_SQL` is a hand-written list of whole FILES, and it is EMPTY today.** It
+ *    used to name the thirteen core migrations that created the column and later dropped it, and it
+ *    exempted each one entirely — so a column re-added inside one of those files was seen by nothing
+ *    here. The SQLite regeneration deleted every file it named (each one checked absent, 2026-09-21),
+ *    so the exemption is gone and the SQL check below now reads every migration file in the tree.
+ *    That is a STRENGTHENING: this limitation stands only as the shape the list would take again, and
+ *    an empty list has no gap to hedge. The gap returns the moment a name is added back, which is why
+ *    the paragraph stays.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
@@ -66,28 +68,17 @@ const SQL_COLUMN = /tenant_ids?\b/;
 const TS_IDENTIFIER = /[tT]enant[Ii][Dd]s?\b/;
 
 /**
- * The core migrations that name `tenant_id`: the baselines that created it, the later migrations
- * that touched tables carrying it, and `0032`–`0034`, which drop it. `packages/db` is the one set
- * with an upgrade test, so its column was removed by migration rather than by regenerating a
- * baseline the way the eleven module sets were.
+ * Migration files allowed to name the column because they are the recorded history of carrying it and
+ * dropping it again. EMPTY, and empty is the STRONG state: nothing in the tree is exempt, so the SQL
+ * check below reads every migration file there is. Not an oversight, and not something to fill in —
+ * an entry here is a hole in that check, one whole file wide.
  *
- * Deliberately empty of anything outside `packages/db/drizzle`.
+ * It held the thirteen `packages/db/drizzle` migrations that named `tenant_id`, from the baselines
+ * that created it to `0032`–`0034`, which dropped it. The SQLite regeneration replaced core's whole
+ * history with one baseline and deleted all thirteen; each name was checked absent from the tree on
+ * 2026-09-21 before this set was emptied.
  */
-const HISTORICAL_TENANT_SQL: ReadonlySet<string> = new Set([
-  "packages/db/drizzle/0000_db_baseline.sql",
-  "packages/db/drizzle/0001_db_baseline_sql.sql",
-  "packages/db/drizzle/0004_device_binding_rule_sql.sql",
-  "packages/db/drizzle/0005_device_profile_form_factor_locked_sql.sql",
-  "packages/db/drizzle/0006_tills_name_unique_sql.sql",
-  "packages/db/drizzle/0008_join_requests.sql",
-  "packages/db/drizzle/0011_drop_print_agent_pairing_codes_sql.sql",
-  "packages/db/drizzle/0014_central_printer_provisioning_sql.sql",
-  "packages/db/drizzle/0015_print_agent_node_id.sql",
-  "packages/db/drizzle/0020_category_names.sql",
-  "packages/db/drizzle/0032_drop_tenant_id_before_sql.sql",
-  "packages/db/drizzle/0033_drop_tenant_id.sql",
-  "packages/db/drizzle/0034_drop_tenant_id_after_sql.sql",
-]);
+const HISTORICAL_TENANT_SQL: ReadonlySet<string> = new Set<string>();
 
 /**
  * Every `.ts` file under `dir`, discovered rather than listed.
@@ -178,7 +169,11 @@ describe("no tenant column", () => {
     // path. They are lower bounds, not counts: a number is a receipt that goes stale.
     expect(nonTestSources().length).toBeGreaterThan(500);
     expect(migrationSets().length).toBeGreaterThan(5);
-    expect(migrationSets().flatMap((set) => migrationSql(set)).length).toBeGreaterThan(20);
+    // The SQL floor came down from 20 to 8 when the sets were regenerated as one SQLite baseline
+    // each. Measured 2026-09-21: 1139 non-test sources, 13 sets, and 12 `.sql` files — one per set,
+    // `packages/fiscal-none` shipping none. Still a lower bound strictly under the tree, so it
+    // catches an empty or mis-pathed selection without failing the day a set is retired.
+    expect(migrationSets().flatMap((set) => migrationSql(set)).length).toBeGreaterThan(8);
   });
 
   it("declares no tenant column in any migration set's head schema", () => {
@@ -218,11 +213,12 @@ describe("no tenant column", () => {
     // typechecker cannot see into it either. No allowlist, deliberately: nothing under `packages/`
     // or `apps/` has a reason to name one.
     //
-    // It reads TEXT, so it also refuses a COMMENT that happens to contain the spelling, and the
-    // one that comes up is a citation: two migration files are called `0033_drop_tenant…` and
-    // `0034_drop_tenant…`, so quoting either path is an offence. Cite those two by number instead
-    // — "migration `0033` line 236, in `packages/db/drizzle/`" — rather than reaching for an
-    // allowlist.
+    // It reads TEXT, so it also refuses a COMMENT that happens to contain the spelling. The case
+    // that came up was a citation: two core migrations were called `0033_drop_tenant…` and
+    // `0034_drop_tenant…`, so quoting either path was an offence. Both files are gone with the
+    // SQLite regeneration, so nothing in the tree needs that dodge today — but the shape recurs
+    // whenever a file name carries the spelling, and the answer is to cite by number ("migration
+    // `0033` line 236, in `packages/db/drizzle/`") rather than to reach for an allowlist.
     const offenders = nonTestSources().filter((file) => {
       const source = readFileSync(join(repoRoot, file), "utf8");
       return TS_IDENTIFIER.test(source) || SQL_COLUMN.test(source);

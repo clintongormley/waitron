@@ -18,12 +18,15 @@ import type { SignedMembershipDocument } from "@waitron/membership";
  * write, so a write through that accessor keeps the two in step — a property of the accessor, not a
  * DB constraint (a raw SQL write could set them apart).
  *
- * Deliberately NOT re-exported from `./schema/index.ts` (which `drizzle.config.ts` reads and
- * `client.ts` derives `Schema` from), for the same reason `mirror-config.ts`/`deployment.ts` are:
- * `0001_db_baseline_sql.sql` is a hand-written custom migration, so drizzle-kit never diffed this
- * table into any snapshot. Adding it to the barrel would risk a duplicate `CREATE TABLE` on the next
- * plain `drizzle-kit generate`. The accessors are exported from the package barrel (`../index.ts`,
- * via `../node-membership.ts`); that surface is unaffected.
+ * Brought INTO `./schema/index.ts` by the SQLite flip, with `deployment` and `mirror_config`. All
+ * three used to be kept out of that barrel because `0001_db_baseline_sql.sql`, a hand-written
+ * custom migration, created them and drizzle-kit had therefore never diffed them into a snapshot —
+ * so a plain (non-`--custom`) generate could emit a duplicate `CREATE TABLE`. Those files named
+ * reconciling the snapshot chain as the precondition for bringing them in, and the flip did exactly
+ * that: every set is now one regenerated baseline. Until the barrel caught up, this table had NO
+ * creator at all — `scripts/classification-complete.test.ts` is what reported it, classified by
+ * core with no migration creating it. Its accessors stay exported from the package barrel
+ * (`../index.ts`, via `../node-membership.ts`).
  */
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
 // never by `vitest run`, so v8 reports them as never-invoked functions. Same treatment, and
