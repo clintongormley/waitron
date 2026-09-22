@@ -4889,6 +4889,46 @@ converting the fixtures is what unblocks the measurement for everything else. Th
 already on this branch — `cast(X as T)` for a cast (`59e173fc`, `cab1ec9d`) and the column
 vocabulary's `now()` bound from the process clock for the timestamp (`packages/db/src/reserved-identity.ts:115`).
 
+**THE ELEVENTH GAP'S PRODUCT HALF IS DONE — 2026-09-22, commit `8718bc12`.** Eleven non-test files
+converted, plus the two shared fixtures. **The `.test.ts` half is NOT done and is the larger one:**
+`unrecognized token: ":"` went from 266 occurrences to 165, and what remains lives in the suites'
+own fixtures (`array['es-ES']`, `'{}'::jsonb`). The failing NAME count barely moved — 447 to 445 —
+because each unblocked suite now dies at the next residue one layer in; the frontier moved, not the
+count. `seed-units.ts` appeared in 101 stack frames before and in none after.
+
+**The table above is wrong in two ways, both found by running the greps rather than reading them.**
+Nine of the files it names carry no SQL residue at all — `till-api.ts`, `printer-probes.ts`,
+`chain-height.ts`, `read-only-gate.ts`, `node-enrol-api.ts`, `mirror-bind-guard.ts`,
+`workforce-api.ts`, `till-backend.ts`, `boot-failure.ts` and the backup files match only on
+comments, IPv6 literals, or the INJECTED clock dependency. And `pairing-mode.ts`'s `now()` is that
+injected `Date.now`, in no SQL at all. A bare `::` or `now()` grep does not answer this question;
+only one scoped to the inside of a `sql` template does, which is what
+`apps/server/src/postgres-sql-residue.test.ts` now does on every push.
+
+**Two files were far larger than "casts and now()".** `configuration-transfer.ts` and
+`working-order.ts` also carried `to_jsonb`, `jsonb_populate_record`, `information_schema.columns`,
+`bool_or`, `json_agg`/`json_build_object`, `extract(epoch from …)` and two `LEFT JOIN LATERAL`,
+which this engine refuses outright (`near "select": syntax error`). The laterals become grouped
+derived tables joined on what was already the correlation key; the JSON aggregate becomes
+`json_group_array(json_object(…))` parsed at the row; `information_schema` becomes
+`pragma_table_info`.
+
+**A CORRECTION to a reading this tree invites.** `packages/db/src/deployment.ts` records that
+`pragma table_info(?)` is refused with `near "?": syntax error`, from which a reader concludes a
+table name cannot bind. The table-valued FUNCTION `pragma_table_info(?)` is a different call and
+DOES bind — measured, with a literal-argument control returning the same rows and an unknown name
+returning none. That is what kept the column-allowlist read parameterised instead of string-built.
+
+**NOT PROVEN, stated so nobody assumes coverage.** Six of the eleven — `break-glass-command.ts`,
+`device-session.ts`, `payments-api.ts`, `report-api.ts`, `print-api.ts`, `till-sale.ts` — are
+covered only by the text guard and the typechecker, because every suite reaching them refuses to
+start on step 27's harness. Their statements were not run. `mirror-session.ts`'s two inserts were.
+
+**Two stale comments deliberately left**, both describing the replaced engine while the code around
+them is correct: `chain-height.ts:19` (a node-postgres probe of `now()::timestamptz`) and
+`workforce-api.ts:83` (a `::timestamptz` column). Sweeping prose across this app is its own piece,
+and step group 8's documentation step is where it belongs.
+
 **AN EIGHTH GAP — found 2026-09-22. The regeneration dropped every BEHAVIOURAL trigger, and only
 the append-only ones came back.** Step 13 regenerated each migration set from the TypeScript schema,
 and a trigger has never been declarable in TypeScript, so every one of them lived in hand-written
