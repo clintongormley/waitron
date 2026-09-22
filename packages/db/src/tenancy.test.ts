@@ -4,7 +4,6 @@ import type { Database } from "./client.js";
 import { refusalCode } from "./constraint-target.js";
 import { locations, tenants } from "./schema/tenants.js";
 import { CHECK_VIOLATION, type RefusalClass } from "./sql-state.js";
-import { withTransaction } from "./tenancy.js";
 import { pgErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -101,19 +100,12 @@ describe("invoice_locales", () => {
   });
 });
 
-describe("withTransaction transaction context", () => {
-  let db: Database;
-
-  beforeEach(async () => {
-    db = suite.db;
-  });
-
-  it("sets no app.tenant_id GUC — the database holds one tenant (spec §1)", async () => {
-    await withTransaction(db, async (tx) => {
-      const { rows } = await tx.execute<{ v: string }>(
-        sql`select current_setting('app.tenant_id', true) as v`,
-      );
-      expect(rows[0]?.v ?? "").toBe("");
-    });
-  });
-});
+/*
+ * LOSS, from the storage swap: the `withTransaction transaction context` case is deleted.
+ *
+ * It opened a transaction and read back the `app.tenant_id` session setting, asserting it was
+ * never set — the database holds one taxpayer, so there is no tenant to scope a session to
+ * (spec §1). SQLite has no session-setting facility, so there is no setting to read and nothing
+ * for the assertion to distinguish: any wording would pass against an engine that could not have
+ * failed it. The property is structural here rather than checked.
+ */
