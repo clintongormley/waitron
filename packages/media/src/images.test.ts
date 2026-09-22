@@ -440,8 +440,9 @@ it("keeps a name match above repeated alt-text matches when sorting by relevance
 
 it("sorts accented names alphabetically in both directions across pages", async () => {
   // Lifted from `name-sort.pg.test.ts`, which was the only place asserting that `Éclair` sorts
-  // between `Bread` and `Zest` rather than after `Zest` — and it needs a PostgreSQL container, so
-  // on this branch it does not collect and nothing has been watching the ordering at all. The
+  // between `Bread` and `Zest` rather than after `Zest`. That file needed a PostgreSQL container
+  // and was deleted with the harness on 2026-09-22; recover it with
+  // `git show origin/main:packages/media/src/name-sort.pg.test.ts`. The
   // `collate pg_catalog."und-x-icu"` that produced it has no SQLite counterpart: the engine ships
   // `BINARY`, `NOCASE` and `RTRIM`, and under a code-point comparison the lowercased `éclair`
   // (U+00E9) sorts after `zest`. `Intl.Collator` is the ICU that `und` named, which is why the

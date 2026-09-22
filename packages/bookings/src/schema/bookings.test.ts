@@ -1,26 +1,42 @@
-import { sql } from "drizzle-orm";
-import { getTableConfig } from "drizzle-orm/pg-core";
-import { beforeEach, describe, expect, it } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
+import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   captureError,
-  pgErrorCode,
+  CHECK_VIOLATION,
+  diningTables,
+  FOREIGN_KEY_VIOLATION,
+  locations,
   pgErrorMessage,
-  tenants,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
-// The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does not
-// need the container. Pins the single FK drizzle-kit emits (the table and tab FKs are hand-written in
-// the custom migrations, so they are NOT on the drizzle object), the two indexes and the party-size
-// check — the shapes the migration proofs assert at the SQL level.
+// The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does
+// not need a database. Pins the foreign keys, the two indexes and the checks — the shapes the
+// migration proofs assert at the SQL level. `getTableConfig` now comes from
+// `drizzle-orm/sqlite-core`; the `pg-core` one threw `Cannot convert undefined or null to object`
+// on a SQLite table.
 describe("the bookings Drizzle table config", () => {
   it("declares the location FK, two indexes, no unique key and the party-size check", () => {
     const config = getTableConfig(bookings);
     expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
+    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT — twice over. Both lists below describe a
+    // drizzle object this branch CHANGED, not a PostgreSQL feature it translated, so updating them
+    // is a change to what the case asserts rather than a conversion, and it is left for the owner:
+    //
+    //  - `foreignKeys` now answers all three (`bookings_location_fk`, `bookings_table_fk`,
+    //    `bookings_tab_fk`). The comment above is stale with it: the table and tab keys used to be
+    //    hand-written `--custom` migration SQL and were therefore absent from the drizzle object;
+    //    on this branch `./bookings.ts` declares all three with `foreignKey({...})`.
+    //  - `checks` now answers two (`bookings_party_size_ck`, `bookings_status_ck`). `status` was a
+    //    PostgreSQL ENUM TYPE, which the engine enforced; `enumType` emits a CHECK constraint here.
+    //
+    // Measured 2026-09-22 on Node v26.7.0 by calling `getTableConfig` on this branch's `bookings`.
     expect(config.foreignKeys.map((fk) => fk.getName())).toEqual(["bookings_location_fk"]);
     expect(config.uniqueConstraints).toEqual([]);
     expect(
@@ -39,9 +55,19 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// Real Postgres (a whole-manifest template clone), not PGlite: every write below runs as the non-owner
-// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// `manifest` template (not [core, bookings]) is the shared ordered set — bookings FKs into core.
+// WHAT THIS SUITE NO LONGER SHOWS. Every write below used to run as the non-owner `app_user`, the
+// deployment role, on a real PostgreSQL cluster — which PGlite could not be. This engine has no
+// roles and `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`), so nothing here is
+// a claim about a privilege; what it still shows is the CHECK and the three foreign keys.
+//
+// The refusals themselves also carry less than they did. `pgErrorCode` answers
+// `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the refusal CLASS comes off
+// `errcode` instead (`packages/db/src/sql-state.ts`: 275 for a CHECK where this was `23514`, 787
+// for a foreign key where it was `23503`). And the foreign-key MESSAGE is the engine's own —
+// `FOREIGN KEY constraint failed`, the same three words whichever key was broken — where
+// PostgreSQL named the constraint. So the three key cases below can no longer tell each other
+// apart by their message, and each is separated only by which parent row it made absent. The
+// constraint NAMES are asserted where the engine still keeps them: on the drizzle object above.
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 // A dining_tables row — the target of bookings.table_id.
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
@@ -49,33 +75,34 @@ const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 
 describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
-  const suite = useTemplateDb({ template: "manifest" });
+  const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
-  // beforeEach, not beforeAll: the helper empties every table after each test.
-  beforeEach(async () => {
-    // The core parents a booking reaches: a location, and the dining table `bookings.table_id`
-    // points at. `tenants` is the one-row taxpayer record a provisioned database carries; nothing
-    // seeded here references it, and neither `locations` nor `dining_tables` has a tenant column.
-    await suite.admin
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
-    await suite.admin.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION}, 'Loc A', array['es'], 'Hostelería')`);
-    await suite.admin.execute(sql`
-      insert into dining_tables (id, location_id, label) values (${TABLE}, ${LOCATION}, 'A1')`);
-  });
-
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
+  // Each test seeds its own parents; the helper empties every table after each one. Written through
+  // the table definitions rather than raw SQL where the row's id is NOT being pinned —
+  // `invoiceLocales` reaches its column's JSON mapping, which `array['es']` used to do in SQL this
+  // engine has not.
+  async function seedParents(): Promise<void> {
+    await seedTenant(suite.db);
+    await suite.db.insert(locations).values({
+      id: LOCATION,
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
     });
+    await suite.db.insert(diningTables).values({ id: TABLE, locationId: LOCATION, label: "A1" });
   }
 
-  // Insert a booking under the app role — the path the real routes take.
+  // Insert a booking. Raw SQL, deliberately: the cases below write column sets a typed builder
+  // would refuse at compile time — a party size of 0, a `table_id` naming no row — and it is the
+  // database's refusal that is under test, not TypeScript's.
   async function seedBooking(time: string, extra: Record<string, unknown> = {}): Promise<string> {
-    return asApp(async (tx) => {
+    return withTransaction(suite.db, async (tx: Transaction) => {
       const cols: Record<string, unknown> = {
+        // `id` and `created_at` are `$defaultFn` generators in JavaScript, not column DEFAULTs, so a
+        // raw insert that does not name them is refused `NOT NULL constraint failed`. They are named
+        // here for that reason, where PostgreSQL supplied both server-side.
+        id: crypto.randomUUID(),
+        created_at: new Date().toISOString(),
         location_id: LOCATION,
         booking_date: "2026-09-01",
         booking_time: time,
@@ -99,19 +126,23 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   }
 
   it("exposes every column through the Drizzle export, with the status default", async () => {
+    await seedParents();
     const id = await seedBooking("20:00", { table_id: TABLE });
     // Read back through the Drizzle `bookings` export (not raw SQL) — exercises the produced table
     // export, its column mapping, the `status` default and `booking_time`'s rendering.
-    const [row] = await asApp((tx) =>
-      tx
-        .select()
-        .from(bookings)
-        .where(sql`id = ${id}`),
+    const [row] = await withTransaction(suite.db, (tx: Transaction) =>
+      tx.select().from(bookings).where(eq(bookings.id, id)),
     );
     expect(row).not.toHaveProperty("tenantId");
     expect(row!.locationId).toBe(LOCATION);
     expect(row!.tableId).toBe(TABLE);
     expect(row!.bookingDate).toBe("2026-09-01");
+    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. `booking_time` was a PostgreSQL `time`,
+    // which normalised `20:00` to `20:00:00` on the way back out. `timeOfDay` is plain `text` on
+    // this engine (`packages/db/src/schema/columns.ts`), so what comes back is the `20:00` that was
+    // written. Changing the expected value is a change to what this case ASSERTS, not a translation
+    // of PostgreSQL-only SQL, so it is left for the owner to decide. The same value appears in
+    // `../routes.test.ts`'s happy path and in `../bookings.test.ts`'s ordering case.
     expect(row!.bookingTime).toBe("20:00:00");
     expect(row!.partySize).toBe(2);
     expect(row!.contactName).toBe("Ana");
@@ -119,41 +150,48 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(row!.createdBy).toBe(CREATED_BY);
     // A booking is edited and moved through its lifecycle: move it to a terminal state and read the
     // change back, so the mapping covers a written value as well as a default.
-    await asApp((tx) => tx.execute(sql`update bookings set status = 'cancelled' where id = ${id}`));
-    const after = await asApp((tx) =>
-      tx
-        .execute<{ status: string }>(sql`select status from bookings where id = ${id}`)
-        .then((r) => r.rows[0]!.status),
+    await withTransaction(suite.db, (tx: Transaction) =>
+      tx.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, id)),
     );
-    expect(after).toBe("cancelled");
+    const [after] = await withTransaction(suite.db, (tx: Transaction) =>
+      tx.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, id)),
+    );
+    expect(after!.status).toBe("cancelled");
   });
 
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {
+    await seedParents();
     const e = await captureError(() => seedBooking("22:00", { party_size: 0 }));
-    expect(pgErrorCode(e)).toBe("23514"); // check_violation on bookings_party_size_ck
+    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275, was 23514
+    // The CHECK's message DOES carry its name here, unlike the foreign keys' — so this one case
+    // can still say which constraint refused it.
+    expect(pgErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
   it("refuses a table_id with no dining_tables row (bookings_table_fk)", async () => {
+    await seedParents();
     const e = await captureError(() =>
       seedBooking("19:00", { table_id: "bbbbbbbb-0000-4000-8000-000000000009" }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-    expect(pgErrorMessage(e)).toMatch(/bookings_table_fk/);
+    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787, was 23503
+    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a tab_id with no working_orders row (bookings_tab_fk)", async () => {
+    await seedParents();
     const e = await captureError(() =>
       seedBooking("18:00", { tab_id: "dddddddd-0000-4000-8000-000000000001" }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-    expect(pgErrorMessage(e)).toMatch(/bookings_tab_fk/);
+    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
+    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a location_id with no locations row (bookings_location_fk)", async () => {
+    await seedParents();
     const e = await captureError(() =>
       seedBooking("17:00", { location_id: "eeeeeeee-0000-4000-8000-000000000001" }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-    expect(pgErrorMessage(e)).toMatch(/bookings_location_fk/);
+    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
+    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 });

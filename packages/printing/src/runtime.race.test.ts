@@ -1,8 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { CORE_MIGRATIONS, locations, printAgents, printJobs, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { claimPrintJobs, runAgentOnce } from "./runtime.js";
 import type { ClaimedJob } from "./runtime.js";
@@ -12,40 +12,75 @@ import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
-// Real Postgres (a `core` template clone), NOT PGlite: the "two agents don't double-print" guarantee
-// is a CONCURRENCY property of the claim, and PGlite serialises every query onto one backend,
-// so two agent instances never truly contend there — a false pass, not a weak one (CLAUDE.md §4).
-// What this suite shows is the PROPERTY — two agents contending over one queue claim each job at
-// most once, as the real deployment role. It does not show what the property rests on. Measured
-// 2026-09-21: with `for update … skip locked` taken out of `packages/db/src/job-claim.ts` and
-// nothing else changed, this suite and runtime.reclaim.test.ts both still PASSED, five tests green.
-// The clause's own proof-by-deletion lives with the SQL, in `packages/db/src/job-claim.pg.test.ts`.
-// See docs/developers/testing-guide.md, "A proof-by-deletion belongs to the SHAPE of the code it
-// was taken against".
-const suite = useTemplateDb({ template: "core" });
+/**
+ * Two agents pulling one venue's queue deliver each job at most once.
+ *
+ * ## What replaced the lock observation
+ *
+ * This suite used to take TWO PostgreSQL backends, park the first mid-push holding its claimed
+ * row's lock, and poll `pg_stat_activity` until the second showed up as a lock WAITER. None of
+ * that exists here: one connection per venue file, no row locks, and no `pg_stat_activity`. What
+ * the engine has instead is the file's write queue — `withTransaction`
+ * (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
+ * `packages/store/src/write-queue.ts` issues `begin immediate`, awaits the body, then `commit`, so
+ * the next caller's `begin` does not run until that `commit` has returned.
+ *
+ * So the thing observed moved: not "agent B is BLOCKED", but "agent B has not STARTED". Each case
+ * below parks agent A inside its push, with A's transaction open, and asserts B's transaction body
+ * has not run a statement — `parkedThenRelease` below, the same shape
+ * `packages/catalogue/test/fixtures.ts`'s `racePair` uses. That is the receipt for the
+ * `for update … skip locked` this claim dropped.
+ *
+ * The observation was taken with a control in the other direction, 2026-09-22 on Node v26.7.0:
+ * with `withTransaction` removed from `parkedThenRelease`'s second body and nothing else changed,
+ * both cases failed on `expected true to be false`; restored, both pass. So the `false` is not a
+ * reading that could never have been anything else (CLAUDE.md §1).
+ *
+ * ## What this suite does NOT show, unchanged from the PostgreSQL version
+ *
+ * It shows the PROPERTY — two agents contending over one queue claim each job at most once — not
+ * what the property rests on. Measured 2026-09-21 on the PostgreSQL version: with
+ * `for update … skip locked` taken out of `packages/db/src/job-claim.ts` and nothing else changed,
+ * this suite and runtime.reclaim.test.ts both still PASSED. The clause is gone from the tree now;
+ * what holds the property on this engine — one writer at a time, plus `claimPrintJobs`'s own
+ * refusal to re-select a LIVE claim — has its own receipts in `packages/db/src/job-claim.sqlite.test.ts`
+ * and in runtime.reclaim.test.ts's third case. See docs/developers/testing-guide.md, "A
+ * proof-by-deletion belongs to the SHAPE of the code it was taken against".
+ *
+ * ## What is LOST outright
+ *
+ * Two distinct backends, and the deployment role. Every write below used to run after
+ * `set local role app_user` on a non-superuser connection, so the claim's and the report's grants
+ * were exercised; this engine has no roles and `asAppUser` is an empty body
+ * (`packages/db/src/testing/roles.ts`). Nothing replaces either.
+ */
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
-  const admin = suite.admin;
-  await seedTenant(admin);
-  const { rows } = await admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
+  await seedTenant(suite.db);
+  // Through the table definition, not raw SQL: `locations.id` comes from `$defaultFn(newId)` in
+  // JavaScript, and `invoiceLocales` reaches its column's JSON mapping where `array['es-ES']` used
+  // to be SQL this engine does not have.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
-/** Run `fn` as the real deployment role — one tx that switches to `app_user` first, the
- * shape the Task-6 route wraps every runtime call in. */
-function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
-    return fn(tx);
-  });
+async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(printAgents)
+    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .returning({ id: printAgents.id });
+  return row!.id;
 }
 
 /**
- * A sink that PARKS the agent mid-push, holding its claim transaction (and the claimed row's lock)
- * open until the test releases it. `entered` resolves the instant `send` is reached, so the test can
- * stage the second agent's contending pull with certainty rather than by timing luck (CLAUDE.md §1 —
- * a race asserted without staged contention proves nothing).
+ * A sink that PARKS the agent mid-push, holding its transaction open until the test releases it.
+ * `entered` resolves the instant `send` is reached, so the test stages the second agent's pull with
+ * certainty rather than by timing luck (CLAUDE.md §1 — a race asserted without staged contention
+ * proves nothing).
  */
 class GatedSink implements Transport {
   readonly written: { printerId: string; bytes: Uint8Array }[] = [];
@@ -60,59 +95,64 @@ class GatedSink implements Transport {
   }
 }
 
-/** Count backends (in this clone db) currently WAITING on a lock — the tell that agent B's pull is
- * blocked on agent A's claimed row (the state the deleted-lock variant reaches). */
-async function lockWaiters(admin: Database): Promise<number> {
-  const { rows } = await admin.execute<{ n: number }>(sql`
-    select count(*)::int as n from pg_stat_activity
-    where datname = current_database() and wait_event_type = 'Lock'`);
-  return rows[0]!.n;
-}
-
-async function waitFor(cond: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await cond()) return;
-    await new Promise((r) => setTimeout(r, 25));
+/**
+ * Runs `second` while `first`'s transaction is parked open, and asserts it did not start.
+ *
+ * `parked` is what tells the helper the first transaction is open and stuck — the gated sink's
+ * `entered` for a push, a latch the body opens for a claim. The pause afterwards is a real timer,
+ * not a microtask turn: it has to give the second transaction every chance to run a statement it
+ * must not run.
+ */
+async function parkedThenRelease<A, B>(
+  first: (tx: Transaction) => Promise<A>,
+  parked: Promise<void>,
+  release: () => void,
+  second: (tx: Transaction) => Promise<B>,
+): Promise<[A, B]> {
+  let secondStarted = false;
+  const one = withTransaction(suite.db, first);
+  await parked;
+  // Started without awaiting `one`. Nothing but the write queue keeps it out.
+  const two = withTransaction(suite.db, (tx: Transaction) => {
+    secondStarted = true;
+    return second(tx);
+  });
+  const settled = Promise.all([one, two]);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondStarted, "the second transaction started while the first was still open").toBe(
+      false,
+    );
+  } finally {
+    release();
   }
-  throw new Error("waitFor: condition not met within timeout");
+  return settled;
 }
 
-describe("double-pull race (real Postgres)", () => {
+describe("double-pull race", () => {
   it("marks printing atomically so two agents don't double-print", async () => {
     const cfg = await setup();
-    // One agent, one printer, one queued job. Two agent INSTANCES (distinct backends) will both try
-    // to pull it — the reimaged-agent / two-boxes topology.
-    const agentId = (
-      await suite.admin.execute<{ id: string }>(sql`
-        insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`)
-    ).rows[0]!.id;
-    const printerId = await asApp(suite.admin, (tx) =>
+    // One agent, one printer, one queued job. Two agent RUNS will both try to pull it — the
+    // reimaged-agent / two-boxes topology.
+    const agentId = await seedAgent(cfg, "Kitchen");
+    const printerId = await withTransaction(suite.db, (tx: Transaction) =>
       createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       }).then((p) => p.id),
     );
-    const { jobId } = await asApp(suite.admin, (tx) =>
+    const { jobId } = await withTransaction(suite.db, (tx: Transaction) =>
       enqueuePrintJob(tx, cfg, printerId, new Uint8Array([0x41])),
     );
 
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        [connA, connB].map(async (db) => {
-          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-          return rows[0]!.pid;
-        }),
-      );
-      expect(new Set(pids).size).toBe(2); // genuinely distinct backends
+    const gated = new GatedSink();
+    const sinkB = new FakeSink();
 
-      const gated = new GatedSink();
-      const sinkB = new FakeSink();
-
-      // Agent A claims the job and PARKS mid-push, holding its row lock (tx still open).
-      const aDone = asApp(connA, (tx) =>
+    // Agent A claims the job and PARKS mid-push, its transaction still open. Agent B's whole run is
+    // attempted while A is parked.
+    const [aResult, bResult] = await parkedThenRelease(
+      (tx) =>
         runAgentOnce({
           tx,
           agentId,
@@ -120,15 +160,9 @@ describe("double-pull race (real Postgres)", () => {
           visibleKeys: [],
           transport: gated,
         }),
-      );
-      await gated.entered;
-
-      // Agent B now pulls WHILE A holds the row. With the skip, B passes over A's row and claims
-      // nothing — it settles quickly. Without it, B blocks on A's row and shows up as a lock waiter.
-      // Either is a state this test can observe, so release A the moment EITHER is, and neither
-      // variant deadlocks.
-      let bSettled = false;
-      const bDone = asApp(connB, (tx) =>
+      gated.entered,
+      () => gated.release(),
+      (tx) =>
         runAgentOnce({
           tx,
           agentId,
@@ -136,31 +170,22 @@ describe("double-pull race (real Postgres)", () => {
           visibleKeys: [],
           transport: sinkB,
         }),
-      ).then((r) => {
-        bSettled = true;
-        return r;
-      });
-      await waitFor(async () => bSettled || (await lockWaiters(suite.admin)) >= 1);
-      gated.release();
+    );
 
-      const [aResult, bResult] = await Promise.all([aDone, bDone]);
+    // The assertion that matters: the job was delivered EXACTLY ONCE across both agents.
+    expect(gated.written.length + sinkB.written.length).toBe(1);
+    expect(gated.written).toHaveLength(1);
+    expect(sinkB.written).toHaveLength(0);
+    expect(aResult).toEqual({ claimed: 1, delivered: 1, failed: 0 });
+    expect(bResult).toEqual({ claimed: 0, delivered: 0, failed: 0 });
 
-      // The assertion that matters: the job was delivered EXACTLY ONCE across both agents.
-      expect(gated.written.length + sinkB.written.length).toBe(1);
-      expect(gated.written).toHaveLength(1);
-      expect(sinkB.written).toHaveLength(0);
-      expect(aResult).toEqual({ claimed: 1, delivered: 1, failed: 0 });
-      expect(bResult).toEqual({ claimed: 0, delivered: 0, failed: 0 });
-
-      // The database agrees: the single job is done, claimed once.
-      const { rows } = await suite.admin.execute<{ status: string; attempts: number }>(
-        sql`select status, attempts from print_jobs where id = ${jobId}`,
-      );
-      expect(rows[0]!.status).toBe("done");
-      expect(rows[0]!.attempts).toBe(0);
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
+    // The database agrees: the single job is done, claimed once.
+    const [row] = await suite.db
+      .select({ status: printJobs.status, attempts: printJobs.attempts })
+      .from(printJobs)
+      .where(eq(printJobs.id, jobId));
+    expect(row!.status).toBe("done");
+    expect(row!.attempts).toBe(0);
   });
 
   it("two DISTINCT agents claiming one network printer's queue never double-claim a job", async () => {
@@ -169,80 +194,59 @@ describe("double-pull race (real Postgres)", () => {
     // keeps each job to one claimer. Distinct agentIds (not the same one twice) so the claim's
     // `claimed_by` stamp differs per winner — the union of what each claims must still be disjoint.
     const cfg = await setup();
-    const [agentA, agentB] = await Promise.all(
-      ["A", "B"].map(async (name) => {
-        const { rows } = await suite.admin.execute<{ id: string }>(sql`
-          insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, ${"Kitchen " + name}, 'scrypt$fixture')
-          returning id`);
-        return rows[0]!.id;
-      }),
-    );
-    const printerId = await asApp(suite.admin, (tx) =>
+    const agentA = await seedAgent(cfg, "Kitchen A");
+    const agentB = await seedAgent(cfg, "Kitchen B");
+    const printerId = await withTransaction(suite.db, (tx: Transaction) =>
       createPrinter(tx, cfg, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }).then(
         (p) => p.id,
       ),
     );
     const N = 8;
-    await asApp(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx: Transaction) => {
       for (let i = 0; i < N; i++) await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([i]));
     });
 
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      // Agent A claims the whole batch and PARKS its transaction OPEN, holding the claimed rows' locks
-      // (an uncommitted UPDATE). This stages guaranteed contention rather than trusting timing luck
-      // (CLAUDE.md §1): B's contending pull runs while A still holds every row.
-      let releaseA!: () => void;
-      const gate = new Promise<void>((resolve) => (releaseA = resolve));
-      let aClaimedResolve!: (v: ClaimedJob[]) => void;
-      const aClaimed = new Promise<ClaimedJob[]>((resolve) => (aClaimedResolve = resolve));
-      const aDone = withTransaction(connA, async (tx) => {
-        await asAppUser(tx);
+    // Agent A claims the whole batch and PARKS its transaction OPEN, so B's contending pull is
+    // attempted while A's claim is still uncommitted.
+    let releaseA!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseA = resolve));
+    let aClaimedResolve!: () => void;
+    const aClaimed = new Promise<void>((resolve) => (aClaimedResolve = resolve));
+
+    const [aResult, bResult] = await parkedThenRelease<ClaimedJob[], ClaimedJob[]>(
+      async (tx) => {
         const claimed = await claimPrintJobs(tx, agentA, {
           locationId: cfg.locationId,
           visibleKeys: [],
         });
-        aClaimedResolve(claimed);
-        await gate; // hold the tx (and its row locks) open until the test releases it
+        aClaimedResolve();
+        await gate; // hold the transaction open until the test releases it
         return claimed;
-      });
-      await aClaimed; // A has claimed and is parked, holding the locks
+      },
+      aClaimed,
+      () => releaseA(),
+      (tx) => claimPrintJobs(tx, agentB, { locationId: cfg.locationId, visibleKeys: [] }),
+    );
 
-      // Agent B pulls the SAME queue concurrently. WITH the skip, B's claim passes over A's locked
-      // rows and claims nothing — it settles fast. WITHOUT it B becomes a lock waiter and sits there
-      // until A's transaction ends (see the header for the measurement). Either outcome is a state
-      // this test can observe, so release A the moment EITHER is observed and neither side deadlocks.
-      let bSettled = false;
-      const bDone = withTransaction(connB, async (tx) => {
-        await asAppUser(tx);
-        return claimPrintJobs(tx, agentB, { locationId: cfg.locationId, visibleKeys: [] });
-      }).then((r) => {
-        bSettled = true;
-        return r;
-      });
-      await waitFor(async () => bSettled || (await lockWaiters(suite.admin)) >= 1);
-      releaseA();
+    // The assertion that matters: across both agents every job was claimed AT MOST once, and all
+    // N were claimed. Duplicate ids here, length 2N, would be a double claim — which is what the
+    // two-statement pull this replaced produced when its lock clause was deleted.
+    const claimedIds = [...aResult.map((j) => j.id), ...bResult.map((j) => j.id)];
+    expect(new Set(claimedIds).size).toBe(claimedIds.length); // no duplicate claim
+    expect(claimedIds).toHaveLength(N); // and the whole queue was claimed
+    expect(aResult).toHaveLength(N); // A ran first, so A won the whole batch
+    expect(bResult).toHaveLength(0);
 
-      const [aResult, bResult] = await Promise.all([aDone, bDone]);
-
-      // The assertion that matters: across both agents every job was claimed AT MOST once, and all
-      // N were claimed. Duplicate ids here, length 2N, would be a double claim — which is what the
-      // two-statement pull this replaced produced when its lock clause was deleted, and what this
-      // suite no longer catches on its own (see the header).
-      const claimedIds = [...aResult.map((j) => j.id), ...bResult.map((j) => j.id)];
-      expect(new Set(claimedIds).size).toBe(claimedIds.length); // no duplicate claim
-      expect(claimedIds).toHaveLength(N); // and the whole queue was claimed
-      expect(aResult).toHaveLength(N); // A held all the locks, so A won the whole batch
-      expect(bResult).toHaveLength(0);
-
-      // The database agrees: every job is claimed exactly once (claimed_by set), none double-stamped.
-      const { rows } = await suite.admin.execute<{ n: number }>(
-        sql`select count(*)::int as n from print_jobs
-            where printer_id = ${printerId} and status = 'printing' and claimed_by is not null`,
-      );
-      expect(rows[0]!.n).toBe(N);
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
+    // The database agrees: every job is claimed exactly once (claimed_by set), none double-stamped.
+    const rows = await suite.db
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    expect(rows).toHaveLength(N);
+    const stamped = await suite.db
+      .select({ id: printJobs.id, claimedBy: printJobs.claimedBy, status: printJobs.status })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    expect(stamped.filter((r) => r.status === "printing" && r.claimedBy !== null)).toHaveLength(N);
   });
 });

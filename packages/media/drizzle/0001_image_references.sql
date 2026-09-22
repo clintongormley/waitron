@@ -62,9 +62,10 @@
 -- `is not` is SQLite's null-safe inequality, PostgreSQL's `IS DISTINCT FROM`.
 --
 -- `product_variants.image` is deliberately NOT guarded: it carried no key on `origin/main` either
--- (the constraint list in `packages/media/src/images.pg.test.ts` names only these two and
--- `media_image_data_image_fk`), and restoring more than was there would be a new rule, not a
--- restoration. `listImageUsages` still counts a variant, so a photo a variant uses cannot be
+-- (the constraint list in the since-deleted `packages/media/src/images.pg.test.ts` named only
+-- these two and `media_image_data_image_fk`; it is at
+-- `git show origin/main:packages/media/src/images.pg.test.ts`), and restoring more than was there
+-- would be a new rule, not a restoration. `listImageUsages` still counts a variant, so a photo a variant uses cannot be
 -- deleted through the product's own path.
 
 CREATE TRIGGER products_media_image_fk_insert
