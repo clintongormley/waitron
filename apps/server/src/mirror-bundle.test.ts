@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readMembershipTrustSet, stampDeployment, type Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
@@ -15,9 +16,25 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 
-// Real Postgres, not PGlite: assembleMirrorBundle reads the venue's tenant + node rows as `app_user`
-// (PGlite connects as a superuser holding every privilege, so it could not prove app_user actually
-// holds SELECT on those parent tables) and runs each module's reservation as that role. CLAUDE.md §4.
+/**
+ * `assembleMirrorBundle`, the primary side, on the engine the box now runs.
+ *
+ * ## What went with PostgreSQL, and is replaced by nothing
+ *
+ * `appDb` used to be a second connection opened as `app_login` — a cluster LOGIN role inheriting
+ * `app_user`'s grants, created by the now-deleted `apps/server/src/testing/global-setup.ts` — while
+ * provisioning and the read-backs ran on the owner connection. That is what put the bundle's tenant
+ * and node reads, and each module's reservation, behind the grants a real box runs under.
+ *
+ * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
+ * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). The
+ * `appDb` dependency is now handed the suite's own handle, so nothing here checks that the
+ * deployment role holds SELECT on the parent tables. NO case was deleted for it: every case asserts the SHAPE of the assembled bundle,
+ * not a refusal, so each converts with its assertions untouched.
+ *
+ * The second, never-stamped database stays a second database. It is what the `mirror.not_provisioned`
+ * case needs — an unstamped `deployment` row — and `useVenueDb` gives a file as many as it asks for.
+ */
 const LOCALE = "es-ES";
 
 // The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — `assembleMirrorBundle`
@@ -30,9 +47,17 @@ const RING: KeyRing = loadKeyRing({
 // The standby's identity key the primary vouches for — a real Ed25519 SPKI public key.
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
-// A second, never-stamped clone for the null-environment branch.
-const unstamped = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
+// A second, never-stamped database for the null-environment branch.
+const unstamped = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 let nifCounter = 0;
 function nextNif(): string {
@@ -42,7 +67,7 @@ function nextNif(): string {
 
 let stateDir: string;
 let caPem: string;
-let appDb: Database; // app_login → app_user: reads the venue rows in this database
+let db: Database;
 // One tenant per database: the venue is provisioned ONCE in beforeAll and every test reuses it. The
 // suite does not reset between tests (resetPerTest:false), so a per-test `setupVenue()` would
 // accumulate tenants in a database whose vault holds one credential per purpose.
@@ -82,7 +107,7 @@ async function setupVenue(): Promise<AdoptResult> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     locationId: venue.locationId,
@@ -90,13 +115,13 @@ async function setupVenue(): Promise<AdoptResult> {
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, designated.nodeId);
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
   return designated;
 }
 
 function baseDeps() {
   return {
-    appDb,
+    appDb: db,
     ring: RING,
     stateDir,
     relayUrl: "https://relay.test:9000/",
@@ -115,17 +140,16 @@ beforeAll(async () => {
   }).caCertPem;
   await writeFile(join(stateDir, "tls", "ca.crt"), caPem);
 
-  await stampDeployment(suite.admin, "preproduction");
-  appDb = await suite.pg.connectAs("app_login", "app_pw");
+  db = suite.db;
+  await stampDeployment(db, "preproduction");
   designated = await setupVenue();
 }, 180_000);
 
 afterAll(async () => {
-  if (appDb !== undefined) await appDb.close();
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
-describe("assembleMirrorBundle (primary side, real Postgres)", () => {
+describe("assembleMirrorBundle (primary side)", () => {
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
@@ -163,7 +187,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     );
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
-    const primaryPub = (await readMembershipTrustSet(suite.admin))[designated.nodeId]!;
+    const primaryPub = (await readMembershipTrustSet(db))[designated.nodeId]!;
     expect(
       verifyBytes(
         canonicalize({ nodeId: standby.nodeId, publicKey: standby.publicKey }),
@@ -218,18 +242,13 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {
-    const unstampedApp = await unstamped.pg.connectAs("app_login", "app_pw");
-    try {
-      await expect(
-        assembleMirrorBundle({
-          ...baseDeps(),
-          appDb: unstampedApp,
-          designated,
-          standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
-        }),
-      ).rejects.toMatchObject({ code: "mirror.not_provisioned" });
-    } finally {
-      await unstampedApp.close();
-    }
+    await expect(
+      assembleMirrorBundle({
+        ...baseDeps(),
+        appDb: unstamped.db,
+        designated,
+        standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      }),
+    ).rejects.toMatchObject({ code: "mirror.not_provisioned" });
   });
 });

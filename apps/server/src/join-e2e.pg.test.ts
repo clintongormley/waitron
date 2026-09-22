@@ -1,23 +1,34 @@
 /**
- * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the real-PostgreSQL harness it runs on is gone.
+ * The assembled device join-and-accept flow, across BOTH route modules on one app.
  *
- * WHAT IT REPORTS TODAY. It does not COLLECT: `useTemplateDb` throws `useTemplateDb: no shared
- * container in scope. Wire the package's vitest globalSetup to a file that calls
- * `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
- * `npx vitest run src/join-e2e.pg.test.ts` in `apps/server`, which reports `3 tests | 3 skipped`
- * and then fails the FILE. Nothing below has run on this branch; the SQL it writes is converted
- * anyway so nothing has to be untangled twice.
+ * This is the ONLY file that mounts `device-api` and `join-api` together sharing ONE `PairingMode`
+ * holder, so it is the regression guard for the assembled flow: the device knocks (device-api), an
+ * admin opens the window / reads the queue / challenges / accepts / denies (join-api), and the
+ * window one surface opens is the window the other honours because it is the same holder instance.
+ * That reason is engine-independent and is why the file survives the storage switch.
  *
- * WHAT ITS `.pg` SUFFIX STILL MEANS is now only half true and is left rather than rewritten: the
- * reason recorded below is that PGlite makes every connection a superuser, so the grants these
- * routes run under would not be exercised. Whether that reason survives the storage swap is not
- * something this conversion establishes.
+ * **What went with PostgreSQL, and is replaced by nothing.** The header this replaces said the suite
+ * needed real PostgreSQL because every route runs as `app_user` under `withTransaction`, so the
+ * `join_requests` / `devices` / `device_profiles` grants were enforced where PGlite's superuser
+ * connection would hide a missing one. There are no roles and no grants on this engine, and
+ * `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`). Nothing now checks that the
+ * deployment role can reach these three tables and no more.
+ *
+ * **All three cases are RED on a blocker in a file this one only imports.**
+ * `apps/server/src/testing/venue-fixtures.ts:137` seeds the manager and the clerk with
+ * `insert into persons (display_name, pin_hash, role)` written as raw SQL, and `persons.id` is a
+ * `$defaultFn` generator a raw insert never reaches while the column is NOT NULL:
+ * `NOT NULL constraint failed: persons.id`, errcode 1299. Measured 2026-09-22 on Node v26.7.0, with
+ * the control — the same two rows written through the table definition, nothing else changed, and
+ * all three cases pass. The fixture is shared with the other device and join suites, so the change
+ * belongs in one place rather than here.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { deviceProfiles } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
@@ -26,16 +37,11 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTransaction`, so
-// the join_requests / devices / device_profiles grants are enforced. On PGlite every connection is a
-// superuser holding every privilege, so those grants would not be exercised. Each test provisions its OWN
-// tenant, so its rows are that test's alone and order-independent across the shared clone.
-//
-// This is the ONLY file that mounts BOTH route modules on one app sharing ONE `PairingMode`, so it is
-// the regression guard for the assembled device join-and-accept flow: the device knocks (device-api),
-// an admin opens the window / reads the queue / challenges / accepts / denies (join-api), and the
-// window one surface opens is the window the other honours because it is the same holder instance.
-const suite = useTemplateDb({ template: "manifest" });
+// Each test provisions its OWN tenant, so its rows are that test's alone and order-independent.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
 
 /** Mount the device surface AND the management join surface on ONE Hono app, sharing ONE `db` and ONE
@@ -45,8 +51,8 @@ const noopLog: Logger = () => {};
  *  rather than the dev auto-accept. */
 function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
-  mountDeviceApi(app, { db: suite.admin, cfg, secureCookies: false, pairingMode }, noopLog);
-  mountJoinApi(app, { db: suite.admin, cfg, pairingMode }, noopLog);
+  mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode }, noopLog);
+  mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
   return app;
 }
 
@@ -106,25 +112,25 @@ async function knock(
 }
 
 let profileCounter = 0;
-/** Seed a `device_profiles` row of the given form factor, read back its id (superuser SQL, fixture
- *  setup). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
+/** Seed a `device_profiles` row of the given form factor and read back its id. The per-suite counter
+ *  keeps two profiles seeded inside one test from colliding on the unique name. */
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
   // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
   // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
   // never reaches, and the table definition is also what encodes `capabilities`, whose `::jsonb`
   // cast is a syntax error to this parser.
-  const [row] = await suite.admin
+  const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
     .returning({ id: deviceProfiles.id });
   return row!.id;
 }
 
-/** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
- *  table and not about what a route chose to show. */
+/** How many pending requests this tenant holds — read straight from the table, so the assertion is
+ *  about what was written and not about what a route chose to show. */
 async function pendingCount(): Promise<number> {
-  const { rows } = await suite.admin.execute<{ n: number }>(
+  const { rows } = await suite.db.execute<{ n: number }>(
     // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
     // syntax error to this parser (`unrecognized token: ":"`).
     sql`select count(*) as n from join_requests `,
@@ -134,7 +140,7 @@ async function pendingCount(): Promise<number> {
 
 describe("device join and accept, end to end (both surfaces, one window)", () => {
   it("open the window, knock, match the number, and the device is in", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
     const profileId = await seedProfile("till");
 
@@ -214,7 +220,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
   });
 
   it("a wrong number denies, and the device is told to ask again", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
     const profileId = await seedProfile("till");
     await openWindow(app, venue);
@@ -254,7 +260,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
   });
 
   it("a knock with the window shut writes nothing and is counted, not recorded", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
 
     // The window is never opened. First read the refused counter through the management route.

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -33,13 +34,23 @@ import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
 import "./errors.js";
 
-// `readTenderBlock` reads back the committed tender (+ payment) rows, so it exercises the app role's
-// grants on `tenders`/`payments` — a real-PG concern, not a PGlite superuser one (CLAUDE.md §4). The
-// shared manifest template supplies the schema; each case seeds its own sale under its own
-// working-order id (unique, so `sales_working_order_id_key` never collides across cases).
+// `readTenderBlock` reads back the committed tender (+ payment) rows through the same handle that
+// wrote them. The whole manifest is migrated because the seed runs the real provisioning plan and
+// `recordSale`, which reach the catalogue, identity, payments and fiscal sets; each case seeds its
+// own sale under its own working-order id (unique, so the `sales.working_order_id` unique index
+// never collides across cases).
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
+// (`packages/db/src/testing/roles.ts`) and are left in place for Task T1 to sweep, so nothing here
+// establishes that the deployment role — which no longer exists — may read `tenders` or `payments`.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -64,8 +75,9 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the shape the sibling suites use.
+// The taxpayer id is unique, so each provisioned venue needs its own NIF — the shape the sibling
+// suites use. One venue is provisioned here, in `beforeAll`; the counter is what keeps that true if
+// a second one is ever added.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -92,7 +104,7 @@ beforeAll(async () => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -132,11 +144,11 @@ beforeAll(async () => {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   cfg = tillConfigFromVenue(venue);
-  productId = await withTransaction(suite.admin, async (tx) => {
+  productId = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -220,7 +232,7 @@ async function seedSale(
 
 describe("readTenderBlock", () => {
   it("returns a cash block with the passed change", async () => {
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "cash",
@@ -234,7 +246,7 @@ describe("readTenderBlock", () => {
   });
 
   it("returns the card amounts without exposing payment identity", async () => {
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -255,7 +267,7 @@ describe("readTenderBlock", () => {
   });
 
   it("shows tip and charged when a tip rode on the card", async () => {
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       // total 1.00 + tip 0.50 → tenders.amount 1.50, tip_amount 0.50.
       const { saleId, workingOrderId } = await seedSale(
@@ -272,7 +284,7 @@ describe("readTenderBlock", () => {
   });
 
   it("a manual card tender carries the operator reference", async () => {
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -290,7 +302,7 @@ describe("readTenderBlock", () => {
   });
 
   it("keeps card amounts when the payment row has no card facts and is not manual", async () => {
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(
         tx,
@@ -307,7 +319,7 @@ describe("readTenderBlock", () => {
     // payment insert when no payment arg is passed) — the `payment === null` branch of readTenderBlock,
     // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
     // so this degrades to a bare card block rather than failing.
-    const block = await withTransaction(suite.admin, async (tx) => {
+    const block = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "card",

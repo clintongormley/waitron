@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
@@ -13,9 +12,10 @@ import {
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import {
   canonicalize,
   generateNodeKeyPair,
@@ -30,16 +30,48 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// Real Postgres, not PGlite: the endpoint authenticates + authorizes as `app_user` (the dashboard
-// login shape) and reads the venue's tenant + node identity as that role — neither is observable under
-// a PGlite superuser, which holds every grant (CLAUDE.md §4), exactly as mirror-bundle.test.ts.
+/**
+ * The primary's adopt endpoint, on the engine the box now runs.
+ *
+ * ## What went with PostgreSQL, and is replaced by nothing
+ *
+ * `appDb` used to be a second connection opened as `app_login` — a cluster LOGIN role inheriting
+ * `app_user`'s grants, created by the now-deleted `apps/server/src/testing/global-setup.ts`. The
+ * endpoint authenticates, authorizes and reads the venue's tenant and node identity through it, so
+ * that connection is what put all of it behind the grants a real box runs under.
+ *
+ * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
+ * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). Every call
+ * runs on the suite's one handle, so nothing here checks the deployment role's privileges.
+ *
+ * ## One case is DELETED, because this engine cannot stage the race it existed for
+ *
+ * `lists EVERY standby under concurrent adopts — the term guard is retried, not last-writer-wins`
+ * fired eight adopts at once and checked that all eight reached the org chart. Its value came
+ * entirely from the interleaving: its own comment recorded 3 of 8 listed under an unguarded plain
+ * upsert, with all eight answered 200.
+ *
+ * That interleaving no longer happens. Measured here 2026-09-22, by counting the endpoint's calls
+ * to `readNodeMembership` (a `vi.mock` wrapper over `@waitron/db`, removed again after the
+ * measurement): **eight concurrent adopts produce exactly 8 chart reads, three runs in a row** —
+ * one per request, so `appendStandbyToChart`'s retry loop (`./mirror-bundle-api.ts`) never ran a
+ * second round and `persistNodeMembershipIfNewer` never once refused a write. Control in the other
+ * direction, same probe: ONE adopt produces exactly 1 read, so the counter really was watching the
+ * route rather than the suite. The cause is the single write queue — `withTransaction` is
+ * `db.withWriteLock` on this engine (`packages/db/src/tenancy.ts:34`), so each request's work
+ * completes before the next begins and every mint is built on the winner's chart.
+ *
+ * So the case would now pass under the very upsert it was written to catch. It is deleted rather
+ * than kept green and vacuous, and no replacement is invented here: proving a term guard needs two
+ * writers, which one SQLite file does not have.
+ */
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
 
 // The box vault key for `establishNodeIdentity` / `readNodeIdentityKey` — a fixed test ring, exactly
 // as node-identity.test.ts uses. The primary seals its identity key under this ring, and the endpoint
-// unseals it (as app_user) to endorse the standby's key.
+// unseals it to endorse the standby's key.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -53,10 +85,13 @@ const STANDBY_PUB = generateNodeKeyPair().publicKey;
 // document (appends standbys, bumps the term, reserves identities). No read here filters by anything
 // but id, so two venues left in one database would let a membership/reserved-identity read return the
 // wrong row. The reset wipes the deployment stamp, so it is re-applied in beforeEach.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
+// `tenants_country_tax_id_uq` is unique, so each provisioned venue needs its own NIF — the
+// per-suite counter the sibling suites use.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -64,7 +99,7 @@ function nextNif(): string {
 }
 
 let stateDir: string;
-let appDb: Database; // app_login → app_user: authentication and venue reads
+let db: Database;
 
 /** Provision a fresh venue (as the owner) with standard FA + rectificative RF series and an ESTABLISHED
  * node identity, returning the four designated ids in AdoptResult shape, the seeded admin's person id,
@@ -106,7 +141,7 @@ async function setupVenue(): Promise<{
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     locationId: venue.locationId,
@@ -116,11 +151,10 @@ async function setupVenue(): Promise<{
   };
   // Establish the primary's membership identity (owner-side seal + nodes.public_key stamp), so the
   // endpoint can unseal the private key and endorse the standby. Mirrors node-identity.test.ts.
-  await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, designated.nodeId);
-  const primaryPublicKey = (await readMembershipTrustSet(suite.admin))[designated.nodeId]!;
-  // The admin person id — read back as app_user, the only role the endpoint ever uses.
-  const adminPersonId = await withTransaction(appDb, async (tx) => {
-    await asAppUser(tx);
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
+  const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;
+  // The admin person id.
+  const adminPersonId = await withTransaction(db, async (tx) => {
     const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
   });
@@ -130,13 +164,20 @@ async function setupVenue(): Promise<{
 /** Insert a second, NON-admin (staff) person carrying a dashboard password, returning its id. Staff
  * lacks `mirror.create` (admin-only), so it authenticates but fails authorization → 403. */
 async function seedStaff(): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, password_hash, role)
-      values ('Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
-      returning id`);
-    return r.rows[0]!.id;
+  // Seeded through the table definition rather than as raw SQL: `persons.id` and `persons.created_at`
+  // are `$defaultFn` generators on this engine, which a raw insert never reaches while both columns
+  // are NOT NULL.
+  return withTransaction(db, async (tx) => {
+    const [row] = await tx
+      .insert(persons)
+      .values({
+        displayName: "Cajera",
+        pinHash: hashPin("4321"),
+        passwordHash: hashPassword(STAFF_PASSWORD),
+        role: "staff",
+      })
+      .returning({ id: persons.id });
+    return row!.id;
   });
 }
 
@@ -146,7 +187,7 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
   mountMirrorBundleApi(
     app,
     {
-      appDb,
+      appDb: db,
       ring: RING,
       stateDir,
       relayUrl,
@@ -193,21 +234,20 @@ beforeAll(async () => {
       .caCertPem,
   );
 
-  appDb = await suite.pg.connectAs("app_login", "app_pw");
+  db = suite.db;
 }, 180_000);
 
 // The per-test reset (afterEach) truncates the deployment stamp along with the data, so re-stamp
 // before each test — every test needs its database provisioned `preproduction`.
 beforeEach(async () => {
-  await stampDeployment(suite.admin, "preproduction");
+  await stampDeployment(db, "preproduction");
 });
 
 afterAll(async () => {
-  if (appDb !== undefined) await appDb.close();
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
-describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)", () => {
+describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
   it("returns a bundle carrying the venue identity for an authorised admin credential", async () => {
     const { designated, adminPersonId } = await setupVenue();
     // A log spy: the credential must NEVER reach the log (the no-secret discipline).
@@ -247,11 +287,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
 
     // The "everyone else survives" assertions below are only worth anything over a NON-EMPTY held
     // chart, so this test seeds its own rather than inherit whatever a sibling left behind (CLAUDE.md
-    // §4: order-independent). `node_membership` is a whole-database singleton whose term carries
-    // across the shared template, so the seed is minted one past the held term rather than at 0.
-    const seedTerm = ((await readNodeMembership(suite.admin))?.body.term ?? -1) + 1;
+    // §4: order-independent). `node_membership` is a whole-database singleton, so the seed is minted
+    // one past whatever term is held rather than at a fixed 0.
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
     await writeNodeMembership(
-      suite.admin,
+      db,
       signedMembershipDoc(seedTerm, {
         signerNodeId: designated.nodeId,
         nodes: [
@@ -268,7 +308,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
         ],
       }),
     );
-    const before = await readNodeMembership(suite.admin);
+    const before = await readNodeMembership(db);
     // Non-vacuity: the seed above is what makes the survival loops mean anything, so a seed that
     // silently wrote nothing fails loudly here rather than turning them into no-ops.
     expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
@@ -282,7 +322,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     });
     expect(res.status).toBe(200);
 
-    const after = await readNodeMembership(suite.admin);
+    const after = await readNodeMembership(db);
     expect(after?.body.term).toBe((before?.body.term ?? -1) + 1);
     // The joining node is listed as a serving secondary at the address it advertised — the address a
     // till reroutes to after a failover (till-reroute §3.3).
@@ -316,7 +356,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     });
     expect(res2.status).toBe(200);
 
-    const afterReadopt = await readNodeMembership(suite.admin);
+    const afterReadopt = await readNodeMembership(db);
     expect(afterReadopt?.body.term).toBe(after!.body.term + 1);
     expect(afterReadopt?.body.nodes.filter((n) => n.nodeId === standbyNodeId)).toEqual([
       {
@@ -327,42 +367,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
     ]);
     for (const node of before?.body.nodes ?? []) {
       expect(afterReadopt?.body.nodes).toContainEqual(node);
-    }
-  });
-
-  it("lists EVERY standby under concurrent adopts — the term guard is retried, not last-writer-wins", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const app = mountApp(designated, "https://relay.example:9000/");
-    // Eight adopts fired at once at ONE primary — two operators, or one retrying operator with two
-    // tabs. Under the unguarded plain upsert this measured 3 of 8 listed with all eight answered 200:
-    // five standbys were handed a bundle (reserved number, endorsement, sync token) and left out of
-    // the chart, which is exactly the failure the route exists to prevent.
-    const standbyNodeIds = Array.from({ length: 8 }, () => crypto.randomUUID());
-    const responses = await Promise.all(
-      standbyNodeIds.map((standbyNodeId) =>
-        post(app, {
-          personId: adminPersonId,
-          password: ADMIN_PASSWORD,
-          standbyNodeId,
-          standbyPublicKey: STANDBY_PUB,
-          standbyContactUrl: `https://cloud-${standbyNodeId}.deli.test`,
-        }),
-      ),
-    );
-    // Every request either lists its node or FAILS — a 200 for a node the chart omits is the defect.
-    expect(responses.map((r) => r.status)).toEqual(Array.from({ length: 8 }, () => 200));
-
-    const after = await readNodeMembership(suite.admin);
-    const listed = new Set((after?.body.nodes ?? []).map((n) => n.nodeId));
-    expect(standbyNodeIds.filter((id) => !listed.has(id))).toEqual([]);
-    // Each entry carries ITS OWN advertised address: a chart that listed the ids but collapsed the
-    // urls onto one winner would still strand seven tills.
-    for (const id of standbyNodeIds) {
-      expect(after?.body.nodes).toContainEqual({
-        nodeId: id,
-        contactUrl: `https://cloud-${id}.deli.test`,
-        standing: "serving-secondary",
-      });
     }
   });
 
@@ -558,7 +562,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
       standbyContactUrl: "",
     });
     expect(res.status).toBe(200);
-    const after = await readNodeMembership(suite.admin);
+    const after = await readNodeMembership(db);
     expect(after?.body.nodes).toContainEqual({
       nodeId: standbyNodeId,
       contactUrl: "",

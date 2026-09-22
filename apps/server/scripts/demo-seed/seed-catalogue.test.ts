@@ -1,16 +1,28 @@
-// Real-Postgres proof of `seedCatalogues` (Phase 2, Task 6): it stands up the two demo menus,
-// routes categories to KDS stations, sets the default + the accessible second, and reports the
-// image→product map. Real Postgres (not PGlite): the seed runs as `app_user` (SELECT/INSERT on
-// `kitchen_stations`, INSERT on `catalogues`/`categories`/`products`, UPDATE of
-// `categories.station_id`) exactly as the demo scripts do, and PGlite's superuser connection
-// cannot check those grants (CLAUDE.md §4). Uses the shared `manifest` template (which includes
-// the KDS migrations, so `kitchen_stations` and `categories.station_id` exist), cloned per file
-// via `useTemplateDb`, the same pattern as `till-sale.test.ts`.
+/**
+ * `seedCatalogues`: the two demo menus, each category routed to its KDS station, the default and
+ * the accessible second menu, and the image→product map the media and sales steps read.
+ *
+ * **What went with PostgreSQL.** The seed used to run as `app_user`, so a missing SELECT/INSERT on
+ * `kitchen_stations`, an INSERT on `catalogues`/`categories`/`products` or an UPDATE of
+ * `categories.station_id` would have failed this file. SQLite has no roles, `asAppUser` is an inert
+ * function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
+ * Nothing now checks who may write the catalogue.
+ *
+ * Three read-back shapes moved with the engine, none of them changing what is asserted:
+ * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
+ * `json_group_array(x order by y)`, which hands back JSON TEXT the mapping parses (the same
+ * substitution `packages/catalogue/src/categories.ts:40` makes in product code); and a JSON column
+ * read RAW arrives as its stored text rather than as a parsed object, because a raw read reaches no
+ * column mapper — so `description`, `dietary_declarations`, a unit's `name` and its `abbreviation`
+ * are parsed in the mapping. A boolean column arrives as 0 or 1 for the same reason, which is why
+ * `is_default` is compared to 1 there.
+ */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -25,10 +37,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 const LOCALE: SeedLocale = "en";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same local-counter shape `till-sale.test.ts` uses.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -68,7 +83,7 @@ async function provisionVenue(): Promise<{ locationId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return { locationId: venue.locationId };
 }
@@ -77,15 +92,19 @@ describe("seedCatalogues", () => {
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { locationId } = await provisionVenue();
 
-    const res = await withTransaction(suite.admin, async (tx) => {
+    const res = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const out = await seedCatalogues(tx, { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
-      // Read back the two stations and one category's route per menu, as app_user, to prove routing.
-      const { rows: stations } = await tx.execute<{ name: string; is_default: boolean }>(sql`
+      // Read back the two stations and one category's route per menu, to prove routing.
+      const { rows: stationRows } = await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);
+      const stations = stationRows.map((row) => ({
+        name: row.name,
+        is_default: row.is_default === 1,
+      }));
       const { rows: drinksRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
@@ -96,25 +115,23 @@ describe("seedCatalogues", () => {
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
         where c.name->>'en' = 'Charcuterie'`);
-      const { rows: editorDemo } = await tx.execute<{
-        description: Record<string, string> | null;
+      const { rows: editorDemoRaw } = await tx.execute<{
+        description: string | null;
         kitchen_name: string | null;
-        dietary_declarations: string[];
+        dietary_declarations: string;
         category_count: number;
         primary_category: string;
-        variant_prices: string[];
-        menu_variant_prices: string[];
+        variant_prices: string;
+        menu_variant_prices: string;
       }>(sql`
         select p.description, p.kitchen_name, p.dietary_declarations,
-          count(distinct pc.category_id)::int as category_count,
+          cast(count(distinct pc.category_id) as integer) as category_count,
           c.name->>'en' as primary_category,
-          -- unit_price counts whole cents, so these are counts, not amounts. The whole ARRAY is
-          -- cast to text rather than each element: that keeps the ordering numeric (element-wise
-          -- text ordering would put 1400 before 210) and hands back a text array on any driver,
-          -- where an uncast bigint array arrives as strings from node-postgres and as numbers from
-          -- PGlite.
-          (array_agg(distinct pv.unit_price order by pv.unit_price))::text[] as variant_prices,
-          (array_agg(distinct mv.unit_price order by mv.unit_price))::text[] as menu_variant_prices
+          -- unit_price counts whole cents, so these are counts, not amounts. Each ELEMENT is cast
+          -- to text while the ORDER BY stays on the uncast column: element-wise text ordering would
+          -- put 1400 before 210, and this keeps the ordering numeric with text elements.
+          json_group_array(distinct cast(pv.unit_price as text) order by pv.unit_price) as variant_prices,
+          json_group_array(distinct cast(mv.unit_price as text) order by mv.unit_price) as menu_variant_prices
         from products p
         join categories c on c.id = p.category_id
         join product_categories pc on pc.product_id = p.id
@@ -122,6 +139,14 @@ describe("seedCatalogues", () => {
         join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id
         where p.name = 'Café'
         group by p.id, c.name`);
+      const editorDemo = editorDemoRaw.map((row) => ({
+        ...row,
+        description:
+          row.description === null ? null : (JSON.parse(row.description) as Record<string, string>),
+        dietary_declarations: JSON.parse(row.dietary_declarations) as string[],
+        variant_prices: JSON.parse(row.variant_prices) as string[],
+        menu_variant_prices: JSON.parse(row.menu_variant_prices) as string[],
+      }));
       // The demo exists to show WHICH name each screen reads, so it has to seed products whose three
       // names are three different strings. A seed that derives them all from one authored map cannot
       // tell a correct screen from an incorrect one.
@@ -138,20 +163,25 @@ describe("seedCatalogues", () => {
         with_kitchen: number;
       }>(sql`
         select
-          count(*) filter (
+          cast(count(*) filter (
             where p.customer_name is not null and p.name <> (p.customer_name->>'en')
-          )::int as differing,
-          count(*) filter (where p.kitchen_name is not null)::int as with_kitchen
+          ) as integer) as differing,
+          cast(count(*) filter (where p.kitchen_name is not null) as integer) as with_kitchen
         from products p`);
-      const { rows: customUnit } = await tx.execute<{
+      const { rows: customUnitRaw } = await tx.execute<{
         precision: number;
-        name: Record<string, string>;
-        abbreviation: Record<string, string>;
+        name: string;
+        abbreviation: string;
       }>(sql`
         select u.precision, u.name, u.abbreviation from units u
         join product_units pu on pu.unit_id = u.id
         join products p on p.id = pu.product_id
         where p.name = 'Mixed salad'`);
+      const customUnit = customUnitRaw.map((row) => ({
+        precision: row.precision,
+        name: JSON.parse(row.name) as Record<string, string>,
+        abbreviation: JSON.parse(row.abbreviation) as Record<string, string>,
+      }));
       return {
         out,
         menus,

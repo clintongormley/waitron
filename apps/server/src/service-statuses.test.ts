@@ -1,23 +1,25 @@
-import { asAppUser, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
 import "./errors.js";
 
-// A clone of the CORE+IDENTITY template. The CRUD both AUTHORIZES (authorizeManager reads persons +
-// management_sessions as the app role) and upserts table_service_statuses as that same role — grants
-// a PGlite superuser connection holds unconditionally — so it needs the real cluster the shared
-// container provides; a Docker-absent run fails at the package globalSetup, not here.
-const suite = useTemplateDb({ template: "core_identity", resetPerTest: false });
+// Core plus identity, because the CRUD both authorizes (`authorizeManager` reads `persons` and
+// `management_sessions`) and writes `table_service_statuses`. `resetPerTest: false`: the manager
+// session seeded once in `beforeAll` is read by every case below.
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -25,11 +27,15 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Seed a person of `role` and an open management session; returns the session id. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
-  const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (display_name, pin_hash, role)
-    values (${`${role} operator`}, 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { personId: person.rows[0]!.id }),
+  // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
+  // statement never reaches, and both columns are NOT NULL.
+  const [person] = await suite.db
+    .insert(persons)
+    .values({ displayName: `${role} operator`, pinHash: "seed-pin-hash", role })
+    .returning({ id: persons.id });
+  const session = await withTransaction(suite.db, (tx) =>
+    startManagementSession(tx, { personId: person!.id }),
   );
   return session.id;
 }
@@ -42,7 +48,7 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
 describe("service-status config CRUD (venue.configure)", () => {
   let managerSession: string;
   beforeAll(async () => {
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     managerSession = await seedSession("manager");
   });
 

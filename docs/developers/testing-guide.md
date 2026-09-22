@@ -893,9 +893,8 @@ because a `-t` filter matching nothing skips every test and still exits 0, follo
 green run that looked like a passing control.
 
 The second guard in the same function family is the category identity row lock — the `for("update")`
-on the category row in `deleteCategory`. Removing it makes
-`apps/server/src/category-route-race.pg.test.ts` fail, but not where you would expect, and no longer
-on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
+on the category row in `deleteCategory`. Removing it made the category-route race suite fail, but not
+where you would expect, and no longer on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
 code on this path any more. What happens instead is that the delete still waits, because its final
 `delete from categories` collides with the KEY SHARE lock the concurrent route insert holds through
 its foreign key — it just waits too late. By then the earlier step that clears `preparation_routes`
@@ -905,6 +904,13 @@ insert does commit, PostgreSQL rejects the category delete with `23503` on
 and the test fails on `expected 'rejected' to be 'fulfilled'`. The lock's job is to move the wait in
 front of the cascade reads, not to create the wait. Both controls passed again with the production
 guards restored.
+
+**That second control has no prover any more, and nothing replaced it (2026-09-22).** The suite it
+ran against staged the wait on two PostgreSQL backends and watched it with `pg_blocking_pids`; the
+storage switch leaves one writer per venue file, so the wait cannot be staged and the suite was
+deleted. The `for("update")` clause itself went with the switch. The paragraph above is kept because
+it records what the lock was FOR — but it is a measurement about an engine this product no longer
+runs, and nothing today would notice if the ordering it describes were wrong.
 
 ## A default you did not state is not a value you tested
 

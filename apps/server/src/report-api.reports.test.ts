@@ -40,8 +40,9 @@ import "./errors.js";
 // `report-api.overview.test.ts` proves the overview route. Unlike the overview (which anchors on
 // TODAY), these routes take an explicit day/range, so the fixtures seed sales on FIXED historical
 // business days and query them by date — no dependence on the wall clock. The `report.view` gate run
-// as the non-superuser app role is the real-Postgres suite's (report-api.pg.test.ts), which PGlite
-// cannot show because every PGlite connection is a superuser holding every grant (CLAUDE.md §4).
+// is asserted by `report-api.test.ts`'s own staff-session case. It used to be asserted a second time
+// under a non-superuser role, in `report-api.pg.test.ts`; that file went with the storage switch,
+// there being no roles on this engine, and the gate is application code either way.
 const noopLog: Logger = () => {};
 
 let tillId: string;

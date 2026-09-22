@@ -1,14 +1,13 @@
-// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -23,13 +22,15 @@ const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
 const BUNDLE_PASS = "recovery pass phrase"; // ≥ MIN_PASSPHRASE_LENGTH
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
-}
+// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
+// row the uniqueness constraint covers.
+const NIF = "74000001K";
 
 // Same manager-login scaffolding as box-status.route.test.ts.
 async function setupTenant(): Promise<{ managerId: string }> {
@@ -37,7 +38,7 @@ async function setupTenant(): Promise<{ managerId: string }> {
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: NIF,
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -64,15 +65,24 @@ async function setupTenant(): Promise<{ managerId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  const managerId = await withTransaction(suite.admin, async (tx) => {
+  const managerId = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const m = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    return m.rows[0]!.id;
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
+    // statement never reaches, and both columns are NOT NULL.
+    const [m] = await tx
+      .insert(persons)
+      .values({
+        displayName: "The Manager",
+        email: MANAGER_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      })
+      .returning({ id: persons.id });
+    return m!.id;
   });
   return { managerId };
 }
@@ -94,7 +104,7 @@ function buildApp(stateDir: string): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // The all-zero node id (the capture default): this suite uses the management API only for its
       // login route, not origin attribution, so the sentinel keeps behaviour exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
@@ -106,7 +116,7 @@ function buildApp(stateDir: string): Hono {
   );
   mountRecoveryBundleApi(
     app,
-    { db: suite.admin, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
+    { db: suite.db, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
     () => {},
   );
   return app;
@@ -122,7 +132,7 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-describe("POST /api/box/recovery-bundle (real postgres)", () => {
+describe("POST /api/box/recovery-bundle", () => {
   let app: Hono;
   let cookie: string;
 

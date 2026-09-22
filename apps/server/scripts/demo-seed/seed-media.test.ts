@@ -1,4 +1,11 @@
-// Real PostgreSQL checks the demo writes image bytes and product references as app_user.
+/**
+ * The demo's media step: committed tiles in the library, content-addressed references on products.
+ *
+ * **What went with PostgreSQL.** This file used to run the writes through `app_user` on a real
+ * server, so a missing grant on `media_images` / `products` would have failed it. SQLite has no
+ * roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below
+ * runs on the one connection. Nothing now checks who may write the image library.
+ */
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -7,7 +14,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -22,10 +30,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 const LOCALE: SeedLocale = "en";
 const SRC_DIR = fileURLToPath(new URL("media", import.meta.url));
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same local-counter shape the sibling tests use.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -65,7 +76,7 @@ async function provisionVenue(): Promise<{ locationId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return { locationId: venue.locationId };
 }
@@ -74,14 +85,14 @@ describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
     const { locationId } = await provisionVenue();
 
-    const { productsByImage, images } = await withTransaction(suite.admin, async (tx) => {
+    const { productsByImage, images } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
       });
       await seedMedia(tx, { productsByImage });
-      // Read every product's stored image back, as app_user, keyed by product id.
+      // Read every product's stored image back, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
         sql`select id, image from products `,
       );
@@ -103,7 +114,7 @@ describe("seedMedia", () => {
       const expectedName = `${createHash("sha256").update(srcBytes).digest("hex")}.png`;
       expect(stored).toBe(expectedName);
 
-      const storedImage = await withTransaction(suite.admin, async (tx) => {
+      const storedImage = await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return readImageBytes(tx, stored!);
       });
@@ -114,8 +125,8 @@ describe("seedMedia", () => {
       );
     }
 
-    const written = await suite.admin.execute<{ count: number }>(
-      sql`select count(*)::int as count from media_images`,
+    const written = await suite.db.execute<{ count: number }>(
+      sql`select cast(count(*) as integer) as count from media_images`,
     );
     const distinctHashes = new Set(
       await Promise.all(
@@ -131,7 +142,7 @@ describe("seedMedia", () => {
 
   it("reuses existing image bytes when the media step runs twice", async () => {
     const { locationId } = await provisionVenue();
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, {
         locationId,

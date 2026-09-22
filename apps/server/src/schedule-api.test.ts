@@ -17,12 +17,14 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the schedule routes are LOGIC (session → verb → JSON) over mutable
-// planning rows. Every DB touch runs through `withTransaction` + `asAppUser` exactly as production does, but
-// the app role's grants and — the crux — the "requester is the SESSION's personId, never the
-// body's" identity property need a real non-superuser role to MEAN anything, so they are proven
-// against real Postgres in `schedule-api.pg.test.ts`. Here we prove the route mechanics: the happy
-// paths, the request-shape 400s and the not-logged-in 401.
+// The schedule routes are LOGIC (session → verb → JSON) over mutable planning rows: the route
+// mechanics, the request-shape 400s and the not-logged-in 401.
+//
+// The "requester is the SESSION's personId, never the body's" identity property is proven HERE, by
+// deletion: making `schedule-api.ts`'s swap compose prefer `body.requestedByPersonId` reddens
+// exactly one case, `expected 403 to be 201` (run 2026-09-22 on node:sqlite). It used to be argued
+// that this needed a non-superuser role and so lived in a second real-Postgres suite; there are no
+// roles on this engine, that suite is gone, and the property was never a privilege decision.
 
 const noopLog: Logger = () => {};
 let tillId: string;

@@ -1,20 +1,44 @@
-// Real PostgreSQL: a promoted primary that sells and chains locally but has no `fiscal.aeat`
-// certificate. The cert-distribution slice has not landed, so the running fiscal pass skips filing —
-// the drain must NOT crash, must NOT submit, must leave local chaining untouched, and must surface
-// the "awaiting fiscal certificate" state on box-status (once in the log, then quiet).
-//
-// The drain runs as the non-superuser deployment role (`server_pass_probe`, an `app_user` member
-// created cluster-wide by apps/server's globalSetup) — the credential read + fiscal-table SELECTs are
-// exercised through the grants a real box runs under, not a superuser that sees everything (CLAUDE.md
-// §4). The `getCredential` seam returns nothing when there is no `fiscal.aeat` vault row, so the
-// regime's `resolveClient` throws `credentials.missing`, which `drain` contains as a skipped pass.
+/**
+ * A promoted primary that sells and chains locally but has no `fiscal.aeat` certificate. The
+ * cert-distribution slice has not landed, so the running fiscal pass skips filing — the drain must
+ * NOT crash, must NOT submit, must leave local chaining untouched, and must surface the "awaiting
+ * fiscal certificate" state on box-status (once in the log, then quiet).
+ *
+ * ## What went with PostgreSQL, and is replaced by nothing
+ *
+ * The drain used to run on a SECOND connection, opened as `server_pass_probe` — a non-superuser
+ * LOGIN role inheriting `app_user`'s grants, created cluster-wide by apps/server's now-deleted
+ * `global-setup.ts` — while the seeding and the read-back ran on the owner connection. That put the
+ * credential read and the fiscal-table SELECTs behind the grants a real box runs under.
+ *
+ * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
+ * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). Every
+ * call below runs on the one connection, so nothing here now checks that the deployment role can
+ * reach the vault and the fiscal tables. No case was deleted for it: the suite's single case
+ * asserts drain behaviour, not a refusal, so it converts with the privilege claim dropped from its
+ * header rather than its body.
+ *
+ * ## This suite is RED, and the reason is a FIXTURE in another package
+ *
+ * `seedPendingEnvios` reaches `seedTenantWithSif` (`packages/fiscal-verifactu/test/fixtures.ts:275`),
+ * which raw-inserts `tenants` naming four columns. `tenants.created_at` is a NOT NULL `$defaultFn`
+ * that a raw insert never reaches, so the insert is refused. Measured 2026-09-22, running this file
+ * alone: `Error: NOT NULL constraint failed: tenants.created_at`, thrown from that line. The same
+ * file still carries `::jsonb`, `array[...]` and `now()` further down, so that refusal is the FIRST
+ * of several rather than the only one.
+ *
+ * Nothing here is edited around it: the fixture belongs to `packages/fiscal-verifactu`, whose own
+ * conversion is unfinished on this branch (`docs/handoffs/2026-09-21-f1-the-flip.md`), and inlining
+ * a seed here would leave the real fixture broken and this suite testing a private copy.
+ */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { beforeAll, describe, expect, it } from "vitest";
+import { withTransaction, type Database } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 // The same test-only entry point the regime's own drain suites (and boot.promote.test.ts) use to seed
 // a due `envios` row + its registro/SIF — but WITHOUT the accompanying `fiscal.aeat` credential, which
@@ -29,32 +53,37 @@ import { runPass, DRAIN_DUTY } from "./pass.js";
 const NOW = new Date("2026-07-26T09:00:00Z");
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 const MANAGER_EMAIL = "manager@awaiting-cert.test";
-const PROBE_ROLE = "server_pass_probe";
-const PROBE_PASSWORD = "probe";
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 const ring = loadKeyRing(KEY_ENV);
 
-const suite = useTemplateDb({ template: "manifest" });
-
-let probe: Database;
-beforeAll(async () => {
-  probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
 });
-afterAll(async () => {
-  if (probe !== undefined) await probe.close();
+let db: Database;
+beforeAll(() => {
+  db = suite.db;
 });
 
 /** Insert a manager (with a dashboard login email) into a seeded tenant so the box-status route's
- * `authorizeManager("system.manage")` gate resolves — `app_user` holds INSERT on `persons`. */
+ * `authorizeManager("system.manage")` gate resolves.
+ *
+ * Seeded through the table definition rather than as raw SQL, the change
+ * `apps/server/src/testing/fiscal-fixtures.ts` took: `persons.id` and `persons.created_at` are
+ * `$defaultFn` generators on this engine, which a raw insert never reaches while both columns are
+ * NOT NULL. */
 async function seedManager(): Promise<void> {
-  await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+  await withTransaction(db, async (tx) => {
+    await tx.insert(persons).values({
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
   });
 }
 
@@ -65,7 +94,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db,
       cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
@@ -76,7 +105,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
   mountBoxStatusApi(
     app,
     {
-      db: suite.admin,
+      db,
       cfg: { nodeId },
       environment: "production",
       health: createHealthState(NOW),
@@ -105,18 +134,18 @@ async function login(app: Hono): Promise<string> {
 async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
-  const rows = await suite.admin.execute<{ estado: string; intentos: number; incidencia: boolean }>(
+  const rows = await db.execute<{ estado: string; intentos: number; incidencia: boolean }>(
     sql`select estado, intentos, incidencia from envios where registro_id = ${registroId}`,
   );
   return rows.rows[0]!;
 }
 
 /** The chain-bearing columns of a registro — what a submit would never touch and a chaining write
- * would. Read via superuser (a read, not the path under test). */
+ * would. */
 async function readRegistro(
   registroId: string,
 ): Promise<{ secuencia: number; huella: string; num_serie_factura: string }> {
-  const rows = await suite.admin.execute<{
+  const rows = await db.execute<{
     secuencia: number;
     huella: string;
     num_serie_factura: string;
@@ -126,10 +155,10 @@ async function readRegistro(
   return rows.rows[0]!;
 }
 
-describe("promoted primary awaiting the fiscal certificate (real postgres)", () => {
+describe("promoted primary awaiting the fiscal certificate", () => {
   it("surfaces awaiting-cert on box-status, does not crash the drain, does not submit, leaves the chain untouched", async () => {
     // A due registro + `envios` row, with NO `fiscal.aeat` credential sealed for the tenant.
-    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
     await seedManager();
     const registroId = seeded.registroIds[0]!;
     const registroBefore = await readRegistro(registroId);
@@ -147,7 +176,7 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
       {
         drain: (now) =>
           FISCAL_SLOT.drain(
-            { db: probe, ring, environment: "production", skipRetryMs: 300_000, log },
+            { db, ring, environment: "production", skipRetryMs: 300_000, log },
             now,
           ),
         reconcile: () =>

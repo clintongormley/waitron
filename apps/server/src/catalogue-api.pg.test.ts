@@ -1,37 +1,50 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { asAppUser, floorZones, kitchenStations, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { createOptionList } from "@waitron/catalogue";
+import { preparationRoutes } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
+import "./errors.js";
 
-// Real Postgres, not PGlite: the route mechanics (body/id screens) are already proven
-// in-process on PGlite (`catalogue-api.test.ts`); what needs the real cluster is the write group run
-// as the non-superuser `app_user` — its table grants are enforced here and held unconditionally by
-// PGlite's superuser (CLAUDE.md §4). The `person.manage` gate is proven by deletion on the block
-// below.
+/**
+ * The catalogue write group, on the engine the box now runs.
+ *
+ * ## What this file was, and the one thing that went with PostgreSQL
+ *
+ * Its header said the write group had to run as the non-superuser `app_user` so that role's table
+ * grants were enforced, where a PGlite superuser holds them unconditionally. **There are no roles on
+ * this engine**: `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), there is no
+ * `connectAs`, and every call below runs on the one connection. Nothing now checks that the
+ * deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
+ * `preparation_routes`, `kitchen_stations`, `floor_zones`, `product_categories`, `products` or
+ * `product_modifiers`. Each sentence saying so has been taken out of the cases below rather than
+ * left standing.
+ *
+ * What survives is the reason the file is worth keeping beside `catalogue-api.test.ts`: this suite
+ * migrates the FULL manifest, so venue-service's `preparation_routes` exists and
+ * `categoryDependants` takes its optional-table branch. The sibling migrates core + catalogue +
+ * identity only and covers the absent-table arm, asserting `routes: []`.
+ *
+ * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
+ * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.
+ */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
-
-// A distinct NIF per provisioned venue — the same per-suite counter `management-api.pg.test.ts`
-// uses. Nothing here depends on them differing: `useTemplateDb` resets the clone between tests and
-// `tenants_singleton_ck` allows one row inside one, so every test provisions into an empty
-// `tenants`.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
-}
 
 interface Venue {
   /**
@@ -51,7 +64,7 @@ async function setupVenue(): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: "70000001K",
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -78,23 +91,24 @@ async function setupVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
-    });
-    const staffSession = await startManagementSession(tx, {
-      personId: stf.rows[0]!.id,
-    });
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are JavaScript
+    // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+    // NOT NULL — the refusal is `NOT NULL constraint failed: persons.id`.
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const managerSession = await startManagementSession(tx, { personId: mgr!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
@@ -105,10 +119,10 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** A Hono app carrying the catalogue routes over the suite's owner connection. */
+/** A Hono app carrying the catalogue routes over the suite's connection. */
 function mountApp(): Hono {
   const app = new Hono();
-  mountCatalogueApi(app, { db: suite.admin }, noopLog);
+  mountCatalogueApi(app, { db: suite.db }, noopLog);
   return app;
 }
 
@@ -163,34 +177,39 @@ async function createProduct(
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("category dependants and bulk add over real Postgres", () => {
+describe("category dependants and bulk add", () => {
   it("reads a category's preparation routes and cascades them away on delete", async () => {
-    // This template migrates the FULL manifest, so venue-service's `preparation_routes` IS present
-    // and `categoryDependants` takes its optional-table branch — the arm PGlite cannot reach, since
-    // `catalogue-api.test.ts` migrates core + catalogue + identity only (that suite covers the
-    // absent-table arm, asserting `routes: []`). What real Postgres adds here is the ROLE: `gated`
-    // switches to the non-superuser `app_user` before the read, so this exercises its SELECT grants
-    // on `preparation_routes`, `kitchen_stations` and `floor_zones` — grants PGlite's superuser
-    // holds unconditionally — and its DELETE grant on the module's table when the category goes.
+    // This suite migrates the FULL manifest, so venue-service's `preparation_routes` IS present and
+    // `categoryDependants` takes its optional-table branch. `catalogue-api.test.ts` migrates core +
+    // catalogue + identity only and covers the absent-table arm, asserting `routes: []`.
     const v = await setupVenue();
     const app = mountApp();
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
-    // Seeded as the OWNER, the way `setupVenue` seeds persons: these are fixture rows, not the
-    // behaviour under test. The route reads them back as `app_user`.
-    const zone = await suite.admin.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${v.locationId}, 'Terraza') returning id`);
-    const station = await suite.admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name)
-      values (${v.locationId}, 'Plancha') returning id`);
-    const routed = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (location_id, zone_id, category_id, station_id)
-      values (${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
-      returning id`);
+    // Fixture rows, not the behaviour under test, and seeded through the table definitions for the
+    // `$defaultFn` reason `setupVenue` states. `no_preparation` is a `flag`, which this engine
+    // stores as 0/1 — the column's own write mapping is what encodes the boolean.
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: v.locationId, name: "Terraza" })
+      .returning({ id: floorZones.id });
+    const [station] = await suite.db
+      .insert(kitchenStations)
+      .values({ locationId: v.locationId, name: "Plancha" })
+      .returning({ id: kitchenStations.id });
+    const [routed] = await suite.db
+      .insert(preparationRoutes)
+      .values({
+        locationId: v.locationId,
+        zoneId: zone!.id,
+        categoryId,
+        stationId: station!.id,
+      })
+      .returning({ id: preparationRoutes.id });
     // `no_preparation` routes report a null station — the read's `case` arm.
-    const direct = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (location_id, category_id, no_preparation)
-      values (${v.locationId}, ${categoryId}, true) returning id`);
+    const [direct] = await suite.db
+      .insert(preparationRoutes)
+      .values({ locationId: v.locationId, categoryId, noPreparation: true })
+      .returning({ id: preparationRoutes.id });
 
     const res = await send(
       app,
@@ -209,8 +228,8 @@ describe("category dependants and bulk add over real Postgres", () => {
       [...rows].sort((a, b) => a.id.localeCompare(b.id));
     expect(byId(body.routes)).toEqual(
       byId([
-        { id: routed.rows[0]!.id, station: "Plancha", zone: "Terraza" },
-        { id: direct.rows[0]!.id, station: null, zone: null },
+        { id: routed!.id, station: "Plancha", zone: "Terraza" },
+        { id: direct!.id, station: null, zone: null },
       ]),
     );
     expect(body).toMatchObject({ products: [], children: [], parentId: null });
@@ -219,15 +238,13 @@ describe("category dependants and bulk add over real Postgres", () => {
       (await send(app, "DELETE", `/management-api/categories/${categoryId}`, v.managerCookie))
         .status,
     ).toBe(204);
-    const left = await suite.admin.execute(
+    const left = await suite.db.execute(
       sql`select 1 from preparation_routes where category_id = ${categoryId}`,
     );
     expect(left.rows).toHaveLength(0);
   });
 
-  it("bulk-adds products to a category as the deployment role", async () => {
-    // The bulk add's INSERT on `product_categories` and UPDATE on `products` run as `app_user`,
-    // whose grants only a real cluster enforces.
+  it("bulk-adds products to a category", async () => {
     const v = await setupVenue();
     const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
@@ -239,13 +256,13 @@ describe("category dependants and bulk add over real Postgres", () => {
     expect(
       (await send(app, "POST", path, v.managerCookie, { productIds: [first, second] })).status,
     ).toBe(204);
-    const members = await suite.admin.execute<{ product_id: string }>(
+    const members = await suite.db.execute<{ product_id: string }>(
       sql`select product_id from product_categories
           where category_id = ${categoryId} order by product_id`,
     );
     expect(members.rows.map((r) => r.product_id)).toEqual([first, second].sort());
     // Neither product had a reporting category, so each took this one.
-    const reporting = await suite.admin.execute<{ category_id: string | null }>(
+    const reporting = await suite.db.execute<{ category_id: string | null }>(
       sql`select category_id from products
           where id in (${first}, ${second})`,
     );
@@ -257,10 +274,18 @@ describe("category dependants and bulk add over real Postgres", () => {
   });
 });
 
-describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", () => {
+describe("Catalogue API — option groups, gates, by-id FKs", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
     // to a staff session that cannot manage the catalogue.
+    //
+    // GUARD-BY-DELETION (authorizeManager), run on this engine 2026-09-22: deleted the
+    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: CATALOGUE_WRITE_PERMISSION });`
+    // call from `catalogue-api.ts`'s `gated` helper and ran this file. THREE cases went red — this
+    // one at `expected 201 to be 403`, the modifier-list sweep below at `expected 400 to be 403`,
+    // and the bulk-add case's staff arm at `expected 204 to be 403`, which is the one that matters
+    // most: without the gate a staff session really did write. Restored from a byte-for-byte copy,
+    // verified with `cmp`, and the file passed again.
     const { staffCookie } = await setupVenue();
     const app = mountApp();
 
@@ -319,12 +344,11 @@ describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", (
   });
 
   it("refuses every modifier-list write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Pinned test 3: the `person.manage` gate covers the modifier-list authoring routes, proved the
-    // same way the catalogue-write test above proves it — by DELETION. A `staff` session holds no
-    // `person.manage`, so `authorizeManager` inside `gated` throws before any list op runs. MEASURED
-    // on these routes, not inherited from the block they replaced: with the `authorizeManager` call
-    // in `catalogue-api.ts`'s `gated` helper replaced by `void sessionId`, this case goes red with
-    // `expected 400 to be 403` — the ungated request reaching the body parser instead.
+    // The `person.manage` gate covers the modifier-list authoring routes too. A `staff` session
+    // holds no `person.manage`, so `authorizeManager` inside `gated` throws before any list op runs.
+    // The deletion receipt is on the catalogue-write case above, which shares the same `gated`
+    // chokepoint; this case's own observed failure in that run was `expected 400 to be 403` — the
+    // ungated request reaching the body parser instead.
     //
     // Both segments, both kinds of write: `mountListSurface` registers one set of handlers per kind
     // and each closes over its own `surface`, so one kind passing says nothing about the other.
@@ -358,8 +382,6 @@ describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", (
 });
 
 it("accepts an ordered modifiers list in the product contract and reads it back", async () => {
-  // The product write goes through the ROUTE, which opens its own `app_user` transaction, so
-  // `product_modifiers`' grants are what carry it.
   const venue = await setupVenue();
   const app = mountApp();
   const cookie = venue.managerCookie;
@@ -367,7 +389,7 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
     name: "Menu",
   });
   const menu = (await menuResponse.json()) as { id: string };
-  const listIds = await withTransaction(suite.admin, async (tx) => {
+  const listIds = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const ids: string[] = [];
     for (const label of ["First", "Second"]) {

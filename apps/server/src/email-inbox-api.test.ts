@@ -1,10 +1,11 @@
-// Real PostgreSQL: exercises the management-session permission gate as the deployment role.
+// The management-session permission gate over a migrated venue database: a real session row, a real
+// person row and a real permission lookup, with only the Mailpit client faked.
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -12,7 +13,10 @@ import type { MailpitClient } from "./mailpit-client.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
 let nif = 74_000_000;
 
@@ -49,17 +53,20 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  const sessions = await withTransaction(suite.admin, async (tx) => {
+  const sessions = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
+    // statement never reaches, and both columns are NOT NULL.
     const start = async (role: "manager" | "staff") => {
-      const inserted = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values (${role}, ${hashPin("1234")}, ${role}) returning id
-      `);
+      const [inserted] = await tx
+        .insert(persons)
+        .values({ displayName: role, pinHash: hashPin("1234"), role })
+        .returning({ id: persons.id });
       return startManagementSession(tx, {
-        personId: inserted.rows[0]!.id,
+        personId: inserted!.id,
       });
     };
     return { manager: await start("manager"), staff: await start("staff") };
@@ -107,7 +114,7 @@ function mount(
   mountEmailInboxApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       resolveMode: () => Promise.resolve(delivery),
       mailpit,
     },

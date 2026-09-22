@@ -1,4 +1,4 @@
-// Real-Postgres proof of `seedOptionLists`: the demo seed creates the cooking options list `Punto` — the
+// `seedOptionLists`: the demo seed creates the cooking options list `Punto` — the
 // generic replacement for the deleted built-in `doneness` field — and attaches it to the steak, so
 // the demo data still carries the question "how do you want it cooked?".
 //
@@ -15,20 +15,20 @@
 // variant BEFORE it looks at `offeredModifiers`, and `apps/till/src/widgets/basket.ts` has its own
 // narrower gate on the offered lists. None of the three is exercised from here.
 //
-// Real Postgres, not PGlite, and NOT because of the grants. The reason first given here — that
-// PGlite cannot check them — is false, and CLAUDE.md §4 says so plainly: grants ARE enforced once
-// the session assumes the role, which is what `asAppUser` does. A review seat measured it rather
-// than reading it, driving PGlite through `SET ROLE app_user`: a granted insert succeeded and an
-// ungranted delete was refused `42501`.
-// The real reason is the seed path itself. Every `seed-*.test.ts` beside this one clones the shared
-// `manifest` template through `useTemplateDb`, so the seed runs against the same migrated schema a
-// provisioned venue gets, and — like all of them — this file calls `applyVenue`, so the seed runs
-// over real provisioning rather than a hand-built fixture. Matching the siblings is the point; a
-// lighter target here would prove the seed against a database no venue ever has.
+// The target is a real migrated venue database, for the seed path's sake rather than for any
+// grant: every `seed-*.test.ts` beside this one applies the whole manifest through `useVenueDb`,
+// and — like all of them — this file calls `applyVenue`, so the seed runs over real provisioning
+// rather than a hand-built fixture. Matching the siblings is the point; a lighter target would
+// prove the seed against a database no venue ever has.
+//
+// The grant question is gone rather than answered: SQLite has no roles, `asAppUser` is an inert
+// function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
+// Nothing here checks who may write an option list.
 
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -40,13 +40,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 const LOCALE: SeedLocale = "en";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF. A base of 52_000_000 keeps this suite's NIFs
-// clear of every other base in the tree — `grep -rn "_000_000 +" apps packages --include="*.ts"` on
-// 2026-09-20 lists 10M, 20M, 40M, 50M, 51M, 60M, 61M, 64M, 70M, 72M–76M, 78M, 80M, 81M, 83M, 90M,
-// 95M and 100M, and no 52M.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -86,7 +86,7 @@ async function provisionVenue(): Promise<{ locationId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return { locationId: venue.locationId };
 }
@@ -96,7 +96,7 @@ describe("seedOptionLists", () => {
     const { locationId } = await provisionVenue();
 
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
-      suite.admin,
+      suite.db,
       async (tx) => {
         await asAppUser(tx);
         const { productsByImage } = await seedCatalogues(tx, {

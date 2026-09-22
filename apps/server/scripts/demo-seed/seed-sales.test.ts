@@ -1,10 +1,18 @@
-// Exercise backdated preproduction sales through recordSale on PostgreSQL as app_user.
-// Clone the whole manifest once per file and assert the stored environment and chain.
+/**
+ * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
+ * reports they light up.
+ *
+ * **What went with PostgreSQL.** The seed used to run through `app_user`, so a grant the sale path
+ * does not hold would have failed it. SQLite has no roles, `asAppUser` is an inert function
+ * (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection. Nothing
+ * now checks who may write a sale, a tender or a fiscal record.
+ */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, sales, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import type { VenueResult } from "@waitron/provisioning";
@@ -26,12 +34,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 const LOCALE: SeedLocale = "es";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF. A distinct base (80_000_000) keeps this
-// suite's NIFs from colliding with `till-sale`/`seed-catalogue`'s 50_000_000 range on the shared
-// container.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -104,7 +113,7 @@ async function provisionVenue(): Promise<VenueResult> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 }
 
@@ -122,7 +131,7 @@ describe("seedSales", () => {
     const venue = await provisionVenue();
     const start = Date.now();
 
-    const { count } = await seedSales(suite.admin, {
+    const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
       locale: LOCALE,
       days: 3,
@@ -132,7 +141,7 @@ describe("seedSales", () => {
     // (a) It recorded something.
     expect(count).toBeGreaterThan(0);
 
-    const read = await withTransaction(suite.admin, async (tx) => {
+    const read = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
@@ -150,9 +159,9 @@ describe("seedSales", () => {
         tips: string;
       }>(sql`
         select
-          s.total::text as total,
-          coalesce(sum(t.amount), 0)::text as tendered,
-          coalesce(sum(t.tip_amount), 0)::text as tips
+          cast(s.total as text) as total,
+          cast(coalesce(sum(t.amount), 0) as text) as tendered,
+          cast(coalesce(sum(t.tip_amount), 0) as text) as tips
         from sales s
         join tenders t on t.sale_id = s.id
         where s.id = ${sampled.id}
@@ -203,7 +212,7 @@ describe("seedSales", () => {
   it("writes nothing when days is 0 (guard by deletion)", async () => {
     const venue = await provisionVenue();
 
-    const { count } = await seedSales(suite.admin, {
+    const { count } = await seedSales(suite.db, {
       venue: venueFor(venue),
       locale: LOCALE,
       days: 0,
@@ -212,7 +221,7 @@ describe("seedSales", () => {
 
     expect(count).toBe(0);
 
-    const saleRows = await withTransaction(suite.admin, async (tx) => {
+    const saleRows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales);
     });

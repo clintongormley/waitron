@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -15,7 +16,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -31,33 +31,55 @@ import { openTab, transferLines } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). Both properties under test are
-// exactly what PGlite CANNOT show: (1) two backends racing `transferLines` on the SAME pair of tabs
-// serialise on the ascending-id `working_orders` FOR UPDATE lock — PGlite serialises every query onto ONE
-// backend, so the race never happens (a FALSE pass, proven by the distinct-pid assertion); (2) the H2
-// per-tab fiscal receipt is written by the app role, holding only its grants. Each racing backend opens
-// its own via `suite.pg.connect()`, and the shared container globalSetup (`testing/global-setup.ts`)
-// THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
-// fails loudly instead of a green that proves nothing.
-// `transferLines` locked `working_orders` ONLY (its `dining_tables` read was a plain SELECT), so —
-// unlike the mergeTabs↔pay path in move-merge.pg.test.ts — it had no
-// `dining_tables`↔`working_orders` deadlock class; the concurrency hazard here is
-// transfer-vs-transfer, covered below.
-//
-// STANDING NOTE — the verb this suite exercises no longer takes row locks. Every
-// `select … for update` in `working-order.ts` is gone: one write transaction runs on the venue
-// file at a time, which is wider than any of them (`assertAnchoredTabOpen` in
-// `apps/server/src/working-order.ts` carries the chain and the receipt). Two transfers cannot
-// overlap, so there is no lock order to keep and no `40P01` class. The `.sort()` in
-// `transferLines` survives for a different, smaller effect, stated on the function. What the case
-// below says about lock order describes the PostgreSQL code it was written against; it still
-// stages two PostgreSQL backends, so it is not evidence about the venue file at all, and
-// converting it — a contention test becomes a test that the write queue serialises writers, the
-// shape `racePair` in `packages/catalogue/test/fixtures.ts` uses — is its own step, not done
-// here.
+/**
+ * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
+ *
+ * ## The case this file LOST, and what covers it now — nothing
+ *
+ * It held a second case: two reverse-orientation `transferLines` over the SAME pair of tabs, on two
+ * PostgreSQL backends, never raising `40P01`. Its subject was the ascending-id lock order —
+ * `transferLines` took `working_orders` rows in `[from, to].sort()` order, so a reverse pair could
+ * not form a deadlock cycle. It was proven load-bearing by deletion: dropping the `.sort()` made all
+ * twelve looped iterations deadlock.
+ *
+ * **That case is deleted and NOTHING replaces it.** There are no row locks left to order — every
+ * `select … for update` in `working-order.ts` is gone — and no second connection to stage the pair
+ * on: one venue file, one write transaction at a time
+ * (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain). The
+ * proof-by-deletion belongs to the shape of the code it was taken against, and that shape is gone
+ * (CLAUDE.md §4). The `.sort()` in `transferLines` survives for a smaller effect stated on the
+ * function itself.
+ *
+ * **Also lost, and not replaced:** the deployment role. The writes below used to run after
+ * `set local role app_user` on a non-superuser connection, so the H2 record's grants were
+ * exercised; `asAppUser` is an empty body now (`packages/db/src/testing/roles.ts`).
+ *
+ * ## Why the surviving case stays here rather than moving
+ *
+ * The sibling `apps/server/src/transfer-lines.test.ts` never pays a tab, so it cannot see whether a
+ * transferred café double-files. This is the only case that transfers and then settles both tabs.
+ *
+ * ## The surviving case is RED, and it is the PRODUCT that is broken
+ *
+ * Measured here 2026-09-22 on Node v26.7.0: paying a tab throws
+ * `TypeError: desglose.map is not a function` at
+ * `packages/fiscal-verifactu/src/backend.ts:360`, reached from `readReceiptIssuer`
+ * (`apps/server/src/receipt-issuer.ts:12`) inside `fileImmediateSale`
+ * (`apps/server/src/till-sale.ts:752`). `filedReceiptFor` reads the alta with
+ * `tx.execute(sql`select * from registros_facturacion …`)`, and `execute` is
+ * `prepare(…).all()` on the raw driver (`packages/store/src/node-sqlite-adapter.ts`), so no
+ * drizzle column mapping runs — `desglose` is a `json()` column
+ * (`packages/fiscal-verifactu/src/schema/registros.ts:98`) and comes back as the stored TEXT.
+ * Nothing in this file can fix that, and editing the case to accept it would hide a live path: this
+ * is the receipt every immediate sale prints. Same class as the drainer's raw
+ * `facturas_sustituidas` read already recorded in the branch ledger.
+ */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -76,14 +98,16 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("transfer-lines.pg.test: anchor() is not used by recordSale");
+      throw new Error("transfer-lines: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique, so
-// each provisioned venue needs its own NIF — the same shape `move-merge.pg.test.ts` uses.
+// This counter was here because tenants accumulated for the life of the shared PostgreSQL
+// container. They do not now: the suite gets its own database file and the per-test reset empties
+// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
+// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -99,7 +123,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these transfer PostgreSQL suites.
+    // No integrated card terminal for this transfer suite.
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -151,11 +175,11 @@ async function setupVenue(): Promise<SeededVenue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.admin, async (tx) => {
+  const available = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -195,7 +219,7 @@ async function setupTwoTabs(): Promise<{
   cafe: AvailableProduct;
 }> {
   const { cfg, cafe } = await setupVenue();
-  const { tabA, tabB } = await withTransaction(suite.admin, async (tx) => {
+  const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
@@ -212,17 +236,17 @@ async function setupTwoTabs(): Promise<{
   return { cfg, tabA, tabB, cafe };
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner. */
+/** How many `sales` rows reference this working order. */
 async function saleCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
 
-/** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
+/** How many chained `registros_facturacion` rows exist for this working order's sale. */
 async function registroCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
@@ -232,96 +256,41 @@ async function registroCount(workingOrderId: string): Promise<number> {
 }
 
 /**
- * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
- * witness that each tab files at its OWN locked composition, not a re-price at pay.
+ * The IMMUTABLE filed `sales.total` for this working order's sale. The witness that each tab files
+ * at its OWN locked composition, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
   // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
-  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+  const { rows } = await suite.db.execute<{ total: string }>(sql`
     select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
   return rawCentsToDecimal(rows[0]!.total);
-}
-
-/** True if `e` (or its cause) is a PostgreSQL deadlock (40P01). Ported from move-merge.pg.test.ts. */
-function isDeadlock(e: unknown): boolean {
-  const code =
-    (e as { code?: string; cause?: { code?: string } })?.code ??
-    (e as { cause?: { code?: string } })?.cause?.code;
-  return code === "40P01";
 }
 
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(
-        new Error("transfer-lines.pg.test: resolveClient must never be called by recordSale"),
-      ),
-  });
-});
-
-describe("concurrent transferLines on the same pair serialise (the lock order is retired — see the file's standing note)", () => {
-  it("two reverse-orientation transfers over the SAME two tabs → NO 40P01; both fulfilled (one waits)", async () => {
-    const { cfg, tabA, tabB } = await setupTwoTabs();
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        [connA, connB].map((d) =>
-          d
-            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-            .then((r) => r.rows[0]!.pid),
-        ),
-      );
-      expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (a false pass).
-
-      const runOn = (d: Database, from: string, to: string) =>
-        withTransaction(d, async (tx) => {
-          await asAppUser(tx);
-          await transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]);
-        });
-
-      // A→B and B→A racing. transferLines locks `[from, to].sort()` — min(id) then max(id) — so BOTH
-      // backends take the two `working_orders` rows in the SAME order; neither can hold one while waiting
-      // on the other in the reverse order, so the deadlock cycle cannot form. One backend simply waits on
-      // the lowest-id row's FOR UPDATE lock until the other commits, then proceeds.
-      //
-      // PROVEN LOAD-BEARING BY DELETION (receipt in task-6-report.md, NOT committed): dropping the
-      // `.sort()` in transferLines so each locks in transfer DIRECTION made this exact reverse-orientation
-      // pair raise `40P01 deadlock detected` on the tab check's `working_orders ... for update` in all 12
-      // looped iterations (connA holds A waiting on B while connB holds B waiting on A); restoring the sort
-      // returns it to the green below. A GREEN with the sort in place is meaningless without that RED
-      // control (CLAUDE.md §1).
-      const results = await Promise.allSettled([
-        runOn(connA, tabA, tabB),
-        runOn(connB, tabB, tabA),
-      ]);
-      for (const r of results) {
-        if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
-        expect(r.status).toBe("fulfilled"); // no 40P01; the serialised loser waited, it did not error
-      }
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
+      Promise.reject(new Error("transfer-lines: resolveClient must never be called by recordSale")),
   });
 });
 
 describe("H2 — after a partial transfer, each tab files its OWN single registro (no double-file, no re-price)", () => {
   it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
     });
 
     // A now holds café×3; B holds café×4 + café×1. Pay each via the UNCHANGED payWorkingOrder path
     // (`lines: []` files from the stored locked lines). tender 20.00 comfortably covers each total.
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
     const paidA = await payWorkingOrder(deps, cfg, {
       id: tabA,
       lines: [],

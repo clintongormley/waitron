@@ -6,7 +6,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -134,18 +134,20 @@ export async function setupVenue(db: Database): Promise<Venue> {
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
 
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
-    });
-    const staffSession = await startManagementSession(tx, {
-      personId: stf.rows[0]!.id,
-    });
+    // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are
+    // NOT NULL columns whose values come from `$defaultFn` generators
+    // (`packages/identity/src/schema/persons.ts`), and a statement reaches no generator — measured
+    // here as `NOT NULL constraint failed: persons.id`.
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const managerSession = await startManagementSession(tx, { personId: mgr!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return {
       cafeId: cafe.id,
       aguaId: agua.id,

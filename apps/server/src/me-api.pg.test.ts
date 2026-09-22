@@ -2,32 +2,55 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  hashPassword,
+  hashPin,
+  persons,
+  startManagementSession,
+  webauthnCredentials,
+} from "@waitron/identity";
+import { shifts } from "@waitron/workforce";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
+import "./errors.js";
 
-// The routes run their DB work as the non-superuser `app_user`, so a grant the role lacks fails
-// these tests.
-// THE IDENTITY PROPERTY (the crux of this surface): the requester is the SESSION's person, never a
-// body field. A request authenticated as P that puts Q's id in the body still files as P. Proven by
-// deletion — make the swap route read `body.requestedByPersonId` instead of the session personId and
-// the cross-person assertion below reddens.
-// The route mechanics (validation 400s, the domain codes, whoami) are proven hermetically in
-// `me-api.test.ts`.
+/**
+ * THE CROSS-PERSON IDENTITY PROPERTY on four me-surface routes, on the engine the box now runs: the
+ * requester is the SESSION's person, never a body field, and the person the body names is left
+ * UNTOUCHED.
+ *
+ * ## What this file was, and the one thing that went with PostgreSQL
+ *
+ * Its header said the routes ran their database work as the non-superuser `app_user`, so a grant the
+ * role lacked would fail these tests. **There are no roles on this engine**: `asAppUser` is an inert
+ * function (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs
+ * on the one connection. A missing grant can no longer fail anything here, because there are no
+ * grants.
+ *
+ * What survives is the reason the file is worth keeping beside `me-api.test.ts`: that sibling covers
+ * the "files as P" half, and nothing in it asserts that Q's row is untouched.
+ *
+ * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
+ * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.
+ */
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
 
-describe("your profile as app_user", () => {
+describe("your profile", () => {
   it("lets a staff session edit only itself", async () => {
     const personId = await seedPerson("Profile owner");
     const colleagueId = await seedPerson("Colleague");
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update persons set email='profile@example.com', password_hash=${hashPassword("current password")} where id=${personId}`,
     );
     const cookie = await cookieFor(personId);
@@ -63,7 +86,7 @@ describe("your profile as app_user", () => {
     });
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ emailVerificationSent: false });
-    const people = await suite.admin.execute<{ id: string; display_name: string; role: string }>(
+    const people = await suite.db.execute<{ id: string; display_name: string; role: string }>(
       sql`select id,display_name,role from persons where id in (${personId},${colleagueId})`,
     );
     expect(people.rows).toEqual(
@@ -82,12 +105,16 @@ describe("your profile as app_user", () => {
       }),
     });
     expect(changed.status).toBe(204);
-    const keys = await suite.admin.execute<{ id: string; person_id: string }>(sql`
-      insert into webauthn_credentials (person_id,credential_id,public_key)
-      values (${personId},'profile-own','public'),(${colleagueId},'profile-other','public')
-      returning id,person_id`);
-    const ownKey = keys.rows.find((key) => key.person_id === personId)!.id;
-    const otherKey = keys.rows.find((key) => key.person_id === colleagueId)!.id;
+    // Through the table definition, for `seedPerson`'s reason.
+    const keys = await suite.db
+      .insert(webauthnCredentials)
+      .values([
+        { personId, credentialId: "profile-own", publicKey: "public" },
+        { personId: colleagueId, credentialId: "profile-other", publicKey: "public" },
+      ])
+      .returning({ id: webauthnCredentials.id, personId: webauthnCredentials.personId });
+    const ownKey = keys.find((key) => key.personId === personId)!.id;
+    const otherKey = keys.find((key) => key.personId === colleagueId)!.id;
     const remove = (id: string) =>
       app.request(`/management-api/session/me/passkeys/${id}`, {
         method: "DELETE",
@@ -96,25 +123,19 @@ describe("your profile as app_user", () => {
       });
     expect((await remove(otherKey)).status).toBe(404);
     expect((await remove(ownKey)).status).toBe(204);
-    const remaining = await suite.admin.execute<{ id: string }>(
+    const remaining = await suite.db.execute<{ id: string }>(
       sql`select id from webauthn_credentials `,
     );
     expect(remaining.rows).toEqual([{ id: otherKey }]);
   });
 });
 
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
 async function setupVenue(): Promise<VenueResult> {
   return applyVenue(
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: "74000001K",
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -141,42 +162,57 @@ async function setupVenue(): Promise<VenueResult> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 }
 
-/** Seed a staff person (on the app role, which holds INSERT on persons). Returns its id. */
+/**
+ * Seed a staff person. Returns its id.
+ *
+ * Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are JavaScript
+ * `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+ * NOT NULL — the refusal is `NOT NULL constraint failed: persons.id`.
+ */
 async function seedPerson(name: string): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values (${name}, ${hashPin("0000")}, 'staff') returning id`);
-    return r.rows[0]!.id;
+    const [row] = await tx
+      .insert(persons)
+      .values({ displayName: name, pinHash: hashPin("0000"), role: "staff" })
+      .returning({ id: persons.id });
+    return row!.id;
   });
 }
 
 /** Open a real management session (through `startManagementSession` on the app role) and return the
  * cookie header — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
-  const session = await withTransaction(suite.admin, async (tx) => {
+  const session = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;
 }
 
-/** A shift for `personId`, seeded as admin (superuser). Returns its id. */
+/** A shift for `personId`. Returns its id. Through the table definition, for `seedPerson`'s reason. */
 async function seedShift(
   personId: string,
   locationId: string,
   startsAt: string,
   endsAt: string,
 ): Promise<string> {
-  const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0) returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(shifts)
+    .values({
+      personId,
+      locationId,
+      startsAt,
+      startsOffsetMinutes: 0,
+      endsAt,
+      endsOffsetMinutes: 0,
+    })
+    .returning({ id: shifts.id });
+  return row!.id;
 }
 
 function mountApp(): Hono {
@@ -185,7 +221,7 @@ function mountApp(): Hono {
   mountMeApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
       venueLocale: "es-ES",
       modules: [],
@@ -212,15 +248,16 @@ async function send(
   });
 }
 
-describe("Me API over real Postgres (the identity property: the session's person, never the body's)", () => {
+describe("Me API — the identity property: the session's person, never the body's", () => {
   it("files a swap as the SESSION's person, never the body's — even when the body names someone else", async () => {
-    // THE IDENTITY PROPERTY, proven by deletion (run 2026-08-16 against postgres:18 via Testcontainers,
-    // TESTCONTAINERS_RYUK_DISABLED=true): P is signed into the dashboard; the request body hostilely
-    // names Q as `requestedByPersonId`. The route ignores the body and files as P (the session), a 201
-    // with `requested_by_person_id = P`. Changing me-api.ts's `requestedByPersonId: personId` to read
-    // `body.requestedByPersonId` made this test RED: the route then tries to file the request as Q, but
-    // the offered shift is P's, so `requestSwap`'s ownership guard 403s where the session-based route
-    // 201s (`expected 403 to be 201`). Restored, green. Run as the non-superuser app_user.
+    // THE IDENTITY PROPERTY, proven by deletion, re-run on this engine 2026-09-22 — the receipt it
+    // replaces was taken against postgres:18, which this branch retired. P is signed into the
+    // dashboard; the request body hostilely names Q as `requestedByPersonId`. The route ignores the
+    // body and files as P, a 201 with `requested_by_person_id = P`. Changing `me-api.ts`'s
+    // `requestedByPersonId: personId` to prefer the body's value made ONLY this case red: the route
+    // then tries to file as Q, but the offered shift is P's, so `requestSwap`'s ownership guard 403s
+    // where the session-based route 201s — `expected 403 to be 201`. Restored from a byte-for-byte
+    // copy, verified with `cmp`, and the file passed again.
     const venue = await setupVenue();
     const p = await seedPerson("P");
     const q = await seedPerson("Q");
@@ -243,7 +280,7 @@ describe("Me API over real Postgres (the identity property: the session's person
     expect(res.status).toBe(201);
     const { swapId } = (await res.json()) as { swapId: string };
 
-    const row = await suite.admin.execute<{ requested_by_person_id: string }>(
+    const row = await suite.db.execute<{ requested_by_person_id: string }>(
       sql`select requested_by_person_id from shift_swaps where id = ${swapId}`,
     );
     expect(row.rows[0]!.requested_by_person_id).toBe(p); // the session's person, not the body's Q
@@ -252,7 +289,15 @@ describe("Me API over real Postgres (the identity property: the session's person
   it("records the passkey offer against the SESSION's person, never the body's", async () => {
     // Same identity property as the swap above, on the route that retires the sign-in passkey offer.
     // P is signed in; the body hostilely names Q. The stamp must land on P and never on Q — a stamp on
-    // Q would silently cancel an offer Q has not yet seen. Run as the non-superuser app_user.
+    // Q would silently cancel an offer Q has not yet seen.
+    //
+    // The "untouched Q" half needs no mutation to be meaningful: the route never reads the body at
+    // all (`me-api.ts`'s `passkey-offer` handler takes the person from `resolveManagementSession`),
+    // so the only way Q could be stamped is a change that introduces the read. What WAS measured on
+    // this engine 2026-09-22 is that the STAMP half is not vacuous: deleting the
+    // `markPasskeyOffered(tx, { personId })` call reddened this case alone, on the array assertion
+    // below — with nobody stamped, P no longer matches `{ id: p, stamped: true }`. Restored from a
+    // byte-for-byte copy, verified with `cmp`.
     const p = await seedPerson("P");
     const q = await seedPerson("Q");
     const app = mountApp();
@@ -273,10 +318,13 @@ describe("Me API over real Postgres (the identity property: the session's person
     );
     expect(res.status).toBe(204);
 
-    const rows = await suite.admin.execute<{ id: string; stamped: boolean }>(
+    // The `is not null` projection is raw SQL, so it bypasses drizzle's mappers and this engine hands
+    // it back as 1/0 rather than true/false. Mapped HERE, in the reader, so the assertion below is
+    // the same assertion it was on PostgreSQL.
+    const rows = await suite.db.execute<{ id: string; stamped: number }>(
       sql`select id, (passkey_offered_at is not null) as stamped from persons where id in (${p},${q})`,
     );
-    expect(rows.rows).toEqual(
+    expect(rows.rows.map((row) => ({ id: row.id, stamped: row.stamped === 1 }))).toEqual(
       expect.arrayContaining([
         { id: p, stamped: true }, // the session's person
         { id: q, stamped: false }, // the body's person, untouched

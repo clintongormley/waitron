@@ -3,21 +3,21 @@
 // the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
 // `backup-supervisor.test.ts`.
 //
-// **STILL BLOCKED, and not by this seam.** Everything below rests on `useTemplateDb` and a shared
-// PostgreSQL container, which the storage switch removed — the suite fails at collection today. The
-// edits here are only the mechanical ones the archive seam forced (no `pg_dump` runner, no backup
-// connection string); converting the harness belongs to whoever converts this file.
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. The `asAppUser(tx)` call in `setupTenant` is now inert
+// (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep; nothing here establishes
+// what the deployment role, which no longer exists, may read or write.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { SingletonRole } from "@waitron/db";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupConfig, type BackupConfig } from "./backup-config.js";
@@ -47,7 +47,11 @@ const BACKUP_KEYS = [
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 let nifCounter = 0;
 function nextNif(): string {
@@ -101,7 +105,7 @@ function buildApp(sup: BackupSupervisor, stateDir: string): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -109,7 +113,7 @@ function buildApp(sup: BackupSupervisor, stateDir: string): Hono {
     },
     () => {},
   );
-  mountBackupApi(app, { supervisor: sup, db: suite.admin, stateDir }, () => {});
+  mountBackupApi(app, { supervisor: sup, db: suite.db, stateDir }, () => {});
   return app;
 }
 
@@ -145,13 +149,29 @@ async function setupTenant(): Promise<void> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+    // Through drizzle rather than the raw `insert into persons` this seeded on PostgreSQL, and not
+    // for tidiness: `persons.id` and `persons.created_at` used to be filled by the COLUMN and are
+    // now filled by drizzle's `$defaultFn` instead, so a statement that names neither is refused.
+    // Measured on this tree — `NOT NULL constraint failed: persons.id`, then, once an id is
+    // supplied, `NOT NULL constraint failed: persons.created_at`. The two sides, each read inside
+    // the `persons` block rather than grepped file-wide:
+    // `origin/main:packages/identity/drizzle/0000_identity_baseline.sql:44,:60` carried
+    // `DEFAULT gen_random_uuid()` and `DEFAULT now()`;
+    // `packages/identity/drizzle/0000_baseline.sql:46,:62` carry a bare `NOT NULL`, because the
+    // defaults moved to `packages/identity/src/schema/persons.ts:27,:67`. The insert the PRODUCT
+    // uses is this one, so the fixture now takes the same route — the shape the converted siblings
+    // use (`catalogue-api.test.ts:60`, `till-api.test.ts:146`).
+    await tx.insert(persons).values({
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
   });
 }
 
@@ -182,7 +202,7 @@ afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
 });
 
-describe("backup admin routes (real postgres)", () => {
+describe("backup admin routes", () => {
   beforeAll(async () => {
     await setupTenant();
   }, 180_000);

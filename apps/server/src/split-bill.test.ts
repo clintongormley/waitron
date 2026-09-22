@@ -1,3 +1,9 @@
+// The domain outcomes of un-joining a table and settling a tab, single-threaded.
+//
+// A sibling suite used to race the two against each other and assert that pay was never the
+// deadlock victim. It was deleted with the storage switch (2026-09-22): there is one writer per
+// venue file, so the ordering between `unjoinTable` and the settle path is unobservable, and
+// nothing covers it now.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

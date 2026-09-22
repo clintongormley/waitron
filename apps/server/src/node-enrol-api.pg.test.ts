@@ -3,7 +3,8 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, locations, tenants, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import {
@@ -18,20 +19,37 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-// Real Postgres (a manifest template clone), NOT PGlite — the enrol WRITES a `print_agents` row as
-// `app_user` under `withTransaction`, so the table grant is the property under test; PGlite's all-superuser
-// connection would false-pass a missing GRANT (CLAUDE.md §4). The sibling `print-api.pg.test.ts` uses
-// the same `useTemplateDb`/`seedTenantWithLocation` shape.
+/**
+ * The loopback self-enrol route, on the engine the box now runs.
+ *
+ * ## What the conversion took away, and nothing replaces it
+ *
+ * The old header argued real PostgreSQL rather than PGlite was required here, because the enrol
+ * WRITES a `print_agents` row as `app_user` under `withTransaction`, and only a real cluster would
+ * refuse a missing table GRANT. **SQLite has no roles and no grants**: one process opens one file
+ * and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). Whether the
+ * deployment role may write `print_agents` is no longer a question this file, or any file, asks.
+ *
+ * The six cases below are unaffected, because none of them was about the grant: five are gates
+ * that refuse BEFORE any database work (loopback, absent address, non-primary, rate limit) and the
+ * sixth checks that a minted token authenticates.
+ */
 const noopLog: Logger = () => {};
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+// `resetPerTest: false` because the tenant and its location are seeded ONCE in `beforeAll` below
+// and every case reads them; a per-test reset would empty both out from under the second case.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 interface Tenant {
   locationId: string;
 }
 
-// Tenants accumulate for the life of the shared clone and `tenants_country_tax_id_key` is unique, so
-// each needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
+// `tenants_country_tax_id_key` is unique, so a NIF is minted per call rather than written out. One
+// call is made today, from the `beforeAll` below; the counter is what keeps a second one honest.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -43,10 +61,10 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   // `packages/db/src/testing/seed.ts` took: `tenants.created_at` and `locations.id` are
   // `$defaultFn` values on this engine rather than SQL DEFAULTs, which a raw insert never reaches,
   // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
-  await suite.admin
+  await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.admin
+  const [loc] = await suite.db
     .insert(locations)
     .values({
       name: "Barra",
@@ -65,7 +83,8 @@ beforeAll(async () => {
 
 /** The FULL TillConfig for the seeded venue. Only locationId is read by `selfEnrolNodeAgent`
  * and nodeId is what the row is keyed by; the fiscal ids are unused, so branded random uuids stand in.
- * A FRESH nodeId per call keeps each mounted app's enrol row independent across the shared clone. */
+ * A FRESH nodeId per call keeps each mounted app's enrol row independent, which matters because
+ * this suite does not reset between tests. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
@@ -79,7 +98,7 @@ function cfgOf(tenant: Tenant): TillConfig {
   };
 }
 
-/** The enrol route mounted over the REAL app-role pool (`suite.admin`), scoped to a fresh cfg. */
+/** The enrol route mounted over the venue handle, scoped to a fresh cfg. */
 function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}): {
   app: Hono;
   cfg: TillConfig;
@@ -89,7 +108,7 @@ function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}
   mountNodeEnrolApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg,
       nodeId: cfg.nodeId,
       isPrimary: opts.isPrimary ?? true,
@@ -125,16 +144,16 @@ async function errorCodeOf(res: Response): Promise<string> {
 
 /** Resolve a minted agent token to its row id under the tenant — the production auth path. */
 async function authenticate(token: string): Promise<{ agentId: string }> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return authenticateAgent(tx, token);
   });
 }
 
-/** How many print_agents rows this node holds — read as the superuser, so the assertion is about the
- *  table and not about what the route chose to return. */
+/** How many print_agents rows this node holds — read straight off the table, so the assertion is
+ *  about what landed and not about what the route chose to return. */
 async function agentRowCount(cfg: TillConfig): Promise<number> {
-  const { rows } = await suite.admin.execute<{ n: number }>(
+  const { rows } = await suite.db.execute<{ n: number }>(
     sql`select cast(count(*) as int) as n from print_agents where node_id = ${cfg.nodeId}`,
   );
   return rows[0]!.n;

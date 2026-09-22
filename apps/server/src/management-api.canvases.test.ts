@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { deviceProfiles, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import type { CanvasDef, ThemeOverride } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -12,32 +12,50 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: these routes wrap the layout-canvas CRUD + tenant-theme config, and each
-// verb both AUTHORIZES (`authorizeManager` reads persons + management_sessions as the app role) and
-// reads/writes `canvases` / `tenant_themes` as that same role — grants a PGlite superuser connection
-// holds unconditionally (CLAUDE.md §4). The same real-Postgres justification
-// as `management-api.pg.test.ts`, whose harness (`applyVenue`/`planVenue` + password `login`) this
-// file reuses.
+/**
+ * The layout-canvas CRUD and tenant-theme routes end to end, over HTTP, with the manager and staff
+ * sessions a real sign-in mints.
+ *
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason was the deployment ROLE: every verb authorized and then read or wrote
+ * `canvases` / `tenant_themes` as `app_user`, and a PGlite superuser would have held those grants
+ * unconditionally. SQLite has no roles and no grants; `asAppUser` is an inert function
+ * (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection. Nothing
+ * here now says anything about which identity the routes reach the database as. The 403 and 401
+ * gates are `authorizeManager` and `requireManagementSession` rather than privileges, so they are
+ * unaffected — and still pass.
+ *
+ * The `canvas.in_use` case below is NOT in that category and keeps its subject: the
+ * `device_profiles.canvas_id` → `canvases.id` key survived the regeneration with `ON DELETE
+ * restrict` (`packages/db/drizzle/0000_baseline.sql`), the store opens with
+ * `pragma foreign_keys = on` (`packages/store/src/index.ts`), and `translateWriteError` already
+ * reads this engine's restrict code (`packages/layouts/src/canvas-store.ts`).
+ */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — a distinct per-suite base from the sibling suites.
+// One NIF per provisioned venue. The counter stays because `provisionTenant` is not structurally
+// once-only — `setupTenant`'s memo is what makes it so.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A canvas name unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the
- *  canvas set accumulates across tests and `(name)` is unique, so a fixed name could collide. */
+/** A canvas name unique within the tenant, so tests are order-independent (CLAUDE.md §4) —
+ *  `resetPerTest` is off, so the canvas set accumulates across tests and `(name)` is unique. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -49,8 +67,8 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
- *  tests, so both groups share the venue provisioned on first use rather than provisioning another. */
+/** The suite's one venue. The database holds one tenant and is not reset between tests, so both
+ *  groups share the venue provisioned on first use rather than provisioning another. */
 let provisioned: Promise<Record<string, never>> | undefined;
 function setupTenant(): Promise<Record<string, never>> {
   provisioned ??= provisionTenant();
@@ -90,17 +108,29 @@ async function provisionTenant(): Promise<Record<string, never>> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+  // Seeded through the table definitions, not by raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(persons).values([
+      {
+        displayName: "The Manager",
+        email: MANAGER_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      },
+      {
+        displayName: "The Clerk",
+        email: STAFF_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "staff",
+      },
+    ]);
   });
   return {};
 }
@@ -110,7 +140,7 @@ function mountApp(): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // nodeId sentinel: the canvas/theme management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
       // sibling management tests (management-api.pg.test.ts, …-status/-passkey).
@@ -257,9 +287,9 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
 
-    await suite.admin.execute(sql`
-      insert into device_profiles (name, form_factor, canvas_id)
-      values (${uniqueName("Binding profile")}, 'till', ${id})`);
+    await suite.db
+      .insert(deviceProfiles)
+      .values({ name: uniqueName("Binding profile"), formFactor: "till", canvasId: id });
 
     const res = await app.request(`/management-api/canvases/${id}`, {
       method: "DELETE",

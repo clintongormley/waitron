@@ -2,31 +2,57 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, nowIso, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { absences, rosterVersions, shiftSwaps, shifts } from "@waitron/workforce";
-import { convenioConfig } from "@waitron/workforce-es";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import "./errors.js";
 
-// Real Postgres, not PGlite: this suite proves the workforce write group's `schedule.manage` gate BY
-// DELETION, and that a decide lands `decided_by_person_id` through app_user's TABLE-level UPDATE grant
-// (which a column-level grant would not cover). Every DB touch goes through `withTransaction` + `asAppUser`
-// from `suite.admin`, so the routes run as the non-superuser app role; a PGlite superuser holds every
-// privilege, so a missing or narrowed grant would pass there (CLAUDE.md §4). The route mechanics are
-// already proven in-process on PGlite (`workforce-api.test.ts`).
+/**
+ * The workforce write group's `schedule.manage` gate, and what a decide writes, on the engine the box
+ * now runs.
+ *
+ * ## What this file was, and the two things that went with PostgreSQL
+ *
+ * 1. **The ROLE is gone and is replaced by nothing.** The header said every touch ran
+ *    `withTransaction` + `asAppUser` so the routes executed as the non-superuser app role, where a
+ *    PGlite superuser would hold every privilege. `asAppUser` is an inert function
+ *    (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the
+ *    one connection.
+ *
+ * 2. **The decide case's STATED SUBJECT is gone with it.** It existed to show that migration 0010 added
+ *    `decided_by_person_id`/`decided_at` with no new grant, relying on a TABLE-level
+ *    `GRANT ... UPDATE ON shift_swaps TO app_user` to cover the later-added columns — proven in both
+ *    directions by narrowing that grant to `grant update (status, decided_at)` and watching the route
+ *    500 on `42501`. There are no grants on this engine, so **nothing now checks that a later-added
+ *    column is writable by the deployment role.** The case is kept, and renamed, for the inch that
+ *    survives the grant: it is the only test that reads `decided_by_person_id` and `decided_at` back
+ *    THROUGH the route. Receipt for the "only" —
+ *    `grep -rln 'decided_by_person_id\|decidedByPersonId' --include='*.test.ts' apps packages`
+ *    returns three files, and the other two read those columns back from the VERB
+ *    (`packages/workforce/src/shift-swaps.test.ts:271`, `packages/workforce/src/absences.test.ts:205`,
+ *    each calling `decideSwap`/`setAbsenceStatus` directly). The sibling `workforce-api.test.ts`
+ *    decide cases assert only the 204 and that the row leaves the pending queue.
+ *
+ * The end-to-end publish case is DELETED rather than converted: `workforce-api.test.ts`,
+ * "publishes a draft and returns { breaches } (a clean roster → empty array)", drives the same two
+ * routes to the same `{ breaches: [] }` and seeds a shift onto the draft first, so it is the stronger
+ * of the two.
+ *
+ * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
+ * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.
+ */
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
-
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
 
 interface Venue {
   locationId: string;
@@ -40,7 +66,7 @@ async function setupVenue(): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: "72000001K",
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -67,9 +93,9 @@ async function setupVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  const seeded = await withTransaction(suite.admin, async (tx) => {
+  const seeded = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
@@ -104,7 +130,7 @@ function mountApp(): Hono {
   // plumbed into cfg but never reaches the chain.
   mountWorkforceApi(
     app,
-    { db: suite.admin, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
+    { db: suite.db, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
     noopLog,
   );
   return app;
@@ -127,7 +153,7 @@ async function send(
 }
 
 async function seedAcceptedSwap(personId: string, locationId: string): Promise<string> {
-  const [shift] = await suite.admin
+  const [shift] = await suite.db
     .insert(shifts)
     .values({
       personId,
@@ -138,7 +164,7 @@ async function seedAcceptedSwap(personId: string, locationId: string): Promise<s
       endsOffsetMinutes: 0,
     })
     .returning({ id: shifts.id });
-  const [swap] = await suite.admin
+  const [swap] = await suite.db
     .insert(shiftSwaps)
     .values({
       requestedByPersonId: personId,
@@ -150,7 +176,7 @@ async function seedAcceptedSwap(personId: string, locationId: string): Promise<s
   return swap!.id;
 }
 async function seedRequestedAbsence(personId: string): Promise<string> {
-  const [r] = await suite.admin
+  const [r] = await suite.db
     .insert(absences)
     .values({
       personId,
@@ -162,15 +188,15 @@ async function seedRequestedAbsence(personId: string): Promise<string> {
   return r!.id;
 }
 
-describe("Workforce API over real Postgres (roster publish, decide columns, gates)", () => {
+describe("Workforce API — the schedule.manage gates, the decider columns, planned-vs-actual", () => {
   it("refuses every roster write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // GUARD-BY-DELETION (authorizeManager), run 2026-08-15 against postgres:18 via Testcontainers
-    // (TESTCONTAINERS_RYUK_DISABLED=true): with the authorizeManager call removed from
-    // workforce-api.ts's `gated` helper (and the inline publish one stubbed to a fixed authorizedBy),
-    // the staff GET /roster below returned 200 instead of 403 — this test went red at the FIRST
-    // `expect403`, `expected 200 to be 403`, and halted there, so routes 2-5 weren't individually
-    // exercised in that run; the gate is what turns this suite red when removed. Restored the call and
-    // the test passed again.
+    // GUARD-BY-DELETION (authorizeManager), re-run on this engine 2026-09-22 — the receipt it replaces
+    // was taken against postgres:18, which this branch retired: deleted the one
+    // `await authorizeManager(tx, { managementSessionId: sessionId, permission });` line from
+    // `workforce-api.ts`'s `gated` helper and ran this file. TWO cases went red, this one and the
+    // swap/absence/planned-vs-actual sweep below, each at its FIRST `expect403` with
+    // `expected 200 to be 403`; the run stops there, so routes 2-5 were not individually exercised.
+    // Restored from a byte-for-byte copy, verified with `cmp`, and the file passed again.
     const { locationId, staffCookie } = await setupVenue();
     const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
@@ -213,27 +239,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     );
   });
 
-  it("publishes end-to-end as the app role and returns the breaches array", async () => {
-    const v = await setupVenue();
-    // Seed the location's convenio_config (as admin — owner).
-    await suite.admin.insert(convenioConfig).values({ locationId: v.locationId });
-    const app = mountApp();
-    const create = await send(app, "POST", "/management-api/roster", v.managerCookie, {
-      locationId: v.locationId,
-      period: "2026-06-01",
-    });
-    const versionId = ((await create.json()) as { versionId: string }).versionId;
-    const res = await send(
-      app,
-      "POST",
-      `/management-api/roster/${versionId}/publish`,
-      v.managerCookie,
-    );
-    expect(res.status).toBe(200);
-    expect((await res.json()) as { breaches: unknown[] }).toEqual({ breaches: [] });
-  });
-
-  it("a manager decides a swap and an absence — the decider columns land through app_user's table-level UPDATE grant", async () => {
+  it("a manager decides a swap and an absence — the decider columns come back through the route", async () => {
     const a = await setupVenue();
     const swapA = await seedAcceptedSwap(a.personId, a.locationId);
     const absA = await seedRequestedAbsence(a.personId);
@@ -248,18 +254,9 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     ).map((r) => r.id);
     expect(aSwaps).toContain(swapA);
 
-    // A decides its own swap as app_user; the decider column is stamped. This is the §5
-    // receipt Task 2 deferred: migration 0010 added `decided_by_person_id`/`decided_at` with NO new
-    // grant, relying on 0008's TABLE-level `GRANT ... UPDATE ON shift_swaps TO app_user` covering the
-    // later-added columns. Proven load-bearing in BOTH directions on 2026-08-15 against postgres:18
-    // (TESTCONTAINERS_RYUK_DISABLED=true): with the table-level grant (production reality) this decide
-    // is a 204 and the read-back shows the stamp; when instead app_user's UPDATE was narrowed to
-    // `grant update (status, decided_at)` — i.e. a grant NOT covering decided_by_person_id — a direct
-    // app_user write of that column raised `42501 permission denied for table shift_swaps` and the
-    // route returned 500, reddening `expect(aDecides.status).toBe(204)`. (A column-level
-    // `revoke update (decided_by_person_id)` was a NO-OP — Postgres won't revoke a column privilege
-    // held implicitly via a table-level grant, CLAUDE.md §3 — hence the revoke-table-then-partial-grant
-    // shape.) The grant was then restored.
+    // The decide route stamps the decider on the row it approves. The grant half of this case's
+    // original subject has no subject on this engine (see the file header); what is asserted here is
+    // the stamp itself, read back through the route's own write — which nothing else does.
     const aDecides = await send(
       appA,
       "POST",
@@ -270,7 +267,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
       },
     );
     expect(aDecides.status).toBe(204);
-    const decided = await suite.admin.execute<{
+    const decided = await suite.db.execute<{
       status: string;
       decided_by_person_id: string | null;
       decided_at: string | null;
@@ -279,7 +276,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     expect(decided.rows[0]!.decided_by_person_id).toBe(a.personId);
     expect(decided.rows[0]!.decided_at).not.toBeNull();
 
-    // And the absence decide lands its decider column too (same grant receipt on `absences`).
+    // And the absence decide lands its decider column too — a separate route and a separate table.
     const aDecidesAbs = await send(
       appA,
       "POST",
@@ -288,7 +285,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
       { decision: "rejected" },
     );
     expect(aDecidesAbs.status).toBe(204);
-    const decidedAbs = await suite.admin.execute<{
+    const decidedAbs = await suite.db.execute<{
       status: string;
       decided_by_person_id: string | null;
     }>(sql`select status, decided_by_person_id from absences where id = ${absA}`);
@@ -297,20 +294,21 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
   });
 
   it("refuses the swap + absence + planned-vs-actual routes to a staff-role session — 403", async () => {
-    // GATE-BY-DELETION (authorizeManager). Each of the three gate mechanisms proven independently on
-    // 2026-08-15 against postgres:18 via Testcontainers (TESTCONTAINERS_RYUK_DISABLED=true); each was
-    // restored afterwards:
-    //  (1) `gated` helper (GET /swaps, GET /absences, planned-vs-actual): removing its authorizeManager
-    //      call made the staff GET /management-api/swaps below return 200 not 403 — red at the FIRST
-    //      expect403 (`expected 200 to be 403`); it halted there so the later routes weren't exercised
-    //      in THAT run, hence (2)/(3) below ran with (1) restored.
-    //  (2) inline swap-decide compose: removing its authorizeManager (and stubbing authorizedBy) made
-    //      POST /swaps/:missing/decide return 404 not 403 (the gate gone, the request reaches
-    //      `decideSwap`, which 404s on the missing id) — red at the swap-decide expect403.
-    //  (3) inline absence-decide compose: same, red at the absence-decide expect403 (line ~410),
-    //      `expected 404 to be 403`, with (1) and (2) intact so #1-#3 passed and it reached #4.
-    // A 404 rather than 200 for the decide routes is still a genuine gate signal: the 403 is what the
-    // gate produces; without it the request falls through to the verb.
+    // GATE-BY-DELETION. Three separate gate mechanisms stand behind these five routes and each was
+    // mutated on its own, on this engine, 2026-09-22 — replacing receipts taken against postgres:18,
+    // which this branch retired. The run stops at the first failed assertion, so a single mutation
+    // can only ever be OBSERVED at one route; that is why there are three:
+    //  (1) the shared `gated` helper (GET /swaps, GET /absences, planned-vs-actual): deleting its one
+    //      `authorizeManager` line reddened this case at the staff `GET /management-api/swaps`,
+    //      `expected 200 to be 403`.
+    //  (2) the inline swap-decide compose: replaced with a lookup returning a manager id without
+    //      gating (it needs `authorizedBy` for `decidedByPersonId`, so deleting it outright does not
+    //      compile) — red at the swap-decide `expect403`, `expected 404 to be 403`. A 404 is still a
+    //      genuine gate signal: the gate gone, the request reaches `decideSwap`, which 404s on the
+    //      missing id.
+    //  (3) the inline absence-decide compose: the same substitution, red at the absence-decide
+    //      `expect403`, `expected 404 to be 403`.
+    // Each mutation was restored from a byte-for-byte copy, verified with `cmp`, before the next.
     const { locationId, staffCookie } = await setupVenue();
     const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
@@ -343,14 +341,13 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
   });
 
   it("assembles planned-vs-actual for the tenant's own location as the app role", async () => {
-    // The route assembles + returns rows under withTransaction + asAppUser (the windowing/scoping logic is
-    // already covered on PGlite in Task 5). Seed one shift on a PUBLISHED roster version as admin
-    // (the planned side is published-only, so a null-version draft would be excluded)
-    // and assert it comes back as a no-show — proving the read runs as app_user without leaking or 500-ing.
+    // Seed one shift on a PUBLISHED roster version — the planned side is published-only, so a
+    // null-version draft would be excluded — and assert it comes back as a no-show. The windowing and
+    // scoping logic itself is covered in `workforce-api.test.ts`.
     const v = await setupVenue();
     // `now()` has no equivalent here: the clock is read in JavaScript and bound. `published_at` is a
     // text column, and `nowIso()` is the canonical spelling every other writer of it uses.
-    const [version] = await suite.admin
+    const [version] = await suite.db
       .insert(rosterVersions)
       .values({
         locationId: v.locationId,
@@ -360,7 +357,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
         publishedAt: nowIso(),
       })
       .returning({ id: rosterVersions.id });
-    await suite.admin.insert(shifts).values({
+    await suite.db.insert(shifts).values({
       personId: v.personId,
       locationId: v.locationId,
       startsAt: "2026-03-02T09:00:00Z",

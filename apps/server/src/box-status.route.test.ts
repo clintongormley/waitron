@@ -2,11 +2,11 @@ import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
@@ -16,26 +16,26 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 
-// Exercise box-status authorization and chain reads on PostgreSQL with manager login. This suite is
-// about the auth gate and the chain read.
+// Exercise box-status authorization and the composed status read over a manager login. The full
+// manifest is migrated because the route composes cells several modules own.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 // Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
 // (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
+// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
+// row the uniqueness constraint covers.
+const NIF = "72000001K";
 
-/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
- *  tests, so every group shares the venue provisioned on first use rather than provisioning another. */
+/** The suite's one venue. The database holds one tenant (one tenant per database) and is not reset
+ *  between tests, so every group shares the venue provisioned on first use rather than another. */
 let provisioned: Promise<{ nodeId: string; managerId: string }> | undefined;
 function setupTenant(): Promise<{ nodeId: string; managerId: string }> {
   provisioned ??= provisionTenant();
@@ -48,7 +48,7 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: NIF,
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -75,16 +75,25 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const managerId = await withTransaction(suite.admin, async (tx) => {
+  const managerId = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    return manager.rows[0]!.id;
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
+    // statement never reaches, and both columns are NOT NULL.
+    const [manager] = await tx
+      .insert(persons)
+      .values({
+        displayName: "The Manager",
+        email: MANAGER_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      })
+      .returning({ id: persons.id });
+    return manager!.id;
   });
   return { nodeId: venue.nodeId, managerId };
 }
@@ -106,7 +115,7 @@ function buildApp(
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
@@ -117,7 +126,7 @@ function buildApp(
   mountBoxStatusApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId },
       environment: "preproduction",
       health: createHealthState(opts.now),
@@ -144,7 +153,7 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-describe("GET /api/box/status (real postgres)", () => {
+describe("GET /api/box/status", () => {
   let app: Hono;
   let managerCookie: string;
 
@@ -208,7 +217,7 @@ describe("GET /api/box/status (real postgres)", () => {
   });
 });
 
-describe("GET /api/box/status with a configured TLS cert (real postgres)", () => {
+describe("GET /api/box/status with a configured TLS cert", () => {
   let app: Hono;
   let managerCookie: string;
 

@@ -1,8 +1,8 @@
-// Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { credentialProvisioned, loadKeyRing, putCredential } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
@@ -14,20 +14,56 @@ import { runPass, RECONCILE_DUTY } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes the
-// grants bite at all. Everything below is the deployment role's view of the world.
-const PROBE_ROLE = "server_pass_probe";
-const PROBE_PASSWORD = "probe";
+/**
+ * One composed scheduler pass against a real migrated database.
+ *
+ * ## The role this file was built around is gone, and is replaced by nothing
+ *
+ * Every call below used to run on `server_pass_probe`, a non-superuser LOGIN role inheriting
+ * `app_user`'s grants, opened with `RealPostgres.connectAs` and created cluster-wide by this
+ * package's now-deleted `global-setup.ts`. Being non-superuser was the whole point: it is what made
+ * a missing SELECT/INSERT/UPDATE grant on `scheduled_runs`, `tenant_credentials` or the reconcile
+ * tables fail rather than pass.
+ *
+ * **SQLite has no roles**, `connectAs` has no counterpart and `asAppUser` is an empty function body
+ * (`packages/db/src/testing/roles.ts:25`), so both cases now run on the one venue handle. What is no
+ * longer checked by anything: that the deployment role can reach the vault, the reconcile tables and
+ * the scheduler ledger, and no further. The two cases keep their assertions unchanged; only the
+ * handle they run on changed.
+ *
+ * The `nonInfo` assertion in the first case was doing double duty and now does single duty. It was
+ * the outside-in signal for a MISSING GRANT, because `runDue` folds a permission-denied error into
+ * `TickResult.skipped` and logs a warning instead of throwing. There is no permission-denied error
+ * on this engine, so what the assertion still catches is any other cause of a skip or defer.
+ *
+ * ## Both cases are RED, and the reason is a BROKEN PRODUCT FUNCTION, not this file
+ *
+ * `credentialProvisioned` (`packages/credentials/src/store.ts:177-182`) is
+ * `select credential_tenants(?)`. That function was created by a PostgreSQL-only migration this
+ * branch deleted; the SQLite credentials baseline creates the table and nothing else, and SQLite
+ * has no user-defined SQL functions. The disposition document records this as "BLOCKER 2", and
+ * `packages/credentials/src/credentials.test.ts` carries the same two red cases for the same
+ * reason from the other side. The measurement is at each case.
+ *
+ * They are kept, converted and red, rather than deleted, because this is the ONLY suite that runs
+ * `runPass` against a real database — `pass.test.ts` beside it is all fakes — so deleting them
+ * would leave the composed drain + reconcile + ledger pass covered by nothing.
+ *
+ * The stale `.pg.` in this file's name, and the "non-superuser deployment role" in the describe
+ * below, are left for the branch's single rename sweep rather than changed here. Two comments
+ * elsewhere repeat the same retired claim about this file and are not this file's to correct:
+ * `apps/server/src/boot.ts:720-722` and `apps/server/src/boot.test.ts:125`.
+ */
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 const NOW = new Date("2026-07-26T09:00:00Z");
 
-// A clone of the full-manifest template; the probe connections below authenticate as the
-// cluster-wide `server_pass_probe` role the package globalSetup creates (in place of the per-file
-// `probeRole` this suite used before the shared container).
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const ring = loadKeyRing(KEY_ENV);
 
 /** A settlement report that finds nothing — the audit's clean case. The point of this suite is the
@@ -45,8 +81,8 @@ const emptyStripe = {
 
 describe("one pass as the non-superuser deployment role", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
-    await seedTenant(suite.admin);
-    await withTransaction(suite.admin, (tx) =>
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
         value: {
@@ -58,103 +94,93 @@ describe("one pass as the non-superuser deployment role", () => {
       }),
     );
 
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      // The enrolment answer, read through `credential_tenants` as the deployment role. Under
-      // PGlite this would pass while proving nothing: a superuser sees the rows regardless of
-      // whether the seam or its grant exists.
-      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
+    const probe = suite.db;
+    // RED, and this is where the file stops. `credentialProvisioned` issues
+    // `select credential_tenants(?)`; measured 2026-09-22 on this suite, the call throws
+    // `no such function: credential_tenants`, so nothing below it runs.
+    expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
 
-      const reconciler = new StripeReconciler({
+    const reconciler = new StripeReconciler({
+      db: probe,
+      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
+      resolveAccount: stripeAccountResolver({
         db: probe,
-        nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
-        resolveAccount: stripeAccountResolver({
-          db: probe,
-          ring,
-          environment: "preproduction",
-          makeStripe: () => emptyStripe,
-        }),
-      });
-      const duty = reconcilerAsDuty(reconciler);
-      const lines: string[] = [];
+        ring,
+        environment: "preproduction",
+        makeStripe: () => emptyStripe,
+      }),
+    });
+    const duty = reconcilerAsDuty(reconciler);
+    const lines: string[] = [];
 
-      const report = await runPass(
-        {
-          // No `envios` rows exist, so the drainer finds no tenants and never asks for a
-          // certificate. Its transport is covered by aeat-transport.test.ts against a real
-          // handshake; what this asserts is that the composed pass runs as app_user.
-          drain: (now) =>
-            drain(
-              {
-                db: probe,
-                resolveClient: () => Promise.reject(new Error("no due fiscal work in this suite")),
-                skipRetryMs: DEFAULTS.skipRetryMs,
-                environment: "production",
-              },
-              now,
-            ),
-          reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, now),
-          awaitingCert: { current: false },
-          monotonicMs: () => performance.now(),
-          log: createLogger(
-            (line) => lines.push(line),
-            () => NOW,
+    const report = await runPass(
+      {
+        // No `envios` rows exist, so the drainer finds no tenants and never asks for a
+        // certificate. Its transport is covered by aeat-transport.test.ts against a real
+        // handshake; what this asserts is that the composed pass runs as app_user.
+        drain: (now) =>
+          drain(
+            {
+              db: probe,
+              resolveClient: () => Promise.reject(new Error("no due fiscal work in this suite")),
+              skipRetryMs: DEFAULTS.skipRetryMs,
+              environment: "production",
+            },
+            now,
           ),
-        },
-        NOW,
-      );
+        reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, now),
+        awaitingCert: { current: false },
+        monotonicMs: () => performance.now(),
+        log: createLogger(
+          (line) => lines.push(line),
+          () => NOW,
+        ),
+      },
+      NOW,
+    );
 
-      expect(report.duties.every((entry) => entry.ok)).toBe(true);
+    expect(report.duties.every((entry) => entry.ok)).toBe(true);
 
-      // A `drain.tenant_skipped` or `reconcile.pair_skipped` WARNING is exactly what a missing
-      // grant looks like from the outside: `runDue` catches the underlying permission-denied error
-      // per duty and folds it into `TickResult.skipped` rather than throwing, so
-      // `report.duties.every(ok)` above stays `true` even when a grant is missing — see the ledger
-      // count below, which is what actually catches that case. Nothing above `info` here is the
-      // positive control: a real grants problem would show up as a warning line this asserts away.
-      const nonInfo = lines
-        .map((line) => JSON.parse(line) as { level: string; event: string })
-        .filter((entry) => entry.level !== "info");
-      expect(nonInfo).toEqual([]);
+    // `runDue` catches a duty's error and folds it into `TickResult.skipped` rather than throwing,
+    // so `report.duties.every(ok)` above stays `true` through a failure. Nothing above `info` is
+    // what actually notices: a `drain.tenant_skipped` or `reconcile.pair_skipped` warning is how a
+    // broken duty looks from the outside. (Under PostgreSQL this doubled as the missing-grant
+    // signal; see the header for what went with the role.)
+    const nonInfo = lines
+      .map((line) => JSON.parse(line) as { level: string; event: string })
+      .filter((entry) => entry.level !== "info");
+    expect(nonInfo).toEqual([]);
 
-      // The ledger is the proof: SELECT, INSERT and UPDATE on `scheduled_runs` all had to succeed
-      // as the deployment role, and a missing grant on any one of them is invisible under PGlite.
-      const rows = await suite.admin.execute<{ count: string }>(
-        sql`select count(*) as count from scheduled_runs
-            where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
-      );
-      expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
+    // The ledger is the proof that the pass reached the database at all: a `succeeded` row means
+    // the read, the insert and the update on `scheduled_runs` each landed.
+    const rows = await suite.db.execute<{ count: string }>(
+      sql`select count(*) as count from scheduled_runs
+          where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
+    );
+    expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 
-      // The folded `nextDueAt` is the one composed output the row count above does not pin: it is
-      // what the real loop (`loop.ts`'s `sleepMsFor`) sleeps on. A clean sweep with nothing deferred
-      // or skipped folds in a FUTURE time — never `now` — so this fails the moment a grants problem
-      // (or anything else) pushes a pair into `deferred`/`skipped`, which reports `now` instead.
-      expect(report.nextDueAt).not.toBeNull();
-      expect(report.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
-    } finally {
-      await probe.close();
-    }
+    // The folded `nextDueAt` is the one composed output the row count above does not pin: it is
+    // what the real loop (`loop.ts`'s `sleepMsFor`) sleeps on. A clean sweep with nothing deferred
+    // or skipped folds in a FUTURE time — never `now` — so this fails the moment anything pushes a
+    // pair into `deferred`/`skipped`, which reports `now` instead.
+    expect(report.nextDueAt).not.toBeNull();
+    expect(report.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
-    await seedTenant(suite.admin);
+    await seedTenant(suite.db);
     // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
     // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
     // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
     // not merely the row's absence, the thing this test depends on.
-    await withTransaction(suite.admin, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      // The vault IS the enrolment list: a credential provisioned for a different purpose does not
-      // make this one look provisioned.
-      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(false);
-    } finally {
-      await probe.close();
-    }
+    // RED for the same reason as the case above: `credential_tenants` does not exist on this
+    // engine, so this throws rather than answering `false`.
+    expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
   });
 });

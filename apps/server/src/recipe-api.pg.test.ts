@@ -1,24 +1,42 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createCatalogue, createProduct } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import "./errors.js";
 
-// Real Postgres, not PGlite: this suite proves the recipe-authoring write group's `recipe.manage` gate
-// BY DELETION against the real cluster, with every DB touch going through `withTransaction` + `asAppUser`
-// so the routes run as the non-superuser app role and its table grants are enforced — PGlite connects
-// as a superuser holding every privilege (CLAUDE.md §4). The route mechanics (body/id screens, STATUS
-// map) are already proven in-process on PGlite (`recipe-api.test.ts`).
+/**
+ * The recipe-authoring write group's `recipe.manage` gate, on the engine the box now runs.
+ *
+ * ## What this file was, and the one thing that went with PostgreSQL
+ *
+ * Its header said it needed the real cluster because every touch ran `withTransaction` + `asAppUser`
+ * so the routes executed as the non-superuser app role and that role's table grants were enforced.
+ * **There are no roles on this engine**: `asAppUser` is an inert function
+ * (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the one
+ * connection. Nothing now checks that the deployment role's grants are part of the refusal.
+ *
+ * What survives is the reason the file is worth keeping beside `recipe-api.test.ts`: that sibling
+ * gates the ingredients LIST route only, and the case below sweeps all five authoring routes with the
+ * PATCH and the two `/recipe` routes aimed at ids that really exist, so a 403 cannot be a not-found in
+ * disguise.
+ *
+ * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
+ * per file, so the one venue provisioned here needs no unique-tax-id dance.
+ */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -26,14 +44,6 @@ const noopLog: Logger = () => {};
 // The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s
 // `RecipeApiDeps` doc), so any valid uuid serves.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
-
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter the sibling real-Postgres suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
 
 interface Venue {
   /** A live MANAGEMENT session cookie for a `manager` (holds `recipe.manage`). */
@@ -50,7 +60,7 @@ async function setupVenue(): Promise<Venue> {
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: "72000001K",
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -77,23 +87,24 @@ async function setupVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid, productId } = await withTransaction(suite.admin, async (tx) => {
+  const { managerSid, staffSid, productId } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
-    });
-    const staffSession = await startManagementSession(tx, {
-      personId: stf.rows[0]!.id,
-    });
+    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
+    // on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches — the
+    // refusal is `NOT NULL constraint failed: persons.id`.
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const managerSession = await startManagementSession(tx, { personId: mgr!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf!.id });
     const catalogue = await createCatalogue(tx, {
       name: "Recipe catalogue",
     });
@@ -120,7 +131,7 @@ async function setupVenue(): Promise<Venue> {
  * (`recipe-api.ts`'s `RecipeApiDeps` doc), so the app is bound to nothing but `db`. */
 function mountApp(): Hono {
   const app = new Hono();
-  mountRecipeApi(app, { db: suite.admin, cfg: { nodeId: NODE_ID } }, noopLog);
+  mountRecipeApi(app, { db: suite.db, cfg: { nodeId: NODE_ID } }, noopLog);
   return app;
 }
 
@@ -151,21 +162,20 @@ async function createIngredient(app: Hono, cookie: string, name: string): Promis
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("Recipe API over real Postgres (the recipe.manage gate)", () => {
+describe("Recipe API — the recipe.manage gate over every authoring route", () => {
   it("refuses every recipe-authoring route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Prove the `recipe.manage` gate BY DELETION. A `staff`-role management session holds no
     // `recipe.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
     // before any op runs on all five routes, while the manager (who holds it) gets 200 on the same list.
     //
-    // GUARD-BY-DELETION (authorizeManager), run on 2026-08-18 against postgres:18 via Testcontainers
-    // (TESTCONTAINERS_RYUK_DISABLED=true): removed the
+    // GUARD-BY-DELETION (authorizeManager), re-run on this engine 2026-09-22 — the receipt it replaces
+    // was taken against postgres:18, which this branch retired: deleted the
     //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: RECIPE_WRITE_PERMISSION });`
-    // call from `recipe-api.ts`'s `gated` helper. This test then FAILED at the FIRST staff assertion
-    // (`expected 200 to be 403` on `GET /management-api/ingredients`) — with the one-line gate gone the
-    // staff list served 200 instead of 403, so `toBe(403)` flipped green→red. (The other four routes
-    // funnel through the SAME `gated` chokepoint, so they lose the gate identically; the run aborts at
+    // call from `recipe-api.ts`'s `gated` helper and ran this file. It FAILED at the FIRST staff
+    // assertion, `expected 200 to be 403` on `GET /management-api/ingredients`. (The other four routes
+    // funnel through the SAME `gated` chokepoint, so they lose the gate identically; the run stops at
     // the first failed assertion, so 200 on the list is the only status this deletion was OBSERVED to
-    // produce.) Restored the line and the test passed again; `git diff recipe-api.ts` is clean afterwards.
+    // produce.) Restored from a byte-for-byte copy, verified with `cmp`, and the file passed again.
     const { managerCookie, staffCookie, productId } = await setupVenue();
     const app = mountApp();
 

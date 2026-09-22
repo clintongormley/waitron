@@ -18,10 +18,9 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: these are person-scoped READ models over mutable planning rows — the
-// scoping predicate is application code, so there is no privilege decision to prove here. The app
-// role's grants on shifts/shift_swaps/absences are in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the ROUTE that
-// passes the session's personId is proven against real Postgres in schedule-api.pg.test.ts.
+// These are person-scoped READ models over mutable planning rows — the scoping predicate is
+// application code, so there is no privilege decision to prove here. The ROUTE that passes the
+// session's personId is proven by deletion in `apps/server/src/schedule-api.test.ts`.
 
 let locationId: string;
 

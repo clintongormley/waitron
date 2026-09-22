@@ -1,21 +1,28 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 
-// The passkey routes below run their DB work through `withTransaction` + `asAppUser`, so the credential
-// write and the session lookup are subject to app_user's grants: a grant the role lacks fails
-// assertion 2. The register route is also GATED on a management-session cookie, which needs a
-// migrated database (persons + management_sessions). The ceremony LOGIC (options issued/stored/consumed,
-// credential persisted, counter bumped) is proven at the unit layer in `@waitron/identity`'s
-// `passkey.test.ts`; this file proves OUR ROUTE WIRING around it — gating, body screening, the cookie
-// the auth-verify login sets, and persistence as the app role — not the crypto.
+// This file proves OUR ROUTE WIRING around the passkey ceremonies — gating, body screening, the
+// cookie the auth-verify login sets, and that a credential row really lands — not the crypto. The
+// ceremony LOGIC (options issued/stored/consumed, credential persisted, counter bumped) is proven at
+// the unit layer in `@waitron/identity`'s `passkey.test.ts`. The register route is GATED on a
+// management-session cookie, which needs a migrated database (persons + management_sessions).
+//
+// WHAT WENT WITH POSTGRESQL. The file's stated reason was the deployment ROLE: the credential write
+// and the session lookup ran under `app_user`'s grants, so a missing grant failed the second
+// assertion of each case. SQLite has no roles and no grants; `asAppUser` is an inert function
+// (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection. Nothing here
+// now says anything about which identity the routes reach the database as. One in-case receipt is
+// retired with the column type and is flagged where it sits — the `isUuid` screen on
+// `challengeHandle`.
 //
 // The WebAuthn ceremony is mocked the same way `@waitron/identity`'s `passkey.test.ts` mocks it:
 // `generateRegistrationOptions`/`generateAuthenticationOptions` run FOR REAL (they mint a random
@@ -83,13 +90,17 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's seed
 // (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter the 1b harness uses.
+// Every test provisions its own venue and the per-test reset empties `tenants` in between
+// (`packages/db/src/testing/venue-db.ts`), so the counter is belt and braces rather than the thing
+// keeping the inserts apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -129,30 +140,37 @@ async function setupTenant(): Promise<{ managerId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerId } = await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    return { managerId: manager.rows[0]!.id };
+  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  const { managerId } = await withTransaction(suite.db, async (tx) => {
+    const [manager] = await tx
+      .insert(persons)
+      .values({
+        displayName: "The Manager",
+        email: MANAGER_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      })
+      .returning({ id: persons.id });
+    return { managerId: manager!.id };
   });
   return { managerId };
 }
 
 function mountApp(): Hono {
   const app = new Hono();
-  // `secureCookies: false` so the session cookie rides the non-TLS `app.request`. `deps.db` is the
-  // owner connection; the routes drop to `app_user` themselves via `withTransaction` + `asAppUser`.
-  // `rpId`/`origin` are the loopback passkey Relying Party values Task 4 widened `ManagementApiDeps`
-  // to require — the same values the mocked `verify*` calls receive.
+  // `secureCookies: false` so the session cookie rides the non-TLS `app.request`. `rpId`/`origin`
+  // are the loopback passkey Relying Party values `ManagementApiDeps` requires — the same values the
+  // mocked `verify*` calls receive.
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // The all-zero node id (the capture default): this suite exercises the passkey ceremonies, not
       // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
@@ -172,7 +190,7 @@ function mountAppWithMe(): Hono {
   mountMeApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       venueLocale: LOCALE,
       modules: [],
@@ -205,21 +223,18 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Read every `webauthn_credentials` row as the app role — the proof a real credential row
- * landed, not merely that a route returned 200. */
-async function readCredentials(): Promise<
-  { credential_id: string; person_id: string; counter: string; name: string | null }[]
+/** Read every `webauthn_credentials` row — the proof a real credential row landed, not merely that a
+ * route returned 200. */
+function readCredentials(): Promise<
+  { credential_id: string; person_id: string; name: string | null }[]
 > {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const r = await tx.execute<{
-      credential_id: string;
-      person_id: string;
-      counter: string;
-      name: string | null;
-    }>(sql`select credential_id, person_id, counter, name from webauthn_credentials`);
-    return r.rows;
-  });
+  return withTransaction(suite.db, (tx) =>
+    Promise.resolve(
+      tx.all<{ credential_id: string; person_id: string; name: string | null }>(
+        sql`select credential_id, person_id, name from webauthn_credentials`,
+      ),
+    ),
+  );
 }
 
 /** Register a passkey for the signed-in manager end-to-end over HTTP: begin (real options + stored
@@ -248,7 +263,7 @@ beforeEach(() => {
   mockVerifyAuth.mockReset();
 });
 
-describe("Management API passkey routes over real Postgres (mocked ceremony)", () => {
+describe("Management API passkey routes (mocked ceremony)", () => {
   it("register/options is gated: 401 without a cookie, 200 with the manager's", async () => {
     await setupTenant();
     const app = mountApp();
@@ -315,8 +330,9 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     // First registration of `cred-dup` succeeds.
     await registerPasskey(app, cookie, "cred-dup");
 
-    // A SECOND ceremony returning the SAME credential id collides on the (credential_id)
-    // unique constraint. `finishPasskeyRegistration` translates the 23505 into
+    // A SECOND ceremony returning the SAME credential id collides on the (credential_id) unique
+    // constraint. `finishPasskeyRegistration` runs the refusal through `isUniqueViolation`, which
+    // reads this engine's codes (`packages/db/src/unique-violation.ts`), and throws
     // `passkey.already_registered`, which STATUS maps to 409 — a raw driver error would instead reach
     // `run` as an opaque `server.internal` 500, the "every surfaced code is a 4xx" invariant this fix
     // restores.
@@ -394,9 +410,12 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
     await setupTenant();
     const app = mountApp();
 
-    // A well-formed-but-non-UUID handle would `22P02` on the `uuid` PK column → opaque 500 (and this
-    // route is UNAUTHENTICATED, so that would be an unauthenticated 500); the `isUuid` screen turns it
-    // into a clean 400 naming the field. The verifier is never reached.
+    // The `isUuid` screen turns a non-UUID handle into a clean 400 naming the field, and the verifier
+    // is never reached. The receipt that screen was written against is gone: it rested on a
+    // PostgreSQL `uuid` primary key raising 22P02 — an opaque 500 on an UNAUTHENTICATED route — and
+    // `webauthn_challenges.id` is `text PRIMARY KEY` now
+    // (`packages/identity/drizzle/0000_baseline.sql:110-115`), which simply matches nothing. The case
+    // pins the 400 and the never-called verifier; it no longer shows what the screen is preventing.
     const badUuid = await app.request("/management-api/passkey/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -514,8 +533,8 @@ describe("Management API passkey routes over real Postgres (mocked ceremony)", (
 });
 
 /**
- * The sign-in passkey offer, which the sign-in route reads back out of the database as `app_user`
- * inside its own transaction.
+ * The sign-in passkey offer, which the sign-in route reads back out of the database inside its own
+ * transaction.
  *
  * The offer's story spans BOTH dashboard surfaces: sign-in answers it (management API) and the route
  * that records it as resolved lives on the me API, so the round-trip test mounts both on one app,
@@ -561,9 +580,4 @@ describe("the sign-in passkey offer", () => {
       offerPasskey: false,
     });
   });
-});
-
-afterEach(async () => {
-  await suite.admin.execute(sql`delete from webauthn_credentials`);
-  await suite.admin.execute(sql`delete from webauthn_challenges`);
 });

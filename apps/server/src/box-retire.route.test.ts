@@ -1,10 +1,9 @@
-// Real PostgreSQL exercises route authorization queries after SET ROLE app_user.
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
@@ -13,8 +12,8 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
 
-// Exercise route authorization, refusal-to-status mapping and success responses on PostgreSQL.
-// Retirement semantics are covered by retire.test.ts.
+// Exercise route authorization, refusal-to-status mapping and success responses over a migrated
+// venue database. Retirement semantics are covered by retire.test.ts.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 const MANAGER_EMAIL = "manager@x.com";
@@ -30,15 +29,15 @@ const RING: KeyRing = loadKeyRing({
 // self document has a carrier (the happy-path shape retireSelf accepts).
 const CARRIER_NODE_ID = "88888888-8888-4888-8888-888888888888";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
+// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
+// row the uniqueness constraint covers.
+const NIF = "72000001K";
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ nodeId: string }> {
@@ -46,7 +45,7 @@ async function setupTenant(): Promise<{ nodeId: string }> {
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: NIF,
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -73,14 +72,21 @@ async function setupTenant(): Promise<{ nodeId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
+    // statement never reaches, and both columns are NOT NULL.
+    await tx.insert(persons).values({
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
   });
   return { nodeId: venue.nodeId };
 }
@@ -92,7 +98,7 @@ function buildApp(nodeId: string): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
@@ -103,7 +109,7 @@ function buildApp(nodeId: string): Hono {
   mountBoxRetireApi(
     app,
     {
-      appDb: suite.admin,
+      appDb: suite.db,
       ring: RING,
       nodeId,
     },
@@ -134,7 +140,7 @@ function membershipDoc(term: number, nodes: readonly MembershipNode[]): SignedMe
   };
 }
 
-describe("POST /api/box/retire (real postgres)", () => {
+describe("POST /api/box/retire", () => {
   let nodeId: string;
   let managerCookie: string;
 
@@ -142,14 +148,14 @@ describe("POST /api/box/retire (real postgres)", () => {
     ({ nodeId } = await setupTenant());
     // Establish the node identity so the mint on the happy path has a key to sign with; harmless to
     // the refusal paths, which return before any mint.
-    await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, nodeId);
+    await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, nodeId);
     managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 
   it("401s without a management session", async () => {
     // A serving-primary self-doc so nothing about the state matters — the gate 401s before any DB work.
     await writeNodeMembership(
-      suite.admin,
+      suite.db,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
     const app = buildApp(nodeId);
@@ -162,7 +168,7 @@ describe("POST /api/box/retire (real postgres)", () => {
     // This node is serving-primary (not fenced), so retireSelf refuses BEFORE any mint. Proves the auth
     // gate passes and the STATUS map maps the refusal to 409 (an unmapped AppError would be 400).
     await writeNodeMembership(
-      suite.admin,
+      suite.db,
       membershipDoc(5, [{ nodeId, contactUrl: "", standing: "serving-primary" }]),
     );
     const app = buildApp(nodeId);
@@ -178,7 +184,7 @@ describe("POST /api/box/retire (real postgres)", () => {
     // A held term-5 chart marking THIS node sell-only (the fence) AND the carrier serving-primary —
     // retireSelf mints the eviction and persists it term-guarded.
     await writeNodeMembership(
-      suite.admin,
+      suite.db,
       membershipDoc(5, [
         { nodeId, contactUrl: "", standing: "sell-only" },
         { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
@@ -193,7 +199,7 @@ describe("POST /api/box/retire (real postgres)", () => {
     expect(await res.json()).toEqual({ evicted: true, term: 6 }); // held term 5 → minted 6
 
     // The persist landed: self now reads `evicted` in the held chart.
-    const held = await readNodeMembership(suite.admin);
+    const held = await readNodeMembership(suite.db);
     const self = held!.body.nodes.find((n) => n.nodeId === nodeId);
     expect(self?.standing).toBe("evicted");
   });

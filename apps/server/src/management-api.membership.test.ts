@@ -1,46 +1,63 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   readNodeMembership,
   stampDeployment,
   withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// GET /management-api/membership — how a returning box fetches its cloud peer's CURRENT signed
-// membership chart (Ruling C7, the boot-time replacement for the deleted gossip). It returns THIS node's
-// held `node_membership` document, authenticated by the SAME credential shape + primitives the
-// mirror-bundle endpoint uses: `loginManagerById` (personId + password + totp) then the admin-only
-// `mirror.create` authorization. Because a GET carries no body in this runtime (undici refuses one), the
-// credential rides in the `x-waitron-peer-credential` header as JSON — the same three fields, the same
-// login/authorize primitives, not a new auth mechanism.
-//
-// Real Postgres, not PGlite: the endpoint authenticates + authorizes as `app_user` (the dashboard login
-// shape) — neither the login nor the `mirror.create` gate is observable under a PGlite superuser, which
-// holds every grant (CLAUDE.md §4), exactly as mirror-bundle-api.test.ts.
+/**
+ * GET /management-api/membership — how a returning box fetches its cloud peer's CURRENT signed
+ * membership chart (Ruling C7, the boot-time replacement for the deleted gossip). It returns THIS
+ * node's held `node_membership` document, authenticated by the SAME credential shape + primitives
+ * the mirror-bundle endpoint uses: `loginManagerById` (personId + password + totp) then the
+ * admin-only `mirror.create` authorization. Because a GET carries no body in this runtime (undici
+ * refuses one), the credential rides in the `x-waitron-peer-credential` header as JSON — the same
+ * three fields, the same login/authorize primitives, not a new auth mechanism.
+ *
+ * ## What went with PostgreSQL
+ *
+ * Every request below used to be served on a second connection opened as the `app_login` LOGIN
+ * role — `suite.pg.connectAs("app_login", "app_pw")` — and the header claimed that was what made
+ * the login and the `mirror.create` gate observable. **The role is gone and is replaced by
+ * nothing:** SQLite has no roles, `connectAs` has no counterpart, and `asAppUser` is an inert
+ * function (`packages/db/src/testing/roles.ts`). Nothing here now says anything about which
+ * identity the endpoint reaches the database as.
+ *
+ * The claim that was ALSO in that header — that the two refusals are unobservable without the
+ * role — is false, and the measurement is this file: converted onto the one connection, the 403
+ * (`authorization.not_permitted`) and all three 401s (`password.invalid`) still fail when they
+ * should, because both gates live in `loginManagerById` and `authorizeManager` and never in a
+ * GRANT. Run 2026-09-22: 5 passed, 0 failed.
+ */
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique, so
-// each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
+// A distinct NIF per provisioned venue. The per-test reset empties `tenants` (see
+// `packages/db/src/testing/venue-db.ts`), so this no longer has to dodge an accumulating table; it
+// stays because two venues inside ONE test would still collide.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(83_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-let appDb: Database; // app_login → app_user: authentication + the membership read
+let db: Database;
 
 /** Provision a fresh venue (as the owner), returning the designated ids and the seeded admin's id.
  * `applyVenue` seeds ONE `role='admin'` person carrying ADMIN_PASSWORD (admin holds `mirror.create`). */
@@ -76,7 +93,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
     locationId: venue.locationId,
@@ -84,24 +101,32 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  const adminPersonId = await withTransaction(appDb, async (tx) => {
-    await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
-    return r.rows[0]!.id;
+  const adminPersonId = await withTransaction(db, (tx) => {
+    const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+    return Promise.resolve(rows[0]!.id);
   });
   return { designated, adminPersonId };
 }
 
 /** Insert a NON-admin (staff) person carrying a dashboard password — staff lacks `mirror.create`, so it
- * authenticates but fails authorization → 403. */
+ * authenticates but fails authorization → 403.
+ *
+ * Seeded through the table definition rather than by raw SQL, the change
+ * `apps/server/src/testing/fiscal-fixtures.ts` took: `persons.id` and `persons.created_at` are
+ * `$defaultFn` generators on this engine, which a raw `insert into persons (...)` never reaches
+ * while the columns are NOT NULL — measured here, `NOT NULL constraint failed: persons.id`. */
 async function seedStaff(): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, password_hash, role)
-      values ('Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
-      returning id`);
-    return r.rows[0]!.id;
+  return withTransaction(suite.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({
+        displayName: "Cajera",
+        pinHash: hashPin("4321"),
+        passwordHash: hashPassword(STAFF_PASSWORD),
+        role: "staff",
+      })
+      .returning({ id: persons.id });
+    return person!.id;
   });
 }
 
@@ -112,7 +137,7 @@ function mountApp(designated: AdoptResult): Hono {
   mountManagementApi(
     app,
     {
-      db: appDb,
+      db,
       cfg: { nodeId: designated.nodeId },
       secureCookies: false,
       rpId: "localhost",
@@ -132,21 +157,17 @@ async function getMembership(app: Hono, credential: unknown): Promise<Response> 
 }
 
 beforeAll(async () => {
-  await stampDeployment(suite.admin, "preproduction");
-  appDb = await suite.pg.connectAs("app_login", "app_pw");
-}, 180_000);
-
-afterAll(async () => {
-  if (appDb !== undefined) await appDb.close();
+  db = suite.db;
+  await stampDeployment(db, "preproduction");
 });
 
-describe("GET /management-api/membership (real Postgres)", () => {
+describe("GET /management-api/membership", () => {
   it("returns this node's held signed membership document for an authorised admin credential", async () => {
     const { designated, adminPersonId } = await setupVenue();
     // A held chart naming this node serving-primary — the current authoritative chart a peer fetches.
-    // `node_membership` is a whole-database singleton whose term carries across the shared template, so
-    // seed one past the held term rather than at 0.
-    const seedTerm = ((await readNodeMembership(suite.admin))?.body.term ?? -1) + 1;
+    // `node_membership` is a whole-database singleton, so seed one past whatever term is held rather
+    // than at 0.
+    const seedTerm = ((await readNodeMembership(suite.db))?.body.term ?? -1) + 1;
     const doc = signedMembershipDoc(seedTerm, {
       signerNodeId: designated.nodeId,
       nodes: [
@@ -157,7 +178,7 @@ describe("GET /management-api/membership (real Postgres)", () => {
         },
       ],
     });
-    await writeNodeMembership(suite.admin, doc);
+    await writeNodeMembership(suite.db, doc);
     const app = mountApp(designated);
 
     const res = await getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD });

@@ -4,6 +4,7 @@
 // → empty. The reset is a trigger + an openTab edit; the fiscal pay path is byte-unchanged.
 import { randomUUID } from "node:crypto";
 import {
+  CORE_MIGRATIONS,
   asAppUser,
   diningTables,
   locations,
@@ -14,21 +15,24 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import "./errors.js";
 
-// A clone of the CORE-only template. The AFTER-UPDATE trigger fires under the non-superuser
-// app_user, whose UPDATE on `dining_tables` PGlite's superuser connection would hold regardless, so
-// this needs the real cluster the shared container provides; a Docker-absent run fails at the package
-// globalSetup, not here.
-const suite = useTemplateDb({ template: "core", resetPerTest: false });
+// The core migration set alone: the trigger under test, its two tables and the working order are
+// all core. `resetPerTest: false` — the venue, till and node seeded once in `beforeAll` are read by
+// every case, and each case seeds its own tab.
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS],
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -39,31 +43,31 @@ let nodeId = "";
 let locationId = "";
 
 async function statusOf(tableId: string): Promise<string | null> {
-  const { rows } = await suite.admin.execute<{ status_id: string | null }>(
+  const { rows } = await suite.db.execute<{ status_id: string | null }>(
     sql`select status_id from dining_tables where id = ${tableId}`,
   );
   return rows[0]!.status_id;
 }
 
 beforeAll(async () => {
-  await seedTenant(suite.admin);
+  await seedTenant(suite.db);
   // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
   // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
   // engine and a raw insert reaches none of them (all three columns are NOT NULL —
   // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
   // a text column, which is what refused the `array[...]` constructor that used to fill it
   // (`near "['es']": syntax error`).
-  const [location] = await suite.admin
+  const [location] = await suite.db
     .insert(locations)
     .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
     .returning({ id: locations.id });
   locationId = location!.id;
-  const [till] = await suite.admin
+  const [till] = await suite.db
     .insert(tills)
     .values({ locationId, name: "A1" })
     .returning({ id: tills.id });
   tillId = till!.id;
-  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
 /** Seed a status + an open working order + N tables whose tab_id points at that order, each carrying the

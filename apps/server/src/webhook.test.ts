@@ -41,8 +41,9 @@ function deps(db: Database): WebhookDeps {
   return {
     db,
     ring,
-    // Value irrelevant on PGlite (superuser, no sync capture triggers here); the origin-capture guard
-    // lives in webhook.pg.test.ts against the full manifest. Required by WebhookDeps.
+    // Required by WebhookDeps and not read by anything this suite asserts. The origin-capture guard
+    // it used to matter for was proven by a sibling suite that ran as a non-superuser role; that
+    // suite went with the storage switch, and nothing covers the guard now.
     nodeId: "11111111-1111-4111-8111-111111111111",
     environment: "preproduction",
     // The secret key is ignored by the HMAC double — verification depends only on the per-tenant
