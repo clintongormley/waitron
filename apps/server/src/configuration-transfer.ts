@@ -213,6 +213,42 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
   return ordered;
 }
 
+/**
+ * The bundle is JSON, and this engine hands a BLOB column back as a `Uint8Array`, which
+ * `JSON.stringify` renders as an object keyed by index — bytes that no importer can read back.
+ * So a BLOB travels as the `\x<hex>` spelling PostgreSQL's driver used to produce.
+ *
+ * **The spelling is not ours to choose.** `packages/media/src/configuration-transfer.ts` validates
+ * every image's bytes against `/^\\x(?:[a-fA-F0-9]{2})+$/` before any configuration is written, and
+ * it hashes what it decodes to check the filename. A bundle carrying an image in any other
+ * encoding is refused with `image.invalid_metadata` — which is what the whole database path did on
+ * this branch until this pair existed.
+ */
+function encodeBytes(value: Uint8Array): string {
+  return `\\x${Buffer.from(value).toString("hex")}`;
+}
+
+/**
+ * What this engine will bind. It refuses a JS boolean outright — `TypeError: Provided value cannot
+ * be bound to SQLite parameter 5`, measured on the `print_agents.active` flag this function sets
+ * below — and a boolean column holds 0 or 1, which is what every row that came OUT of a venue
+ * already carries. So the conversion is here, at the bind, rather than at each of the three places
+ * that overwrite a flag: a value read from a bundle never needs it, and one written here always
+ * does.
+ */
+function bindable(value: unknown): unknown {
+  return typeof value === "boolean" ? (value ? 1 : 0) : value;
+}
+
+/** The other half of {@link encodeBytes}, applied only to a column the SCHEMA declares `blob`.
+ * Matching on the value's shape instead would rewrite any ordinary text column whose contents
+ * happen to start with a backslash and an x. */
+function decodeBytes(value: unknown): unknown {
+  return typeof value === "string" && /^\\x(?:[a-fA-F0-9]{2})*$/.test(value)
+    ? Buffer.from(value.slice(2), "hex")
+    : value;
+}
+
 /** Read every row of the explicitly declared configuration tables (one tenant per database). */
 export async function exportConfigurationTables(
   db: Database | Transaction,
@@ -235,6 +271,9 @@ export async function exportConfigurationTables(
     tables[declaration.name] = result.rows.map((row) => {
       const copy = { ...row };
       for (const field of declaration.omit ?? []) delete copy[field];
+      for (const [field, value] of Object.entries(copy)) {
+        if (value instanceof Uint8Array) copy[field] = encodeBytes(value);
+      }
       return copy;
     });
     if (declaration.reconnect && result.rows.length > 0) reconnect.push(declaration.name);
@@ -391,6 +430,10 @@ export async function importConfigurationTables(
   validateConfigurationBundle(bundle, modules, targetVersions);
   const checked = checkedRows(bundle, modules);
   const columns = new Map<string, Set<string>>();
+  // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES. Written as
+  // text instead they would be stored as text — this engine keeps whatever it is given, whatever a
+  // column declares — and every later read of that image would hand back the hex.
+  const blobColumns = new Map<string, Set<string>>();
   for (const [declaration] of checked) {
     // This engine has no `information_schema`; a table's columns come from the PRAGMA function.
     // The table-valued `pragma_table_info(?)` BINDS its argument — measured 2026-09-22 on Node
@@ -399,14 +442,22 @@ export async function importConfigurationTables(
     // STATEMENT, which is refused at prepare with `near "?": syntax error`
     // (`packages/db/src/deployment.ts` records that one). An unknown table yields no rows, which
     // the empty check below already treats as a refusal.
-    const result = await tx.execute<{ column_name: string }>(sql`
-      select name as column_name from pragma_table_info(${declaration.name})
+    const result = await tx.execute<{ column_name: string; column_type: string }>(sql`
+      select name as column_name, type as column_type from pragma_table_info(${declaration.name})
     `);
     const allowed = new Set(result.rows.map((row) => row.column_name));
     if (allowed.size === 0) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
     }
     columns.set(declaration.name, allowed);
+    blobColumns.set(
+      declaration.name,
+      new Set(
+        result.rows
+          .filter((row) => row.column_type.toUpperCase().includes("BLOB"))
+          .map((row) => row.column_name),
+      ),
+    );
   }
   for (const [declaration, rows] of checked) {
     const allowed = columns.get(declaration.name)!;
@@ -461,8 +512,10 @@ export async function importConfigurationTables(
       if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source };
+      const blobs = blobColumns.get(declaration.name)!;
       for (const [field, value] of Object.entries(row)) {
         if (typeof value === "string" && idMap.has(value)) row[field] = idMap.get(value)!;
+        else if (blobs.has(field)) row[field] = decodeBytes(value);
       }
       for (const column of declaration.locationColumns ?? []) {
         if (column in row) row[column] = target.locationId;
@@ -493,7 +546,7 @@ export async function importConfigurationTables(
           sql`, `,
         )})
         values (${sql.join(
-          fields.map((field) => sql`${row[field]}`),
+          fields.map((field) => sql`${bindable(row[field])}`),
           sql`, `,
         )})
       `);

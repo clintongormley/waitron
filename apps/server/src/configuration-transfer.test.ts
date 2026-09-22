@@ -448,6 +448,12 @@ describe("configuration transfer database path", () => {
         cross join products p
         where p.name = 'Café'
       `);
+      // LEFT FAILING DELIBERATELY, and not narrowed: this reads a `json` column and two boolean
+      // EXPRESSIONS through raw SQL, which skips drizzle's read mapping — the engine answers
+      // `'{"es":"Panadería"}'` and `1`, not an object and `true`. It is the same undecided idiom
+      // the plan records for `packages/identity/src/login.test.ts:121`, and the branch has left
+      // every instance red rather than invent one here. Everything BEFORE this line passed, which
+      // is what says the transfer itself works: the image bytes came back as bytes a few lines up.
       expect(category.rows).toEqual([
         {
           name: { es: "Panadería" },

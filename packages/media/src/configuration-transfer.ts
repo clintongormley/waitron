@@ -9,6 +9,28 @@ function invalid(): never {
   throw new AppError("image.invalid_metadata", {});
 }
 
+/**
+ * A `json` or `labelList` column, read back out of the bundle.
+ *
+ * Both are one TEXT column holding JSON (`packages/db/src/schema/columns.ts`), and what parses them
+ * is drizzle's read mapping — which the export does not go through: it takes a raw `select *` and
+ * says so (`apps/server/src/configuration-transfer.ts`). So an image's names, alt text and labels
+ * reach this function as the JSON TEXT the engine stores, and a value that is anything else did not
+ * come out of a venue.
+ *
+ * Measured, which is why this exists at all: without it the whole configuration-transfer database
+ * path failed with `image.invalid_metadata`, thrown from `normalizeTranslations`
+ * (`packages/media/src/images.ts:71`) because a string is not a record.
+ */
+function parsedJson(value: unknown): unknown {
+  if (typeof value !== "string") invalid();
+  try {
+    return JSON.parse(value);
+  } catch {
+    invalid();
+  }
+}
+
 /** Validate bytes before any configuration writes, preserving immutable URL contents on import. */
 export function validateMediaConfiguration(
   tables: Record<string, readonly Record<string, unknown>[]>,
@@ -38,9 +60,9 @@ export function validateMediaConfiguration(
     if (image.filename !== `${createHash("sha256").update(bytes).digest("hex")}.${extension}`)
       invalid();
     const input = {
-      names: image.names,
-      altText: image.alt_text,
-      labels: image.labels,
+      names: parsedJson(image.names),
+      altText: parsedJson(image.alt_text),
+      labels: parsedJson(image.labels),
     } as ImageMetadataInput;
     const metadata = normalizeImageMetadata(input);
     if (
