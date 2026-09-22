@@ -29,14 +29,15 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: this suite is about appendToChain's OWN logic — ordering, the genesis
-// shape, the error shape, and that a real appended chain re-verifies. True lock CONTENTION is proven
-// elsewhere, in chain.concurrency.test.ts on real Postgres — PGlite serialises every query onto one
-// backend, so it cannot test contention, see chain.pglite-cannot-test-contention.test.ts. What the
-// app role may do on `workforce_chains` is the privilege matrix's
-// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
-// suite's. PGlite connects as a superuser holding every grant, so no withTransaction/asAppUser wrapper is
-// needed here.
+// This suite is about appendToChain's OWN logic — ordering, the genesis shape, the error shape, and
+// that a real appended chain re-verifies. Serialisation between two appenders is proven elsewhere,
+// in ./chain.concurrency.test.ts. The sentence that used to stand here said this suite ran on PGlite
+// while the contention one ran on real Postgres through Testcontainers, and pointed at a permanent
+// demonstration that PGlite serialises every query onto one backend; all three of those are gone
+// with the engine, and one writer at a time is now the product's design rather than a test target's
+// limitation. What the app role may do on `workforce_chains` was the privilege matrix's
+// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`) — there are no
+// roles on this engine, which is also why no asAppUser wrapper is needed here.
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });

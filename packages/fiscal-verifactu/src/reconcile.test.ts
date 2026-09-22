@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -59,11 +59,15 @@ async function incidentsFor(): Promise<
   { code: string; severity: string; params: Record<string, unknown> }[]
 > {
   const { rows } = await withTransaction(pg.db, (tx) =>
-    tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
+    tx.execute<{ code: string; severity: string; params: string }>(
       sql`select code, severity, params from incidents`,
     ),
   );
-  return rows;
+  // `params` is a `json` column (`packages/db/src/schema/incidents.ts:40`). Drizzle decodes one
+  // read through the table definition; a raw read hands back the stored text, so the parse happens
+  // here rather than each `toMatchObject` below being loosened to compare against a string.
+  // `./reconcile.period.test.ts` and `packages/payments/src/reconcile.test.ts` do the same.
+  return rows.map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
 }
 
 /** The committed `envios.estado` per registro — used to prove reconcile now CORRECTS state toward
@@ -406,8 +410,14 @@ describe("reconcile — the three audit cases", () => {
     const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      sql`insert into persons (display_name, pin_hash, role)
-          values ('P', ${hashPin("1234")}, 'manager') returning id`,
+      // `id` and `created_at` are supplied here rather than left to the table: both come from a
+      // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs
+      // for a builder insert and never for raw SQL, and the generated DDL declares neither with a
+      // SQL DEFAULT (packages/identity/drizzle/0000_baseline.sql:46,62) — omitting them is refused
+      // `NOT NULL constraint failed: persons.id`. Same idiom as
+      // packages/workforce/src/migrations.test.ts:43-50.
+      sql`insert into persons (id, created_at, display_name, pin_hash, role)
+          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
     const voidSession = await withTransaction(pg.db, (tx) =>
       loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),

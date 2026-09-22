@@ -846,14 +846,29 @@ see "Two targets" above.) Every grant assertion must call
 under test; a grant test that skips this checks nothing about `app_user`'s reach regardless of what
 it asserts.
 
-## PGlite cannot test lock contention, on any schema
+## A contention test proves the write queue serialises writers, not that a lock blocked
 
-All queries serialise onto one backend
-(`packages/fiscal-verifactu/src/chain.pglite-cannot-test-contention.test.ts` is a permanent,
-executable demonstration of why), so `FOR UPDATE` parses and runs but never blocks — a hand-rolled
-contention test can pass while nothing ever contended. Chain-append and allocation concurrency must
-be tested against real Postgres via Testcontainers
-(`packages/fiscal-verifactu/src/chain.concurrency.test.ts`), never PGlite alone.
+**This section replaces one that said PGlite cannot test lock contention and that chain-append
+concurrency must therefore run against real Postgres through Testcontainers.** Both halves of that
+advice retired with the engine: there is no PGlite, no Testcontainers, and no `FOR UPDATE`. The
+executable demonstration it pointed at — a suite named chain.pglite-cannot-test-contention.test.ts,
+beside the chain suites in `packages/fiscal-verifactu/src` until the SQLite flip deleted it — existed
+to keep someone from dropping the Testcontainers dependency, and there is no such dependency to
+protect. It is named here without a backticked path deliberately: the pointer guard
+(`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and this one no longer
+does.
+
+What a contention suite asserts now is that one writer holds the venue file at a time
+(`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is
+the worked example, and its own header names the two properties that did NOT survive the change:
+per-node parallelism is gone — every writer serialises on the FILE, whichever node it appends to —
+and a premise check that writers run on distinct backends has no counterpart, because one writer at
+a time is the design rather than the thing that would make the suite theatre.
+
+**Start a writer through `withTransaction`, never through a bare `db.transaction(...)`.** Only the
+former takes the write queue (`packages/db/src/tenancy.ts` → `db.withWriteLock`). Twenty bare
+`db.transaction(...)` calls started together against one venue file fail
+`no such savepoint: wt_sp_1` — measured on the deleted suite above, which is how it was found.
 
 ## Treat "there is a test" as an unfinished sentence
 

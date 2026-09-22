@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
@@ -50,16 +50,23 @@ describe("liveSeriesBases", () => {
       await registerSif(tx, identity);
       const registered = await registerSif(tx, identity);
       expect(registered.numeroInstalacion).toBe(2);
+      // Every raw insert below supplies `id` itself: it comes from the table's `$defaultFn`
+      // generator (packages/db/src/schema/series.ts:29), which drizzle runs for a builder insert
+      // and never for raw SQL, and the generated DDL declares it without a SQL DEFAULT
+      // (packages/db/drizzle/0000_baseline.sql:63) — omitting it is refused `NOT NULL constraint
+      // failed: invoice_series.id`. `purpose` and `next_number` DO carry a SQL DEFAULT there
+      // (lines 66-67), so they are still left to the table. Same idiom as
+      // packages/workforce/src/migrations.test.ts:43-50.
       await tx.execute(sql`
-        insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'FA', 'standard'),
-          ( ${node.nodeId}, 'FA-2', 'standard')
+        insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'FA', 'standard'),
+          (${newId()}, ${node.nodeId}, 'FA-2', 'standard')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([{ code: "FA", purpose: "standard" }]);
 
       await tx.execute(sql`
-        insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'RE', 'rectificative'),
-          ( ${node.nodeId}, 'FA-2-2', 'rectificative'),
-          ( ${node.nodeId}, 'FA-2-2-2', 'rectificative')
+        insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'RE', 'rectificative'),
+          (${newId()}, ${node.nodeId}, 'FA-2-2', 'rectificative'),
+          (${newId()}, ${node.nodeId}, 'FA-2-2-2', 'rectificative')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
@@ -79,9 +86,12 @@ describe("liveSeriesBases across purposes", () => {
       const node = { nodeId: TENANT_A.nodeId };
       const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
       expect(sif.numeroInstalacion).toBe(1);
+      // `id` supplied for the same reason as the first suite above: no SQL DEFAULT in the DDL
+      // (packages/db/drizzle/0000_baseline.sql:63), and the `$defaultFn` runs only for a builder
+      // insert.
       await tx.execute(sql`
-          insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'FA', 'standard'),
-            ( ${node.nodeId}, 'FA-1', 'rectificative')
+          insert into invoice_series (id, node_id, code, purpose) values (${newId()}, ${node.nodeId}, 'FA', 'standard'),
+            (${newId()}, ${node.nodeId}, 'FA-1', 'rectificative')
         `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
@@ -45,8 +45,14 @@ beforeEach(async () => {
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the void path
   // under test now needs an authorizer, mirroring packages/core/src/record-correction.test.ts.
   const { rows } = await pg.db.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role)
-        values ('P', ${hashPin("1234")}, 'manager') returning id`,
+    // `id` and `created_at` are supplied here rather than left to the table: both come from a
+    // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs for
+    // a builder insert and never for raw SQL, and the generated DDL declares neither with a SQL
+    // DEFAULT (packages/identity/drizzle/0000_baseline.sql:46,62) — omitting them is refused
+    // `NOT NULL constraint failed: persons.id`. Same idiom as
+    // packages/workforce/src/migrations.test.ts:43-50.
+    sql`insert into persons (id, created_at, display_name, pin_hash, role)
+        values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
   const session = await withTransaction(pg.db, (tx) =>
     loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),

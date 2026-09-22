@@ -987,7 +987,7 @@ async function setEstado(
       confirmado_en = ${opts.confirmadoEn ? opts.confirmadoEn.toISOString() : null},
       codigo_error = ${codigoError},
       mensaje_error = ${opts.mensajeError ?? null},
-      incidencia = ${opts.incidencia ?? false} or incidencia
+      incidencia = ${opts.incidencia ? 1 : 0} or incidencia
     where registro_id = ${registroId}
   `);
   // The choke point for the per-row terminal estados THIS function writes (accepted /
@@ -1016,17 +1016,27 @@ async function setEstado(
  * the ack↔estado invariant intact. Each successor id is distinct from the rejected `row.id` whose
  * ack `setEstado` already wrote, so there is no double-write.
  *
- * No `WHERE ... AND e.registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
+ * No `WHERE ... AND registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
  * moved to `rechazado` by `setEstado` (called by `applyOutcome` before this), so it can never
  * match this UPDATE's own `estado in ('pendiente', 'enviando')` filter a second time.
+ *
+ * The chain is reached through a subquery rather than the `UPDATE ... FROM` this statement used
+ * to carry, which is the same replacement `packages/db/src/job-claim.ts` already made and for the
+ * same reason. Measured on this engine (`node:sqlite`, probe kept at `/tmp/f1-updfrom-probe.mjs`):
+ * `update envios e set … from registros_facturacion r …` is refused `near "e": syntax error`, and
+ * spelling the alias `as e` gets past the parser only to be refused `no such column: e.registro_id`
+ * in the `returning` clause. The subquery form and `returning registro_id` both name the same two
+ * successor rows the `FROM` form named.
  */
 async function haltSuccessors(tx: Transaction, row: DueRow, now: Date): Promise<string[]> {
   const halted = await tx.execute<{ registro_id: string }>(sql`
-    update envios e set estado = 'detenido', incidencia = true
-    from registros_facturacion r
-    where r.id = e.registro_id and r.sif_id = ${row.sif_id} and r.secuencia > ${row.secuencia}
-      and e.estado in ('pendiente', 'enviando')
-    returning e.registro_id
+    update envios set estado = 'detenido', incidencia = true
+    where estado in ('pendiente', 'enviando')
+      and registro_id in (
+        select id from registros_facturacion
+        where sif_id = ${row.sif_id} and secuencia > ${row.secuencia}
+      )
+    returning registro_id
   `);
   const haltedIds = halted.rows.map((r) => r.registro_id);
   for (const id of haltedIds) await writeAck(tx, id, now);
