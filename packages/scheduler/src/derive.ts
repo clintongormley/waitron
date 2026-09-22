@@ -40,11 +40,13 @@ export function mostRecentCompleteDay(now: Date): Date {
   return new Date(utcDayStart(now).getTime() - DAY_MS);
 }
 
-/** The subset of a ledger row derivation reads. Timestamps are ISO-8601 strings — normalised at
- * the read boundary (`store.ts`'s `isoText`/`isoTextOrNull`, via `to_json(col) #>> '{}'`), NOT
- * Postgres's native `timestamptz` rendering (`"2026-07-24 01:00:00+01"`: space-separated, no `T`,
- * and it shifts with the session's `TimeZone`). `new Date(...)` below tolerates either form, but
- * the type says ISO string, so the store makes that true rather than merely convenient. */
+/** The subset of a ledger row derivation reads. Timestamps are ISO-8601 strings, and no read
+ * boundary renders them: the columns are `tsString` (text, handed back as the driver's string),
+ * and every writer in `store.ts` binds `toISOString()` or `nowIso()`, so the stored bytes ARE that
+ * rendering (`nowIso` is `() => new Date().toISOString()`, packages/db/src/schema/columns.ts:272).
+ * `readSnapshot` therefore selects the columns plainly. `new Date(...)` below parses them; it
+ * would tolerate other renderings too, but no writer of `scheduled_runs` produces one — grepped
+ * 2026-09-22, the table is named nowhere outside this package but a privilege list and a comment. */
 export interface LedgerRow {
   id: string;
   periodFrom: string;

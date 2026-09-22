@@ -48,15 +48,6 @@ const NOW = new Date("2026-07-25T04:00:00Z");
  * actually reached the contended row while the first still held it. With one writer there is no
  * such moment to observe.
  *
- * ## Two cases here are STILL RED, and not for anything this file does
- *
- * `two runners starting together on one gap` and `... on one failed row` both fail with
- * `unrecognized token: "#"` (`ERR_SQLITE_ERROR`, errcode 1) on their first `claimGap`. The `#>>`
- * is PostgreSQL's JSON path operator, and `packages/scheduler/src/store.ts:27,:33,:92` still
- * builds every timestamp read as `to_json(<column>) #>> '{}'`. That is PRODUCT code this file
- * does not own; the cases are converted and left red rather than skipped, so the conversion is
- * not credited with a green it has not earned. Measured by running this file, 2026-09-22.
- *
  * Migration sets: CORE then SCHEDULER, the pair the deleted `core_scheduler` template this file
  * cloned was built from (`git show origin/main:packages/scheduler/src/testing/global-setup.ts`).
  *

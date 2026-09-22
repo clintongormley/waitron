@@ -52,17 +52,16 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // idempotent-re-migrate observation has no privilege content left. What the cases still prove is
 // what a mirror boot MOUNTS and REFUSES, which is the whole of the rest of this file.
 //
-// ONE CASE BELOW IS RED, AND A BROKEN PRODUCT FUNCTION IS WHY — not this file. `drain`'s
-// `workIsDue` (`packages/fiscal-verifactu/src/drain.ts:147-152`) issues
+// ONE CASE BELOW WAS RED ON A BROKEN PRODUCT FUNCTION, AND IT PASSES NOW. `drain`'s `workIsDue`
+// (`packages/fiscal-verifactu/src/drain.ts`) used to issue
 // `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22, on a venue directory
-// migrated by `applyMigrations`: the statement as written throws `unrecognized token: ":"` at the
-// cast, and with the cast removed it throws `no such function: envios_work_due`. Nothing creates
-// that function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such
-// thing. So EVERY `drain()` call on this engine throws before it reaches `resolveClient`. The case
-// is kept, converted and red, rather than deleted, because it guards a fiscal invariant
-// (CLAUDE.md §5: a node that is not the singleton primary must never file to AEAT) and because its
-// red assertion is the OTHER-direction control — see the note at that assertion for what the
-// failure costs the case that still passes.
+// migrated by `applyMigrations`: the statement as written threw `unrecognized token: ":"` at the
+// cast, and with the cast removed `no such function: envios_work_due`. Nothing created that
+// function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such thing.
+// So EVERY `drain()` call on this engine threw before it reached `resolveClient`. `workIsDue` is an
+// ordinary query now and the case passes unedited; it was kept red rather than deleted because it
+// guards a fiscal invariant (CLAUDE.md §5: a node that is not the singleton primary must never file
+// to AEAT) and because its assertion is the OTHER-direction control for the case beside it.
 
 // The four venue directories, and the long-lived handle this suite seeds and reads each through. A
 // directory is migrated through `applyMigrations` — the product's own entry point, which installs
@@ -432,7 +431,7 @@ describe("mirror-mode boot (deployment.mode = 'mirror')", () => {
     expect(role).toBe("secondary");
 
     // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
-    // primary control below (`envios_work_due` gates on `proximo_intento_en <= now`, whose
+    // primary control below (`workIsDue` gates on `proximo_intento_en <= now`, whose
     // default is the CONTAINER's `now()` at insert — which can sit microseconds ahead of the host's
     // `new Date()`, leaving the row not-yet-due and the tripwire silent for a clock-skew reason). The
     // mirror direction ignores `now` (the gate short-circuits), so one instant serves both.

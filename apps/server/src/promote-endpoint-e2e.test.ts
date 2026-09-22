@@ -90,18 +90,18 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 // connection this box may not write with any more, but nothing has re-derived what else could
 // refuse that write on this engine.
 //
-// STEP 1 IS RED FROM ITS `awaitingFiscalCertificate` POLL ONWARD, AND A BROKEN PRODUCT FUNCTION IS
-// WHY — not this file. `drain`'s `workIsDue` (`packages/fiscal-verifactu/src/drain.ts:147-152`)
-// issues `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22 on this suite's
-// OWN venue directory, after the sale: the statement as written throws `unrecognized token: ":"` at
-// the cast, and with the cast removed `no such function: envios_work_due`. Nothing creates that
+// STEP 1 WAS RED FROM ITS `awaitingFiscalCertificate` POLL ONWARD, ON A BROKEN PRODUCT FUNCTION,
+// AND IT PASSES NOW. `drain`'s `workIsDue` (`packages/fiscal-verifactu/src/drain.ts`) used to issue
+// `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22 on this suite's OWN
+// venue directory, after the sale: the statement as written threw `unrecognized token: ":"` at the
+// cast, and with the cast removed `no such function: envios_work_due`. Nothing created that
 // function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such thing. So
-// the promoted primary's fiscal pass fails outright (`duty.failed` with `fiscal.drain`, every pass)
-// instead of finding due work and skipping it for want of a certificate, and the awaiting-cert cell
-// never flips. This box is `WAITRON_ENV=production`, which is why the failure shows here and not in
-// a preproduction boot: `fiscalDrainEnabled` (`onboarding-policy.ts:12-16`) short-circuits a
-// preproduction pass to an empty result before any SQL runs. Everything up to that poll — the
-// promote, the restart, the sale, and the chained registro on the node's own reserved SIF — passes.
+// the promoted primary's fiscal pass failed outright (`duty.failed` with `fiscal.drain`, every
+// pass) instead of finding due work and skipping it for want of a certificate, and the
+// awaiting-cert cell never flipped. This box is `WAITRON_ENV=production`, which is why the failure
+// showed here and not in a preproduction boot: `fiscalDrainEnabled` (`onboarding-policy.ts`)
+// short-circuits a preproduction pass to an empty result before any SQL runs. `workIsDue` is an
+// ordinary query now and the step passes unedited.
 
 // `undici`'s `fetch` is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` (a distinct module identity — see boot.promote.test.ts) still serves the probes.

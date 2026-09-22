@@ -41,18 +41,18 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
  *    `pg_get_function_result` out of `pg_proc` to pin the seam's declared return type. There is no
  *    catalogue to ask and no function to ask about (see below).
  *
- * ## The two cases below are RED, and the reason is a BROKEN PRODUCT FUNCTION, not this file
+ * ## `credential_tenants` is gone, and the cases below are what holds its behaviour now
  *
- * `credentialProvisioned` (`./store.ts:177-182`) is `select credential_tenants(?)`. That function
+ * `credentialProvisioned` (`./store.ts`) used to be `select credential_tenants(?)`. That function
  * was created by `drizzle/0001_credentials_baseline_sql.sql`, which this branch DELETED; the SQLite
- * baseline creates the table and nothing else, and SQLite has no user-defined SQL functions.
- * Measured here 2026-09-22: the call throws `no such function: credential_tenants`.
+ * baseline creates the table and nothing else, and SQLite has no user-defined SQL functions, so the
+ * call threw `no such function: credential_tenants` (measured here 2026-09-22). It is an ordinary
+ * query now, and the two cases that were red for that reason pass without being adjusted.
  *
- * They are kept, converted and red, rather than deleted, for one reason: `apps/server/src/boot.ts`
- * calls `credentialProvisioned` to decide whether Stripe is configured, so this is a live path
- * that is broken today. Deleting its only two tests would make a broken function an untested one.
- * The storage swap's disposition ledger records the same blocker against
- * `apps/server/src/pass.pg.test.ts` ("BLOCKER 2").
+ * A THIRD case joined them with that conversion. The old function selected `id FROM tenants`, so it
+ * answered false on a box with no taxpayer row however well provisioned the vault was; nothing
+ * pinned that, and the obvious rewrite — asking `tenant_credentials` alone — drops it silently. The
+ * case states its own control.
  */
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -105,5 +105,22 @@ describe("credentialProvisioned", () => {
     await seedTenant(suite.db);
     const found = await credentialProvisioned(suite.db, "credentials-vault-test.never-provisioned");
     expect(found).toBe(false);
+  });
+
+  it("reports false while there is no taxpayer row, even with the purpose provisioned", async () => {
+    // NO `seedTenant` — the one thing this case varies. `useVenueDb` empties every data table
+    // after each test (`packages/db/src/testing/venue-db.ts`'s `applyReset`), so `tenants` really
+    // is empty here whatever the cases above seeded.
+    //
+    // The half of the answer the vault cannot give. The PostgreSQL function this replaced selected
+    // `id FROM tenants`, so a vault provisioned on a box whose venue is not configured yet
+    // enumerated nobody and the host ran no duty. Nothing else pinned that, and the obvious
+    // rewrite — asking `tenant_credentials` alone — drops it silently: with the `tenants` half
+    // deleted from `credentialProvisioned` this case reports `true` and fails, which is the
+    // control that was run (2026-09-22).
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
+    );
+    expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
   });
 });

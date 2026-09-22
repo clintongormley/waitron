@@ -139,16 +139,49 @@ export interface DrainDeps {
 type DueRow = RegistroRow & { intentos: number };
 
 /**
- * Is there anything to send, read before the drain opens its own transaction and with the caller's
- * grants? Lone stale claims count, so `drainDue` can recover them even with no pending row.
- * The SQL interval in `envios_work_due` matches RECUPERACION_ENVIANDO_MS;
- * migrations.test.ts checks both sides of that threshold.
+ * Is there anything to send, read on the supplied handle before the drain opens its own
+ * transaction? Lone stale claims count, so `drainDue` can recover them even with no pending row.
+ *
+ * An ordinary query. It replaces a PostgreSQL function, `envios_work_due(timestamptz)`, which this
+ * engine has no counterpart for — SQLite defines no SQL functions of its own and parses no
+ * `::timestamptz` cast, and the two gaps were measured one at a time: with the cast the call threw
+ * `unrecognized token: ":"`, and with the cast removed `no such function: envios_work_due`
+ * (`packages/fiscal-verifactu/src/drain.containment.test.ts`, run 2026-09-22 before this
+ * replacement). The old body is at
+ * `git show origin/main:packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`.
+ *
+ * Its two disjuncts are carried over with their comparisons unchanged, and the difference between
+ * them is not cosmetic:
+ *
+ * - `proximo_intento_en <= now` — INCLUSIVE, so a row whose next attempt falls exactly on this
+ *   instant is due now rather than one pass later. The same comparison `countDue` and `claimBatch`
+ *   make below, which is what stops this gate from opening on a row neither of them would claim.
+ * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` — STRICT, and the threshold is read from that
+ *   constant instead of the `interval '300000 milliseconds'` literal the SQL carried. Two literals
+ *   across a TS/SQL boundary are what `migrations.test.ts`'s threshold cases were written to pin;
+ *   there is one literal now, so the drift they watched for is unrepresentable rather than merely
+ *   tested. (Those cases still call the SQL function directly and are red — see that file.)
+ *   `recoverStaleClaims` recomputes the identical cutoff the identical way, so a row this reports
+ *   stale is a row that pass will actually recover.
+ *
+ * Both columns are compared as TEXT, which is what the ISO-8601 encoding makes sound: the `ts`
+ * helper writes every value through `Date.prototype.toISOString`
+ * (`packages/db/src/schema/columns.ts`'s `isoTimestamp`), whose output is fixed-width UTC, so
+ * lexical order is chronological order. Same treatment as `countDue`, `claimBatch` and
+ * `recoverStaleClaims` in this file.
+ *
+ * Boundary coverage: `drain.containment.test.ts`'s two threshold cases, each with the other side of
+ * the boundary beside it.
  */
 async function workIsDue(db: Database, now: Date): Promise<boolean> {
-  const rows = await db.execute<{ due: boolean }>(sql`
-    select envios_work_due(${now.toISOString()}::timestamptz) as due
+  const staleCutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
+  const rows = await db.execute<{ due: number }>(sql`
+    select 1 as due from envios
+    where (estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()})
+       or (estado = 'enviando' and enviado_en < ${staleCutoff})
+    limit 1
   `);
-  return rows.rows[0]?.due === true;
+  return rows.rows.length > 0;
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {

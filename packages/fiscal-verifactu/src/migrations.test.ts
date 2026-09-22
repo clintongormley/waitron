@@ -191,6 +191,22 @@ describe("registros_facturacion.entorno migration", () => {
   });
 });
 
+/**
+ * **Every case in this describe outlived its subject and none of them can pass.** They ask a
+ * PostgreSQL catalogue (`has_function_privilege`, `pg_proc`) about `envios_work_due(timestamptz)`,
+ * a function this branch's regeneration dropped and this engine could not hold anyway — SQLite
+ * defines no SQL functions and has no catalogue to ask. What the two THRESHOLD cases pinned is
+ * live again, through `drain()` rather than through SQL, in
+ * `packages/fiscal-verifactu/src/drain.containment.test.ts`'s "the due-work gate's thresholds": the
+ * `<=` on `proximo_intento_en` and the strict `<` on the `RECUPERACION_ENVIANDO_MS` cutoff, each
+ * with the other side of the boundary beside it, and each proven by a control that flips the one
+ * comparison and watches that case alone go red. The grant case has no successor and is not owed
+ * one: there are no roles on this engine (`packages/db/src/testing/roles.ts`).
+ *
+ * They are left here rather than deleted because this whole FILE is red before any of them runs —
+ * its `useVenueDb` setup expects `runMigrations(db, FISCAL_MIGRATIONS)` to be rejected and it is
+ * not, so all twelve cases are skipped — and untangling that is separate work.
+ */
 describe("envios drainer enumeration", () => {
   it("grants app_user EXECUTE on the enumeration and withholds PUBLIC EXECUTE", async () => {
     const db = pg.db;

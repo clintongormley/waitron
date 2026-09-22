@@ -95,8 +95,19 @@ describe("the credentials migration set", () => {
 });
 
 /**
- * The enumeration function pins its search path and grants EXECUTE to app_user while revoking
- * PUBLIC's default EXECUTE. Functional cases are in credentials.test.ts.
+ * **Both cases here outlived their subject and neither can pass.** They ask a PostgreSQL catalogue
+ * (`has_function_privilege`, `pg_proc`) about `credential_tenants(text)` — a function this branch's
+ * regeneration dropped, and one this engine could not hold anyway: SQLite defines no SQL functions,
+ * has no catalogue to ask, and has no roles for a grant to name
+ * (`packages/db/src/testing/roles.ts`). The `search_path` pin has no counterpart either: there is
+ * one file and no schema to resolve against.
+ *
+ * What the function DID, `credentialProvisioned` now does as an ordinary query, and the functional
+ * cases in `credentials.test.ts` are what hold it — the purpose filter, and the `tenants` half the
+ * old SQL carried by selecting `id FROM tenants`.
+ *
+ * Left rather than deleted: deciding what a PostgreSQL-catalogue suite becomes on this engine is
+ * the branch's own sweep, not a side effect of replacing one function.
  */
 describe("credential_tenants enumeration seam", () => {
   it("names EXECUTE to app_user only — PUBLIC's default grant was revoked", async () => {

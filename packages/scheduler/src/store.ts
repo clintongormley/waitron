@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lt, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
@@ -16,32 +16,28 @@ export interface ClaimedRun {
 }
 
 /**
- * Renders a `timestamp with time zone` column as ISO-8601 text, e.g. `2026-07-24T01:00:00+01:00`,
- * instead of Postgres's native `2026-07-24 01:00:00+01` (space-separated, no `T`). Plain column
- * selection hands back that native rendering — `LedgerRow`'s and `ClaimedRun`'s own doc comments
- * promise ISO strings, and `to_json(col) #>> '{}'` is what makes that literally true rather than a
- * claim callers have to trust. `new Date(...)` parses either rendering correctly, so nothing
- * downstream depended on the native form; this only fixes what the TYPE says the value looks like.
+ * The columns a claim hands back.
+ *
+ * Every timestamp here is read by selecting the column and nothing else. The columns are
+ * `tsString` — `text`, handed back as the string the driver returned — and every writer in this
+ * file binds `toISOString()` or `nowIso()`, so what is stored IS the ISO-8601 string
+ * `ClaimedRun` and `LedgerRow` promise. Measured 2026-09-22, through `useVenueDb` on the real
+ * engine: after an insert carrying `claimGap`'s own values, `select period_from,
+ * typeof(period_from) from scheduled_runs` gave `2026-07-24T00:00:00.000Z` and `text`, and a
+ * plain drizzle selection of the same column gave that same string. No rendering step is needed
+ * to make the type true.
  */
-function isoText(column: AnyColumn) {
-  return sql<string>`to_json(${column}) #>> '{}'`;
-}
-
-/** As `isoText`, for a column (or aggregate expression) that can genuinely be SQL NULL —
- * `to_json(NULL) #>> '{}'` renders NULL, not the string `"null"`, so the nullability is real. */
-function isoTextOrNull(column: AnyColumn) {
-  return sql<string | null>`to_json(${column}) #>> '{}'`;
-}
-
 const CLAIMED = {
   id: scheduledRuns.id,
-  periodFrom: isoText(scheduledRuns.periodFrom),
-  periodTo: isoText(scheduledRuns.periodTo),
+  periodFrom: scheduledRuns.periodFrom,
+  periodTo: scheduledRuns.periodTo,
   generation: scheduledRuns.generation,
   attempts: scheduledRuns.attempts,
   // Never null here: every statement that selects via CLAIMED sets started_at in the same
-  // statement (claimGap on insert, claimRow/reclaimStale on update).
-  startedAt: isoText(scheduledRuns.startedAt),
+  // statement (claimGap on insert, claimRow/reclaimStale on update). The COLUMN is nullable, so
+  // selecting it plainly would infer `string | null` and refuse to satisfy `ClaimedRun.startedAt`;
+  // this template emits the same column reference and is where that invariant is asserted.
+  startedAt: sql<string>`${scheduledRuns.startedAt}`,
 } as const;
 
 /**
@@ -63,13 +59,13 @@ export async function readSnapshot(
   const rows = await tx
     .select({
       id: scheduledRuns.id,
-      periodFrom: isoText(scheduledRuns.periodFrom),
-      periodTo: isoText(scheduledRuns.periodTo),
+      periodFrom: scheduledRuns.periodFrom,
+      periodTo: scheduledRuns.periodTo,
       generation: scheduledRuns.generation,
       state: scheduledRuns.state,
       attempts: scheduledRuns.attempts,
-      nextAttemptAt: isoTextOrNull(scheduledRuns.nextAttemptAt),
-      startedAt: isoTextOrNull(scheduledRuns.startedAt),
+      nextAttemptAt: scheduledRuns.nextAttemptAt,
+      startedAt: scheduledRuns.startedAt,
     })
     .from(scheduledRuns)
     .where(
@@ -86,10 +82,12 @@ export async function readSnapshot(
 
   const [bounds] = await tx
     .select({
-      // `min()` over zero rows is SQL NULL — the "duty has never run" case — and `to_json` renders
-      // that as NULL too (not the string "null"), so `?? null` below is a real fallback, not dead
-      // code papering over a lie.
-      earliest: sql<string | null>`to_json(min(${scheduledRuns.periodFrom})) #>> '{}'`,
+      // `min()` over zero rows is SQL NULL — the "duty has never run" case — so `?? null` below is
+      // a real fallback, not dead code papering over a lie. Measured 2026-09-22 on the real engine:
+      // `select min(period_from), count(*) from scheduled_runs where duty = 'no.such.duty'`
+      // returned one row reading `{"earliest":null,"n":0}`, so the driver hands back JS `null`, not
+      // a string and not a missing row.
+      earliest: sql<string | null>`min(${scheduledRuns.periodFrom})`,
       below: sql<number>`count(distinct ${scheduledRuns.periodFrom}) filter (where ${scheduledRuns.periodFrom} < ${horizon})`,
     })
     .from(scheduledRuns)

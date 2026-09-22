@@ -65,14 +65,20 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 //
 // `does not file as a secondary, then files on the next tick after a live promote` expects the
 // promoted primary's drain to have ATTEMPTED the submission — `intentos: 1, incidencia: true`.
-// Measured 2026-09-22 by running this file: the row is still `intentos: 0, incidencia: false`,
-// because the drain never reaches a submission. `workIsDue` (`packages/fiscal-verifactu/src/
-// drain.ts:147-152`) issues `select envios_work_due(<instant>::timestamptz)`, and no migration in
-// the tree creates that function — `grep -rn "create function" packages/*/drizzle` returns
-// nothing, and SQLite has no user-defined SQL functions. So every real `drain()` throws, which is
-// what the booted server's `duty.failed` line for `fiscal.drain` records. The secondary half of
-// the case — that a secondary files NOTHING — passes, so what is red is only the post-promote
-// half.
+// The row is still `intentos: 0, incidencia: false`, because the drain never reaches a submission.
+//
+// The cause MOVED on 2026-09-22 and this paragraph is its replacement. It used to be `workIsDue`,
+// which issued `select envios_work_due(<instant>::timestamptz)` — a function no migration creates
+// and a cast this engine does not parse — so `drain()` threw before it enumerated anything at all.
+// `workIsDue` is an ordinary query now, and the drain gets one statement further and throws there
+// instead: `countDue` (`packages/fiscal-verifactu/src/drain.ts`) selects `count(*)::text`, and
+// SQLite refuses the `::` with `unrecognized token: ":"`. Measured by running this file with the
+// swallowed error printed from `drain`'s own catch — the stack names `countDue`, `errcode` 1 — and
+// visible without that patch as the booted server's `drain.tenant_skipped` warning carrying
+// `errorCode: "unknown"`, which is `codeOf`'s fallback for a driver error.
+//
+// The secondary half of the case — that a secondary files NOTHING — passes, so what is red is
+// only the post-promote half.
 //
 // `undici`'s `fetch` is module-mocked to REJECT so the AEAT submit the post-promote drain makes fails
 // fast: the seeded `envios` row transitions to an OBSERVABLE attempted state (`backoffBatch` sets

@@ -144,52 +144,55 @@ beforeEach(() => {
  * "runs no migration" half of "refuses to start, and runs no migration" — on a different lever, and
  * that test's own comment states the lever and the control run both ways.
  *
- * ## SIX CASES BELOW ARE RED, AND TWO BROKEN PRODUCT FUNCTIONS ARE WHY — not this file
+ * ## SIX CASES BELOW WERE RED ON TWO BROKEN PRODUCT FUNCTIONS, AND ALL SIX PASS NOW
  *
- * Two SQL functions the product calls are created by no migration, and SQLite has no user-defined
- * functions to find them in. Measured 2026-09-22 against a directory migrated by
+ * Two SQL functions the product called were created by no migration, and SQLite has no
+ * user-defined functions to find them in. Measured 2026-09-22 against a directory migrated by
  * `applyMigrations(dir, migrationOptionsFor(manifestSets(), null))`, each statement run with its
  * `::timestamptz` cast removed: `no such function: envios_work_due` and
  * `no such function: credential_tenants`, `errcode` 1 each. The control in the other direction, in
  * the same probe: `select count(*) as n from envios` answers `0`, so the migration set that would
- * have carried the function DID run and it is the FUNCTION that is missing, not the schema.
+ * have carried the function DID run and it was the FUNCTION that was missing, not the schema.
  *
- * - `credential_tenants` (`packages/credentials/src/store.ts:178`) is called from `boot.ts:2375` on
- *   EVERY reconcile pass, with no gate in front of it, so `payments.reconcile.stripe` fails on every
- *   trading boot in this file.
- * - `envios_work_due` is reached through `workIsDue`
- *   (`packages/fiscal-verifactu/src/drain.ts:147-152`) only when the submission policy lets the REAL
- *   drain run. `runFiscalDrain` (`apps/server/src/onboarding-policy.ts:19-25`) returns
+ * Both are ordinary queries now — `packages/credentials/src/store.ts`'s `credentialProvisioned` and
+ * `packages/fiscal-verifactu/src/drain.ts`'s `workIsDue` — and this file reports 37 passed, with no
+ * case edited. What each of the six used to cost is kept below, because it is the reading that
+ * showed the two functions apart:
+ *
+ * - `credential_tenants` is called from `boot.ts` on EVERY reconcile pass, with no gate in front of
+ *   it, so `payments.reconcile.stripe` failed on every trading boot in this file.
+ * - `envios_work_due` is reached through `workIsDue` only when the submission policy lets the REAL
+ *   drain run. `runFiscalDrain` (`apps/server/src/onboarding-policy.ts`) returns
  *   `emptyDrainResult()` without calling it when `fiscalDrainEnabled` is false — which preproduction
  *   is, unless fiscal test submissions are switched on.
  *
- * **That second bullet corrects a claim three sibling suites state more widely.** They say every
- * real `drain()` throws, which is true of `drain()`, and read as though every boot's drain duty
- * does. It does not. Measured here, one case each, counting the `pass.complete` duty outcomes:
- * a `WAITRON_ENV=preproduction` trading boot reports `fiscal.drain ok:true` 3 times out of 3 and
- * `payments.reconcile.stripe ok:false` 3 out of 3; a `WAITRON_ENV=production` one reports BOTH
- * `ok:false`, 201 out of 201. So `credential_tenants` alone is enough to hold `/health` at 503 on
- * every trading boot, and it is the only thing doing so on a preproduction one.
+ * **That second bullet corrects a claim three sibling suites stated more widely.** They said every
+ * real `drain()` throws, which was true of `drain()`, and read as though every boot's drain duty
+ * did. It did not. Measured then, one case each, counting the `pass.complete` duty outcomes:
+ * a `WAITRON_ENV=preproduction` trading boot reported `fiscal.drain ok:true` 3 times out of 3 and
+ * `payments.reconcile.stripe ok:false` 3 out of 3; a `WAITRON_ENV=production` one reported BOTH
+ * `ok:false`, 201 out of 201. So `credential_tenants` alone was enough to hold `/health` at 503 on
+ * every trading boot, and it was the only thing doing so on a preproduction one.
  *
- * What that costs, case by case, and why each is kept rather than edited:
+ * What that cost, case by case:
  *
- * 1. `boots, pins the tick-clamp mapping…` (production) — `sleeping.sleepMs` reads 1000
+ * 1. `boots, pins the tick-clamp mapping…` (production) — `sleeping.sleepMs` read 1000
  *    (`minTickMs`) where the case pins 94327 (`maxTickMs`). Its premise is that with nothing due
  *    both duties report `nextDueAt: null`; a FAILING duty asks to be retried at once instead, so
- *    `sleepMsFor` clamps to the floor. The mapping the case exists to pin is unobservable until
- *    both duties can succeed.
+ *    `sleepMsFor` clamped to the floor. The mapping the case exists to pin was unobservable until
+ *    both duties could succeed.
  * 2-4. The three that call `fetchHealthOk` — `/health` stays 503 until EACH duty's first clean pass
- *    sets `lastOkAt` (`health.ts`), and the reconcile duty never has one. One of the three
- *    (`boots in trading mode over HTTPS…`) is preproduction, so its drain is fine and
- *    `credential_tenants` is its whole cause.
+ *    sets `lastOkAt` (`health.ts`), and the reconcile duty never had one. One of the three
+ *    (`boots in trading mode over HTTPS…`) is preproduction, so its drain was fine and
+ *    `credential_tenants` was its whole cause.
  * 5. `sleeps on WAITRON_SKIP_RETRY_MS…` (production) — no `drain.tenant_skipped` line, because
- *    `drain` throws in `workIsDue` before it enumerates a tenant at all.
- * 6. `closes the mTLS transport…` (production) — `Agent.prototype.close` is never called, for the
- *    same reason: the throw is upstream of `resolveClient`.
+ *    `drain` threw in `workIsDue` before it enumerated a tenant at all.
+ * 6. `closes the mTLS transport…` (production) — `Agent.prototype.close` was never called, for the
+ *    same reason: the throw was upstream of `resolveClient`.
  *
- * Three other suites record the drain half in their own header comments: `boot.mirror.test.ts`,
- * `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`. None of them records `credential_tenants`
- * reaching boot's reconcile duty.
+ * Three other suites recorded the drain half in their own header comments: `boot.mirror.test.ts`,
+ * `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`. Only `boot.promote.test.ts` still has a
+ * red case, and it is red on a THIRD PostgreSQL leftover — see that file.
  *
  * **The suite owns a venue DIRECTORY, not a database.** `useVenueDb` never exposes the directory it
  * makes and boot needs one, so the shared fixture below is a `mkdtemp` + `applyMigrations` +

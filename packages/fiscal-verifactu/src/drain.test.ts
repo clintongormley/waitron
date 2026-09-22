@@ -999,7 +999,7 @@ describe("drain — the deployment-environment guard", () => {
       // in place it would sit `pendiente` forever in this file's SHARED `pg.db`, violating the
       // "batching (the >cap split)" describe's own documented assumption that nothing else here
       // leaves work behind (its header comment, corrected in this same fix round). Deleting the
-      // `envios` row (not the registro — `envios_work_due` reads only this table)
+      // `envios` row (not the registro — `workIsDue` reads only this table)
       // is `boot.test.ts`'s own established pattern for the identical need.
       await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }

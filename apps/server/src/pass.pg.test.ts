@@ -36,18 +36,18 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
  * `TickResult.skipped` and logs a warning instead of throwing. There is no permission-denied error
  * on this engine, so what the assertion still catches is any other cause of a skip or defer.
  *
- * ## Both cases are RED, and the reason is a BROKEN PRODUCT FUNCTION, not this file
+ * ## Both cases were RED on a BROKEN PRODUCT FUNCTION, and both pass now
  *
- * `credentialProvisioned` (`packages/credentials/src/store.ts:177-182`) is
- * `select credential_tenants(?)`. That function was created by a PostgreSQL-only migration this
- * branch deleted; the SQLite credentials baseline creates the table and nothing else, and SQLite
- * has no user-defined SQL functions. The disposition document records this as "BLOCKER 2", and
- * `packages/credentials/src/credentials.test.ts` carries the same two red cases for the same
- * reason from the other side. The measurement is at each case.
+ * `credentialProvisioned` (`packages/credentials/src/store.ts`) was `select credential_tenants(?)`.
+ * That function was created by a PostgreSQL-only migration this branch deleted; the SQLite
+ * credentials baseline creates the table and nothing else, and SQLite has no user-defined SQL
+ * functions. The disposition document records this as "BLOCKER 2", and
+ * `packages/credentials/src/credentials.test.ts` carried the same red cases from the other side.
+ * It is an ordinary query now and both cases below pass unadjusted.
  *
- * They are kept, converted and red, rather than deleted, because this is the ONLY suite that runs
+ * They were kept, converted and red, rather than deleted, because this is the ONLY suite that runs
  * `runPass` against a real database — `pass.test.ts` beside it is all fakes — so deleting them
- * would leave the composed drain + reconcile + ledger pass covered by nothing.
+ * would have left the composed drain + reconcile + ledger pass covered by nothing.
  *
  * The stale `.pg.` in this file's name, and the "non-superuser deployment role" in the describe
  * below, are left for the branch's single rename sweep rather than changed here. Two comments
@@ -95,9 +95,6 @@ describe("one pass as the non-superuser deployment role", () => {
     );
 
     const probe = suite.db;
-    // RED, and this is where the file stops. `credentialProvisioned` issues
-    // `select credential_tenants(?)`; measured 2026-09-22 on this suite, the call throws
-    // `no such function: credential_tenants`, so nothing below it runs.
     expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
 
     const reconciler = new StripeReconciler({
@@ -170,17 +167,15 @@ describe("one pass as the non-superuser deployment role", () => {
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
     await seedTenant(suite.db);
     // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
-    // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
-    // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
-    // not merely the row's absence, the thing this test depends on.
+    // would pass this assertion even if `credentialProvisioned`'s `purpose` predicate were deleted
+    // outright. Giving it a DIFFERENT purpose's credential is what makes the filter, not merely the
+    // row's absence, the thing this test depends on.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
-    // RED for the same reason as the case above: `credential_tenants` does not exist on this
-    // engine, so this throws rather than answering `false`.
     expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
   });
 });

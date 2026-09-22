@@ -66,6 +66,12 @@ const ROOTS: readonly string[] = [
   join(REPO, "packages/reporting/src"),
   join(REPO, "packages/reporting/test"),
   join(REPO, "packages/workforce/src"),
+  // `packages/scheduler/src` joined for the same reason as the two above, and it is why `to_json`
+  // and `#>>` are on the list below: `store.ts` built every timestamp read as
+  // `to_json(<column>) #>> '{}'`, which refuses at prepare, and most of `run.test.ts` was red on
+  // it. This guard reported nothing, and BOTH halves were needed to make it report — measured
+  // 2026-09-22 by putting the expression back with this root removed, which still passed.
+  join(REPO, "packages/scheduler/src"),
 ];
 
 /**
@@ -84,6 +90,15 @@ const ROOTS: readonly string[] = [
  * The three `packages/workforce` entries carry a second reason on top: each opens
  * `RED ON THIS BRANCH, AND NOT BY OVERSIGHT`, because the row lock it was written to prove has been
  * deleted from the source tree-wide. Their residue is the `for update` clause itself.
+ *
+ * `packages/scheduler/src/migrations.test.ts` is the one entry that is NOT a `useTemplateDb`
+ * suite. It collects, it RUNS, and it is red on this branch for reasons this guard cannot see: it
+ * asserts SQLSTATEs (`23514`, `23505`) against an engine that answers `ERR_SQLITE_ERROR`, and its
+ * raw inserts omit `id`, which is a JavaScript `$defaultFn` here rather than a column default, so
+ * the row is refused `NOT NULL constraint failed: scheduled_runs.id` — the second of the two blind
+ * spots this file's header names. Its residue by this guard's own list is a `count(*)::int`.
+ * Converting that suite is its own piece of work; naming it here keeps the debt visible rather
+ * than letting the scheduler root pass by omission. Measured 2026-09-22 by running the package.
  */
 const UNSWEPT: readonly string[] = [
   "packages/reporting/src/record-daily-close.pg.test.ts",
@@ -92,6 +107,7 @@ const UNSWEPT: readonly string[] = [
   "packages/workforce/src/chain.concurrency.test.ts",
   "packages/workforce/src/clocking.concurrency.test.ts",
   "packages/workforce/src/scheduling.concurrency.test.ts",
+  "packages/scheduler/src/migrations.test.ts",
 ];
 
 /** PostgreSQL-only spellings, each with what SQLite answers when one reaches the engine. */
@@ -130,6 +146,15 @@ const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] 
   // refuses the clause at prepare (`near "for": syntax error`), and the compiler cannot see it
   // inside a template, which is the reason it is worth a pattern.
   { name: "for update — SQLite has no row locks", pattern: /\bfor\s+update\b/ },
+  // Measured against `node:sqlite` on Node v26.7.0, 2026-09-22: `select to_json(a) #>> '{}' from
+  // t` is refused at prepare with `unrecognized token: "#"` (`ERR_SQLITE_ERROR`, errcode 1), and
+  // with the operator removed the same statement gives `no such function: to_json`. Two separate
+  // refusals, so two patterns — the operator alone is enough to refuse a statement whose function
+  // name this list might not carry. Their one use in the source tree was rendering a `timestamptz`
+  // as ISO-8601 text, which a `tsString` column does not need: it already holds the string the
+  // writer bound.
+  { name: "to_json() — SQLite has no such function", pattern: /\bto_json\s*\(/ },
+  { name: "#>> — PostgreSQL JSON path operator", pattern: /#>>/ },
 ];
 
 /**

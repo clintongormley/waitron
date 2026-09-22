@@ -1,29 +1,29 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 
 /**
- * **Every case in this file is RED, and none of them is red for a reason inside this file.**
+ * `drain()`'s first act is `workIsDue`, which used to ask the database for
+ * `envios_work_due(<instant>::timestamptz)` — a PostgreSQL scalar function behind a PostgreSQL
+ * cast, and this engine has neither. It is an ordinary query now (`./drain.ts`), and the five cases
+ * that were red for that one reason went green without one of them being adjusted:
+ * `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.containment.test.ts` reports
+ * 7 passed, the two threshold cases at the foot of this file included.
  *
- * `drain()`'s first act is `workIsDue`, which asks the database for
- * `envios_work_due(<instant>::timestamptz)` (`./drain.ts:148`) — a PostgreSQL scalar function
- * behind a PostgreSQL cast, and this engine has neither. Measured against a database migrated by
- * `TEST_MIGRATIONS`, with a control in the other direction:
+ * The measurement kept from when they were red, because it is what showed the two gaps were
+ * SEPARATE and that closing either alone would only have moved the failure:
  *
  * - `select envios_work_due('2026-07-21T00:01:00Z'::timestamptz) as due` → `unrecognized token: ":"`
  * - the same statement with the cast removed → `no such function: envios_work_due`
  * - the control, `select count(*) as n from envios` → no error
  *
- * So the table is there and the connection is sound; it is the function and the cast that are not,
- * and removing only the cast would not be enough. Nothing in `packages/fiscal-verifactu/drizzle/`
- * or `packages/store` defines `envios_work_due` on this engine (grepped 2026-09-22). Converting
- * `drain.ts` is product work, not test work, so these cases are left failing rather than adjusted:
- * the moment `drain()` runs here, they should go green unchanged.
+ * So the table was there and the connection sound; it was the function and the cast that were not.
  */
 
 // A `now` a minute after the fixtures' fixed `2026-07-21T00:00:00Z`, so the seeded rows are due.
@@ -222,5 +222,102 @@ describe("drain resolves a client only when it has work", () => {
 
     // `codeOf`'s fallback: the driver's own error on a closed database is not an `AppError`.
     expect(result.skipped).toEqual([{ errorCode: "unknown" }]);
+  });
+});
+
+/**
+ * The due-work gate's two thresholds, each probed on BOTH sides.
+ *
+ * `workIsDue` (`./drain.ts`) is the only reader of either, and it is not exported, so these reach
+ * it the way production does: through `drain`, reading `tenantsWithWork` — which `drain` increments
+ * the moment the gate opens, before it resolves a client. Nothing else in this package pins these
+ * two comparisons on this engine. The cases that used to, in `migrations.test.ts`, call the
+ * PostgreSQL function `envios_work_due` directly and cannot survive its removal; they are left as
+ * they are rather than rewritten here.
+ *
+ * Both halves of each case are deliberately ordered "not due" first: the due half runs `drainDue`,
+ * which claims the row and rewrites it, so it cannot be followed by another read of the same row.
+ */
+describe("the due-work gate's thresholds", () => {
+  it("counts a pendiente row whose next attempt falls exactly on this instant, and not one a millisecond later", async () => {
+    // `<=`, not `<`. A row stamped exactly `now` is due NOW — `claimBatch` makes the same
+    // comparison, so a gate reading `<` here would leave a claimable row sitting for a whole pass.
+    // `proximo_intento_en` is written explicitly rather than taken from the fixture's own default,
+    // so this case states the instant it is probing.
+    await seedPendingEnvios(pg.db, { count: 1 });
+    await pg.db.execute(sql`
+      update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+    `);
+
+    const early = recordingResolver();
+    const notYet = await drain(
+      {
+        db: pg.db,
+        resolveClient: early.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      new Date(NOW.getTime() - 1),
+    );
+    expect(notYet.tenantsWithWork).toBe(0);
+    expect(early.asked).toBe(0);
+
+    const onTime = recordingResolver();
+    const due = await drain(
+      {
+        db: pg.db,
+        resolveClient: onTime.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(due.tenantsWithWork).toBe(1);
+    expect(onTime.asked).toBe(1);
+  });
+
+  it("counts a lone enviando row past RECUPERACION_ENVIANDO_MS, and not one exactly at it", async () => {
+    // `<`, not `<=`, against a cutoff derived from RECUPERACION_ENVIANDO_MS — the same constant,
+    // recomputed the same way, that `recoverStaleClaims` uses. Equal instants are NOT stale, which
+    // is what keeps the gate from opening on a row that pass would then decline to recover.
+    //
+    // A lone `enviando` row, with no `pendiente` row beside it: that is the only shape in which
+    // this disjunct decides the answer on its own.
+    await seedPendingEnvios(pg.db, { count: 1 });
+    await pg.db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS).toISOString()}
+    `);
+
+    const exact = recordingResolver();
+    const notYet = await drain(
+      {
+        db: pg.db,
+        resolveClient: exact.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(notYet.tenantsWithWork).toBe(0);
+    expect(exact.asked).toBe(0);
+
+    await pg.db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS - 1).toISOString()}
+    `);
+
+    const stale = recordingResolver();
+    const due = await drain(
+      {
+        db: pg.db,
+        resolveClient: stale.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(due.tenantsWithWork).toBe(1);
+    expect(stale.asked).toBe(1);
   });
 });

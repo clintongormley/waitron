@@ -40,9 +40,10 @@ describe("resweepAfter", () => {
     const snapshot = await snapshotOf();
     const pending = snapshot.rows.filter((r) => r.state === "pending");
     expect(pending).toHaveLength(1);
-    // Store timestamps are normalised ISO-8601 via `to_json(col) #>> '{}'`, which renders the
-    // offset form (`"2026-07-24T00:00:00+00:00"`), not the `.000Z` literal — parse-then-compare,
-    // as packages/payments/src/store.test.ts's convention already does.
+    // The store hands back the string the column holds — `period.from.toISOString()` went in, and
+    // `CLAIMED` selects the column and nothing else (store.ts). Parsed before comparing anyway, as
+    // packages/payments/src/store.test.ts's convention does, so this pins the MOMENT and leaves
+    // the store free to change how it renders one without a test having to be edited.
     expect(new Date(pending[0]!.periodFrom).toISOString()).toBe("2026-07-24T00:00:00.000Z");
     expect(pending[0]).toMatchObject({ generation: 1 });
   });
