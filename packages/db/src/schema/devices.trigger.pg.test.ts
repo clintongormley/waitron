@@ -1,22 +1,46 @@
-// Real Postgres, not PGlite: the binding-rule triggers (device_binding_rule_insert +
-// device_binding_rule_update) are what this suite
-// exercises, and CLAUDE.md §4 requires the real target for anything about triggers firing under the
-// deployment role. The trigger fires on both targets, but the seeds run as the owner and the inserts
-// are the app-role write path, so the realism is the point. The clone carries CORE_MIGRATIONS, which
-// includes the drop-device_kind + device_binding_rule migrations under test.
-import { sql } from "drizzle-orm";
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT.
+ *
+ * This suite is the only thing that holds the device BINDING RULE: a `kds`-profile device binds a
+ * kitchen station and no register, and every other form factor binds a register and no station. On
+ * PostgreSQL that rule was two triggers, `device_binding_rule_insert` and
+ * `device_binding_rule_update` (`packages/db/src/schema/devices.ts` still names them in its own
+ * comments).
+ *
+ * **Neither trigger is in the SQLite migration set.** Regenerating every set from the schema
+ * dropped every hand-written trigger, and `packages/db/drizzle/0001_behavioural_triggers.sql`
+ * restored eight of them — the binding rule is not one of the eight, and
+ * `scripts/behavioural-triggers.test.ts` pins that list by EQUALITY, so re-adding the trigger would
+ * fail that guard until its list grows too. Measured 2026-09-22 against a database migrated with
+ * `CORE_MIGRATIONS`: `select name from sqlite_master where type = 'trigger'` returns 28 names and
+ * neither `device_binding_rule_insert` nor `device_binding_rule_update` is among them.
+ *
+ * So a `kds` device with no station, a till device with a stray station, and a device reactivated
+ * onto an incompatible profile are all ACCEPTED by this database today. The cases below are left
+ * asserting what they always asserted, and they fail. Restoring the trigger — or deciding the rule
+ * moves into application code and deleting this file with that decision written down — is the
+ * owner's call, not this conversion's.
+ *
+ * The name still ends `.pg.test.ts`, and nothing here reaches PostgreSQL any more; the rename waits
+ * on that same decision.
+ */
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
+import { deviceProfiles } from "./device-profiles.js";
+import { devices } from "./devices.js";
+import { locations, tills } from "./tenants.js";
 import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices binding-rule trigger (form factor → station XOR register)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
-  let admin: Database;
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  let db: Database;
   let locationId: LocationId;
   let stationId: string;
   let tillId: string;
@@ -24,32 +48,47 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   let tillProfileId: string;
 
   beforeAll(async () => {
-    admin = suite.admin;
-    await seedTenant(admin);
-    const location = await admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
-    locationId = location.rows[0]!.id as LocationId;
-    stationId = await seedKitchenStation(admin, { locationId });
-    const till = await admin.execute<{ id: string }>(sql`
-      insert into tills (location_id, name) values (${locationId}, 'Till') returning id`);
-    tillId = till.rows[0]!.id;
-    const kds = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor) values ('KDS profile', 'kds') returning id`);
-    kdsProfileId = kds.rows[0]!.id;
-    const tillProfile = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor) values ('Till profile', 'till') returning id`);
-    tillProfileId = tillProfile.rows[0]!.id;
+    db = suite.db;
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .returning({ id: locations.id });
+    locationId = location!.id as LocationId;
+    stationId = await seedKitchenStation(db, { locationId });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: "Till" })
+      .returning({ id: tills.id });
+    tillId = till!.id;
+    const [kds] = await db
+      .insert(deviceProfiles)
+      .values({ name: "KDS profile", formFactor: "kds" })
+      .returning({ id: deviceProfiles.id });
+    kdsProfileId = kds!.id;
+    const [tillProfile] = await db
+      .insert(deviceProfiles)
+      .values({ name: "Till profile", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    tillProfileId = tillProfile!.id;
   });
 
+  // Through the Drizzle builder, since `id`, `enrolled_at` and `created_at` are `$defaultFn`
+  // columns applied CLIENT-side.
   async function insertDevice(fields: {
     profileId: string;
     stationId: string | null;
     tillId: string | null;
     label: string;
   }): Promise<void> {
-    await admin.execute(sql`
-      insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash) values (${locationId}, ${fields.profileId}, ${fields.stationId}, ${fields.tillId},
-              ${fields.label}, ${TOKEN_HASH})`);
+    await db.insert(devices).values({
+      locationId,
+      deviceProfileId: fields.profileId,
+      stationId: fields.stationId,
+      tillId: fields.tillId,
+      label: fields.label,
+      tokenHash: TOKEN_HASH,
+    });
   }
 
   it("accepts a kds-profile device bound to a station and no register", async () => {
@@ -86,9 +125,9 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
   });
 
   it("rejects a register (non-kds) device that also names a station", async () => {
-    // The symmetric ELSE-branch case: a till-profile device that names a valid register AND a stray
-    // station. This exercises the `station_id IS NOT NULL` disjunct of the ELSE branch, which the
-    // NULL-register case above cannot reach.
+    // The symmetric ELSE-branch case: a till-profile device that names a valid register AND a
+    // stray station. This exercises the `station_id is not null` disjunct, which the NULL-register
+    // case above cannot reach.
     const error = await captureError(() =>
       insertDevice({ profileId: tillProfileId, stationId, tillId, label: "Till with station" }),
     );
@@ -97,8 +136,8 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
 
   it("a binding-changing UPDATE is still enforced (the WHEN did not disable it)", async () => {
     // Seed a valid till device, then UPDATE it into a bad state (add a stray station). The update
-    // trigger's WHEN sees station_id change, fires, and the ELSE branch rejects — proving the WHEN
-    // gate narrows WHEN the trigger runs, not WHETHER it enforces.
+    // trigger's condition sees station_id change, fires, and the rule rejects — proving the gate
+    // narrows WHEN the trigger runs, not WHETHER it enforces.
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
@@ -106,69 +145,88 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
       label: "Till to break",
     });
     const error = await captureError(() =>
-      admin.execute(
-        sql`update devices set station_id = ${stationId} where label = 'Till to break'`,
-      ),
+      db.update(devices).set({ stationId }).where(eq(devices.label, "Till to break")),
     );
     expect(pgErrorMessage(error)).toMatch(/binds a register and no station/);
   });
 
   it("reactivation re-validates the binding: the WHEN watches active false→true (BUG D)", async () => {
-    // A device deactivated, its profile then changed to an incompatible form factor (permitted WHILE the
-    // device is inactive — the drift guard blocks only ACTIVE devices), must be re-validated when it is
-    // switched back on. Without the `active false→true` disjunct in the update trigger's WHEN, the
-    // trigger never re-runs on an active-only change and the invalid binding lands.
-    const profile = (
-      await admin.execute<{ id: string }>(sql`
-        insert into device_profiles (name, form_factor) values ('Reactivate till', 'till') returning id`)
-    ).rows[0]!.id;
+    // A device deactivated, its profile then changed to an incompatible form factor (permitted
+    // WHILE the device is inactive — the drift guard blocks only ACTIVE devices), must be
+    // re-validated when it is switched back on. Without the `active false→true` disjunct in the
+    // update trigger's condition, the trigger never re-runs on an active-only change and the
+    // invalid binding lands.
+    const [profile] = await db
+      .insert(deviceProfiles)
+      .values({ name: "Reactivate till", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
     // A valid till device (register, no station) on that profile, then deactivated.
-    await insertDevice({ profileId: profile, stationId: null, tillId, label: "Reactivate me" });
-    await admin.execute(sql`update devices set active = false where label = 'Reactivate me'`);
+    await insertDevice({
+      profileId: profile!.id,
+      stationId: null,
+      tillId,
+      label: "Reactivate me",
+    });
+    await db.update(devices).set({ active: false }).where(eq(devices.label, "Reactivate me"));
     // Flip the profile to kds — allowed because the referencing device is now inactive.
-    await admin.execute(sql`update device_profiles set form_factor = 'kds' where id = ${profile}`);
+    await db
+      .update(deviceProfiles)
+      .set({ formFactor: "kds" })
+      .where(eq(deviceProfiles.id, profile!.id));
     // Reactivating must now be REJECTED: the profile is kds but the device binds a register and no
-    // station. Before the WHEN fix this active-only UPDATE slipped through and left the bad binding.
+    // station.
     const error = await captureError(() =>
-      admin.execute(sql`update devices set active = true where label = 'Reactivate me'`),
+      db.update(devices).set({ active: true }).where(eq(devices.label, "Reactivate me")),
     );
     expect(pgErrorMessage(error)).toMatch(/kds device binds a station/);
   });
 
   it("a non-binding UPDATE (last_seen_at touch) does not fire the trigger", async () => {
     // requireDevice touches last_seen_at on every authenticated request. That UPDATE changes no
-    // binding column, so the update trigger's WHEN is false and the device_profiles lookup never
-    // runs — the performance point of the two-trigger split. It must succeed.
+    // binding column, so the update trigger's condition is false and the device_profiles lookup
+    // never runs — the performance point of the two-trigger split. It must succeed.
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
       tillId,
       label: "Till heartbeat",
     });
-    await expect(
-      admin.execute(sql`update devices set last_seen_at = now() where label = 'Till heartbeat'`),
-    ).resolves.toBeDefined();
+    await db
+      .update(devices)
+      .set({ lastSeenAt: new Date().toISOString() })
+      .where(eq(devices.label, "Till heartbeat"));
+    const [row] = await db
+      .select({ lastSeenAt: devices.lastSeenAt })
+      .from(devices)
+      .where(eq(devices.label, "Till heartbeat"));
+    expect(row!.lastSeenAt).not.toBeNull();
   });
 
   // Prove by deletion (CLAUDE.md §1/§4): with the trigger dropped, the insert the trigger rejects
-  // above now SUCCEEDS — so the trigger is provably what enforces the rule, not an FK or CHECK. Done
-  // inside a transaction that ROLLBACKs, so the drop (and the bad row) never outlive this test and the
-  // suite stays order-independent.
+  // above now SUCCEEDS — so the trigger is provably what enforces the rule, not a foreign key or a
+  // CHECK. The trigger's own text is read back first so it can be recreated afterwards.
   it("prove-by-deletion: dropping the trigger lets the bad insert succeed", async () => {
-    const sentinel = new Error("rollback sentinel");
-    const outcome = await captureError(() =>
-      admin.transaction(async (tx) => {
-        await tx.execute(sql`drop trigger device_binding_rule_insert on devices`);
-        // The exact insert the "rejects a kds-profile device with a NULL station" case refuses.
-        await tx.execute(sql`
-          insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash) values (${locationId}, ${kdsProfileId}, ${null}, ${null}, 'KDS no-trigger', ${TOKEN_HASH})`);
-        const { rows } = await tx.execute<{ n: number }>(
-          sql`select count(*)::int as n from devices where label = 'KDS no-trigger'`,
-        );
-        expect(rows[0]!.n).toBe(1);
-        throw sentinel; // roll the drop + the bad row back
-      }),
+    const [stored] = db.all<{ sql: string }>(
+      sql`select sql from sqlite_master
+           where type = 'trigger' and name = 'device_binding_rule_insert'`,
     );
-    expect(outcome).toBe(sentinel);
+    expect(stored?.sql, "device_binding_rule_insert must exist to be deleted").toBeDefined();
+    try {
+      db.run(sql`drop trigger device_binding_rule_insert`);
+      // The exact insert the "rejects a kds-profile device with a NULL station" case refuses.
+      await insertDevice({
+        profileId: kdsProfileId,
+        stationId: null,
+        tillId: null,
+        label: "KDS no-trigger",
+      });
+      const [counted] = db.all<{ n: number }>(
+        sql`select cast(count(*) as int) as n from devices where label = 'KDS no-trigger'`,
+      );
+      expect(counted!.n).toBe(1);
+    } finally {
+      if (stored !== undefined) db.run(sql.raw(stored.sql));
+      await db.delete(devices).where(eq(devices.label, "KDS no-trigger"));
+    }
   });
 });

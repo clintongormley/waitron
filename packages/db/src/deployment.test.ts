@@ -1,6 +1,11 @@
-// Real PostgreSQL: checks app_user SELECT and withheld write privileges on deployment.
+// LOSS, from the storage swap: a case here read `has_table_privilege` both directions and pinned
+// that `app_user` holds SELECT on `deployment` and NOT INSERT or UPDATE — the mode write being an
+// owner-only write. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so that
+// question has no counterpart and the case is deleted rather than kept in a form that asserts
+// nothing. CLAUDE.md §3 still states the rule ("four tables the application role may read and never
+// write"), and nothing in this package now holds it.
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import type { Database } from "./client.js";
 import {
@@ -14,8 +19,11 @@ import {
   setSingletonRoleTx,
   stampDeployment,
 } from "./deployment.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { describeEachTarget } from "./testing/harness.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
+import { CHECK_VIOLATION } from "./sql-state.js";
+import { isPgError } from "./unique-violation.js";
+import { withTransaction } from "./tenancy.js";
+import { captureError, pgErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 // A database with NO migration set applied, so `deployment` does not exist — the state of a
@@ -43,23 +51,15 @@ describe("before any migration set has run", () => {
   });
 });
 
-describeEachTarget("the deployment stamp", (target) => {
+describe("the deployment stamp", () => {
+  // One migrated database for the whole block, emptied between tests by the helper's default
+  // reset — which is what the per-test `target.create()` this replaces bought, without a fresh
+  // file each time.
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
 
-  beforeEach(async () => {
-    // target.create() (testing/harness.ts) already returns a freshly migrated
-    // database — CORE_MIGRATIONS included — per test, matching every other
-    // suite in this package (see allocate-number.test.ts's beforeEach for why
-    // a suite should never build its own migrated handle by hand).
-    db = await target.create();
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
+  beforeEach(() => {
+    db = suite.db;
   });
 
   it("reads as unstamped on a freshly migrated database", async () => {
@@ -97,10 +97,19 @@ describeEachTarget("the deployment stamp", (target) => {
 
   it("permits at most one row, so there is never an ambiguous answer", async () => {
     await stampDeployment(db, "production");
+    // `stamped_at` is stated because it is a `$defaultFn` column Drizzle fills CLIENT-side: a raw
+    // insert reaches it not at all, and the row would be refused NOT NULL rather than by the
+    // singleton CHECK under test.
     const error = await captureError(() =>
-      db.execute(sql`insert into deployment (id, environment) values (2, 'preproduction')`),
+      Promise.resolve(
+        db.run(
+          sql`insert into deployment (id, environment, stamped_at)
+              values (2, 'preproduction', ${new Date().toISOString()})`,
+        ),
+      ),
     );
-    expect(error).toBeDefined();
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/deployment_singleton_ck/);
   });
 
   it("readDeploymentMode returns 'primary' by default and 'mirror' after setDeploymentMode", async () => {
@@ -127,31 +136,15 @@ describeEachTarget("the deployment stamp", (target) => {
 
   it("the mode CHECK rejects any value outside primary/mirror", async () => {
     await stampDeployment(db, "preproduction");
-    // Not `.rejects.toThrow(/deployment_mode_ck|23514/)`: drizzle-orm@0.45.2 wraps every failed
-    // query in a DrizzleQueryError whose own `.message` is `Failed query: <sql>` — the CHECK name
-    // and SQLSTATE live on `.cause`, which `toThrow` never reads (see tenancy.test.ts's
-    // `rejectsWithCauseMatching` / series.test.ts). Read the reason off the cause instead: 23514 is
-    // check_violation.
+    // Not `.rejects.toThrow(/deployment_mode_ck/)`: drizzle-orm@0.45.2 wraps every failed query in
+    // a DrizzleQueryError whose own `.message` is `Failed query: <sql>` — the engine's words and
+    // its result code live on `.cause`, which `toThrow` never reads. Read the reason off the cause
+    // instead.
     const error = await captureError(() =>
-      db.execute(sql`update deployment set mode = 'bogus' where id = 1`),
+      Promise.resolve(db.run(sql`update deployment set mode = 'bogus' where id = 1`)),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/deployment_mode_ck/);
-  });
-
-  it("app_user may SELECT deployment but may NOT write it (the mode write is owner-only)", async () => {
-    // Read the ACL back both directions: the SELECT app_user should hold is present, and the
-    // INSERT/UPDATE it must NOT hold are absent (the mode write is an owner-role write — no new
-    // grant was added, so app_user's only privilege on deployment is 0010's table-wide SELECT).
-    // has_table_privilege reads pg_class.relacl regardless of the connected role, so this is the
-    // authoritative answer on the postgres target as much as on pglite.
-    const rows = await db.execute<{ sel: boolean; ins: boolean; upd: boolean }>(sql`
-      select
-        has_table_privilege('app_user', 'deployment', 'SELECT') as sel,
-        has_table_privilege('app_user', 'deployment', 'INSERT') as ins,
-        has_table_privilege('app_user', 'deployment', 'UPDATE') as upd
-    `);
-    expect(rows.rows[0]).toEqual({ sel: true, ins: false, upd: false });
   });
 
   it("reads singleton_role as 'primary' on a freshly stamped database", async () => {
@@ -199,7 +192,8 @@ describeEachTarget("the deployment stamp", (target) => {
     await stampDeployment(db, "preproduction");
     await setDeploymentMode(db, "mirror");
     const error = await captureError(() => setSingletonRole(db, "primary"));
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/deployment_role_valid_ck/);
   });
 
   it("setSingletonRole fails loudly on an unstamped database", async () => {
@@ -211,7 +205,7 @@ describeEachTarget("the deployment stamp", (target) => {
     // The tx-taking form (Task 4 commits this flip and a membership-document write in ONE
     // transaction): stamp first, run it on a caller-provided tx, confirm the flip persists.
     await stampDeployment(db, "preproduction");
-    await db.transaction(async (tx) => {
+    await withTransaction(db, async (tx) => {
       await setSingletonRoleTx(tx, "secondary");
     });
     expect(await readSingletonRole(db)).toBe("secondary");
@@ -219,7 +213,7 @@ describeEachTarget("the deployment stamp", (target) => {
 
   it("setDeploymentModeTx flips mode on a caller tx and co-sets singleton_role for mirror", async () => {
     await stampDeployment(db, "preproduction");
-    await db.transaction((tx) => setDeploymentModeTx(tx, "mirror"));
+    await withTransaction(db, (tx) => setDeploymentModeTx(tx, "mirror"));
     expect(await readDeploymentMode(db)).toBe("mirror");
     expect(await readSingletonRole(db)).toBe("secondary");
   });
@@ -228,7 +222,7 @@ describeEachTarget("the deployment stamp", (target) => {
     await stampDeployment(db, "preproduction");
     await setSingletonRole(db, "secondary");
     await setDeploymentMode(db, "mirror"); // (mirror, secondary)
-    await db.transaction(async (tx) => {
+    await withTransaction(db, async (tx) => {
       await setDeploymentModeTx(tx, "primary"); // (primary, secondary) — valid, no CHECK violation
       await setSingletonRoleTx(tx, "primary"); // (primary, primary)
     });

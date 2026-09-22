@@ -1,87 +1,86 @@
-import { sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { catalogues } from "./catalogue.js";
 import { locationCatalogues } from "./location-catalogues.js";
-import { tenants } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
-// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// cases retain the role switch so the reads and writes still exercise app_user grants.
+// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
+// PostgreSQL, so the suite also established that role's INSERT and DELETE grants on these two
+// tables. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so what is left
+// is the column mapping and the composite primary key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
-    await suite.admin
+    await suite.db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await suite.admin.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
-      on conflict (id) do nothing`);
+    await suite.db.insert(locations).values({
+      id: LOCATION_A,
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
   });
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
-  // Seed under the app role to exercise catalogues' INSERT grant. This is an additional menu
-  // the location may sell, beyond its default.
+  // An additional menu the location may sell, beyond its default. The Drizzle builder rather than
+  // raw SQL: `catalogues.id` and its `created_at` are `$defaultFn` columns applied CLIENT-side.
   async function seedCatalogue(name: string): Promise<string> {
-    return asApp(async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (name) values (${name}) returning id`,
-      );
-      return r.rows[0]!.id;
+    return inTx(async (tx) => {
+      const [row] = await tx.insert(catalogues).values({ name }).returning({ id: catalogues.id });
+      return row!.id;
     });
   }
 
   async function seedMembership(location: string, catalogue: string): Promise<void> {
-    await asApp((tx) =>
-      tx.execute(
-        sql`insert into location_catalogues (location_id, catalogue_id) values (${location}, ${catalogue})`,
-      ),
+    await inTx((tx) =>
+      tx.insert(locationCatalogues).values({ locationId: location, catalogueId: catalogue }),
     );
   }
 
   it("maps every column through the Drizzle export and detaches by DELETE … RETURNING", async () => {
     const catalogue = await seedCatalogue("Menú de tarde");
     await seedMembership(LOCATION_A, catalogue);
-    // Read back through the Drizzle `locationCatalogues` export (not raw SQL) — exercises the produced
-    // table export and its column mapping under the app role.
-    const [row] = await asApp((tx) =>
-      tx
-        .select()
-        .from(locationCatalogues)
-        .where(sql`catalogue_id = ${catalogue}`),
+    const [row] = await inTx((tx) =>
+      tx.select().from(locationCatalogues).where(eq(locationCatalogues.catalogueId, catalogue)),
     );
     expect(row!.locationId).toBe(LOCATION_A);
     expect(row!.catalogueId).toBe(catalogue);
-    // A membership row is REMOVED via DELETE (app_user holds DELETE — detach).
-    const deleted = await asApp((tx) =>
+    // A membership row is REMOVED via DELETE — detach.
+    const deleted = await inTx((tx) =>
       tx
-        .execute<{ catalogue_id: string }>(
-          sql`delete from location_catalogues
-              where location_id = ${LOCATION_A} and catalogue_id = ${catalogue}
-              returning catalogue_id`,
+        .delete(locationCatalogues)
+        .where(
+          and(
+            eq(locationCatalogues.locationId, LOCATION_A),
+            eq(locationCatalogues.catalogueId, catalogue),
+          ),
         )
-        .then((r) => r.rows),
+        .returning({ catalogueId: locationCatalogues.catalogueId }),
     );
     expect(deleted).toHaveLength(1);
-    expect(deleted[0]!.catalogue_id).toBe(catalogue);
+    expect(deleted[0]!.catalogueId).toBe(catalogue);
   });
 
-  it("the primary key rejects a duplicate (location_id, catalogue_id) membership (23505)", async () => {
+  it("the primary key rejects a duplicate (location_id, catalogue_id) membership", async () => {
     const catalogue = await seedCatalogue("Carta de vinos");
     await seedMembership(LOCATION_A, catalogue);
     const e = await captureError(() => seedMembership(LOCATION_A, catalogue));
-    expect(pgErrorCode(e)).toBe("23505"); // unique_violation on the composite PK
+    // PostgreSQL folded a primary-key collision into `23505` with every other unique index; SQLite
+    // reports it under its own result code, which is why the class is a list (`../sql-state.ts`).
+    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
   });
 });

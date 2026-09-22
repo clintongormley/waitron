@@ -1,62 +1,69 @@
-import { sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { kitchenStations } from "./kitchen-stations.js";
+import { printers } from "./printers.js";
 import { stationPrinters } from "./station-printers.js";
-import { tenants } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
-// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// cases retain the role switch so the reads and writes still exercise app_user grants.
+// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
+// PostgreSQL, so the suite also established that role's INSERT and DELETE grants on the mapping
+// table. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`); what is left is
+// the column mapping and the composite primary key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
-    await suite.admin
+    await suite.db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await suite.admin.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
-      on conflict (id) do nothing`);
+    await suite.db.insert(locations).values({
+      id: LOCATION_A,
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
   });
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
+  // The Drizzle builder rather than raw SQL throughout: `id` and `created_at` on both parent tables
+  // are `$defaultFn` columns applied CLIENT-side, so a raw `insert` reaches neither.
   async function seedStation(name: string): Promise<string> {
-    return asApp(async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_stations (location_id, name) values (${LOCATION_A}, ${name}) returning id`,
-      );
-      return r.rows[0]!.id;
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: LOCATION_A, name })
+        .returning({ id: kitchenStations.id });
+      return row!.id;
     });
   }
 
   // A cloud_poll printer (needs only poll_id — no agent, so no print_agents fixture) satisfies the
   // printers transport CHECK, keeping this suite to the two tables the mapping actually references.
   async function seedPrinter(name: string, pollId: string): Promise<string> {
-    return asApp(async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into printers (location_id, name, transport, poll_id) values (${LOCATION_A}, ${name}, 'cloud_poll', ${pollId}) returning id`,
-      );
-      return r.rows[0]!.id;
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(printers)
+        .values({ locationId: LOCATION_A, name, transport: "cloud_poll", pollId })
+        .returning({ id: printers.id });
+      return row!.id;
     });
   }
 
   async function seedMapping(station: string, printer: string): Promise<void> {
-    await asApp((tx) =>
-      tx.execute(
-        sql`insert into station_printers (station_id, printer_id) values (${station}, ${printer})`,
-      ),
+    await inTx((tx) =>
+      tx.insert(stationPrinters).values({ stationId: station, printerId: printer }),
     );
   }
 
@@ -64,34 +71,27 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     const station = await seedStation("Cocina");
     const printer = await seedPrinter("Impresora Cocina", "poll-control");
     await seedMapping(station, printer);
-    // Read back through the Drizzle `stationPrinters` export (not raw SQL) — exercises the produced
-    // table export and its column mapping under the app role.
-    const [row] = await asApp((tx) =>
-      tx
-        .select()
-        .from(stationPrinters)
-        .where(sql`station_id = ${station}`),
+    const [row] = await inTx((tx) =>
+      tx.select().from(stationPrinters).where(eq(stationPrinters.stationId, station)),
     );
     expect(row!.stationId).toBe(station);
     expect(row!.printerId).toBe(printer);
-    // A mapping row is REMOVED via DELETE (app_user holds DELETE — detach in §3a).
-    const deleted = await asApp((tx) =>
+    // A mapping row is REMOVED via DELETE — detach in §3a.
+    const deleted = await inTx((tx) =>
       tx
-        .execute<{ printer_id: string }>(
-          sql`delete from station_printers where station_id = ${station} and printer_id = ${printer}
-              returning printer_id`,
-        )
-        .then((r) => r.rows),
+        .delete(stationPrinters)
+        .where(and(eq(stationPrinters.stationId, station), eq(stationPrinters.printerId, printer)))
+        .returning({ printerId: stationPrinters.printerId }),
     );
     expect(deleted).toHaveLength(1);
-    expect(deleted[0]!.printer_id).toBe(printer);
+    expect(deleted[0]!.printerId).toBe(printer);
   });
 
-  it("the primary key rejects a duplicate (station_id, printer_id) mapping (23505)", async () => {
+  it("the primary key rejects a duplicate (station_id, printer_id) mapping", async () => {
     const station = await seedStation("Barra");
     const printer = await seedPrinter("Impresora Barra", "poll-dup");
     await seedMapping(station, printer);
     const e = await captureError(() => seedMapping(station, printer));
-    expect(pgErrorCode(e)).toBe("23505"); // unique_violation on the composite PK
+    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
   });
 });

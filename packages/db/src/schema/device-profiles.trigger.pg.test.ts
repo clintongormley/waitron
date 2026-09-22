@@ -1,196 +1,167 @@
-// Real Postgres, not PGlite: this suite exercises the form-factor drift-guard trigger
-// (device_profile_form_factor_locked), and CLAUDE.md §4 requires the real target for anything
-// about triggers firing. The clone carries CORE_MIGRATIONS, which includes the drift-guard migration
-// under test. The mutating cases each create their OWN profile so the suite stays order-independent.
-import { sql } from "drizzle-orm";
+// The name still ends `.pg.test.ts`, and this suite no longer reaches PostgreSQL. Renaming it is
+// not this change's: `scripts/behavioural-triggers.test.ts` names this file, and the storage swap's
+// plan (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the
+// rename for the same sweep that deals with `asAppUser` and `pgErrorCode`.
+//
+// It exercises the form-factor drift-guard trigger (`device_profile_form_factor_locked`), which the
+// SQLite migration set restores in `packages/db/drizzle/0001_behavioural_triggers.sql`. Each
+// mutating case creates its OWN profile so the suite stays order-independent.
+//
+// LOSS, from the storage swap: the concurrency case is deleted. It raced a device INSERT against a
+// form_factor change on two backends and proved that the `for share` row lock the binding-rule
+// trigger took made the second transaction BLOCK rather than interleave. SQLite admits one writer
+// per file and has no row locks at all, so there is no second backend to race and no lock to
+// observe; `withTransaction` runs every write body inside the venue file's write queue
+// (`packages/store/src/write-queue.ts`), which is what serialises them now. That is a different
+// mechanism and this suite no longer says anything about it —
+// `packages/catalogue/test/fixtures.ts`'s `racePair` is the shape that asks the question on this
+// engine, and nothing here uses it.
+//
+// SECOND LOSS: the binding-rule triggers the concurrency case leaned on (`device_binding_rule_*`)
+// are not in the SQLite migration set at all. See `packages/db/src/schema/devices.trigger.pg.test.ts`,
+// which is red for that reason.
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { FORM_FACTOR_REFUSAL } from "../trigger-refusals.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
+import { deviceProfiles } from "./device-profiles.js";
+import { devices } from "./devices.js";
+import { locations } from "./tenants.js";
 import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("device_profiles form-factor drift guard (locked while an active device uses it)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
-  let admin: Database;
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  let db: Database;
   let locationId: LocationId;
   let stationId: string;
   let profileSeq = 0;
 
   beforeAll(async () => {
-    admin = suite.admin;
-    await seedTenant(admin);
-    const location = await admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
-    locationId = location.rows[0]!.id as LocationId;
-    stationId = await seedKitchenStation(admin, { locationId });
+    db = suite.db;
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Loc",
+        invoiceLocales: ["es"],
+        operationDescription: "Hostelería",
+      })
+      .returning({ id: locations.id });
+    locationId = location!.id as LocationId;
+    stationId = await seedKitchenStation(db, { locationId });
   });
 
   // A fresh `kds` profile per case, so a form_factor mutation in one case never leaks into another.
+  // Through the Drizzle builder, since `id`, `created_at` and `updated_at` are `$defaultFn` columns
+  // applied CLIENT-side.
   async function freshKdsProfile(): Promise<string> {
     profileSeq += 1;
-    const p = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor) values (${`KDS profile ${profileSeq}`}, 'kds') returning id`);
-    return p.rows[0]!.id;
+    const [row] = await db
+      .insert(deviceProfiles)
+      .values({ name: `KDS profile ${profileSeq}`, formFactor: "kds" })
+      .returning({ id: deviceProfiles.id });
+    return row!.id;
   }
 
-  // A kds device bound to the station (the binding rule needs a station and no till for a kds profile).
+  /** A kds device bound to the station. */
   async function insertKdsDevice(profileId: string, active: boolean, label: string): Promise<void> {
-    await admin.execute(sql`
-      insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash, active) values (${locationId}, ${profileId}, ${stationId}, ${null}, ${label}, ${TOKEN_HASH}, ${active})`);
+    await db.insert(devices).values({
+      locationId,
+      deviceProfileId: profileId,
+      stationId,
+      tillId: null,
+      label,
+      tokenHash: TOKEN_HASH,
+      active,
+    });
   }
 
-  // Poll (bounded) until a backend in THIS clone is waiting on a lock while running `querySubstr`. The
-  // proof that the FOR SHARE row lock conflicts. On the un-fixed code the query never blocks, so this
-  // times out and returns — the caller's assertions then detect the bug.
-  async function waitUntilBlocked(db: Database, querySubstr: string): Promise<void> {
-    for (let i = 0; i < 100; i++) {
-      const { rows } = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from pg_stat_activity
-         where datname = current_database()
-           and wait_event_type = 'Lock'
-           and query ilike ${`%${querySubstr}%`}`);
-      if (rows[0]!.n > 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+  async function formFactorOf(profileId: string): Promise<string> {
+    const [row] = await db
+      .select({ formFactor: deviceProfiles.formFactor })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    return row!.formFactor;
   }
 
   it("rejects changing form_factor while an ACTIVE device references the profile", async () => {
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, true, "Active kds");
     const error = await captureError(() =>
-      admin.execute(sql`update device_profiles set form_factor = 'till' where id = ${profileId}`),
+      db.update(deviceProfiles).set({ formFactor: "till" }).where(eq(deviceProfiles.id, profileId)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot change form factor of a profile in use/);
+    expect(pgErrorMessage(error)).toBe(FORM_FACTOR_REFUSAL);
   });
 
   it("allows changing form_factor when the referencing device is INACTIVE (negative control)", async () => {
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, false, "Inactive kds");
-    await expect(
-      admin.execute(sql`update device_profiles set form_factor = 'till' where id = ${profileId}`),
-    ).resolves.toBeDefined();
+    await db
+      .update(deviceProfiles)
+      .set({ formFactor: "till" })
+      .where(eq(deviceProfiles.id, profileId));
     // Confirm the control succeeded for the reason we think: the value really changed.
-    const [row] = (
-      await admin.execute<{ form_factor: string }>(
-        sql`select form_factor from device_profiles where id = ${profileId}`,
-      )
-    ).rows;
-    expect(row!.form_factor).toBe("till");
+    expect(await formFactorOf(profileId)).toBe("till");
   });
 
   it("allows changing form_factor when NO device references the profile (negative control)", async () => {
     const profileId = await freshKdsProfile();
-    await expect(
-      admin.execute(sql`update device_profiles set form_factor = 'till' where id = ${profileId}`),
-    ).resolves.toBeDefined();
-    const [row] = (
-      await admin.execute<{ form_factor: string }>(
-        sql`select form_factor from device_profiles where id = ${profileId}`,
-      )
-    ).rows;
-    expect(row!.form_factor).toBe("till");
+    await db
+      .update(deviceProfiles)
+      .set({ formFactor: "till" })
+      .where(eq(deviceProfiles.id, profileId));
+    expect(await formFactorOf(profileId)).toBe("till");
   });
 
   it("allows a no-op UPDATE that leaves form_factor unchanged, even with an active device", async () => {
-    // The guard fires only when NEW.form_factor <> OLD.form_factor. An UPDATE that re-writes the same
-    // value (e.g. touching updated_at) with an active device present must pass — proving the guard keys
-    // on the CHANGE, not the mere presence of an active device.
+    // The guard fires only when the new form factor differs from the old. An UPDATE that re-writes
+    // the same value (touching updated_at, say) with an active device present must pass — proving
+    // the guard keys on the CHANGE, not the mere presence of an active device.
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, true, "Active kds no-op");
-    await expect(
-      admin.execute(sql`update device_profiles set updated_at = now() where id = ${profileId}`),
-    ).resolves.toBeDefined();
-  });
-
-  it("serialises a concurrent device INSERT against a form_factor change (BUG C — FOR SHARE)", async () => {
-    // Two transactions race: tx1 inserts an ACTIVE kds device on profile P (its binding rule row-locks P
-    // FOR SHARE); tx2 changes P.form_factor kds→till. Without the FOR SHARE lock both commit interleaved
-    // and leave an active device whose binding contradicts its profile — the drift guard cannot see tx1's
-    // uncommitted insert, and the insert trigger read P's form factor without locking it. With FOR SHARE
-    // the UPDATE (a FOR NO KEY UPDATE row lock) blocks on tx1; once tx1 commits, tx2 re-evaluates, the
-    // drift guard sees the now-committed active device, and tx2 is REJECTED. Real Postgres only — PGlite
-    // serialises onto one backend and cannot express the race (CLAUDE.md §4).
-    const profileId = await freshKdsProfile();
-
-    // A second, independent connection (its own backend) so both transactions can be held open at once.
-    const conn2 = await suite.pg.connect();
-    try {
-      let release!: () => void;
-      const gate = new Promise<void>((resolve) => (release = resolve));
-      let signalInserted!: () => void;
-      const inserted = new Promise<void>((resolve) => (signalInserted = resolve));
-
-      // tx1: insert the active kds device (acquires FOR SHARE on P through the binding trigger), signal,
-      // then HOLD until released, then commit.
-      const p1 = admin.transaction(async (tx) => {
-        await tx.execute(sql`
-          insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash, active) values (${locationId}, ${profileId}, ${stationId}, ${null}, 'Race kds', ${TOKEN_HASH}, true)`);
-        signalInserted();
-        await gate;
-      });
-      await inserted;
-
-      // tx2: change P's form factor. With FOR SHARE it BLOCKS on tx1; without it, it commits immediately.
-      const p2 = conn2
-        .transaction(async (tx) => {
-          await tx.execute(
-            sql`update device_profiles set form_factor = 'till' where id = ${profileId}`,
-          );
-        })
-        .then(
-          () => ({ ok: true as const }),
-          (error: unknown) => ({ ok: false as const, error }),
-        );
-
-      // Bounded wait until tx2 is actually blocked on the lock — the proof the FOR SHARE lock conflicts.
-      await waitUntilBlocked(admin, "update device_profiles");
-      // Release tx1 so it commits and drops the lock; tx2 then re-evaluates under the drift guard.
-      release();
-      await p1;
-      const outcome = await p2;
-
-      // With the fix tx2 was rejected by the drift guard; without it, tx2 committed → outcome.ok === true.
-      expect(outcome.ok).toBe(false);
-      if (!outcome.ok) {
-        expect(pgErrorMessage(outcome.error)).toMatch(
-          /cannot change form factor of a profile in use/,
-        );
-      }
-      // End state consistent: P is still kds, never a till profile carrying an active kds-bound device.
-      const [prof] = (
-        await admin.execute<{ form_factor: string }>(
-          sql`select form_factor from device_profiles where id = ${profileId}`,
-        )
-      ).rows;
-      expect(prof!.form_factor).toBe("kds");
-    } finally {
-      await conn2.close();
-    }
+    await db
+      .update(deviceProfiles)
+      .set({ updatedAt: new Date().toISOString() })
+      .where(eq(deviceProfiles.id, profileId));
+    expect(await formFactorOf(profileId)).toBe("kds");
   });
 
   // Prove by deletion (CLAUDE.md §1/§4): with the trigger dropped, the form_factor change the guard
-  // rejects above now SUCCEEDS — so the trigger is provably what enforces the rule. Done inside a
-  // ROLLED-BACK transaction so the drop (and the mutated row) never outlive this test.
+  // rejects above now SUCCEEDS — so the trigger is provably what enforces the rule.
+  //
+  // The PostgreSQL version did this inside a ROLLED-BACK transaction so neither the drop nor the
+  // mutated row outlived the case. `withTransaction` IS this file's one write transaction
+  // (`packages/db/src/tenancy.ts`), so the drop is undone by recreating the trigger from the text
+  // SQLite stored for it, and the mutated profile is a fresh one no other case reads.
   it("prove-by-deletion: dropping the trigger lets the locked change succeed", async () => {
     const profileId = await freshKdsProfile();
     await insertKdsDevice(profileId, true, "Active kds for deletion");
-    const sentinel = new Error("rollback sentinel");
-    const outcome = await captureError(() =>
-      admin.transaction(async (tx) => {
-        await tx.execute(sql`drop trigger device_profile_form_factor_locked on device_profiles`);
-        await tx.execute(
-          sql`update device_profiles set form_factor = 'till' where id = ${profileId}`,
-        );
-        const { rows } = await tx.execute<{ form_factor: string }>(
-          sql`select form_factor from device_profiles where id = ${profileId}`,
-        );
-        expect(rows[0]!.form_factor).toBe("till");
-        throw sentinel; // roll the drop + the mutated row back
-      }),
+    const [stored] = db.all<{ sql: string }>(
+      sql`select sql from sqlite_master
+           where type = 'trigger' and name = 'device_profile_form_factor_locked'`,
     );
-    expect(outcome).toBe(sentinel);
+    expect(stored?.sql).toContain("form factor");
+    try {
+      db.run(sql`drop trigger device_profile_form_factor_locked`);
+      await db
+        .update(deviceProfiles)
+        .set({ formFactor: "till" })
+        .where(eq(deviceProfiles.id, profileId));
+      expect(await formFactorOf(profileId)).toBe("till");
+    } finally {
+      db.run(sql.raw(stored!.sql));
+    }
+    // And with the trigger back, the same change is refused again — so the restore is real and the
+    // rest of the suite is not running against a database missing its guard.
+    const again = await captureError(() =>
+      db.update(deviceProfiles).set({ formFactor: "kds" }).where(eq(deviceProfiles.id, profileId)),
+    );
+    expect(pgErrorMessage(again)).toBe(FORM_FACTOR_REFUSAL);
   });
 });

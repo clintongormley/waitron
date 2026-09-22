@@ -674,12 +674,21 @@ nothing else touched:
   reset blocks on that holder's row locks and takes the rest of the file down with it. Expect the
   control run to take minutes.
 
-So what the clause buys is that a claimer does not WAIT, and that is the property
-`packages/db/src/job-claim.pg.test.ts` now holds. What keeps a row from being claimed twice without
+So what the clause buys is that a claimer does not WAIT, and that was the property the
+real-PostgreSQL job-claim suite then held. What keeps a row from being claimed twice without
 it was not measured and is not a property of the helper: it depends on whether the CALLER's
 predicate excludes the state its stamp writes, which `claimPrintJobs`'s does.
 
 ## The key a claim stamps by must be the row's identifier, not its physical address.
+
+**Historical as of 2026-09-22 (task F1, the SQLite switch).** Everything below was measured on
+PostgreSQL, and the rule it paid for has been removed from CLAUDE.md rather than reworded: SQLite
+has no `ctid` to key on, and a claim runs inside a write transaction no other writer can interleave
+with, so the failure shape cannot arise. It is kept here because the *lesson* — a locking selection
+has to carry its choice out on something that survives a rewrite — is about databases, not about
+PostgreSQL, and slice 2 puts a second writer back. The suite named below was deleted with the rest
+of the real-PostgreSQL tier; read it with
+`git show origin/main:packages/db/src/job-claim.pg.test.ts`.
 
 `ctid` is the obvious way to carry a locking selection's choice out to the UPDATE around it, and it
 is wrong. Measured 2026-09-21 on PostgreSQL 18, with a claim parked mid-statement on an advisory
@@ -692,9 +701,11 @@ The measurement is one row, so what it shows is that a rewritten row is MISSED. 
 nobody touched are still stamped, which is the shape worth worrying about: the claim comes back
 short and says nothing.
 
-The case is `packages/db/src/job-claim.pg.test.ts`, "takes a row another transaction rewrote while
-the claim was running"; set its `key` to `ctid` and it fails with `expected [] to deeply equal
-[ { position: 1, ... } ]`.
+The case was "takes a row another transaction rewrote while the claim was running", in the deleted
+suite above; set its `key` to `ctid` and it failed with `expected [] to deeply equal
+[ { position: 1, ... } ]`. What survives on SQLite is `packages/db/src/job-claim.sqlite.test.ts`,
+which pins the one-statement claim's shape but cannot pin this property — there is no second writer
+to rewrite the row.
 
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 

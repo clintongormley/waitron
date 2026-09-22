@@ -9,48 +9,32 @@ export default defineConfig({
     // one interrupted mutation run makes every later test run fail confusingly.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // Vitest's 5s default is too short for this package's database-backed tests: each `it` runs
-    // real SQL, against PGlite in-process or a clone of the shared container. Not every test here
-    // is one: a minority of the package's test files call none of the five helpers, and which ones
+    // real SQL against a SQLite file the suite opens under `os.tmpdir()`. Not every test here is
+    // one: a minority of the package's test files call none of the harness helpers, and which ones
     // is a property to recompute rather than a number to remember —
     // `grep -rLE "useVenueDb|useTemplateDb|useRealPostgres|describeEachTarget|createPgliteDb"
-    // --include="*.test.ts" src` lists them. That grep measures which DOOR a suite uses, not whether
-    // it touches a database: the ones named here reach a real PostgreSQL anyway, by starting or
-    // connecting to a container themselves — `migrate-upgrade.pg`,
-    // `testing/networked-postgres`, `testing/shared-container`, `testing/postgres`,
-    // `testing/two-node` and `testing/two-node-wireguard`. The rest open no database at all.
+    // --include="*.test.ts" src` lists them. That grep measures which DOOR a suite uses, not
+    // whether it touches a database; the four names after `useVenueDb` belong to the PostgreSQL
+    // harness the storage swap's step 27 deletes, and stay in the recipe only until it does.
     //
-    // What this setting does NOT bound is the PGlite boot and migrations. `usePgliteDb` hands its
-    // own `beforeAll` a 60s default (`src/testing/lifecycle.ts:22` and `:146`), and a timeout
-    // passed to a hook overrides the config's. This comment used to say the 30s figure came from
-    // docs/research/2026-07-20-pglite-throughput.md as "cold boot plus schema plus seed", and that
-    // it was a risk "in this package and nowhere else in the repo": the first named a budget this
-    // setting does not hold, and the second is not so —
-    // `grep -ln testTimeout packages/*/vitest.config.ts apps/*/vitest.config.ts | wc -l` is 25,
-    // 24 of them other packages — and that glob is two levels deep, so it misses three more
-    // (`apps/server/vitest.preprod.config.ts` and the two `vitest.sandbox.config.ts` files).
-    // Keep the headroom anyway: a bound that fires under CI load produces a flaky suite people
-    // learn to rerun, and a suite people rerun is a suite that no longer gates.
+    // What this setting does NOT bound is the database's own setup. `useVenueDb` hands its
+    // `beforeAll` a 60s default (`src/testing/venue-db.ts`), and a timeout passed to a hook
+    // overrides the config's.
+    //
+    // Keep the headroom: a bound that fires under CI load produces a flaky suite people learn to
+    // rerun, and a suite people rerun is a suite that no longer gates.
     testTimeout: 30_000,
-    // What `hookTimeout` reaches here was measured, by setting it to 1 and running two suites:
-    //   - every `afterEach` and `afterAll` in the package, PGlite suites included — the per-test
-    //     reset and the close (`src/testing/lifecycle.ts:148` and `:153`). That is where
-    //     `src/testing/reset-append-only.test.ts` died.
-    //   - the `beforeAll` of a `useTemplateDb` or `useRealPostgres` suite that passes no
-    //     `timeoutMs` of its own, because `lifecycle.ts` passes that option straight through
-    //     (`:422` and `:431`). That is where `src/testing/reset-append-only.pg.test.ts` died, on
-    //     the template clone.
-    //   - ONE hand-written `beforeAll` that declares no timeout:
-    //     `src/testing/networked-postgres.test.ts:12`, which starts a Docker network and a real
-    //     Testcontainers PostgreSQL. On a cold runner that includes the image pull, so the old
-    //     reason given here — "beforeAll starts a Testcontainers Postgres … a network download,
-    //     not a boot" — is TRUE of that one suite and false of the rest. Every other
-    //     container-booting hook in this package declares its own budget
-    //     (`shared-container.test.ts:133`, `lifecycle.test.ts:215` and `:319`,
-    //     `postgres.test.ts:128`, `two-node.test.ts:331` and `:407`,
-    //     `two-node-wireguard.test.ts:292`).
-    // It does NOT reach a PGlite `beforeAll`, which survived the same 1ms run, and it does not
-    // reach the shared container's boot — that is `globalSetup` below, which Vitest budgets
-    // separately.
+    // What `hookTimeout` reaches here was measured (by setting it to 1 and running two suites),
+    // AGAINST THE POSTGRESQL HARNESS, so the three bullets that measurement produced are history
+    // rather than a state this tree can reproduce: they named the per-test reset and close in
+    // `src/testing/lifecycle.ts`, the `beforeAll` of a `useTemplateDb` or `useRealPostgres` suite
+    // that passed no `timeoutMs`, and `src/testing/networked-postgres.test.ts`'s container boot.
+    // The storage swap's step 27 deletes those helpers.
+    //
+    // What it reaches TODAY has not been re-measured. `useVenueDb` passes its own budget to its
+    // `beforeAll` (`src/testing/venue-db.ts`), which overrides this; its `afterEach` reset and its
+    // `afterAll` close pass none, so those are the hooks this bound plausibly covers. Left at two
+    // minutes rather than tightened to a figure nobody has taken.
     hookTimeout: 120_000,
     // NO global setup. It booted a PostgreSQL container and migrated a `core` template into it
     // through `runMigrationSets`, and the migration sets are SQLite DDL from step 13 onwards — so
@@ -59,21 +43,15 @@ export default defineConfig({
     // with the line in place. The harness files it started are deleted by the storage swap's step
     // 27 (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step group 7); this
     // line has to go first, because until it does no test in this package can run at all.
-    // BOUNDED multi-fork — a cap, not this package's previous UNBOUNDED default and not `maxWorkers: 1`.
-    // The shared container is ONE cluster on the default 100-connection budget (postgres.ts starts it
-    // with no override) where the old per-file containers each had their own 100. `createPostgresDb`
-    // pools to 10 connections each, and three suites open many backends against one clone: the
-    // lock-contention pair `allocate-order-number` (~20 separate `suite.pg.connect()` pools) and
-    // `append-order-amendment` (~10), plus `allocate-number`'s 20-concurrent-allocator test (~10, all
-    // on ONE pool, so capped at pool max). UNBOUNDED forks crowd the one budget — measured worst case
-    // ~94/100 at 18 forks, too close to rely on (the passes-once / fails-under-load flake). Capping at
-    // 4 keeps the worst case ~46-50 (~21 + ~11 + ~11 + a normal fork's ~3) with wide margin at the
-    // default ceiling, so it needs no `max_connections` change to the shared `startPostgresContainer`
-    // primitive — and 4 is ALSO CI's core count (`test-heavy` on a 2-4 vCPU runner), so the cap costs
-    // the CI gate essentially nothing while recovering most of the ~2.6x `maxWorkers: 1` left on the table
-    // (measured 137s→50s at 4 forks / 42s at 18 forks locally). NOT the `@vitest/coverage-v8`
-    // branch-merge reason apps/server/payments/scheduler carry: this shard runs alone and passed
-    // coverage multi-fork at far more than 4 forks for its whole history.
+    // BOUNDED multi-fork — a cap, not an unbounded default and not `maxWorkers: 1`.
+    //
+    // WHAT THIS NUMBER USED TO BE FOR, AND WHAT IT IS FOR NOW. It was a PostgreSQL connection
+    // budget: one shared container on the default 100-connection ceiling, three suites opening
+    // ~40 backends between them, and 4 forks keeping the worst case near half the ceiling. None of
+    // that exists any more — each suite opens its own SQLite file under `os.tmpdir()` and there is
+    // no shared ceiling to crowd. The cap is kept because 4 is CI's core count (`test-heavy` on a
+    // 2-4 vCPU runner), so it costs the gate essentially nothing; it is no longer measured against
+    // anything, and raising it is a question nobody has asked the machine yet.
     maxWorkers: 4,
     coverage: {
       provider: "v8",

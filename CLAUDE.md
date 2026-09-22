@@ -650,14 +650,10 @@ container or browser test** — most of these rules exist because a test passed 
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it. Cost: a one-statement job claim left `packages/printing`'s
   race suite passing with `for update skip locked` deleted, where the header of that suite recorded
-  the two-statement claim it replaced failing; the proof moved to
-  `packages/db/src/job-claim.pg.test.ts`. The control runs, and the old receipt nothing now holds:
-  [testing-guide.md](docs/developers/testing-guide.md).
-- **A claim that stamps the rows a locking selection chose finds them again by their KEY, never by
-  `ctid`.** A row's physical address changes when anything rewrites it, and the UPDATE around the
-  selection is still reading the row where it used to be — so the claim silently misses that row and
-  comes back short. Guard: the `takes a row another transaction rewrote while the claim was running`
-  case in `packages/db/src/job-claim.pg.test.ts`.
+  the two-statement claim it replaced failing; the proof moved to the real-PostgreSQL job-claim
+  suite, which the SQLite switch has since deleted with the rest of that tier
+  (`git show origin/main:packages/db/src/job-claim.pg.test.ts`). The control runs, and the old
+  receipt nothing now holds: [testing-guide.md](docs/developers/testing-guide.md).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
   `recordSale`; correcting it took 42 tests red-to-green across eight files and left three red that

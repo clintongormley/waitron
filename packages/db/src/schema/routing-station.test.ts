@@ -1,17 +1,23 @@
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, categories, products } from "./catalogue.js";
+import { kitchenStations } from "./kitchen-stations.js";
 import { locations, tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: what this proves is the hand-written
-// (station_id) → kitchen_stations FKs on categories/products, written and read as the
-// non-owner `app_user` — the deployment role, which PGlite (every connection a superuser) cannot be.
-// The suite retains the reads and writes under app_user's grants.
+// What this proves is the hand-written (station_id) → kitchen_stations foreign keys on
+// categories/products.
+//
+// LOSS, from the storage swap: the writes below used to run as the non-owner `app_user` on a real
+// PostgreSQL, so the suite also established that the additive `station_id` column fell under the
+// existing table-wide grant. SQLite has no roles and no grants
+// (`packages/db/src/testing/roles.ts`), so only the foreign keys are left.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
@@ -19,15 +25,15 @@ let categoryA = "";
 let productA = "";
 let stationA = "";
 
-describe("categories.station_id / products.station_id routing FKs (app-writable)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+describe("categories.station_id / products.station_id routing FKs", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
-    const admin = suite.admin;
-    await admin
+    const db = suite.db;
+    await db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await admin.insert(locations).values([
+    await db.insert(locations).values([
       {
         id: LOCATION_A,
         name: "Loc A",
@@ -35,17 +41,21 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
         operationDescription: "Hostelería",
       },
     ]);
-    stationA = await seedStation(LOCATION_A);
-    const [catA] = await admin
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: LOCATION_A, name: "Cocina", isDefault: true })
+      .returning({ id: kitchenStations.id });
+    stationA = station!.id;
+    const [catA] = await db
       .insert(categories)
       .values({ name: { es: "Comida" } })
       .returning({ id: categories.id });
     categoryA = catA!.id;
-    const [cat] = await admin
+    const [cat] = await db
       .insert(catalogues)
       .values({ name: "Deli A" })
       .returning({ id: catalogues.id });
-    const [prodA] = await admin
+    const [prodA] = await db
       .insert(products)
       .values({
         catalogueId: cat!.id,
@@ -58,62 +68,45 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
     productA = prodA!.id;
   });
 
-  async function seedStation(location: string): Promise<string> {
-    const r = await suite.admin.execute<{ id: string }>(
-      sql`insert into kitchen_stations (location_id, name, is_default) values (${location}, 'Cocina', true) returning id`,
-    );
-    return r.rows[0]!.id;
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
-  }
-
-  it("lets the app role route a category to an own-tenant station and rejects a missing one", async () => {
-    // The app role writes and reads back station_id (the additive column, under categories' existing
-    // grant) …
-    await asApp((tx) =>
-      tx.execute(sql`update categories set station_id = ${stationA} where id = ${categoryA}`),
+  it("routes a category to a station and rejects a missing one", async () => {
+    await inTx((tx) =>
+      tx.update(categories).set({ stationId: stationA }).where(eq(categories.id, categoryA)),
     );
-    const [row] = await asApp((tx) =>
+    const [row] = await inTx((tx) =>
       tx
-        .execute<{ station_id: string | null }>(
-          sql`select station_id from categories where id = ${categoryA}`,
-        )
-        .then((r) => r.rows),
+        .select({ stationId: categories.stationId })
+        .from(categories)
+        .where(eq(categories.id, categoryA)),
     );
-    expect(row!.station_id).toBe(stationA);
+    expect(row!.stationId).toBe(stationA);
 
     // … a station that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`update categories set station_id = ${RANDOM_UUID} where id = ${categoryA}`),
+      inTx((tx) =>
+        tx.update(categories).set({ stationId: RANDOM_UUID }).where(eq(categories.id, categoryA)),
       ),
     );
-    expect(pgErrorCode(eRandom)).toBe("23503");
+    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("lets the app role route a product to an own-tenant station and rejects a missing one", async () => {
-    await asApp((tx) =>
-      tx.execute(sql`update products set station_id = ${stationA} where id = ${productA}`),
+  it("routes a product to a station and rejects a missing one", async () => {
+    await inTx((tx) =>
+      tx.update(products).set({ stationId: stationA }).where(eq(products.id, productA)),
     );
-    const [row] = await asApp((tx) =>
-      tx
-        .execute<{ station_id: string | null }>(
-          sql`select station_id from products where id = ${productA}`,
-        )
-        .then((r) => r.rows),
+    const [row] = await inTx((tx) =>
+      tx.select({ stationId: products.stationId }).from(products).where(eq(products.id, productA)),
     );
-    expect(row!.station_id).toBe(stationA);
+    expect(row!.stationId).toBe(stationA);
 
     const eRandom = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`update products set station_id = ${RANDOM_UUID} where id = ${productA}`),
+      inTx((tx) =>
+        tx.update(products).set({ stationId: RANDOM_UUID }).where(eq(products.id, productA)),
       ),
     );
-    expect(pgErrorCode(eRandom)).toBe("23503");
+    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

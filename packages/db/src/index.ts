@@ -170,14 +170,17 @@ export {
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
- * Testing infrastructure exported for reuse by a module package's OWN test suite — not test-only
- * dependency-heavy internals like `describeEachTarget` (which pulls in `@testcontainers/postgresql`
- * and would make it a transitive dependency of the production surface for every consumer of this
- * package), but the three small, dependency-light primitives every immutability suite in this
- * repo is built from. `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` (Task 12) is the first
- * consumer outside this package: it reproduces `immutability.test.ts`'s pattern against its own
- * module-owned table and needs the same non-owner-role switch and the same wrapped-driver-error
- * readers this package's own suite uses.
+ * Testing infrastructure exported for reuse by a module package's OWN test suite: three small,
+ * dependency-light primitives every immutability suite in this repo is built from. Nothing that
+ * drags a test-only dependency in with it belongs here — it would become a transitive dependency of
+ * the production surface for every consumer of this package.
+ *
+ * `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` is the first consumer outside this package:
+ * it reproduces `immutability.test.ts`'s pattern against its own module-owned table and needs the
+ * same wrapped-driver-error readers this package's own suite uses.
+ *
+ * `asAppUser` does nothing on this engine — SQLite has no roles — and is exported only so its call
+ * sites still compile until task T1 removes them (`./testing/roles.ts`).
  */
 export { asAppUser } from "./testing/roles.js";
 export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";

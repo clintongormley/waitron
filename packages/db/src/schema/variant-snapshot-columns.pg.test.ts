@@ -1,13 +1,19 @@
-// Real Postgres, not PGlite: this proves the B1 snapshot-column migration (0030) and the custom
-// variant-locales trigger (0031) actually APPLY and behave on the deployment target. The trigger is a
-// plain data-validation BEFORE trigger — it does not turn on the connecting role — so PGlite would
-// suffice for firing (as the sibling descriptions check in orders.test.ts uses), but the brief scopes
-// this unit's proof to real PG, and cloning the shared `core` template is ~26ms.
+// The name still ends `.pg.test.ts`, and this suite no longer reaches PostgreSQL. Renaming it is
+// not this change's — the storage swap's plan
+// (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the rename
+// for the same sweep that deals with `asAppUser` and `pgErrorCode`.
+//
+// What it proves: the B1 snapshot columns round-trip, and the variant-locales trigger
+// (`working_order_lines_check_variant_locales_insert` / `_update`) refuses a map that is not
+// exactly the venue's locales. Nothing here ever turned on the connecting role, so the storage
+// swap costs this suite no assertion — only its last case changes how it reads the schema (see it).
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -20,17 +26,17 @@ const AT = "2026-07-20T19:20:30+00:00";
 // "at least one locale", so the trigger is exercised against two configured locales.
 const LOCALES = ["es", "ca"] as const;
 
-describe("B1 snapshot columns and the variant-descriptions locales trigger (real PG)", () => {
-  // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test truncation
-  // `useTemplateDb` runs by default would empty them after the first case. Each case that writes a
+describe("B1 snapshot columns and the variant-descriptions locales trigger", () => {
+  // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test reset
+  // `useVenueDb` runs by default would empty them after the first case. Each case that writes a
   // line uses its own `line_no` and reads back only its own row, so they do not need the reset.
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let db: Database;
   let productId = "";
   let orderId = "";
 
   beforeAll(async () => {
-    db = suite.admin;
+    db = suite.db;
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
@@ -48,19 +54,19 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
     const [prod] = await db
       .insert(products)
       .values({
-        catalogueId: cat.id,
+        catalogueId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
         unitPrice: 130,
         vatClass: "general",
       })
       .returning({ id: products.id });
-    productId = prod.id;
+    productId = prod!.id;
     const [order] = await db
       .insert(workingOrders)
       .values({ tillId: TILL, orderNumber: 1, status: "open", openedAt: AT })
       .returning({ id: workingOrders.id });
-    orderId = order.id;
+    orderId = order!.id;
   });
 
   function lineValues(overrides: Record<string, unknown> = {}) {
@@ -84,11 +90,11 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
 
   it("round-trips the new snapshot columns (name, text variant_name, variant_descriptions, variant_kitchen_name)", async () => {
     const [line] = await db.insert(workingOrderLines).values(lineValues()).returning();
-    expect(line.name).toBe("Café solo");
-    // variant_name is now plain text, not a jsonb map.
-    expect(line.variantName).toBe("Grande");
-    expect(line.variantDescriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
-    expect(line.variantKitchenName).toBe("CAFE GR");
+    expect(line!.name).toBe("Café solo");
+    // variant_name is plain text, not a map.
+    expect(line!.variantName).toBe("Grande");
+    expect(line!.variantDescriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
+    expect(line!.variantKitchenName).toBe("CAFE GR");
   });
 
   it("accepts a null variant_descriptions (the optional column is skipped by the trigger)", async () => {
@@ -96,7 +102,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
       .insert(workingOrderLines)
       .values(lineValues({ lineNo: 2, variantDescriptions: null }))
       .returning();
-    expect(line.variantDescriptions).toBeNull();
+    expect(line!.variantDescriptions).toBeNull();
   });
 
   it("rejects a variant_descriptions that is missing a configured locale", async () => {
@@ -105,9 +111,7 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
         .insert(workingOrderLines)
         .values(lineValues({ lineNo: 3, variantDescriptions: { es: "Café solo" } })),
     );
-    expect(pgErrorMessage(error)).toMatch(
-      /variant_descriptions must carry exactly the venue locales/,
-    );
+    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
   });
 
   it("rejects a variant_descriptions carrying an unconfigured locale", async () => {
@@ -119,26 +123,33 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger (real
         }),
       ),
     );
-    expect(pgErrorMessage(error)).toMatch(
-      /variant_descriptions must carry exactly the venue locales/,
-    );
+    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
   });
 
   it("applied the same new columns to sale_lines with matching types", async () => {
     // sale_lines' round-trip needs a full fiscal sale (node, series, invoice number) to satisfy its
-    // parent FK; the migration-apply proof for it reads the live applied schema instead.
-    const cols = (
-      await db.execute<{ column_name: string; data_type: string; is_nullable: string }>(sql`
-        select column_name, data_type, is_nullable from information_schema.columns
-         where table_name = 'sale_lines'
-           and column_name in ('name','variant_name','variant_descriptions','variant_kitchen_name')
-         order by column_name`)
-    ).rows;
+    // parent FK; this reads the live applied schema instead.
+    //
+    // `pragma table_info` replaces `information_schema.columns`, and the answer it gives is
+    // COARSER: PostgreSQL reported `jsonb` for `variant_descriptions` and `text` for the other
+    // three, so the old assertion separated a JSON column from a plain one. Every one of the four
+    // is `text` here — `json` in `packages/db/src/schema/columns.ts` is `text(..., { mode: "json" })`,
+    // a Drizzle read/write mode with no counterpart in the stored type — so the column's JSON-ness
+    // is no longer something the catalogue can be asked about. What survives is presence,
+    // nullability and the storage type, which the catalogue reports in the case the DDL declared it
+    // (`TEXT`), not normalised.
+    const cols = db
+      .all<{ name: string; type: string; notnull: number }>(
+        sql`select name, type, "notnull" from pragma_table_info('sale_lines')
+             where name in ('name','variant_name','variant_descriptions','variant_kitchen_name')
+             order by name`,
+      )
+      .map((c) => ({ name: c.name, type: c.type, notnull: c.notnull }));
     expect(cols).toEqual([
-      { column_name: "name", data_type: "text", is_nullable: "NO" },
-      { column_name: "variant_descriptions", data_type: "jsonb", is_nullable: "YES" },
-      { column_name: "variant_kitchen_name", data_type: "text", is_nullable: "YES" },
-      { column_name: "variant_name", data_type: "text", is_nullable: "YES" },
+      { name: "name", type: "TEXT", notnull: 1 },
+      { name: "variant_descriptions", type: "TEXT", notnull: 0 },
+      { name: "variant_kitchen_name", type: "TEXT", notnull: 0 },
+      { name: "variant_name", type: "TEXT", notnull: 0 },
     ]);
   });
 });

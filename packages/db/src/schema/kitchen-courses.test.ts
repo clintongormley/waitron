@@ -1,45 +1,51 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenCourses } from "./kitchen-courses.js";
-import { tenants } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
-// Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
-// `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// cases retain the role switch so the reads and writes still exercise app_user grants.
+// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
+// PostgreSQL, so the suite also established that the additive columns fell under the existing
+// table-wide grants. SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`).
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
 describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // Seeded once in beforeAll: a product of tenant A (for the products.course_id FK proof) and a course
-  // of tenant A to route (course A).
+  // Seeded once in beforeAll: a product (for the products.course_id FK proof) and a course to
+  // route to.
   let productA = "";
   let courseA = "";
 
   beforeAll(async () => {
-    await suite.admin
+    const db = suite.db;
+    await db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await suite.admin.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_A2}, 'Loc A2', array['es'], 'Hostelería')
-      on conflict (id) do nothing`);
+    await db.insert(locations).values([
+      { id: LOCATION_A, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" },
+      {
+        id: LOCATION_A2,
+        name: "Loc A2",
+        invoiceLocales: ["es"],
+        operationDescription: "Hostelería",
+      },
+    ]);
     courseA = await seedCourse(LOCATION_A, "Entrantes");
-    // A catalogue + product of tenant A, so the products.course_id FK proof has an own-tenant product
-    // to route. Seeded as admin (a catalogue fixture, not the thing under test) — same as routing-station.
-    const [cat] = await suite.admin
+    const [cat] = await db
       .insert(catalogues)
       .values({ name: "Deli A" })
       .returning({ id: catalogues.id });
-    const [prod] = await suite.admin
+    const [prod] = await db
       .insert(products)
       .values({
         catalogueId: cat!.id,
@@ -52,123 +58,115 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     productA = prod!.id;
   });
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
+  // The Drizzle builder rather than raw SQL: `id` and `created_at` are `$defaultFn` columns applied
+  // CLIENT-side, so a raw `insert` is refused NOT NULL.
   async function seedCourse(location: string, name: string, displayOrder = 0): Promise<string> {
-    return asApp(async (tx) => {
-      const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_courses (location_id, name, display_order) values (${location}, ${name}, ${displayOrder}) returning id`,
-      );
-      return r.rows[0]!.id;
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(kitchenCourses)
+        .values({ locationId: location, name, displayOrder })
+        .returning({ id: kitchenCourses.id });
+      return row!.id;
     });
   }
 
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
     const id = await seedCourse(LOCATION_A, "Principales", 1);
-    await asApp((tx) =>
-      tx.execute(sql`update kitchen_courses set display_order = 5 where id = ${id}`),
+    await inTx((tx) =>
+      tx.update(kitchenCourses).set({ displayOrder: 5 }).where(eq(kitchenCourses.id, id)),
     );
-    // Read back through the Drizzle `kitchenCourses` export (not raw SQL) — exercises the produced
-    // table export and its column mapping under the app role.
-    const [row] = await asApp((tx) =>
-      tx
-        .select()
-        .from(kitchenCourses)
-        .where(sql`id = ${id}`),
+    const [row] = await inTx((tx) =>
+      tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id)),
     );
     expect(row!.displayOrder).toBe(5);
     expect(row!.name).toBe("Principales");
     expect(row!.active).toBe(true);
   });
 
-  it("exposes locations.fire_control to the app role, defaulting to 'waiter' (the new venue setting)", async () => {
-    // The additive fire_control column lands NOT NULL DEFAULT 'waiter' and is readable under the app
-    // role (locations' SELECT grant covers it). Writing it is a config verb (Task 3),
-    // not exercised here.
-    const [row] = await asApp((tx) =>
+  it("locations.fire_control defaults to 'waiter' (the new venue setting)", async () => {
+    const [row] = await inTx((tx) =>
       tx
-        .execute<{ fire_control: string }>(
-          sql`select fire_control from locations where id = ${LOCATION_A}`,
-        )
-        .then((r) => r.rows),
+        .select({ fireControl: locations.fireControl })
+        .from(locations)
+        .where(eq(locations.id, LOCATION_A)),
     );
-    expect(row!.fire_control).toBe("waiter");
+    expect(row!.fireControl).toBe("waiter");
   });
 
-  it("fire_control_mode accepts the new 'expo' label (KDS-3 ALTER TYPE ADD VALUE applied)", async () => {
-    // The label is present in pg_enum, and a literal casts to the type without raising. Setting the
-    // locations column to 'expo' is the config verb's job (a later KDS-3 task), NOT exercised here — this
-    // is purely the enum-type receipt. Cast as the owner (enum validity is not tenant- or grant-scoped).
-    const labels = await suite.admin
-      .execute<{ enumlabel: string }>(
-        sql`select e.enumlabel from pg_enum e
-            join pg_type t on t.oid = e.enumtypid
-            where t.typname = 'fire_control_mode' order by e.enumsortorder`,
-      )
-      .then((r) => r.rows.map((row) => row.enumlabel));
-    expect(labels).toEqual(["waiter", "kitchen", "expo"]);
-    // The cast succeeds for 'expo' …
-    const [castRow] = await suite.admin
-      .execute<{ v: string }>(sql`select 'expo'::fire_control_mode as v`)
-      .then((r) => r.rows);
-    expect(castRow!.v).toBe("expo");
-    // … and the control in the other direction (§4): a value that is NOT a label raises 22P02
-    // (invalid_text_representation), so the positive cast above is genuinely validating the label.
-    const e = await captureError(() => suite.admin.execute(sql`select 'nope'::fire_control_mode`));
-    expect(pgErrorCode(e)).toBe("22P02");
+  it("fire_control accepts the three labels and refuses a fourth", async () => {
+    // PostgreSQL held these labels in an ENUM TYPE, so this case read `pg_enum` and cast a literal,
+    // with a non-label cast raising `22P02` as the control. The regenerated SQLite column is `text`
+    // with an `in (...)` CHECK (`packages/db/src/schema/columns.ts`'s `enumType`/`enumCheck`), so
+    // the same question is asked by WRITING each label: there is no type to interrogate, and the
+    // constraint is the only thing that knows the set.
+    for (const label of ["waiter", "kitchen", "expo"] as const) {
+      await inTx((tx) =>
+        tx.update(locations).set({ fireControl: label }).where(eq(locations.id, LOCATION_A2)),
+      );
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ fireControl: locations.fireControl })
+          .from(locations)
+          .where(eq(locations.id, LOCATION_A2)),
+      );
+      expect(row!.fireControl).toBe(label);
+    }
+    // The control in the other direction: a value that is not a label is refused by the CHECK, so
+    // the three accepted above are genuinely being validated. Raw SQL, because the column's type
+    // admits only the three labels.
+    const e = await captureError(() =>
+      inTx(async (tx) => {
+        tx.run(sql`update locations set fire_control = 'nope' where id = ${LOCATION_A2}`);
+      }),
+    );
+    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    // Restore, since this suite shares its rows across cases.
+    await inTx((tx) =>
+      tx.update(locations).set({ fireControl: "waiter" }).where(eq(locations.id, LOCATION_A2)),
+    );
   });
 
-  it("lets the app role route a product to an own-tenant course and rejects a missing one", async () => {
-    // The app role writes and reads back products.course_id (the additive column, under products'
-    // existing grant) …
-    await asApp((tx) =>
-      tx.execute(sql`update products set course_id = ${courseA} where id = ${productA}`),
+  it("routes a product to a course and rejects a missing one", async () => {
+    await inTx((tx) =>
+      tx.update(products).set({ courseId: courseA }).where(eq(products.id, productA)),
     );
-    const [row] = await asApp((tx) =>
-      tx
-        .execute<{ course_id: string | null }>(
-          sql`select course_id from products where id = ${productA}`,
-        )
-        .then((r) => r.rows),
+    const [row] = await inTx((tx) =>
+      tx.select({ courseId: products.courseId }).from(products).where(eq(products.id, productA)),
     );
-    expect(row!.course_id).toBe(courseA);
+    expect(row!.courseId).toBe(courseA);
 
     // … a course that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`update products set course_id = ${RANDOM_UUID} where id = ${productA}`),
+      inTx((tx) =>
+        tx.update(products).set({ courseId: RANDOM_UUID }).where(eq(products.id, productA)),
       ),
     );
-    expect(pgErrorCode(eRandom)).toBe("23503");
+    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("wires all three course columns with a foreign key to kitchen_courses", async () => {
-    // The heavy behavioural proof above covers products.course_id; working_order_lines.course_id and
-    // ticket_items.course_id use the IDENTICAL hand-written DDL. Asserting each of the three FK
-    // definitions structurally (pg_get_constraintdef reads the LIVE catalog, not source) catches a
-    // copy-paste error in the target or the column list — e.g. a course FK that points at
-    // kitchen_stations — that the single behavioural test would not reach.
-    const defs = await suite.admin.execute<{ conname: string; def: string }>(
-      sql`select conname, pg_get_constraintdef(oid) as def from pg_constraint
-          where conname in ('products_course_fk', 'working_order_lines_course_fk', 'ticket_items_course_fk')
-          order by conname`,
-    );
-    const byName = new Map(defs.rows.map((r) => [r.conname, r.def]));
-    expect(byName.size).toBe(3);
-    for (const name of [
-      "products_course_fk",
-      "working_order_lines_course_fk",
-      "ticket_items_course_fk",
-    ]) {
-      const def = byName.get(name);
-      expect(def, `${name} must exist`).toBeDefined();
-      expect(def).toContain("FOREIGN KEY (course_id)");
-      expect(def).toContain("kitchen_courses(id)");
+    // The behavioural proof above covers products.course_id; working_order_lines.course_id and
+    // ticket_items.course_id use the IDENTICAL DDL. Asserting each of the three structurally
+    // catches a copy-paste error in the target or the column list — a course FK pointing at
+    // kitchen_stations, say — that the single behavioural test would not reach.
+    //
+    // `pragma foreign_key_list` replaces `pg_get_constraintdef`: it reads the LIVE catalogue the
+    // same way, but it reports no constraint NAME, because SQLite does not store one for a foreign
+    // key. So the three are found by their owning table and column instead of by
+    // `products_course_fk` and its two siblings, and if one of those names were needed again it
+    // could not be read back from this engine at all.
+    for (const table of ["products", "working_order_lines", "ticket_items"]) {
+      const keys = suite.db.all<{ table: string; from: string; to: string }>(
+        sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('${table}')`),
+      );
+      const course = keys.filter((key) => key.from === "course_id");
+      expect(course, `${table}.course_id must have exactly one foreign key`).toHaveLength(1);
+      expect(course[0]!.table).toBe("kitchen_courses");
+      expect(course[0]!.to).toBe("id");
     }
   });
 });
