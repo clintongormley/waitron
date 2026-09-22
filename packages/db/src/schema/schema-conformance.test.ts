@@ -53,8 +53,9 @@ function enumsIn(module: Record<string, unknown>): PgEnum<[string, ...string[]]>
 // coverage credits each of those mutants to whatever test happened to be running when the module
 // first loaded — in a whole-package run, some unrelated file's test, which is then the only test
 // the mutant is run against. Receipt: mutation run 35498146363 on this branch, shard 7, where the
-// surviving mutant in `src/schema/printers.ts` is covered-by six cases in
-// `src/testing/harness.docker.test.ts` and by none of the cases here, and the file scored 5.8%.
+// surviving mutant in `src/schema/printers.ts` is covered-by six cases in a suite that has since
+// been deleted with the PostgreSQL test harness, and by none of the cases here; the file scored
+// 5.8%. The run is the receipt; the file it names is not in this tree any more.
 // Re-importing in the test body puts the declaration's execution inside the test.
 async function reload(): Promise<{ tables: PgTable[]; enums: PgEnum<[string, ...string[]]>[] }> {
   vi.resetModules();

@@ -548,11 +548,9 @@ jobs:
   # a blob captures coverage ONLY when `--coverage` is on (a blob written without it merges to an empty
   # map that passes thresholds vacuously GREEN, so the missing flag is caught by ci-workflow.test.mjs,
   # not at runtime); the shard's own threshold check fires on its partial coverage unless overridden;
-  # and `--merge-reports` re-runs NOTHING — no globalSetup, no container — so the merge job below needs
-  # no Docker.
+  # and `--merge-reports` re-runs NOTHING, so the merge job below needs no Docker.
   #
-  # Each shard boots its OWN shared container (globalSetup runs once per process), so the
-  # install+container overhead is re-paid per shard and the speed-up is sub-linear. maxWorkers: 4 and the
+  # Each shard re-pays the install overhead, so the speed-up is sub-linear. maxWorkers: 4 and the
   # REQUIRE_DOCKER / TESTCONTAINERS_RYUK_DISABLED pair are exactly as the un-sharded job had them; the
   # `heavy` gate is unchanged and now feeds three jobs (these shards plus the merge) rather than one.
   #
@@ -576,9 +574,11 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     env:
-      # packages/db's harness skips its real-Postgres target when Docker is absent. That is right on
-      # a laptop and wrong here: the skipped target is the only one that can observe lock contention
-      # and non-superuser RLS, so a runner without Docker would report green having checked neither.
+      # NOTHING READS THIS ANY MORE. It was read by `packages/db/src/testing/harness.ts`, which this
+      # branch deleted along with the rest of the PostgreSQL test harness;
+      # `grep -rn REQUIRE_DOCKER packages apps scripts bench` on 2026-09-22 returns no line at all.
+      # Left set rather than removed here because retiring the real-Postgres shard layout is its own
+      # piece of work; see `docs/backlog.md`.
       REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
@@ -825,10 +825,9 @@ jobs:
   # other packages' results down with it — before this, the whole shard reported nothing.
   #
   # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, unlike the other two shards: packages/ui
-  # drives Chromium through Playwright and touches no database. Checked rather than assumed —
-  # `grep -rn REQUIRE_DOCKER packages apps scripts` on 2026-08-01 answers only in packages/db (its
-  # harness, its suites and its README) and in the two workflows that set it, and `packages/ui`'s
-  # only runtime dependency is `lit`.
+  # drives Chromium through Playwright and touches no database. Its only runtime dependency is
+  # `lit`. (On 2026-09-22 `grep -rn REQUIRE_DOCKER packages apps scripts bench` answers nowhere at
+  # all — see the note on test-heavy's own REQUIRE_DOCKER.)
   test-ui:
     timeout-minutes: 15
     needs: changes

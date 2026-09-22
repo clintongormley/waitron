@@ -59,8 +59,8 @@ export interface SeededFiscalRegistro extends FiscalIds {
   secuencia: number;
 }
 
-// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion). Suites share ONE
-// cloned database (one useTemplateDb clone per file), so each seed call must be collision-free against
+// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion). A suite gets ONE
+// database for the whole file, so each seed call must be collision-free against
 // every earlier one in the same file. A per-module counter gives each call a
 // distinct-but-deterministic tax_id / numero_instalacion; callers may override. The taxpayer row
 // itself is a singleton, so only the FIRST call in a database sets its tax id.

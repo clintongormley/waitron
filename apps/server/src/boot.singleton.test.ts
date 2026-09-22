@@ -48,9 +48,9 @@ import { startServer } from "./boot.js";
  * directory gets below is therefore closed before `startServer` is called, and no test reads the
  * database back while a server is up. `DATABASE_URL` and `WAITRON_MIGRATIONS_DATABASE_URL` are not
  * set because nothing reads them any more:
- * `grep -rn "DATABASE_URL" apps/server/src --include="*.ts" | grep -v "\.test\.ts"` returns three
- * lines and all three are COMMENTS — `restore-command.ts:48`, `backup-config.ts:21` and
- * `testing/postgres.ts:5`, the retiring harness itself.
+ * `grep -rn "DATABASE_URL" apps/server/src --include="*.ts" | grep -v "\.test\.ts"` returns two
+ * lines and both are COMMENTS — `restore-command.ts:48` and `backup-config.ts:21` (re-run
+ * 2026-09-22, after the PostgreSQL test harness was deleted).
  */
 
 vi.mock("@waitron/tunnel", async (importOriginal) => {

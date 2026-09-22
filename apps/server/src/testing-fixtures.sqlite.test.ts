@@ -90,10 +90,11 @@ describe("the shared fixtures seed a real migrated venue", () => {
 });
 
 describe("the mirror's ambient viewer is seeded on a real migrated venue", () => {
-  // `mirror-session.ts`'s own suite cannot run yet — it is one of this package's files waiting on
-  // the `useTemplateDb` harness — so this is what exercises the two inserts the storage swap
-  // rewrote. Both relied on PostgreSQL column defaults (`persons.created_at`,
-  // `management_sessions.created_at` / `last_seen_at`) and the upsert stamped `now()`.
+  // The two inserts the storage swap rewrote: both relied on PostgreSQL column defaults
+  // (`persons.created_at`, `management_sessions.created_at` / `last_seen_at`) and the upsert
+  // stamped `now()`. `mirror-session.test.ts` covers `ensureMirrorViewer` too and now runs
+  // (9 passed, 2026-09-22); this case is kept because it drives it against the fixture module's
+  // own migrated venue rather than that suite's.
   it("creates the viewer and its live session, and a second call revives rather than duplicates", async () => {
     await ensureMirrorViewer(db);
     await ensureMirrorViewer(db);

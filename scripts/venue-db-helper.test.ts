@@ -3,9 +3,17 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Contract: a suite that wants a PGlite database asks for it through `useVenueDb`. That helper is
- * the seam the SQLite switch (task F1) replaces, so the switch changes one function body rather
- * than every call site.
+ * Contract: a suite that wants a database asks for it through `useVenueDb`
+ * (`packages/db/src/testing/venue-db.ts`), and the helper it replaced, `usePgliteDb`, is a RETIRED
+ * NAME that no source file may write again.
+ *
+ * What this guard is for has changed with the storage swap, and the new job is the smaller one.
+ * While both helpers existed it stopped a suite reaching past the seam. `usePgliteDb` is now
+ * defined nowhere — `git grep -l usePgliteDb -- "*.ts"` answers with this file alone, taken
+ * 2026-09-22 — so what it holds today is that the name stays retired: a reintroduced PGlite helper,
+ * or a comment pointing a reader at one, is reported rather than quietly accumulating. That is a
+ * thin subject, and it is stated plainly so nobody mistakes this for a check on how suites open
+ * databases. CLAUDE.md §4 states the rule this file enforces; the two travel together.
  *
  * It lives in the ROOT Vitest project rather than beside the helper in `packages/db`, for the same
  * reason `scripts/column-vocabulary.test.ts` does, and the reason runs in the direction a reader
@@ -27,46 +35,31 @@ import { describe, expect, it } from "vitest";
  * TYPECHECK of `packages/db`, never a suite living there. The root project needs none of this —
  * ci.yml's `lint` job and `.husky/pre-push` both run it on every non-documentation push.
  *
- * **It forbids the NAME, not just the call, and that is the deliberate part.** `useVenueDb`'s whole
- * body is `return usePgliteDb(options)`, so a comment elsewhere in the tree pointing a reader at
- * "the suite's `usePgliteDb` options" stays true while naming a function that file cannot call.
- * Seven such dead pointers were standing when this guard was written and are swept in the same
- * pull request; five of them were in a `vitest.config.ts`, where a call-shaped grep would never
- * have looked. `docs/backlog.md` asked whoever wrote this guard to decide about comments
- * deliberately and say so: it reads them, because they are the class that kept recurring.
+ * **It forbids the NAME, not just the call, and that is the deliberate part.** Seven dead pointers
+ * in comments were standing when this guard was written, five of them in a `vitest.config.ts`,
+ * where a call-shaped grep never looks. Comments are the class that kept recurring, so it reads
+ * them.
  *
- * Five things it does not do, stated here because a failing test can never restore a missing hedge.
- * The first is an OVER-report rather than a blind spot; the other four are blind spots:
+ * Three things it does not do, stated here because a failing test can never restore a missing
+ * hedge. The first is an OVER-report rather than a blind spot; the other two are blind spots:
  *
  * 1. **It reads TEXT.** The name inside a string literal, a regular expression or prose is reported
  *    exactly like a call. That is the point rather than a flaw, but it means a file that needs to
  *    DISCUSS the old helper cannot, outside the package that owns it.
- * 2. **`packages/db/` is exempt WHOLE**, not file by file. It defines both helpers, tests them, and
- *    documents them in its own vitest config and README. `git grep -l usePgliteDb -- packages/db`
- *    returns SEVEN files on this tree and six of them are `.ts`, which is what a per-file list here
- *    would have to carry — six entries that go stale on the next refactor. The price: a suite inside
- *    that package could call `usePgliteDb` directly and this guard would not see it.
- * 3. **It sees one of the three doors to a PGlite database.** `createPgliteDb` called directly and
- *    `describeEachTarget`'s PGlite half are the other two, and neither is reported. On `e596fea4f`,
- *    `comm -23 <(grep -rlE "createPgliteDb\(" --include="*.test.ts" packages apps | sort)
- *    <(grep -rlE "useVenueDb\(|describeEachTarget\(" --include="*.test.ts" packages apps | sort)`
- *    returns 10 suites taking the first door and no other, and
- *    `grep -rlE "describeEachTarget\(" --include="*.test.ts" packages apps` returns 7 taking the
- *    second. They are not a mechanical rename — `describeEachTarget` hands out a fresh cluster PER
- *    TEST where this helper hands out one database per SUITE with a truncate between tests, a
- *    different isolation contract — so plan task P2 left them to F1 and so does this guard. A
- *    control below pins that rather than only claiming it.
- * 4. **Its scope is `.ts` under `packages/` and `apps/`.** `scripts/`, `bench/`, `deploy/` and every
+ * 2. **Its scope is `.ts` under `packages/` and `apps/`.** `scripts/`, `bench/`, `deploy/` and every
  *    markdown file in the repository are outside it — so a plan or a runbook naming the old helper
  *    is invisible to this guard, which is the class `docs/backlog.md` records as needing a human
- *    sweep, not a check.
- * 5. **It reads the file, not the module graph.** Re-exporting `usePgliteDb` from `packages/db`
- *    under a different name and importing THAT name elsewhere passes.
+ *    sweep, not a check. The name is still written in several markdown files today.
+ * 3. **It checks a NAME, not how a suite opens a database.** A suite that opened one some other way
+ *    entirely, under any other name, passes. Nothing here says a suite went through `useVenueDb`.
+ *
+ * There is no longer a whole-package exemption. `packages/db` held one while it defined both
+ * helpers; it names neither now, so the exemption was earning nothing and covering whatever came
+ * next. Removing it makes the rule apply to every `.ts` under both roots without exception.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["packages", "apps"];
-const OWNER = "packages/db/";
 const OLD_HELPER = "usePgliteDb";
 const SEAM = "packages/db/src/testing/venue-db.ts";
 
@@ -101,12 +94,11 @@ function allSources(): string[] {
 }
 
 /**
- * `"<file> names usePgliteDb"` if this file names the old helper and is not allowed to, else
- * nothing. Takes the text rather than reading it, so the controls below run this same function over
- * a fixture string instead of a reimplementation of it.
+ * `"<file> names usePgliteDb"` if this file names the retired helper, else nothing. Takes the text
+ * rather than reading it, so the controls below run this same function over a fixture string
+ * instead of a reimplementation of it.
  */
 function offendingMention(file: string, text: string): string[] {
-  if (file.startsWith(OWNER)) return [];
   return text.includes(OLD_HELPER) ? [`${file} names ${OLD_HELPER}`] : [];
 }
 
@@ -116,25 +108,14 @@ function offenders(files: readonly string[]): string[] {
   );
 }
 
-describe("a suite asks for its PGlite database through useVenueDb", () => {
-  it("no file outside the package that owns the helpers names the old one", () => {
+describe("the retired helper name is written nowhere", () => {
+  it("no source file under either root names it", () => {
     expect(offenders(allSources())).toEqual([]);
   });
 
   it("the seam the rule points at still exists", () => {
     const seam = readFileSync(join(repoRoot, SEAM), "utf8");
     expect(seam).toContain("export function useVenueDb(");
-  });
-
-  it("the whole-package exemption is still earned", () => {
-    // An exemption for something a package no longer does is an exemption nobody will notice
-    // covering the next offender. If this fails, narrow `OWNER` to the files that still need it
-    // rather than deleting the assertion.
-    const named = allSources().filter(
-      (file) =>
-        file.startsWith(OWNER) && readFileSync(join(repoRoot, file), "utf8").includes(OLD_HELPER),
-    );
-    expect(named).not.toEqual([]);
   });
 
   it("reaches both roots", () => {
@@ -156,14 +137,14 @@ describe("negative controls", () => {
   });
 
   it("reports a named import", () => {
-    expect(report(`import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";`)).toEqual([
+    expect(report(`import { usePgliteDb } from "@waitron/db/testing/venue-db.js";`)).toEqual([
       `${other} names ${OLD_HELPER}`,
     ]);
   });
 
   it("reports one renamed on the way in", () => {
     expect(
-      report(`import { usePgliteDb as useDb } from "@waitron/db/testing/lifecycle.js";`),
+      report(`import { usePgliteDb as useDb } from "@waitron/db/testing/venue-db.js";`),
     ).toEqual([`${other} names ${OLD_HELPER}`]);
   });
 
@@ -183,21 +164,9 @@ describe("negative controls", () => {
     expect(report(`const pg = useVenueDb({ migrations: [] });`)).toEqual([]);
   });
 
-  it("leaves the other two doors alone — they are task F1's, not this rule's", () => {
-    expect(
-      report(`const db = await createPgliteDb();\ndescribeEachTarget("x", () => {});`),
-    ).toEqual([]);
-  });
-
-  it("exempts the package that owns both helpers", () => {
-    expect(report(`const pg = usePgliteDb({});`, "packages/db/src/testing/lifecycle.ts")).toEqual(
-      [],
-    );
-  });
-
-  it("does not exempt a package whose name merely starts with the owner's", () => {
-    expect(report(`const pg = usePgliteDb({});`, "packages/db-extra/src/x.test.ts")).toEqual([
-      `packages/db-extra/src/x.test.ts names ${OLD_HELPER}`,
+  it("reports the retired name inside packages/db too, which used to be exempt", () => {
+    expect(report(`const pg = usePgliteDb({});`, "packages/db/src/testing/venue-db.ts")).toEqual([
+      `packages/db/src/testing/venue-db.ts names ${OLD_HELPER}`,
     ]);
   });
 });

@@ -16,9 +16,8 @@ import { defineConfig } from "vitest/config";
 //   which package holds which coverage bar, column-vocabulary reads every `.ts` file under both
 //   roots for a column builder imported straight from `drizzle-orm/pg-core` — which only
 //   `packages/db/src/schema/columns.ts` may do, so that the SQLite switch replaces one file —
-//   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, which under those roots
-//   only `packages/db` may write now that a suite which would once have called it calls
-//   `useVenueDb` (`createPgliteDb` and `describeEachTarget` are separate doors, and task F1's),
+//   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, a retired helper no
+//   source file under either root may write again,
 //   brand-icons pins each app's `index.html` icon
 //   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
 //   and journal-monotonic reads every migration set named by

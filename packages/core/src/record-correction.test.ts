@@ -218,8 +218,9 @@ async function correct(
   });
 }
 
-/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
- * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
+/** Counts every row in `table`. The suite helper empties every data table between tests
+ * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
+ * test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)}`,

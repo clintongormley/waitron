@@ -4,12 +4,7 @@
   "plugins": ["@stryker-mutator/vitest-runner"],
   "testRunner": "vitest",
   "vitest": { "configFile": "vitest.config.ts" },
-  "mutate": [
-    "src/**/*.ts",
-    "!src/**/*.test.ts",
-    "!src/english-only.ts",
-    "!src/testing/global-setup.ts"
-  ],
+  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/english-only.ts"],
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "reporters": ["clear-text", "progress", "html", "json"],

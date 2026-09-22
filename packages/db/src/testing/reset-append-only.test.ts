@@ -1,62 +1,100 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "./venue-db.js";
-import { seedTenant } from "./seed.js";
 
 /**
- * Proof that the PGlite per-test reset (reset-ON, the default) leaves an append-only table's
- * `BEFORE TRUNCATE` trigger EXACTLY as it found it — `ENABLE ALWAYS` and firing. This is the
- * fiscal-critical guarantee (CLAUDE.md §5) the reset must never weaken: to empty the append-only
- * tables the reset disables their `*_block_truncate` triggers, and a bug that restored one as a
- * plain ENABLE (or left it disabled) would silently open a hole in the immutability protection.
- * `reset-append-only.pg.test.ts` is the real-Postgres twin, and says there why one engine passing
- * is no evidence about the other. PGlite is this file's whole scope.
+ * The per-test reset must hand the NEXT test an append-only table that still refuses a write.
  *
- * The reset itself is `usePgliteDb`'s, in `lifecycle.ts`; this suite reaches it through
- * `useVenueDb`, which forwards unchanged. It runs in the `afterEach` the helper registers, so the
- * FIRST test's insert is cleared by a real reset BEFORE the second test — whose assertions read
- * the trigger's POST-reset state.
+ * To empty `sales` the reset has to get past the very triggers that protect it: SQLite has no
+ * `ALTER TABLE … DISABLE TRIGGER`, so `useVenueDb`'s reset drops each trigger, deletes the rows and
+ * recreates the trigger from the text `sqlite_master` stored for it. A reset that dropped and did
+ * not put them back would leave every later test in its file free to rewrite a filed sale, which is
+ * the class of damage `CLAUDE.md` §5 says cannot be repaired afterwards.
  *
- * What is unique here is the ASSERTION, not the cycle. A reset-ON PGlite suite whose schema has
- * an append-only table RUNS the disable→truncate→restore cycle without asserting anything about it
- * — that `afterEach` calls `applyReset` for any suite that left `resetPerTest` at its default
- * (`lifecycle.ts:148-151`). The qualifier matters: `buildResetPlan` collects TRUNCATE-level
- * triggers only (`lifecycle.ts:93`), so a suite whose migrations create none just truncates. This is the only PGlite suite that reads
- * the trigger's state back AFTER one. `inmutabilidad`, the suite that owns the trigger, reads
- * `tgenabled` too but never post-reset: it runs `resetPerTest: false`
- * (`packages/fiscal-verifactu/src/inmutabilidad.test.ts:11-15`).
+ * The cycle is exercised rather than assumed: the first test leaves a row in `sales`, so the
+ * reset's `delete` really does run against the protected table; the second test reads what the
+ * reset left behind.
+ *
+ * This file's scope is the RESET. The triggers themselves are
+ * `scripts/append-only-triggers.test.ts`'s.
  */
-describe("the PGlite per-test reset preserves append-only truncate protection", () => {
-  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] }); // reset-ON (default)
 
-  it("leaves data the reset must clear (the reset bypasses the block-truncate trigger to do it)", async () => {
-    await seedTenant(suite.db);
-    const seeded = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from tenants`,
-    );
-    expect(seeded.rows[0]!.n).toBeGreaterThan(0);
+/** Rows in `table`. `count(*)::int` is PostgreSQL's spelling and SQLite refuses it at prepare time
+ * with `unrecognized token: ":"` (measured 2026-09-22 on this suite's previous body). */
+const count = (db: Database, table: string) =>
+  db.all<{ n: number }>(sql.raw(`select cast(count(*) as int) as n from "${table}"`))[0].n;
+
+/**
+ * What the ENGINE said about `statement`, or `undefined` if it was accepted.
+ *
+ * `error.cause`, never the message drizzle wraps it in. Printed 2026-09-22 from inside this
+ * function: for the refused update the wrapper read
+ * `Failed to run the query 'update sales set locale = 'es-ES''` and the cause read
+ * `sales is append-only`. The wrapper quotes the failing STATEMENT, so it carries the table name
+ * whatever the engine thought of it, and a match on the table name alone reads that quotation
+ * rather than the refusal. The words asserted below appear only in the cause.
+ */
+function refusalFor(db: Database, statement: string): string | undefined {
+  try {
+    db.run(sql.raw(statement));
+    return undefined;
+  } catch (error) {
+    const cause = error instanceof Error ? error.cause : undefined;
+    return cause instanceof Error ? cause.message : String(error);
+  }
+}
+
+/**
+ * One `sales` row, every NOT NULL column stated.
+ *
+ * Only the foreign keys are switched off — the values satisfy every CHECK the table declares, which
+ * is why the insert below needs no second pragma — and they are switched straight back on, which is
+ * how `packages/store/src/index.ts:133` leaves a handle it opened. Issued outside any transaction.
+ * Every refusal asserted below is tried after this function has put foreign keys back on, so no
+ * assertion here rests on what the pragma does or does not do to a trigger.
+ */
+function seedSale(db: Database, id: string, invoiceNumber: number): void {
+  db.run(sql.raw("pragma foreign_keys = off"));
+  db.run(
+    sql.raw(
+      `insert into "sales" (id, till_id, series_id, node_id, invoice_number, issued_at,
+        issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
+        fiscal_state)
+       values ('${id}', 'till-1', 'series-1', 'node-1', ${String(invoiceNumber)},
+        '2026-09-22T00:00:00.000Z', 0, 0, '[]', 'es-ES', '["es-ES"]', 'none', 'recorded')`,
+    ),
+  );
+  db.run(sql.raw("pragma foreign_keys = on"));
+}
+
+describe("the per-test reset and an append-only table from a real migration set", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] }); // reset-ON (the default)
+
+  it("leaves a row the reset has to delete THROUGH the append-only protection", () => {
+    seedSale(suite.db, "sale-before-reset", 1);
+    expect(count(suite.db, "sales")).toBe(1);
+    // The protection is already firing before the reset runs, so the next test is reading a
+    // restoration and not an installation.
+    expect(refusalFor(suite.db, "delete from sales")).toBe("sales is append-only");
   });
 
-  it("after the reset: sales_block_truncate is back to ENABLE ALWAYS and still rejects a TRUNCATE", async () => {
-    // The reset ran in the previous test's afterEach: it disabled the ALWAYS block-truncate trigger,
-    // truncated every data table (tenants among them), and restored the trigger.
+  it("after the reset, the table is empty and still refuses an update and a delete", () => {
+    // The reset ran in the previous test's afterEach: it dropped every append-only trigger in the
+    // database, `sales`'s pair among them, deleted the row the delete trigger would otherwise have
+    // refused, and recreated them all.
+    expect(count(suite.db, "sales")).toBe(0);
 
-    // The reset actually happened: the row the first test left is gone.
-    const cleared = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from tenants`,
-    );
-    expect(cleared.rows[0]!.n).toBe(0);
+    // FOR EACH ROW is SQLite's only trigger granularity, so a row trigger on an EMPTY table refuses
+    // nothing. Measured here 2026-09-22 with both triggers in place: run at this point, before the
+    // seed, the same update and delete below were BOTH accepted. The seed is what gives the
+    // triggers something to fire on.
+    seedSale(suite.db, "sale-after-reset", 2);
 
-    // (a) No A->O downgrade: the trigger's enable state is still 'A' (ENABLE ALWAYS).
-    const trigger = await suite.db.execute<{ tgenabled: string }>(sql`
-      select t.tgenabled::text as tgenabled
-      from pg_trigger t
-      join pg_class c on c.oid = t.tgrelid
-      where c.relname = 'sales' and t.tgname = 'sales_block_truncate'`);
-    expect(trigger.rows[0]!.tgenabled).toBe("A");
-
-    // (b) It is active, not left disabled: an explicit TRUNCATE is still rejected by the trigger.
-    await expect(suite.db.execute(sql`truncate table sales`)).rejects.toThrow();
+    expect(refusalFor(suite.db, "update sales set locale = 'es-ES'")).toBe("sales is append-only");
+    expect(refusalFor(suite.db, "delete from sales")).toBe("sales is append-only");
+    // Refused, not merely noisy: the row the refusals were tried against is still there.
+    expect(count(suite.db, "sales")).toBe(1);
   });
 });

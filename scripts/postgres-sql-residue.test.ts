@@ -77,22 +77,17 @@ const ROOTS: readonly string[] = [
 /**
  * Files that still carry PostgreSQL-only SQL, and the reason each is left alone.
  *
- * Every one is a suite that asks for the real-PostgreSQL harness this branch removed, by calling
- * `useTemplateDb`. None of them COLLECTS: the helper throws `useTemplateDb: no shared container in
- * scope`, so their statements never reach an engine, and 145 files across the workspace are in the
- * same position — 145 files, counted by grepping for `useTemplateDb` under every package and app
- * source tree on 2026-09-22 (the glob is not written out here: a star-slash inside a block comment
- * closes it, which is the same hazard CLAUDE.md records for the English-only scan, and here it broke
- * the parser). Converting their SQL here would contradict a decision each one's own header records;
- * leaving them unnamed would fail this guard. Naming them keeps the debt visible, and each entry
- * goes when its suite is converted or deleted.
+ * This list held seven entries until 2026-09-22, on the grounds that each asked for the
+ * real-PostgreSQL test harness and so never reached an engine at all. That harness has since been
+ * deleted and every one of the seven converted to `useVenueDb`, which retires the grounds AND most
+ * of the list: emptying `UNSWEPT` and running this file reports exactly ONE offender,
+ * `packages/scheduler/src/migrations.test.ts:91`. The other six carry no residue this scan can see
+ * any more, so they are removed — an exemption nobody earns is one nobody notices covering the next
+ * offender. Nothing here CHECKS that, which is the hedge to keep in mind: an entry that stops
+ * offending sits here silently until somebody re-runs that experiment.
  *
- * The three `packages/workforce` entries carry a second reason on top: each opens
- * `RED ON THIS BRANCH, AND NOT BY OVERSIGHT`, because the row lock it was written to prove has been
- * deleted from the source tree-wide. Their residue is the `for update` clause itself.
- *
- * `packages/scheduler/src/migrations.test.ts` is the one entry that is NOT a `useTemplateDb`
- * suite. It collects, it RUNS, and it is red on this branch for reasons this guard cannot see: it
+ * `packages/scheduler/src/migrations.test.ts` is what is left. It collects, it RUNS, and it is red
+ * on this branch for reasons this guard cannot see (6 failed, measured 2026-09-22): it
  * asserts SQLSTATEs (`23514`, `23505`) against an engine that answers `ERR_SQLITE_ERROR`, and its
  * raw inserts omit `id`, which is a JavaScript `$defaultFn` here rather than a column default, so
  * the row is refused `NOT NULL constraint failed: scheduled_runs.id` — the second of the two blind
@@ -100,15 +95,7 @@ const ROOTS: readonly string[] = [
  * Converting that suite is its own piece of work; naming it here keeps the debt visible rather
  * than letting the scheduler root pass by omission. Measured 2026-09-22 by running the package.
  */
-const UNSWEPT: readonly string[] = [
-  "packages/reporting/src/record-daily-close.pg.test.ts",
-  "apps/server/src/move-merge.pg.test.ts",
-  "apps/server/src/working-order.pg.test.ts",
-  "packages/workforce/src/chain.concurrency.test.ts",
-  "packages/workforce/src/clocking.concurrency.test.ts",
-  "packages/workforce/src/scheduling.concurrency.test.ts",
-  "packages/scheduler/src/migrations.test.ts",
-];
+const UNSWEPT: readonly string[] = ["packages/scheduler/src/migrations.test.ts"];
 
 /** PostgreSQL-only spellings, each with what SQLite answers when one reaches the engine. */
 const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] = [

@@ -46,7 +46,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 // `timeoutMs` restates the 60s the helper applies by default and passes to its own `beforeAll`
-// (`packages/db/src/testing/lifecycle.ts:22`, used at :146), so dropping it would change no bound.
+// (`packages/db/src/testing/venue-db.ts:12`, used at :196), so dropping it would change no bound.
 // An argument to a hook replaces `vitest.config.ts`'s `hookTimeout` rather than narrowing it
 // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`), so this line is what governs the boot.
 //
@@ -169,8 +169,9 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
   });
 }
 
-/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
- * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
+/** Counts every row in `table`. The suite helper empties every data table between tests
+ * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
+ * test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*) as n from ${sql.raw(table)}`,

@@ -119,8 +119,7 @@ sees it — and its `mutate` list covers two named files, not the package. **`db
 own stryker config**, because CI splits its run across ten shards and a `thresholds.break` there
 would gate a slice: the ten reports are merged and scored once by the `mutation-db-aggregate` job,
 so a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing. Like `fiscal`'s,
-db's 90 is not quite package-wide — two files are out of its `mutate` set: `src/testing/global-setup.ts`,
-which vitest runs in the main process where Stryker records no coverage, and `src/english-only.ts`,
+db's 90 is not quite package-wide — one file is out of its `mutate` set, `src/english-only.ts`,
 whose only suite is in the root project and which nothing under `packages/db` imports today.
 Receipts: `scripts/mutation-shard.mjs`'s `NOT_MUTATED`. Which package
 holds which bar is pinned by `scripts/mutation-break-thresholds.test.mjs`, weaker than its name in

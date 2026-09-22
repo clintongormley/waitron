@@ -584,8 +584,10 @@ carries the earlier migrations.
 
 Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidence.
 
-The upgrade regression that migrates real databases from each release point covers `core` alone
-(`packages/db/src/migrate-upgrade.pg.test.ts`).
+The upgrade regression that migrated real databases from each release point covered `core` alone.
+It was deleted with the PostgreSQL test harness on 2026-09-22 — its subject was PostgreSQL's own
+enum-safety rule inside drizzle's single migrate transaction, and there is no `ALTER TYPE` left —
+so **no migration set has an upgrade test at all today.**
 
 **2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
 was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the

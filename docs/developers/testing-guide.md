@@ -14,9 +14,9 @@ superuser, so a privilege test that never switches role runs as the owner and as
 triggers still fire. Every query serialises onto its single backend, so a contention test on PGlite
 is a **false pass**. **Real Postgres** via Testcontainers is required for concurrency, for triggers
 running as the deployment role, and for anything that depends on who CONNECTED rather than who the
-session made itself. `describeEachTarget` (`packages/db/src/testing/harness.ts`) runs a suite against
-both. Pick the lighter one when the heavier one's justification does not apply, and say why in a
-comment.
+session made itself. A helper that ran a suite against both targets used to live beside them; it
+went with the PostgreSQL test harness on 2026-09-22. Pick the lighter target when the heavier one's
+justification does not apply, and say why in a comment.
 
 **Grants ARE enforced on PGlite once the session assumes the role.** This file and `CLAUDE.md` both
 used to say the opposite — "grants are not enforced" — which sends a reader to a Docker container
@@ -415,8 +415,9 @@ for both suites above, every variable accounted for.
 Testcontainers 12's `withNetworkAliases()` also attaches the default bridge. On this Docker Desktop
 host that produced interfaces with MTUs 65535 and 1500: a 1,400-byte query passed, a 1,600-byte
 query stalled, and removing the unused bridge made queries up to 100 KB pass. Use
-`networkedPostgresContainer` (`packages/db/src/testing/postgres.ts`); its real-Docker guard checks
-one interface, name resolution and a large query. WireGuard peers use `node.networkHost`. Evidence:
+the networked-PostgreSQL fixture, whose real-Docker guard checked one interface, name resolution
+and a large query — deleted with the rest of the PostgreSQL test harness on 2026-09-22, so this
+paragraph is the mechanism only. WireGuard peers use `node.networkHost`. Evidence:
 `docs/superpowers/specs/2026-09-09-test-load-design.md`.
 
 ## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally. A recurrent real-PG stall needs a retained log and a live database snapshot.
@@ -495,12 +496,13 @@ trust this paragraph. The measured detail — a 2026-09-14 probe on PostgreSQL 1
 the PostgreSQL source behind it — was removed from this file on 2026-09-19 with those suites; the
 trap surfaced as a CI failure in #356 and the fix landed in #361.
 
-PostgreSQL logical replication itself is still exercised here, so a reader who wants a live example
-has one: the "copies a row A→B over the network via a raw publication/subscription" case in
-`packages/db/src/testing/two-node.test.ts` creates a publication on one containerised node and a
-subscription on the other, then waits for the row to arrive. The change feed's own replicated case
-stood beside it until the SQLite flip, which deleted it — `installChangeFeed` emits SQLite triggers
-now, and this engine has no apply worker and no `ENABLE ALWAYS` for one to skip. A third suite, in
+PostgreSQL logical replication was exercised here until 2026-09-22: a "copies a row A→B over the
+network via a raw publication/subscription" case created a publication on one containerised node
+and a subscription on the other, then waited for the row to arrive. It went with the two-node
+fixture and the rest of the PostgreSQL test harness, so **no live example of it remains in this
+tree.** The change feed's own replicated case had gone earlier, at the SQLite flip —
+`installChangeFeed` emits SQLite triggers now, and this engine has no apply worker and no
+`ENABLE ALWAYS` for one to skip. A third suite, in
 `packages/catalogue`, created a publication with no subscriber at all,
 so that `product_units` was PUBLISHED while the test reassigned a product's unit — the UPDATE
 PostgreSQL refuses with `55000` when a published table has only a UNIQUE and no primary key

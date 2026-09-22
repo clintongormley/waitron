@@ -1042,11 +1042,11 @@ export async function payWorkingOrderIntegrated(
  *
  * The duplicate path is real and reachable rather than dead code: it is exercised end to end by "two
  * concurrent pays for one parked order file ONE sale; the loser replays (one sale/settlement)"
- * (`apps/server/src/till-sale-integrated.pg.test.ts`), which stages the race on two PostgreSQL
- * connections (`suite.pg.connectAs`). That staging has not been converted, so the receipt is held by
- * nothing that runs: on 2026-09-22 `pnpm --filter @waitron/server test` reported the file as 30
- * tests, 30 skipped, erroring `useTemplateDb: no shared container in scope`. A replay returns the
- * persisted payment facts without reopening the drawer.
+ * (`apps/server/src/till-sale-integrated.pg.test.ts`). That suite used to stage the race on two
+ * PostgreSQL connections; it now stages it on the one venue handle, and it RUNS —
+ * `pnpm --filter @waitron/server exec vitest run src/till-sale-integrated.pg.test.ts` reported
+ * 30 passed on 2026-09-22. A replay returns the persisted payment facts without reopening the
+ * drawer.
  *
  * The tender records the WHOLE card charge (`total + tip`) with the tip attributed on it, satisfying
  * `settleSale`'s coverage identity `sum(amount) = total + sum(tip)`; the fiscal `total` stays ex-tip

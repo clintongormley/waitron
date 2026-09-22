@@ -14,43 +14,31 @@ and once the commit has returned it hands those rows to this process's change li
 
 ## Commands
 
-| Command                   | Does                                           |
-| ------------------------- | ---------------------------------------------- |
-| `pnpm test`               | Runs Vitest; the global setup requires Docker. |
-| `pnpm test:coverage`      | Runs the suite with coverage thresholds.       |
-| `pnpm typecheck`          | Runs `tsc --noEmit`.                           |
-| `pnpm mutation`           | Runs Stryker.                                  |
-| `pnpm db:generate`        | Generates migrations from the schema barrel.   |
-| `pnpm db:generate:custom` | Creates a migration for hand-written SQL.      |
-
-Use PGlite for schema and query behaviour. Use real PostgreSQL for privileges and concurrency:
-PGlite connects as superuser and serialises queries onto one backend, so it cannot measure lock
-contention. Set `TESTCONTAINERS_RYUK_DISABLED=true` for local container runs.
+| Command                   | Does                                         |
+| ------------------------- | -------------------------------------------- |
+| `pnpm test`               | Runs Vitest. No Docker, no global setup.     |
+| `pnpm test:coverage`      | Runs the suite with coverage thresholds.     |
+| `pnpm typecheck`          | Runs `tsc --noEmit`.                         |
+| `pnpm mutation`           | Runs Stryker.                                |
+| `pnpm db:generate`        | Generates migrations from the schema barrel. |
+| `pnpm db:generate:custom` | Creates a migration for hand-written SQL.    |
 
 ## Test setup
 
-`useVenueDb` (`./src/testing/venue-db.ts`) forwards to `usePgliteDb` unchanged, so the planned
-SQLite switch replaces that one body rather than every call site (plan
-`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P2). Asking for a PGlite
-database through it is now a written rule (`CLAUDE.md` §4), enforced by
-`scripts/venue-db-helper.test.ts`: outside this package, no `.ts` file under `packages/` or `apps/`
-may NAME `usePgliteDb`; inside this package the name is allowed, and six `.ts` files use it —
-seven files counting this one. Which files
-take the seam is the grep in `docs/developers/testing-guide.md` under "A PGlite suite asks for its
-database through one helper, and a guard enforces it". Its exclusion is about that command's output
-rather than about permission: without it the list also returns `src/testing/venue-db.ts` and its
-contract test, which take the seam without being anyone's conversion.
+A suite asks for its database through `useVenueDb` (`./src/testing/venue-db.ts`), which opens a
+SQLite venue directory under `os.tmpdir()`, applies the migration sets it is handed, installs the
+append-only triggers and empties the data between tests. That is a written rule (`CLAUDE.md` §4),
+enforced by `scripts/venue-db-helper.test.ts`: no `.ts` file under `packages/` or `apps/` may NAME
+the retired PGlite helper it replaced, this package included.
 
 Keep `testTimeout: 30_000` in `vitest.config.ts` for the database-backed tests; do not replace it
 with the usual 5 s default. **Neither that budget nor the `hookTimeout: 120_000` beside it bounds
-the PGlite boot and migrations**, which is what this paragraph used to say: `usePgliteDb` hands its
-own `beforeAll` a 60-second default (`src/testing/lifecycle.ts:22` and `:146`), and a timeout passed
-to a hook overrides the config's. What `hookTimeout` does reach — measured, by setting it to 1 — is
-every `afterEach`/`afterAll` in the package; the `beforeAll` of a `useTemplateDb` or
-`useRealPostgres` suite that passes no `timeoutMs` of its own; and one hand-written `beforeAll` that
-declares no budget, `src/testing/networked-postgres.test.ts:12`, which starts a real Testcontainers
-PostgreSQL — the one suite the old sentence was true about. The comments in `vitest.config.ts` name
-the suites and where each died. Shared-fixture suites migrate once.
+the database's own setup**: `useVenueDb` hands its own `beforeAll` a 60-second default
+(`src/testing/venue-db.ts:12`, applied at `:196`), and a timeout passed to a hook overrides the
+config's. What `hookTimeout` reaches is every `afterEach`/`afterAll` that passes no budget of its
+own — which includes this helper's reset and its close. That last sentence has not been re-measured
+since the storage switch; the figure it replaced was taken against a test harness that no longer
+exists.
 
 ## What CI runs
 

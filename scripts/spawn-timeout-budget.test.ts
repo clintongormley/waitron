@@ -174,9 +174,14 @@ function callArguments(source: string, open: number) {
  *     imported, or computed in a helper resolves to nothing; a number inside a FIXTURE STRING counts
  *     as though it were code. This file is its own example — `budgets()` run over it reports numbers
  *     that come from the fixture sources below, and this suite performs no wait at all. Ordinary
- *     code counts too: `packages/db/src/testing/harness.docker.test.ts` has a `timeout: 10_000`
- *     inside a `toHaveBeenCalledExactlyOnceWith(…)` — an assertion ABOUT a mocked call, waiting for
- *     nothing — and this reads it as a wait.
+ *     code counts too: a since-deleted suite in `packages/db` had a `timeout: 10_000` inside a
+ *     `toHaveBeenCalledExactlyOnceWith(…)` — an assertion ABOUT a mocked call, waiting for nothing
+ *     — and this read it as a wait. It was also, as it happens, the LONGEST "wait" the package and
+ *     app scan below could find, which is why deleting the PostgreSQL test harness on 2026-09-22
+ *     left that scan's two non-vacuity cases red: `grep -rnE "timeout: *[0-9_]+" packages apps
+ *     --include="*.test.ts"` now answers nowhere at all, so no package or app suite declares a wait
+ *     for the scan to judge. The scan is DORMANT rather than wrong, and what to do about it — carry
+ *     it dormant, or retire the package/app half — has not been decided.
  *  3. It is per FILE, not per test. It takes the LARGEST bound anywhere in the file, so a suite that
  *     raises the bound on its slow cases and waits a long time in an untouched one still passes.
  *  4. A bound it cannot evaluate makes it DECLINE to judge the file rather than accuse it, because a

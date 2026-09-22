@@ -7,10 +7,10 @@ export default defineConfig({
     // Headroom for the suites that open and migrate a venue directory — the two `useVenueDb`
     // callers, and `schema-ahead.migrate.test.ts`, which owns its own directory. `hookTimeout`
     // below bounds a hook that passes no timeout of its OWN; a hook given one overrides this config
-    // (the receipt is at `packages/db/src/testing/lifecycle.ts:178`). So it does not bound
+    // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does not bound
     // `schema-ahead.migrate.test.ts`, which sets a timeout at its own `beforeAll`, and it does not
     // bound `useVenueDb` setup, which runs under the 60s default that helper forwards to
-    // (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`).
+    // (`packages/db/src/testing/venue-db.ts:12`, applied at `:196`).
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

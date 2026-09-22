@@ -80,8 +80,8 @@ interface ResetPlan {
  * by the `sqlite_*` exclusion, so it is added back by name.
  *
  * Table and trigger names are validated rather than escaped, the shape `CLAUDE.md` §3 asks for when
- * a statement cannot bind — SQLite binds no identifier — and the same choice `probeRoleStatement`
- * beside this file makes. A trigger's stored text is replayed verbatim, never built.
+ * a statement cannot bind — SQLite binds no identifier, and `identifiers.ts` beside this file
+ * carries the receipt. A trigger's stored text is replayed verbatim, never built.
  */
 function buildResetPlan(db: Database): ResetPlan {
   const tables = db.all<{ name: string }>(sql`

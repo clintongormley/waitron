@@ -59,8 +59,9 @@ import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
 /** The manifest builder the sweep uses; matches {@link buildManifest}'s signature. Injectable so the
- * fan-out/archive-assembly tests stay pure-DI (no real journal), while the real DB integration is
- * covered by a `useTemplateDb` suite driving the default. */
+ * fan-out/archive-assembly tests stay pure-DI (no real journal), while the real-database
+ * integration is covered by the migrated-venue cases in `backup-sweep.test.ts`, which drive the
+ * default. */
 export type ManifestBuilder = (deps: {
   readonly db: Database;
   readonly modules: readonly WaitronModule[];

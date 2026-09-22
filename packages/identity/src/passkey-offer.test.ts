@@ -7,11 +7,10 @@ import { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
 import { seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: both verbs are a SELECT and an UPDATE over two tables, and every case
-// below asserts what they DO — which row is read, which row is stamped — never what a privilege
-// permits. The suite runs as the connection owner (packages/db/src/testing/lifecycle.ts boots PGlite
-// that way), so nothing here is a grant assertion; a suite that wanted one would switch role first,
-// the way packages/db/src/allocate-number.test.ts does.
+// Both verbs are a SELECT and an UPDATE over two tables, and every case below asserts what they DO
+// — which row is read, which row is stamped — never what a privilege permits. There is no role to
+// assert against: `useVenueDb` opens a SQLite file (`packages/db/src/testing/venue-db.ts`) and
+// SQLite has no roles or grants at all.
 
 const suite = useVenueDb({
   resetPerTest: false,
