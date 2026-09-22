@@ -831,6 +831,10 @@ What the product attachment (#456, the plan's Task 6) left behind:
   while the whole file measures 1.4s alone. Fixed in #456: one read per file, and a declared bound
   on each scanning case. **Next action:** none — noted because the same shape is latent in any root
   guard that walks the whole tree without declaring a bound.
+  _2026-09-22: the scan this describes no longer exists. The guard reads `scripts/` alone again —
+  the packages-and-apps half was retired with the real-PostgreSQL harness — so the rule holds under
+  those two roots with nothing enforcing it, as `CLAUDE.md` §4 and
+  [testing-guide.md](developers/testing-guide.md) both say._
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
@@ -1987,14 +1991,19 @@ image constraints under *Detail → Box image*.
   constraints, established by applying the migrations and reading `pg_get_constraintdef` back — but
   a probe is not a guard and the next type change will need the same by hand.
 
-- **The spawn-timeout guard now covers `packages/` and `apps/` — LANDED (2026-09-18).** It read only
-  `scripts/` when it arrived in #407; extending it meant teaching it to resolve a bound from a
-  package's config, because a test file there almost never sets its own. It found one real defect and
-  a hand-read of the same files found a second the guard structurally cannot catch; both fixed here.
+- **The spawn-timeout guard reads `scripts/` alone — SUPERSEDED 2026-09-22.** It was extended to
+  `packages/` and `apps/` on 2026-09-18, and that half is gone again: it went with the
+  real-PostgreSQL harness, which owned every long wait those two roots declared. Checked here
+  before writing this — `grep -rnE "timeout: *[0-9_]+" packages apps --include="*.test.ts"` answers
+  nowhere at all, where the same pattern under `scripts/` still finds waits — so the half had
+  nothing left to judge. **The rule holds under both roots and nothing checks it there**, which is
+  stated in `CLAUDE.md` §4 and carried with its measurement in
+  [testing-guide.md](developers/testing-guide.md). No work here: re-extending the scan is worth
+  doing only if suites under those roots start declaring long waits again.
 
-  **Still open, and the guard cannot close it:** it compares a bound against the LARGEST SINGLE wait,
-  never the sum, so a case that waits several times can still outlast a bound that passes this check.
-  The sum is what caught the change-feed case, and only by reading. If that shape recurs, the answer
+  **Still open over the half that remains, and the guard cannot close it:** it compares a bound
+  against the LARGEST SINGLE wait, never the sum, so a case that waits several times can still
+  outlast a bound that passes this check. Only reading catches that shape; if it recurs, the answer
   is probably a runtime check rather than a text reader.
 
 - **Reuse the stub executables in the root guard suites — LANDED (2026-09-18).** The follow-up from
@@ -2191,6 +2200,30 @@ can serve another request inside that window. Adding a read connection per file 
 `packages/store` and whatever routes reads, not the 1,556 `withTransaction` call sites. The full
 measurement, with the owner's options, is in the flip's pull request and in the campaign's
 `questions.md`.
+
+**An append-only trigger can be dropped, or quietly replaced, from the application's own database
+handle — OPEN (found 2026-09-22, task F1).** PostgreSQL protected an append-only table with two
+layers: the `reject_mutation()` trigger, and table ownership, which meant the connection a request
+was served on could not drop that trigger. SQLite has no roles, so only the trigger is left — every
+connection is the owner-equivalent, and a `DROP TRIGGER` on the application's own handle succeeds
+(measured and recorded in `packages/db/src/immutability.test.ts`'s header). Data mutations are still
+refused while the triggers are in place, so this is defence in depth rather than a live hole.
+
+**The defence to build:** at boot, and then on a repeating check while the box runs, read
+`sqlite_master` and refuse to trade if any append-only trigger that should be there is missing, or
+its stored text is not the text `installAppendOnlyTriggers` writes
+(`packages/store/src/append-only.ts`). The set to compare against is already known — the tables a
+module declared with `appendOnly()`, carried set by set as `MigrationSet.appendOnlyTables`.
+
+**Why re-installing the triggers is not that check**, measured on node v26.7.0 against
+`node:sqlite`, 2026-09-22, with a control in each direction. The installer writes
+`create trigger if not exists`, so a trigger that was simply DROPPED is put back by the next
+migrating path — the control: after the re-run the update is refused again, `sales is
+append-only`. A trigger dropped and re-created under the SAME NAME with a permissive body is not:
+re-running the installer leaves the permissive text in `sqlite_master`, the update succeeds, and
+the row reads back `tampered`. One detail for whoever writes the comparison — SQLite stores a
+trigger with `IF NOT EXISTS` removed and `CREATE TRIGGER` upper-cased, so the stored text is not
+byte-identical to the string the installer sent.
 
 **The verifactu extraction's compliance-doc references — DONE (2026-09-21).** The compliance
 provenance doc now reads `@waitron/verifactu` and notes the extraction. The library's own

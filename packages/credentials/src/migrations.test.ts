@@ -39,6 +39,9 @@ const OK = {
  */
 const stamp = () => sql`${nowIso()}`;
 
+// This suite checks what the migration set DECLARES, and on this engine that is a table, its
+// primary key and its CHECK constraints — nothing about who may read the vault, because the set
+// grants nothing and defines no function. The loss note at the foot of this file says what went.
 describe("the credentials migration set", () => {
   it("stores and returns a row round-trip", async () => {
     await suite.db.execute(sql`
@@ -138,43 +141,35 @@ describe("the credentials migration set", () => {
   });
 });
 
-/**
- * **Both cases here outlived their subject and neither can pass.** They ask a PostgreSQL catalogue
- * (`has_function_privilege`, `pg_proc`) about `credential_tenants(text)` — a function this branch's
- * regeneration dropped, and one this engine could not hold anyway: SQLite defines no SQL functions,
- * has no catalogue to ask, and has no roles for a grant to name
- * (`packages/db/src/testing/roles.ts`). The `search_path` pin has no counterpart either: there is
- * one file and no schema to resolve against.
+/*
+ * TWO LOSSES, from the storage swap, and both are deletions rather than rewrites.
  *
- * What the function DID, `credentialProvisioned` now does as an ordinary query, and the functional
- * cases in `credentials.test.ts` are what hold it — the purpose filter, and the `tenants` half the
- * old SQL carried by selecting `id FROM tenants`.
+ * `describe("credential_tenants enumeration seam")` stood here with two cases. Both asked a
+ * PostgreSQL catalogue about `credential_tenants(text)`, and both failed `no such table: pg_proc`
+ * when this suite was run on this engine (measured 2026-09-22):
  *
- * Left rather than deleted: deciding what a PostgreSQL-catalogue suite becomes on this engine is
- * the branch's own sweep, not a side effect of replacing one function.
+ *  - `names EXECUTE to app_user only — PUBLIC's default grant was revoked` read
+ *    `has_function_privilege` and `aclexplode(pg_proc.proacl)` to pin who could call the seam.
+ *    SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so there is no
+ *    privilege to read back and nothing to re-point the case at.
+ *  - `pins search_path to pg_catalog, public` read the same function's `proconfig`. There is one
+ *    file and no schema here, so there is no path to pin.
+ *
+ * Both also lost their subject. `credential_tenants(text)` was created by
+ * `drizzle/0001_credentials_baseline_sql.sql` (`git show
+ * origin/main:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which this branch
+ * deleted, and this engine defines no SQL functions of its own. That file also held the table's
+ * own `REVOKE ALL` / `GRANT SELECT, INSERT, UPDATE, DELETE ... TO app_user`; the whole set is now
+ * one `CREATE TABLE` (`packages/credentials/drizzle/0000_baseline.sql`).
+ *
+ * WHAT IS NO LONGER CHECKED, here or anywhere else in this package: that a caller other than the
+ * application may not read or enumerate the vault. The database refuses nobody on the grounds of
+ * who is asking, so the guarantee has moved off it, onto whoever may open the database file. The
+ * layer that does survive is the seal — a row holds ciphertext, and the key comes from the
+ * process environment rather than from the database (`./keyring.ts`'s `loadKeyRing`) — which
+ * `cipher.test.ts` and `credentials.test.ts` still cover.
+ *
+ * What the function DID is an ordinary query now, `credentialProvisioned` (`./store.ts`), held by
+ * the three cases under `describe("credentialProvisioned")` in `credentials.test.ts`, the
+ * `tenants` half of the old SQL included.
  */
-describe("credential_tenants enumeration seam", () => {
-  it("names EXECUTE to app_user only — PUBLIC's default grant was revoked", async () => {
-    // Check the app role grant and the absence of PUBLIC's default EXECUTE grant independently.
-    // aclexplode grantee 0 denotes PUBLIC.
-    const [exec] = (
-      await suite.db.execute<{ app_user_exec: boolean; public_exec: boolean }>(sql`
-        select
-          has_function_privilege('app_user', 'credential_tenants(text)', 'EXECUTE') as app_user_exec,
-          exists (
-            select 1 from pg_proc p, aclexplode(p.proacl) acl
-            where p.proname = 'credential_tenants'
-              and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'
-          ) as public_exec
-      `)
-    ).rows;
-    expect(exec).toEqual({ app_user_exec: true, public_exec: false });
-  });
-
-  it("pins search_path to pg_catalog, public", async () => {
-    const result = await suite.db.execute<{ proconfig: string[] | null }>(sql`
-      select proconfig from pg_proc where proname = 'credential_tenants'
-    `);
-    expect(result.rows).toEqual([{ proconfig: ["search_path=pg_catalog, public"] }]);
-  });
-});
