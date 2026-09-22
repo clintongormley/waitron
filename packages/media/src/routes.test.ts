@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -8,6 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
+  persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -23,13 +23,22 @@ const suite = useVenueDb({
 const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 async function fixture(role = "manager") {
   const id = await seedTenant(suite.db);
-  const person = await suite.db.execute<{ id: string }>(
-    // A fresh display name per call: live display names are unique across the database, and this
-    // fixture runs twice in one test (a staff caller, then a manager).
-    sql`insert into persons (display_name, pin_hash, role) values (${`Manager ${crypto.randomUUID()}`},${hashPin("1234")},${role}) returning id`,
-  );
+  // Through the table definition, not raw SQL: `id` and the timestamps are JavaScript generators
+  // now (`$defaultFn`), never column DEFAULTs, so a raw insert naming none of them is refused with
+  // `NOT NULL constraint failed`.
+  //
+  // A fresh display name per call: live display names are unique across the database, and this
+  // fixture runs twice in one test (a staff caller, then a manager).
+  const [person] = await suite.db
+    .insert(persons)
+    .values({
+      displayName: `Manager ${crypto.randomUUID()}`,
+      pinHash: hashPin("1234"),
+      role: role as "manager" | "staff",
+    })
+    .returning({ id: persons.id });
   const session = await suite.db.transaction((tx) =>
-    startManagementSession(tx, { personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person!.id }),
   );
   const app = new Hono();
   MEDIA_ROUTES.mount(

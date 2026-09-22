@@ -63,6 +63,27 @@ import {
  * trigger takes exactly one event — so the three that covered more than one event are split, and
  * the suffix names the event. The split is the engine's; the rules are unchanged.
  */
+/**
+ * The other triggers a fully migrated venue carries, and why they are named here.
+ *
+ * These are not behavioural rules: they are the two foreign keys `products.image` and
+ * `category_details.image` carried, which SQLite cannot express as keys added to a table another
+ * migration set already created. `packages/media/drizzle/0001_image_references.sql` carries the
+ * reasoning and `packages/media/src/image-references.test.ts` proves each one by deletion. They
+ * appear here only because the assertion below is an EQUALITY over every non-append-only trigger,
+ * and an equality that quietly grew an exception would stop being one.
+ */
+const IMAGE_REFERENCE_TRIGGERS = [
+  "category_details_media_image_fk_insert",
+  "category_details_media_image_fk_parent_delete",
+  "category_details_media_image_fk_parent_rename",
+  "category_details_media_image_fk_update",
+  "products_media_image_fk_insert",
+  "products_media_image_fk_parent_delete",
+  "products_media_image_fk_parent_rename",
+  "products_media_image_fk_update",
+];
+
 const EXPECTED_TRIGGERS = [
   "device_profile_form_factor_locked",
   "sale_settlements_check_coverage",
@@ -268,7 +289,7 @@ async function migratedDatabase() {
 const connection = await migratedDatabase();
 
 describe("the behavioural triggers a migrated venue file carries", () => {
-  it("creates exactly the behavioural triggers, under the names this file pins", () => {
+  it("creates exactly the triggers this file pins, and no others", () => {
     const created = connection
       .prepare(`select name from sqlite_master where type = 'trigger' order by name`)
       .all()
@@ -276,7 +297,7 @@ describe("the behavioural triggers a migrated venue file carries", () => {
       .filter(
         (name) => !name.endsWith("_append_only_update") && !name.endsWith("_append_only_delete"),
       );
-    expect(created).toEqual(EXPECTED_TRIGGERS);
+    expect(created).toEqual([...EXPECTED_TRIGGERS, ...IMAGE_REFERENCE_TRIGGERS].sort());
   });
 });
 
