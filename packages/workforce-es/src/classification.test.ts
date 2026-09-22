@@ -33,6 +33,11 @@ describe("WORKFORCE_ES_CLASSIFICATION", () => {
   it("classifies exactly the tables this module's migrations create", () => {
     const classified = new Set(WORKFORCE_ES_CLASSIFICATION.map((c) => c.table));
     const created = new Set(tablesInDrizzle());
+    // The control, and the reason this line exists: the assertion below it — the one that catches a
+    // NEW table nobody classified — passes against an empty `created`, so it says nothing at all
+    // unless the scan actually found the migrations. It found none when the DDL switched to
+    // backtick quoting and this scanner still matched only double quotes.
+    expect(created.size).toBeGreaterThan(0);
     expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
     expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
   });
