@@ -76,11 +76,11 @@ export const drawerOpenPolicy = enumType(["gated", "open"]);
 export const tenants = table(
   "tenants",
   {
-    // One row per database. id pinned to 1 and defaulted to it, the way `mirror_config` and
-    // `node_membership` do it; `deployment` pins its id the same way but carries NO default, so it
-    // is a precedent for the pin and not for the default. A second insert violates the PK and the
-    // check.
-    id: count("id").primaryKey().default(1),
+    // One row per database: `tenants_singleton_ck` pins the id to 1 and every writer states it. No
+    // column default — an `INTEGER PRIMARY KEY` is a rowid alias, and probed on Node v26.7.0 two
+    // tables differing only in `DEFAULT 1` behaved identically: a statement omitting the id COLUMN
+    // stored 1 in an empty table, and was refused errcode 275 beside a seeded row 1.
+    id: count("id").primaryKey(),
     country: label("country").notNull(),
     taxId: label("tax_id").notNull(),
     legalName: label("legal_name").notNull(),

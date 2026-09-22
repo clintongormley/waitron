@@ -1,6 +1,6 @@
 {
-  "id": "f0a14cd5-ee8a-4a3b-81fd-fcc525774ff5",
-  "prevId": "47b32456-ad55-4aa0-a4fd-292b60ad2d5c",
+  "id": "30054713-dc76-47c0-8758-9f7946f84649",
+  "prevId": "10bf5357-a620-4bae-943a-cb47530050d9",
   "version": "6",
   "dialect": "sqlite",
   "tables": {
@@ -195,8 +195,7 @@
           "type": "integer",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false,
-          "default": 1
+          "autoincrement": false
         },
         "country": {
           "name": "country",

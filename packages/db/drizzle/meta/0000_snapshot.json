@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "47b32456-ad55-4aa0-a4fd-292b60ad2d5c",
+  "id": "10bf5357-a620-4bae-943a-cb47530050d9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "locations": {
@@ -195,8 +195,7 @@
           "type": "integer",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false,
-          "default": 1
+          "autoincrement": false
         },
         "country": {
           "name": "country",

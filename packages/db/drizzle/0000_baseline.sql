@@ -27,7 +27,7 @@ CREATE TABLE `locations` (
 );
 --> statement-breakpoint
 CREATE TABLE `tenants` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	`id` integer PRIMARY KEY NOT NULL,
 	`country` text NOT NULL,
 	`tax_id` text NOT NULL,
 	`legal_name` text NOT NULL,

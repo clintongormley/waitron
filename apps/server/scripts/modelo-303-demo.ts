@@ -311,7 +311,9 @@ interface Venue {
  * text column, not the PostgreSQL `array['es-ES']` this used to write.
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  await db.insert(tenants).values({ country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
   const [loc] = await db
     .insert(locations)
     .values({

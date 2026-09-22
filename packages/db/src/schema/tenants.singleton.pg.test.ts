@@ -3,7 +3,7 @@
 // (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the rename
 // for the same sweep that deals with `asAppUser` and `pgErrorCode`.
 //
-// LOSS, from the storage swap. Two things this suite established are gone and have no counterpart
+// LOSS, from the storage swap. Three things this suite established are gone and have no counterpart
 // on this engine:
 //  - a fourth case proved `app_user` is refused an INSERT into `tenants` by the GRANT (`42501`)
 //    BEFORE either constraint below is reached. SQLite has no roles and no grants
@@ -12,13 +12,15 @@
 //  - the surviving case used to assert `rolsuper` on its own connection first, so that "even to the
 //    session that owns the table" was a checked claim rather than a hope. There is no privileged
 //    session here to be distinguished from an unprivileged one: one process opens one file.
+//  - "a row written without an id IS row 1" is gone with the column default that made it true; the
+//    last case in this file carries that loss and what replaced it.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isPgError } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedTenant } from "../testing/seed.js";
 
@@ -68,46 +70,37 @@ describe("tenants is one row, keyed 1", () => {
     expect(still[0]!.n).toBe(1);
   });
 
-  // RED ON THIS BRANCH, DELIBERATELY. The assertion is the one this case has always made and it is
-  // not edited to pass: what changed is the engine.
+  // WHICH CONSTRAINT REFUSES AN ID-OMITTING INSERT HAS CHANGED, and the property this case used to
+  // hold is gone. On PostgreSQL `id` carried a column `DEFAULT 1`, so an insert omitting it took
+  // that 1 and collided with the seeded row's PRIMARY KEY — and the collision was readable as
+  // proof the default had put the 1 there. On SQLite an `INTEGER PRIMARY KEY` is an alias for the
+  // rowid, which takes the next rowid instead, so the default never applied. It has been dropped
+  // from the schema (owner decision 2026-09-22; `packages/db/src/schema/tenants.ts`) and the
+  // writers state the id.
   //
-  // `tenants.id` is declared `integer PRIMARY KEY DEFAULT 1 NOT NULL`
-  // (`packages/db/drizzle/0000_baseline.sql`), and on SQLite an `INTEGER PRIMARY KEY` is an alias
-  // for the table's rowid. A row that omits it is given the NEXT ROWID rather than the column
-  // default, so with row 1 already seeded this insert lands id = 2 and is refused by
-  // `tenants_singleton_ck` (errcode 275) instead of colliding on the primary key. Measured
-  // 2026-09-22 on Node v26.7.0 against the migrated schema, reading the thrown `errcode` and the
-  // surviving rows (`[{"id":1}]`).
+  // Probed 2026-09-22 on Node v26.7.0, two one-table `node:sqlite` databases differing only in the
+  // clause — `id integer primary key default 1 not null` and `id integer primary key not null`,
+  // each with the same singleton CHECK. Into an EMPTY table a statement omitting the id COLUMN
+  // stored id 1 both ways; beside a seeded row 1 both were refused errcode 275, `CHECK constraint
+  // failed`. The two readings being identical IS the finding: the clause changes nothing here.
   //
-  // WHAT IS AND IS NOT INERT, measured the same day with four one-table `node:sqlite` probes, each
-  // seeded with row 1 and then sent the same id-omitting insert:
-  //  - a NON-key `integer DEFAULT 1 NOT NULL` column omitted from an insert is given 1. So a
-  //    column DEFAULT is not inert on this engine in general — this is the control that stops the
-  //    finding being read as "SQLite ignores defaults";
-  //  - `id INTEGER PRIMARY KEY DEFAULT 1` — refused 275, `CHECK constraint failed`, id = 2. The
-  //    rowid alias wins;
-  //  - the same columns with `PRIMARY KEY(id)` written as a table constraint — also 275. Moving
-  //    the key off the column does not stop it being a rowid alias;
-  //  - the same table declared `WITHOUT ROWID` — refused 1555, `UNIQUE constraint failed: c.id`.
-  //    The default IS applied there, which is the assertion below.
+  // WHAT REACHES THAT PATH is narrower than "a caller that leaves the id out", and an earlier note
+  // here had it the other way round. Read off `.toSQL()` the same day, drizzle-orm 0.45.2 NAMES the
+  // id column either way: with a `.default(1)` it binds the 1 client-side, and without one it emits
+  // a literal `null`, which an `INTEGER PRIMARY KEY` then fills from the rowid. So the rowid path
+  // belongs to raw SQL that omits the COLUMN — this case — and a plain
+  // `db.insert(tenants).values({ country, taxId, legalName })` never had a default to lose.
   //
-  // So the property is expressible on this engine and this schema does not express it. What stands
-  // in the way is the toolchain rather than the engine: neither drizzle-orm 0.45.2 nor drizzle-kit
-  // 0.31.10 knows the clause at all (`grep -rl "WITHOUT ROWID"` over both installed packages
-  // matches no file), so `WITHOUT ROWID` here would be a hand-written statement that a regenerate
-  // would drop. That is a schema decision, not this suite's, which is why the case is left red.
+  // LOSS: nothing now states that a row written without an id IS row 1. It is 1 only because it is
+  // the first rowid, which is a fact about an empty table and not about this column. Expressing the
+  // old property would take `WITHOUT ROWID`, which neither drizzle-orm 0.45.2 nor drizzle-kit
+  // 0.31.10 knows (`grep -rl "WITHOUT ROWID"` over both installed packages matches no file), so it
+  // would be hand-written SQL a regenerate would drop.
   //
-  // The default is therefore INERT for this column, and that is a fact about the schema rather
-  // than about this suite: any caller that inserts a taxpayer row without stating `id` — a plain
-  // `db.insert(tenants).values({ country, taxId, legalName })` included, since `.default(1)` makes
-  // Drizzle omit the column — is now refused where PostgreSQL accepted it. No caller does:
-  // `packages/provisioning/src/venue-apply.ts` is the only product writer of this table and states
-  // `id: 1`, as does `packages/db/src/testing/seed.ts`.
-  it("defaults id to 1, so a row that omits it meets the singleton rather than a NOT NULL error", async () => {
-    // The two answers are deliberately different. Without the column default this insert fails on
-    // NOT NULL — nothing supplied id. With the default it collides on the primary key, refusing a
-    // SECOND row 1, which can only happen if the default put the 1 there. The row seeded in
-    // `beforeAll` is what separates them.
+  // What survives is the invariant the case exists for: a writer that omits the id cannot add a
+  // second taxpayer. Same repair `packages/payments/src/migrations.test.ts` made for
+  // `payment_policy`, and it names the constraint where the old assertion named only the class.
+  it("refuses a row that omits the id, by the singleton check", async () => {
     const omitted = await captureError(() =>
       Promise.resolve(
         db.run(
@@ -116,6 +109,10 @@ describe("tenants is one row, keyed 1", () => {
         ),
       ),
     );
-    expect(isPgError(omitted, UNIQUE_VIOLATION)).toBe(true);
+    expect(isPgError(omitted, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(omitted)).toMatch(/tenants_singleton_ck/);
+
+    const still = db.all<{ n: number }>(sql`select cast(count(*) as int) as n from tenants`);
+    expect(still[0]!.n).toBe(1);
   });
 });
