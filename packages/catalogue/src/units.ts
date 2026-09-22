@@ -1,5 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
+import type { ProductUsingUnit } from "./unit-types.js";
+
+export type { ProductUsingUnit };
 import { AppError } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { productUnits, units } from "./schema/units.js";
@@ -14,12 +17,6 @@ import type { Unit, SellableUnit } from "./product-types.js";
 export type { Unit, SellableUnit } from "./product-types.js";
 
 /** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
-export interface ProductUsingUnit {
-  id: string;
-  name: string;
-  available: boolean;
-}
-
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
  * product_units row (a no-unit product simply has no row); `sellableUnit()` returns it for the null
  * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged.

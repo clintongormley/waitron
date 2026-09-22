@@ -9,6 +9,9 @@
 import "./errors.js";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
+import type { VatBreakdownLine } from "./vat-breakdown.js";
+
+export type { VatBreakdownLine };
 
 /**
  * The lifecycle of a fiscal record as the POS understands it. Regime-neutral: `recorded` means
@@ -23,14 +26,6 @@ export interface NodeRegistration {
   /** Opaque to the POS. An installation number, a device id, or nothing meaningful at all. */
   registrationId: string;
   registeredAt: Date;
-}
-
-export interface VatBreakdownLine {
-  rate: Decimal;
-  base: Decimal;
-  tax: Decimal;
-  surchargeRate?: Decimal;
-  surcharge?: Decimal;
 }
 
 /** Receipt facts read from a backend's stored fiscal record. */

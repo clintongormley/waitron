@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { subscribeToChanges } from "./change-log.js";
+import type { Transaction } from "./client.js";
 import * as schema from "./schema/index.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -49,7 +50,7 @@ const listen = () => {
 const labels = (db: Awaited<ReturnType<typeof open>>) =>
   db.all<{ label: string }>(sql`select label from probe order by label`).map((row) => row.label);
 
-const logChange = (db: Awaited<ReturnType<typeof open>>, id: string, change: ResourceChange) =>
+const logChange = (db: Transaction, id: string, change: ResourceChange) =>
   db.run(sql`insert into change_log (id, payload) values (${id}, ${JSON.stringify(change)})`);
 
 const aChange = (resource: string): ResourceChange => ({ resource }) as unknown as ResourceChange;

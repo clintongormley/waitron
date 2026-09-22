@@ -1,7 +1,7 @@
 // A bare side-effect import so TypeScript augments the real "@waitron/shared" module.
 import "@waitron/shared";
 // Type-only, so it adds no runtime edge back to the module that side-effect-imports this file.
-import type { ProductUsingUnit } from "./units.js";
+import type { ProductUsingUnit } from "./unit-types.js";
 
 /** @waitron/catalogue's contribution to the shared error registry — DOMAIN-CONCEPT prefixes. */
 declare module "@waitron/shared" {

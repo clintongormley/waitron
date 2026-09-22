@@ -160,7 +160,7 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);

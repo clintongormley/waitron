@@ -9,8 +9,8 @@ import {
   MONEY_SCALE,
 } from "@waitron/shared";
 import type { Decimal, OptionSnapshot } from "@waitron/shared";
-import type { RecordSaleLine } from "@waitron/core";
-import type { VatBreakdownLine } from "@waitron/fiscal";
+import type { RecordSaleLine } from "@waitron/core/src/sale-line.js";
+import type { VatBreakdownLine } from "@waitron/fiscal/src/vat-breakdown.js";
 import { assertQuantityPrecision } from "./unit-validation.js";
 
 export type PricingUnit = "each" | "weight";

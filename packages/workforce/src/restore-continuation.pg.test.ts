@@ -112,7 +112,7 @@ async function readHead() {
  * `truncateToWholeSecond` (`./chain.ts`) emits, since `toISOString` always writes the milliseconds
  * field.
  */
-function rawForkInsertAt(position: number): Promise<unknown> {
+function rawForkInsertAt(position: number) {
   return suite.db.run(sql`
     insert into time_entries (
       id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,

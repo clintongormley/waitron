@@ -31,7 +31,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
