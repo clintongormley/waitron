@@ -14,14 +14,10 @@
  * `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`). Nothing now checks that the
  * deployment role can reach these three tables and no more.
  *
- * **All three cases are RED on a blocker in a file this one only imports.**
- * `apps/server/src/testing/venue-fixtures.ts:137` seeds the manager and the clerk with
- * `insert into persons (display_name, pin_hash, role)` written as raw SQL, and `persons.id` is a
- * `$defaultFn` generator a raw insert never reaches while the column is NOT NULL:
- * `NOT NULL constraint failed: persons.id`, errcode 1299. Measured 2026-09-22 on Node v26.7.0, with
- * the control — the same two rows written through the table definition, nothing else changed, and
- * all three cases pass. The fixture is shared with the other device and join suites, so the change
- * belongs in one place rather than here.
+ * **A blocker this header used to declare is fixed.** The shared fixture seeded `persons` with raw
+ * SQL, which reaches no `$defaultFn` generator, so every case here died on
+ * `NOT NULL constraint failed: persons.id`. `apps/server/src/testing/venue-fixtures.ts` writes those
+ * rows through the table definition now, and this file is green — run on its own, 2026-09-23.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";

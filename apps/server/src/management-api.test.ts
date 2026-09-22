@@ -46,19 +46,14 @@ import { mountManagementApi } from "./management-api.js";
  * every one of those cases still pins its response — what is gone is the proof that dropping the
  * screen would be worse than a 404.
  *
- * ## Two cases left RED, deliberately
+ * ## Two cases this header used to declare red are green
  *
- * The two `zoneId that names no zone` cases answer 500 instead of 404 `zone.not_found`, because
- * `createTable` / `updateTable` (`apps/server/src/tables.ts:122,:185`) identify the zone key by the
- * table and column the refusal NAMES, and on this engine a foreign-key refusal names neither.
- * Measured 2026-09-22 on Node v26.7.0: a bad `zone_id` and a bad `location_id` both report
- * `"FOREIGN KEY constraint failed"` with errcode 787 — byte-identical, so the two cannot be told
- * apart — while the control in the other direction, a unique-index refusal on the same table,
- * reports `"UNIQUE constraint failed: dining_tables.location_id, dining_tables.label"` (2067), so
- * names ARE readable when the engine supplies them. Running `refusalOn` itself over those two real
- * errors returns `false` for the foreign key and `true` for the unique index. That is a PRODUCT
- * defect, not a test to edit: the ledger names `tables.ts` as one of four write paths this breaks
- * and owns the fix. These cases stay red until it lands.
+ * The two `zoneId that names no zone` cases answered 500 instead of 404 `zone.not_found`, because
+ * `createTable` / `updateTable` identified the zone key from the table and column a refusal NAMES,
+ * and on this engine a foreign-key refusal names neither: a bad `zone_id` and a bad `location_id`
+ * both report `"FOREIGN KEY constraint failed"`, errcode 787, byte-identical. `apps/server/src/tables.ts`
+ * reads the zone row first now (`requireZone`) rather than reading the refusal, so the two cases
+ * assert what they always did and pass. The file is green — run on its own, 2026-09-23.
  */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
@@ -581,7 +576,6 @@ describe("/management-api/tables", () => {
     expect(await dup.json()).toMatchObject({ error: { code: "table.label_taken" } });
   });
 
-  // KNOWN FAILING, and deliberately left so — the header's "Two cases left RED" states why.
   it("POST with a zoneId that names no zone → 404 zone.not_found", async () => {
     const res = await req(
       "/tables",

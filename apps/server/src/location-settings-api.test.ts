@@ -14,24 +14,19 @@ import { recordTillSale } from "./till-sale.js";
 /**
  * The venue's invoice operation description, over the route.
  *
- * ## This file is CONVERTED and RED, and neither reason is in this file
+ * ## Two blockers this header used to declare are fixed
  *
- * 1. **`beforeAll` cannot get past `setupVenue`.** `apps/server/src/testing/venue-fixtures.ts:137`
- *    and `:140` insert `persons` with a raw statement, and `persons.id` / `persons.created_at` are
- *    `$defaultFn` generators filling NOT NULL columns
- *    (`packages/identity/src/schema/persons.ts:26,:67`) that a statement never reaches. Measured
- *    2026-09-22: `NOT NULL constraint failed: persons.id`. That fixture is shared with five other
- *    suites and is nobody's to edit from here; the fix is the same `tx.insert(persons)` swap every
- *    sibling took.
+ * 1. The shared fixture seeded `persons` with a raw statement, which reaches no `$defaultFn`
+ *    generator, so `beforeAll` never got past `setupVenue`
+ *    (`NOT NULL constraint failed: persons.id`). `apps/server/src/testing/venue-fixtures.ts` writes
+ *    those rows through the table definition now.
  *
- * 2. **One case is then red on a PRODUCT defect.** Measured 2026-09-22 with that fixture patched
- *    locally and the patch reverted: 8 of the 9 cases pass, and
- *    `uses an edited description for the next fiscal record while retaining the earlier record`
- *    fails with `TypeError: desglose.map is not a function` at
- *    `packages/fiscal-verifactu/src/backend.ts:360`. `filedReceiptFor` reads the row at `:332`
- *    with a raw select over `registros_facturacion`, and a raw read skips drizzle's JSON decoding,
- *    so `desglose` arrives as TEXT. Same shape as the drainer's `facturas_sustituidas` read the
- *    branch ledger already records.
+ * 2. `filedReceiptFor` read `registros_facturacion` with a raw select, which skips drizzle's JSON
+ *    decoding, so `desglose` arrived as text and the edited-description case died in
+ *    `desglose.map`. `packages/fiscal-verifactu/src/backend.ts` decodes the row it read
+ *    (`decodeRegistroRow`).
+ *
+ * The file is green — run on its own, 2026-09-23.
  */
 // The full manifest, because the first case files a real fiscal record through `recordTillSale`.
 // `resetPerTest: false`: the venue set up once in `beforeAll` is read by every case, and each case

@@ -50,17 +50,14 @@ import "./errors.js";
  * - `does not enable across a concurrent committed unpair` no longer stages a race; see the comment
  *   on the case for what it proves now.
  *
- * ## One case is RED, and it is a BROKEN ROUTE rather than a test to edit
+ * ## A broken route this header used to declare is fixed
  *
- * `refuses local enable after unpair until the provider lists the reader for adoption again` fails
- * because `GET /management-api/payments/readers` serves `canEnable` as a NUMBER. The route builds
- * it as a raw expression — `apps/server/src/payments-api.ts:386`, `sql<boolean>`…is null`` — and
- * that type parameter is a cast, not a read mapping, so SQLite's integer reaches the JSON body
- * unconverted. Measured here 2026-09-22, both directions: with the reader unpaired the body carries
- * `canEnable: 0` where the case expects `false`, and with it paired again (the second assertion,
- * reached by temporarily accepting the first) it carries `1` where the case expects `true`. The
- * dashboard reads this field, so the contract the case pins is the right one and the route is what
- * has to change.
+ * `GET /management-api/payments/readers` served `canEnable` as a NUMBER: the route asked the engine
+ * for it with `sql<boolean>`, and that type parameter is a cast rather than a read mapping, so
+ * SQLite's integer reached the JSON body unconverted and the dashboard was handed `0` and `1` where
+ * it expects `false` and `true`. The route derives the field in JavaScript now
+ * (`apps/server/src/payments-api.ts`, `canEnable: unpairedAt === null`), and this file is green —
+ * run on its own, 2026-09-23.
  */
 const noopLog: Logger = () => {};
 

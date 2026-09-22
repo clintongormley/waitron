@@ -3496,21 +3496,17 @@ scoped.
 
 ## Reference
 
-**Adding a new real-PG test package** (the shared-container rollout pattern, so it isn't reinvented):
-`ProbeRole.inRole` takes `string | readonly string[]` (a multi-membership role is a plain `roles` entry,
-no `setup` hook); `cloneTemplate` is exported from `lifecycle.ts` and validates its own identifiers, so a
-package needing a fresh DB per test (a `describeEachTarget`-style seam) reuses it — `packages/db`'s
-`harness.ts` `postgresTarget` is the reference (clone per test, track, drop all in `teardown()`);
-`nextCloneName()` mints the shared clone-name; `useTemplateDb` covers one-clone-per-file. Template-key
-naming is **`core_<schema>`** (self-describing about what it migrates, not the package name). Fork mode is
-a **per-package call**: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug needs `maxWorkers: 1`
-where a package runs under `pnpm -r` oversubscription; (b) a shared container is one cluster on a
-100-connection budget, so a package whose suites open many backends caps at `maxWorkers: 4`. `packages/db` is the
-reason-(b) reference, `packages/payments` the reason-(a) one — but both carry the HIGH coverage bar, so
-a new package that copies either config must set the `90/90/85/85` floor (CLAUDE.md §2), or
-`scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job. Plan:
-`docs/superpowers/plans/2026-08-19-shared-test-container.md`. A two-node replication suite uses
-`packages/db/src/testing/two-node.ts`, or `two-node-wireguard.ts` when the link itself is under test.
+**Adding a database test to a new package.** Give the suite `useVenueDb` and the migration sets it
+needs; it makes its own temporary venue directory. There is no shared container, no template
+database and no clone-per-test seam any more — the storage switch deleted that whole harness
+(`ProbeRole`, `cloneTemplate`, `useTemplateDb`, `harness.ts`, `two-node.ts`; the rollout plan
+`docs/superpowers/plans/2026-08-19-shared-test-container.md` is history, not a recipe). What survives
+it: a worker limit is still a per-package call, and the reason that is left is the
+`@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
+package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
+`packages/db` keeps `maxWorkers: 4`, and its own comment says the cap now guards nothing it can name.
+Either way a new package that copies one of those configs must set the `90/90/85/85` floor
+(CLAUDE.md §2), or `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
