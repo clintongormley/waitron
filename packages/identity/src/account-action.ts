@@ -1,7 +1,7 @@
 import "./errors.js";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
-import { UNIQUE_VIOLATION, refusalOn, type Transaction } from "@waitron/db";
+import { indexViolated, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
@@ -191,7 +191,7 @@ export async function confirmEmailChangeByCode(
     if (changed.length !== 1) return null;
     return changed[0]!.email;
   } catch (error) {
-    if (refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
+    if (indexViolated(error, PERSONS_EMAIL)) {
       throw new AppError("person.email_taken", { email: action.targetEmail });
     }
     throw error;

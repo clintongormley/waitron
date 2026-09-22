@@ -13,19 +13,18 @@
  * **The second assertion changed, and this is the one to read carefully.** It was
  * `expect(constraintTarget(error)).toEqual(PERSONS_EMAIL)` — the table and the expression
  * PostgreSQL wrote into the refusal's DETAIL. SQLite does not report that for an index over an
- * EXPRESSION: it reports the INDEX's own name and no columns, which is why
- * `constraintTarget` returns `undefined` here and every one of `person-constraints.ts`'s three
- * matchers is unreachable on this engine (that file carries the probe and the reasoning). Measured
- * again for this suite on 2026-09-22, Node v26.7.0, against the index
+ * EXPRESSION: it reports the INDEX's own name and no columns, so `constraintTarget` returns
+ * `undefined` here. Measured again for this suite on 2026-09-22, Node v26.7.0, against the index
  * `drizzle/0000_baseline.sql:76` generates: errcode `2067`, message
  * `UNIQUE constraint failed: index 'persons_tenant_email_uq'`. The control in the other direction,
  * from the same probe: a PRIMARY KEY, which is not an expression, answers errcode `1555` and
  * `UNIQUE constraint failed: persons.id` — the shape that DOES carry a key.
  *
  * So the case below names the same index the old assertion named, in the engine's words instead of
- * PostgreSQL's. What it can no longer do is check that identity's OWN matcher agrees with the
- * engine — it provably does not, and moving those callers to a mechanism SQLite can answer is
- * recorded work, not this suite's.
+ * PostgreSQL's. What it does NOT do is check that identity's own translators agree with the engine;
+ * they were moved onto `indexViolated` and the index's name on 2026-09-22, and
+ * `person-constraints.db.test.ts` is what drives one real collision per index through them, with
+ * the plain-column `persons_tenant_google_subject_uq` as the control.
  */
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, isUniqueViolation, withTransaction } from "@waitron/db";
