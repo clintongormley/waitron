@@ -1,9 +1,4 @@
-// The name still ends `.pg.test.ts`, and this suite no longer reaches PostgreSQL. Renaming it is
-// not this change's — the storage swap's plan
-// (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the rename
-// for the same sweep that deals with `asAppUser` and `pgErrorCode`.
-//
-// What it proves: the B1 snapshot columns round-trip, and the variant-locales trigger
+// What this suite proves: the B1 snapshot columns round-trip, and the variant-locales trigger
 // (`working_order_lines_check_variant_locales_insert` / `_update`) refuses a map that is not
 // exactly the venue's locales. Nothing here ever turned on the connecting role, so the storage
 // swap costs this suite no assertion — only its last case changes how it reads the schema (see it).

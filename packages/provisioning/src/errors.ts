@@ -180,11 +180,17 @@ declare module "@waitron/shared" {
      * reached). This code catches what that pre-read cannot see: another run committing a different
      * taxpayer between the pre-read and this write, and the caller that does no pre-read at all.
      *
-     * The write itself is `insert … on conflict do nothing` followed by a `for update` read of the
-     * row, so the loser of that race waits for the winner's transaction and then reads the winner's
-     * identity — landing here or on the idempotent path, never on a raw `23505`
-     * (`venue-apply.race.pg.test.ts`). Comparison is on the canonical values — both sides trimmed
-     * and upper-cased, the same normalisation `planVenue` applies — so a casing or
+     * The write itself is `insert … on conflict do nothing` on the pinned `id = 1` row, followed by
+     * a plain read of that row (`venue-apply.ts`, the `ensure-tenant` case). The `for update` this
+     * paragraph used to describe is gone — this engine refuses it outright — and nothing needs it:
+     * `withTransaction` runs the whole plan inside one `begin immediate` and SQLite admits one
+     * writer per file, so two plans are serialised by the engine rather than by anything this write
+     * does (`packages/db/src/tenancy.ts` → `withWriteLock`, `packages/store/src/write-queue.ts`).
+     * What `on conflict do nothing` therefore absorbs is a RE-RUN, not a race, and it reports
+     * neither the re-run nor the clash — so the read-back is the only thing that can tell the same
+     * taxpayer from a foreign one, which is what raises this code (`venue-apply.test.ts`, "refuses
+     * a re-run whose tax id differs, by name"). Comparison is on the canonical values — both sides
+     * trimmed and upper-cased, the same normalisation `planVenue` applies — so a casing or
      * surrounding-space difference is the SAME identity and proceeds as an idempotent re-run.
      *
      * No params, the shape `provisioning.second_venue` above keeps: this is a refusal INSIDE

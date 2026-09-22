@@ -10,10 +10,6 @@
  * so it is the shape the application writes — `id`, `enrolled_at` and `created_at` are `$defaultFn`
  * columns applied CLIENT-side, and a rule that only held for hand-written SQL would pass there and
  * fail here.
- *
- * The name still ends `.pg.test.ts`, and nothing here reaches PostgreSQL any more; the rename waits
- * on the same sweep as `asAppUser` and `pgErrorCode`
- * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25).
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

@@ -5,8 +5,12 @@ import { flag, id, label, newId, nowIso, table, tsString } from "@waitron/db";
  * One row per physical card reader the venue owns (SumUp/Stripe). Manager configuration, not a
  * money movement — classified `state` (copied to a standby, never drained back). A reader is
  * DISABLED via UPDATE (`active=false`, `disabled_at` set), never DELETEd, so historical payments can
- * still resolve the reader's name; the grant idiom in 0001_payments_baseline_sql.sql withholds
- * DELETE for that reason.
+ * still resolve the reader's name. The grant that used to withhold DELETE is gone with PostgreSQL;
+ * what refuses it now is the schema itself, and only while something points at the row —
+ * `payments.reader_id` and `device_card_readers.reader_id` are both `on delete restrict`
+ * (`drizzle/0000_baseline.sql`), and the venue store opens every connection with
+ * `pragma foreign_keys = on` (`packages/store/src/index.ts`). A reader nothing references can
+ * still be deleted by anyone holding the file.
  */
 export const cardReaders = table(
   "card_readers",

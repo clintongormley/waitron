@@ -57,11 +57,12 @@ beforeEach(async () => {
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 
-// `beforeEach` truncates payments/payment_refunds only — tenants (and the location/till/
-// working_order chain under them) accumulate for the life of the suite, same as
-// packages/core/src/record-sale.test.ts's shared PGlite instance. Each test therefore needs its
-// own NIF, or the second call to seedWorkingOrder's default "B00000000" collides with the first
-// on tenants_country_tax_id_key. `freshNif` is shared from ../test/seed.js.
+// Nothing carries from one test to the next: `useVenueDb` empties every data table after each
+// one, `resetPerTest` defaulting to true and this suite not setting it. Both directions are
+// pinned by `packages/db/src/testing/venue-db.test.ts` — its "emptied the previous test's row"
+// case against its `resetPerTest: false` pair, which keeps one. So the `beforeEach` above and the
+// per-test `freshNif` (../test/seed.js) are belt-and-braces rather than the thing that keeps two
+// tests off each other's `tenants_country_tax_id_key`.
 
 async function seedTenant() {
   return seedWorkingOrder(pg.db, freshNif());

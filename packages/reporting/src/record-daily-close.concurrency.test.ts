@@ -1,6 +1,11 @@
 /**
  * Closes started together leave one row per business day, on one contiguous chain.
  *
+ * Named for what separates it from the sibling `record-daily-close.test.ts`: every case here starts
+ * more than one `recordDailyClose` without awaiting the first, where that file awaits each close
+ * before the next — it contains no `Promise.all`, and its same-day refusal case says `sequential`
+ * in its own name.
+ *
  * ## What this suite was, and what converting it cost
  *
  * It ran against real PostgreSQL through `useTemplateDb`, opened one backend per closer, and was

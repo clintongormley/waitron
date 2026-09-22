@@ -29,11 +29,12 @@ export function quoteIdent(value: string): string {
 }
 
 // The standard SQL string-literal quoting rule — moved to @waitron/shared so the escaping is written
-// once; see its header for the argument. The one
-// literal this package emits is the `CREATE ROLE … PASSWORD '…'` password: `applyInstance` and
-// `InstanceAction` are EXPORTED (`index.ts`) and `InstanceAction.password` is typed `string`, so
-// escaping makes the safety structural rather than a property of one caller — this repo's dominant
-// defect class. For a generated base64url password (`[A-Za-z0-9_-]`) it escapes nothing.
+// once; see its header for the argument. This package emits no literal of its own any more: the
+// `CREATE ROLE … PASSWORD '…'` it was re-exported for went with the instance path: neither
+// `applyInstance` nor `InstanceAction` is DECLARED anywhere in the tree any more, and the only
+// `quoteLiteral` call left in product code is the change feed's
+// (`packages/db/src/change-feed.ts:45`). The re-export stays because `identifiers.test.ts` pins the escaping rule here,
+// and because escaping is a property of the function rather than of whoever calls it.
 export { quoteLiteral } from "@waitron/shared";
 
 /**

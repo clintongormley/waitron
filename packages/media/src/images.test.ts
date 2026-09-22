@@ -19,7 +19,10 @@ import {
 import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
-// PGlite exercises content persistence; the real-Postgres suite covers grants and races.
+// One real migrated SQLite venue database, carrying the core, catalogue and media sets. There is no
+// second target, and no grant or race coverage anywhere: the suite that held those was
+// `images.pg.test.ts`, deleted with the PostgreSQL harness — `image-data.test.ts`'s header lists
+// exactly what went with it and which parts have counterparts.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });

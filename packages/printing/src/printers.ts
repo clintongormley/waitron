@@ -233,10 +233,11 @@ export async function updatePrinter(
 }
 
 /**
- * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
- * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
- * (unknown id) → `printer.not_found`. One tenant per database, so the id alone selects the row;
- * values bind as parameters.
+ * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: the
+ * `print_jobs` history references it (`print_jobs.printer_id`, no `on delete` clause, so the
+ * parent row cannot be removed while a job names it). `0` rows (unknown id) →
+ * `printer.not_found`. One tenant per database, so the id alone selects the row; values bind as
+ * parameters.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops

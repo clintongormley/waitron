@@ -52,7 +52,7 @@ beforeEach(async () => {
  * seal and the store, and nothing about who is allowed to make it.
  */
 describe("the seal binds each credential to its purpose", () => {
-  it("round-trips a credential written and read as app_user", async () => {
+  it("round-trips a credential through the seal and the store", async () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE });
@@ -171,8 +171,9 @@ describe("putCredential and getCredential", () => {
     // all.
     //
     // `updated_at` is checked by BACKDATING the row to a value no clock can produce, rather than
-    // comparing two `now()` reads taken moments apart: PGlite's `now()` has limited sub-second
-    // resolution, and two `withTransaction` round trips can land inside the same tick, so a
+    // comparing two clock reads taken moments apart: the value comes from JavaScript
+    // (`nowIso`, `packages/db/src/schema/columns.ts`), whose ISO string carries milliseconds and
+    // no more, and two `withTransaction` round trips can land inside the same one, so a
     // correctly-behaving implementation can produce byte-identical timestamps — verified flaky
     // (2/15, then 5/20 runs) when this test compared "before" and "after" reads of the real clock
     // instead. Backdating removes the race entirely: `2020-01-01T00:00:00Z` can only ever be the

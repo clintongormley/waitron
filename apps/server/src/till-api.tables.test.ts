@@ -32,7 +32,7 @@ import "./errors.js";
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
 // prove here). The table/tab verbs' own real-PG proofs (the FKs, and the concurrency properties
 // that predate the venue file's write queue)
-// live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
+// live in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
 let cfg: TillConfig;

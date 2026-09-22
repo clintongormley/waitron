@@ -38,7 +38,7 @@ export type { DeviceKind };
  * refusal cannot be attributed to any of the five.
  *
  * `devices_device_profile_fk` and `devices_receipt_printer_fk` are still in the schema and are
- * still what makes a dangling binding impossible — measured on this engine in `device-api.pg.test.ts`,
+ * still what makes a dangling binding impossible — measured on this engine in `device-api.test.ts`,
  * which drives each update directly and reads the device row back unchanged. This check only decides
  * what the operator is TOLD. Existence is all either one can establish: every profile and printer in
  * the database belongs to the one taxpayer.

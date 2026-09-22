@@ -14,8 +14,14 @@
  * What every case below still proves is the ROUTE: its permission gate, its refusal codes, the
  * shape of what it returns, and what it leaves in the tables — none of which the database enforced.
  *
- * The stale `.pg.` in this file's own name is left for the branch's single rename sweep, the choice
- * `apps/server/src/device.pg.test.ts:24` records.
+ * ## Which of the two `join-api` suites this is
+ *
+ * This file is `join-api.db.test.ts`, the `.db` naming the difference a reader can check in the two
+ * import lists: this one opens a database — `useVenueDb`, and `mountJoinApi` driven over HTTP —
+ * while `join-api.test.ts` imports only `vitest` and `@waitron/identity` and opens none. That
+ * sibling is one case over the role map, asserting `device.manage` and `printer.manage` are held by
+ * exactly the same roles; its own header sets out why that has to be asserted on the map rather
+ * than through a route.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";

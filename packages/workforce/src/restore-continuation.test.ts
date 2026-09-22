@@ -1,12 +1,7 @@
 /**
  * A cold restore CONTINUES the working-time chain, and a survivor's forked row is refused loudly.
  *
- * CLAUDE.md §5 names this file as the guard for both halves, so the filename stays as it is even
- * though `.pg` now names an engine this suite does not touch: the pointer in CLAUDE.md is checked
- * by `scripts/claude-md-pointers.test.ts` and renaming the file means editing CLAUDE.md, which is a
- * separate change. Two other converted suites on this branch kept the same suffix for the same
- * reason (`packages/db/src/schema/tenants.singleton.pg.test.ts`,
- * `packages/fiscal-verifactu/src/restore.pg.test.ts`).
+ * CLAUDE.md §5 names this file as the guard for both halves.
  *
  * ## What this suite documents (spec §2 decision 3, §5.1)
  *

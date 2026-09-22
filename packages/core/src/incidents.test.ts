@@ -146,7 +146,7 @@ function failingChain(): FakeFiscalBackend {
 
 /**
  * Runs the write path exactly as the application will: registers the node with the injected
- * backend, then sells as `app_user` inside one transaction — mirrors record-sale.test.ts's own
+ * backend, then sells inside one transaction — mirrors record-sale.test.ts's own
  * `run` helper (registration is required; `FakeFiscalBackend` refuses `recordSale` for a node
  * with no prior `registerNode`, exactly like a real backend).
  */
@@ -159,10 +159,11 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
 }
 
 /**
- * Scoped to the CURRENT test's own till, never the bare table. This suite shares ONE PGlite
- * instance across the whole file (booting a fresh WASM Postgres per test would be far slower) and
- * reseeds a fresh till per test, so an earlier test's incident rows would otherwise be counted
- * here too.
+ * Scoped to the CURRENT test's own till, never the bare table, because several cases below seed a
+ * SECOND till inside one test (`seedTillForIncidents`, just under this) and then assert on that
+ * one's rows alone — a bare `select` over `incidents` could not tell the two tills apart. It is
+ * not about leakage between tests: `useVenueDb` empties every data table after each one
+ * (`resetPerTest`, its default, which this suite does not turn off).
  */
 async function incidentsForTill(till: TillId) {
   return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
@@ -356,8 +357,10 @@ describe("openIncidents", () => {
     await sell(failingChain());
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      // The one permitted mutation, and it must be permitted for app_user — a column-level GRANT
-      // that omitted acknowledged_at would fail here. This update acknowledges the fixture rows.
+      // Acknowledges the fixture rows, so the read below has something to exclude. This used to
+      // double as a privilege check — `app_user` held UPDATE on `acknowledged_at` alone, so a
+      // column-level GRANT that omitted it would have failed right here. On this engine there are
+      // no grants, so it is only a setup write now.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
     const rows = await withTransaction(suite.db, async (tx) => {

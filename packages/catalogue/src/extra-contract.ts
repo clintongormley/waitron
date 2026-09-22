@@ -115,17 +115,21 @@ export interface MenuExtraPublication {
  * It lives beside {@link parseExtraListInput} because every rule it needs is already here — the
  * uuid-and-lower-case `id`, the boolean `bool`, the unknown-key `keys` and the shared
  * {@link extraPrice}. Parsed by hand inside the write path instead, two of those checks were simply
- * absent: a `listId` that was not a uuid reached PostgreSQL as `22P02`, and a non-boolean
- * `available` went straight to the column. Run through that same drizzle insert on PGlite 0.5.8:
- * the NUMBER `1` stored true and `0` stored false, silently; `"banana"` and `{}` came back as
- * `Invalid input for boolean type` carrying no SQLSTATE and no field an editor could read; and the
- * STRING `"false"` stored FALSE. All three are the DRIVER's doing rather than the server's — drizzle
- * declares no `mapToDriverValue` for a boolean column, so the raw value reaches PGlite's own
- * parameter serializer, which maps `true/t/yes/y/on/1` and `false/f/no/n/off/0` to `t`/`f` before
- * anything is sent and throws a plain `Error` for the rest, which is why there is no SQLSTATE. Under
- * `pg` on a real backend the bad value reaches the server instead and comes back as `22P02`. So what
- * {@link bool} adds is a refusal with a field path where there was either a silent coercion or an
- * error with nothing an editor could put beside an input.
+ * absent, and on this engine NOTHING downstream supplies either of them.
+ *
+ * `available` is a `flag`, which is drizzle's `integer(..., { mode: "boolean" })`
+ * (`packages/db/src/schema/columns.ts`). That column DOES declare a `mapToDriverValue`, and it
+ * coerces rather than refuses: calling it directly on the column this table builds (Node v26.7.0,
+ * 2026-09-22) mapped `true`/`1` to 1 and `false`/`0` to 0, and mapped `"banana"`, `{}` AND the
+ * string `"false"` to 1, with `null` and `undefined` to 0. So every bad value stores a boolean
+ * silently and none of them throws. `listId` has no backstop either: `id` is a plain `text` column
+ * on this engine, so a value that is not a uuid is simply stored.
+ *
+ * That is worse than what the storage switch replaced, which is the reason to state it rather than
+ * drop the paragraph: under the previous engine the driver at least threw a plain `Error` for
+ * `"banana"` and `{}`, and a non-uuid `listId` came back `22P02` — both unreadable to an editor,
+ * but both refusals. What {@link bool} adds now is the only refusal there is, and it carries the
+ * field path an editor can put beside an input.
  *
  * The two duplicates a body can carry are refused here as well, because neither has a unique index
  * behind it that would name the offending position: one list published twice, and one product

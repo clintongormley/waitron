@@ -75,7 +75,9 @@ async function seedSale(
 }
 
 /**
- * Runs `settleSale` inside one transaction as the non-superuser app role.
+ * Runs `settleSale` inside one transaction, the shape a request takes. The `asAppUser` call it
+ * makes is inert on this engine (`packages/db/src/testing/roles.ts`): there is no second role to
+ * assume, so nothing below is a claim about a privilege.
  */
 function settle(db: Database, input: SettleSaleInput): Promise<void> {
   return withTransaction(db, async (tx) => {
@@ -378,7 +380,7 @@ describe("settleSale — error propagation", () => {
     // constraint, a transport error) must reach the caller as-is rather than be mislabelled as
     // already-settled. Mirrors record-void.test.ts's identical "propagates a database error that is
     // not a unique violation" stub for recordVoid's analogous catch/rethrow. A hand-built
-    // Transaction stub, not the real PGlite/PG one: there is no second schema-level constraint on
+    // Transaction stub rather than the suite's real handle: there is no second schema-level constraint on
     // `sale_settlements` to provoke a genuinely different SQLSTATE, so this drives settleSale's own
     // catch/rethrow branch directly. A tenderless (€0) settlement so the ONLY insert reached is the
     // `sale_settlements` one that rejects — no tender insert runs before it.

@@ -37,11 +37,11 @@ let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 r
 // requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
 let voidSessionId: string;
 
-// The deployment holds one tenant per database. PGlite for everything in this file: the guards
-// here are pure logic (an empty list, a duplicate id, an unknown/voided/already-substituted
-// ticket, a wrong-node series) that a superuser backend exercises just as well as a non-superuser
-// one. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely ABSENT
-// row, which is what those codes mean here — the same shape record-correction.test.ts uses.
+// The deployment holds one tenant per database. One venue file for everything here (`useVenueDb`):
+// the guards are pure logic (an empty list, a duplicate id, an unknown/voided/already-substituted
+// ticket, a wrong-node series), none of which turns on who is connected or on two writers
+// contending. `sale.not_found` and `sale.series_not_found` are asserted below for a genuinely
+// ABSENT row, which is what those codes mean here — the same shape record-correction.test.ts uses.
 const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -53,8 +53,8 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
-  // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
-  // void below needs an authorizer, exactly as the record-void suite arranges.
+  // Seed a manager (holds `sale.void`) on the suite's own handle and open its session — the
+  // precondition void below needs an authorizer, exactly as the record-void suite arranges.
   // Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
   // `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
   // so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`.
@@ -174,8 +174,8 @@ function substitutionInput(
   };
 }
 
-/** Records an ORIGINAL simplified ticket exactly as the application will: as `app_user`, in one
- * transaction, on a node already registered with the backend. */
+/** Records an ORIGINAL simplified ticket exactly as the application will: in one transaction, on a
+ * node already registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
@@ -184,7 +184,7 @@ async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleI
   });
 }
 
-/** Runs `recordSubstitution` as `app_user`, in one transaction — the real write path. */
+/** Runs `recordSubstitution` in one transaction — the real write path. */
 async function substitute(
   backend: FiscalBackend,
   substitutedSaleIds: SaleId[],

@@ -149,9 +149,11 @@ describe("applyMigrations installs the append-only triggers on the product's own
   });
 
   it("applies a partial set list, protecting only the tables that set created", async () => {
-    // Boot hands over the ENABLED modules only, and `instance-apply.pg.test.ts` hands over
-    // `sets.slice(0, fiscalIdx)`, so a run that reached for every declared name rather than the
-    // ones belonging to the sets in front of it would ask for a table nothing had created.
+    // Boot in trading mode hands over the ENABLED modules only (`apps/server/src/boot.ts`, the
+    // `enabledModules(ALL_MODULES, moduleConfig)` branch), and the demo scripts hand over a named
+    // subset — `apps/server/scripts/allergens-demo.ts` filters `manifestSets()` down to `core` and
+    // `catalogue`. So a run that reached for every declared name rather than the ones belonging to
+    // the sets in front of it would ask for a table nothing had created.
     const venue = freshVenue();
     const core = manifestSets().filter((set) => set.name === "core");
     await expect(applyMigrations(venue, migrationOptionsFor(core, null))).resolves.toBeUndefined();

@@ -1,8 +1,12 @@
 # @waitron/db
 
-Use this package for the PostgreSQL schema and database client. PGlite (embedded WASM PostgreSQL)
-and real PostgreSQL use one dialect; there is no SQLite path. See
-`docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3.
+Use this package for the venue schema and the database client. The engine is **SQLite** — Node's
+own built-in `node:sqlite`, driven by Drizzle's SQLite dialect through a small adapter
+(`@waitron/store`). There is no PostgreSQL path and no PGlite. A whole database is a directory of
+files, opened by path; there is no connection string, no server and no role. See
+`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` for the switch, and
+`docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3 for the schema this
+package holds.
 
 Each database holds one taxpayer, as the single row of `tenants` (`id` pinned to 1). No table
 carries a tenant column and no query filters by one: a read that wants "this tenant's rows" reads
@@ -57,20 +61,23 @@ exists.
 
 ## Migrations
 
-Core has two baselines: `0000_db_baseline.sql` contains the generated schema, and
-`0001_db_baseline_sql.sql` contains the additional tables, constraints, grants, functions and
-triggers. `app_user` is a non-login role; it receives only the grants in the custom baseline.
-Migrations `0030`–`0032` drop the tenant column from this set and `0033`–`0034` make `tenants` a
-one-row table; the baselines above still create the column, because a drizzle migration is never
-edited after it ships.
+Core has two migrations, both written for the storage switch: `0000_baseline.sql` is the schema
+drizzle-kit generates from the barrel, and `0001_behavioural_triggers.sql` is a `--custom`
+migration carrying the nine behavioural rules this package used to enforce with hand-written
+PostgreSQL triggers, restored as SQLite triggers. Neither file contains a `GRANT`, a role or an
+`ENABLE ALWAYS`: there is no database role to grant anything to, and file permissions on the venue
+directory are the access control.
+
+The **append-only** triggers are not in either file. They are installed at runtime by
+`installAppendOnlyTriggers` (`@waitron/store`), from the table names each migration set declares,
+which is why every migrating path gets them without having to remember to.
 
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
 produces one folder and one journal; each package that owns tables has its own config and journal.
 
-The generated snapshot covers the schema barrel. Triggers, grants and the append-only triggers'
-`ENABLE ALWAYS` state are hand-written into the `…_baseline_sql` custom migration; they survive
-later `generate` runs because drizzle-kit diffs against its own snapshot, which has no concept of
-them, so you maintain them by hand when changing a constraint, trigger or table Drizzle does not
-generate.
+The generated snapshot covers the schema barrel. Triggers are hand-written into a `--custom`
+migration; they survive later `generate` runs because drizzle-kit diffs against its own snapshot,
+which has no concept of them, so you maintain them by hand when changing a constraint, trigger or
+table Drizzle does not generate.
 `runMigrations` requires the module's journal table name; core uses `__drizzle_migrations_db`.
 The caller orders migration sets from different modules.

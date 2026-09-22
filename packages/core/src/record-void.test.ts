@@ -56,8 +56,8 @@ const suite = useVenueDb({
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
-  // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
-  // Seed directly on the fixture connection.
+  // staff member (holds nothing). Seeded on the suite's own handle, exactly like `seedTenant`
+  // above.
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -68,7 +68,7 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
+/** A person of `role` whose PIN is "1234", inserted on the suite's own handle. The role makes the
  * display name distinct because this fixture creates several live people in one tenant.
  *
  * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
@@ -421,9 +421,10 @@ describe("recordVoid — error propagation", () => {
     // `packages/fiscal-verifactu/src/chain.test.ts`'s identical "does not retry an error that is
     // not a chain collision" test for the analogous branch in `appendToChain`.
     //
-    // A hand-built `Transaction`-shaped stub, not the real PGlite one: there is no schema-level
-    // constraint on `sale_voids` today other than the unique one this suite already exercises, so
-    // provoking a genuinely different SQLSTATE from the real database would mean inventing one —
+    // A hand-built `Transaction`-shaped stub rather than the suite's real handle: there is no
+    // schema-level constraint on `sale_voids` today other than the unique one this suite already
+    // exercises, so provoking a genuinely different error code from the real database would mean
+    // inventing one —
     // this stub instead asserts on `recordVoid`'s own catch/rethrow logic directly, the same way
     // `chain.test.ts`'s stub asserts on `appendToChain`'s.
     //

@@ -55,54 +55,43 @@ export function centsToDecimal(cents: number): Decimal {
   return decimal(`${negative ? "-" : ""}${digits.slice(0, point)}.${digits.slice(point)}`);
 }
 
-// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the exact
-// shape both engines render for an integer, or a scale-0 `numeric`, cast to text, and nothing
-// else. The `numeric` half is not a corner case: plenty of call sites cast an AGGREGATE rather
-// than the column, and `sum(...)` over a `bigint` is a `numeric`, as is `sum(round(..., 0))`.
+// Anchored, no sign but a leading minus, no leading zeros, no point, no exponent — the exact shape
+// this engine renders for an integer, column or aggregate alike, cast to text, and nothing else. A
+// value carrying a decimal point is refused rather than converted, which is the case that would
+// otherwise be wrong by a factor of a hundred.
 const RAW_CENTS_PATTERN = /^-?(?:0|[1-9]\d*)$/;
 
 /**
  * The amount for a count of cents read by RAW SQL, where the count arrives as TEXT.
  *
- * A raw read hands back whatever the driver makes of the wire value, and the two engines this
- * repository runs against disagree about an uncast eight-byte integer COLUMN. Casting the
- * expression `::text` in the query makes both give the same plain integer string, which is what
- * this function takes.
+ * A raw read hands back whatever the driver makes of the value, and on this engine an uncast
+ * integer arrives as a JavaScript NUMBER. So the caller must cast the expression to text in the
+ * query — spelled `cast(x as text)`, because this engine has no `::` cast operator — and that
+ * string is what this function takes.
  *
- * Measured 2026-09-20 over `probe(amount bigint not null, dec numeric(12, 2) not null)` holding
- * (1234, 6.75) and (2147483648, 6.75). The instrument is a node script that prints `typeof` for
- * every value it reads, through two clients: this repository's own `pg` (8.23.0) against the
- * development container `waitron-db-1`, where `show server_version` reports 18.6, and the
- * `@electric-sql/pglite` 0.5.8 JavaScript API. It has to be a JavaScript instrument. `psql`
- * renders every value as text, so no psql output can tell a driver returning a string from one
- * returning a number — a psql run is evidence about RENDERING and RANGE and about nothing else
- * on this page.
+ * Measured on this engine 2026-09-22 (`node:sqlite`, Node v26.7.0) over
+ * `probe(amount integer not null)` holding 1234 and 2147483648, with a node script printing
+ * `typeof` for every value it read:
  *
- *   expression                             pg 8.23 / PostgreSQL 18.6   PGlite 0.5.8
- *   amount::text                           "1234" string               "1234" string
- *   sum(amount)::text                      "2147484882" string         "2147484882" string
- *   coalesce(sum(amount), 0)::text         "0" string, over no rows    "0" string
- *   sum(round(dec, 0))::text               "14" string                 "14" string
- *   amount — CONTROL, no cast              "1234" STRING               1234 NUMBER
- *   sum(amount) — CONTROL, no cast         "2147484882" string         "2147484882" string
- *   sum(dec)::text — CONTROL, unrounded    "13.50" string              "13.50" string
+ *   expression                              result
+ *   cast(amount as text)                    "1234" string
+ *   cast(sum(amount) as text)               "2147484882" string
+ *   cast(coalesce(sum(amount), 0) as text)  "0" string, over no rows
+ *   amount — CONTROL, no cast               1234 NUMBER
+ *   sum(amount) — CONTROL, no cast          2147484882 NUMBER
  *
- * Three controls, because a probe whose passing and failing cases print the same thing measures
- * nothing. The uncast COLUMN is why the cast exists at all: the engines really do differ there,
- * so a read a PGlite suite passes on a number arrives as a string against the real server, and
- * a converter written for one of those refuses the other. The uncast AGGREGATE narrows that: a
- * `sum()` over a `bigint` is a `numeric`, which both drivers render as a string, so the
- * disagreement is about the int8 column and not about raw reads in general. The unrounded
- * `numeric` sum shows a scale surviving into the text, which is what the rounded one would look
- * like if the `round(…, 0)` were ever dropped — and this function refuses it rather than
- * converting it a hundredfold wrong.
+ * The two controls are what make the reading mean anything: they are why the cast exists, and they
+ * fail LOUDLY rather than silently — an uncast read reaches the `typeof value !== "string"` line
+ * below and throws `shared.invalid_cents`, so a caller that forgets the cast finds out.
  *
- * NOT `::int`, which is what this repository cast first. Four bytes tops out at 2147483647 cents
- * — €21,474,836.47 — while a money column here stores twelve integer digits (`assertMoney`,
- * 99999999999999 cents). A value the column accepts on the way in is then refused on the way out
- * with a bare `22003`, which is exactly the band the columns were widened to eight bytes to
- * carry. NOT `::numeric(12, 2)::text` either: that renders a count of 7734 cents as "7734.00", a
- * plausible string a hundred times the amount, and nothing fails.
+ * NOT a cast to an integer type, and this is the part that is easy to get wrong when adding a call
+ * site: `cast(x as integer)` would hand back a number this function refuses, and a fixed-scale
+ * rendering would be worse — a count of 7734 cents written as "7734.00" is a plausible string a
+ * hundred times the amount, which the pattern above refuses for exactly that reason.
+ *
+ * The four-byte overflow that first argued for text — PostgreSQL's `::int` topping out at
+ * 2147483647 cents while a money column carries twelve integer digits — belonged to the previous
+ * engine and is not the reason any more. The rule it produced is unchanged.
  *
  * None of this applies to a typed drizzle `.select()` over a schema column — the column's own
  * mapping converts the value, so those call sites use `centsToDecimal` directly and need no cast.

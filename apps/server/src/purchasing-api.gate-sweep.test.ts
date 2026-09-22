@@ -22,10 +22,12 @@ import "./errors.js";
  * (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the one
  * connection. Nothing now checks that the deployment role's grants are part of the refusal.
  *
- * What survives is the reason the file is worth keeping beside `purchasing-api.test.ts`: that sibling
- * gates the POST route only (`purchasing-api.test.ts`, "refuses a create to a staff-role session"),
- * and the case below sweeps all five routes with PATCH and DELETE aimed at an id that really exists,
- * so a 403 cannot be a not-found in disguise.
+ * What survives is the reason the file is worth keeping beside `purchasing-api.test.ts`, and the
+ * reason it is now named `purchasing-api.gate-sweep.test.ts`: that sibling gates the POST route only
+ * (`purchasing-api.test.ts`, "POST as a staff-role session → 403 authorization.not_permitted" — its
+ * one `staffCookie` case, 2026-09-22), and the case below sweeps
+ * all five routes with PATCH and DELETE aimed at an id that really exists, so a 403 cannot be a
+ * not-found in disguise.
  *
  * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
  * per file, so the one venue provisioned here needs no unique-tax-id dance.
@@ -108,7 +110,7 @@ async function setupVenue(): Promise<Venue> {
 }
 
 /** One Hono app per venue — `mountPurchasingApi` takes only `db`, so each venue's
- * routes need their own app (mirrors `catalogue-api.pg.test.ts`). */
+ * routes need their own app (mirrors `catalogue-api.full-manifest.test.ts`). */
 function mountApp(): Hono {
   const app = new Hono();
   mountPurchasingApi(app, { db: suite.db }, noopLog);

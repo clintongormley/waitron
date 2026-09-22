@@ -15,10 +15,10 @@
  * This is the only suite in the package that covers this function, which is why it is converted
  * rather than deleted with the role it used to exercise.
  *
- * The `.pg` in the filename now names an engine this suite does not touch. It is left alone here
- * for the reason the branch's other converted `.pg.test.ts` files were
- * (`packages/db/src/schema/tenants.singleton.pg.test.ts`,
- * `packages/fiscal-verifactu/src/restore.pg.test.ts`): renaming them is one sweep, not twelve.
+ * The filename names that function because nothing else in the package does: `grep -rn
+ * listActivePersonsWithPermission packages/identity/src`, run 2026-09-22, finds it in `staff.ts`
+ * (the definition), `index.ts` (the re-export) and this file. The sibling `staff.test.ts` covers
+ * the rest of `staff.ts` and never mentions it.
  */
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";

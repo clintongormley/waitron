@@ -23,11 +23,10 @@ import {
 // `authorizeManager` reads. Every store call below runs inside `withTransaction`, the shape the
 // management routes use.
 //
-// This file was `canvas-store.pg.test.ts`, and its header said it needed real PostgreSQL so that
-// every call ran as a non-superuser member of `app_user`. There are no roles and no grants on this
-// engine — one process opens one file — so that justification is gone, and with it the `asAppUser`
-// wrapper. Everything the suite actually asserts is the store's own behaviour, which the engine
-// change does not touch, so every assertion is kept.
+// What it does NOT show: no assertion here is about who may write `canvases`. This engine has no
+// roles and no grants — one process opens one file (`packages/db/src/testing/roles.ts`) — so there
+// is no such property left for a suite to assert, and the store's own gates are the only refusal.
+// Every assertion below is the store's behaviour, which the engine does not touch.
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 

@@ -148,8 +148,9 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /**
- * Runs the write path exactly as the application will: as `app_user`, in one transaction, on a
- * node already registered with the injected backend.
+ * Runs the write path exactly as the application will: in one transaction, on a node already
+ * registered with the injected backend. (The `asAppUser` call inside is inert on this engine —
+ * `packages/db/src/testing/roles.ts` — so it is the transaction, not a role, that this mirrors.)
  *
  * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
  * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node
@@ -954,10 +955,11 @@ describe("recordSale — working order linkage", () => {
   // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
   // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
   // NULL for a walk-up sale rung with no draft. The FK
-  // `(working_order_id) → working_orders(id)` is enforced even on PGlite (its
-  // default connection is a superuser, but constraints still hold), so the "supplied" case needs a
-  // REAL working_orders row as the FK target — a fabricated id would FK-violate, which is why the
-  // seed fixtures no longer mint one.
+  // `(working_order_id) → working_orders(id)` is enforced here, because the venue store opens
+  // every connection with `pragma foreign_keys = on` (`packages/store/src/index.ts`) — SQLite
+  // checks no foreign key without it. So the "supplied" case needs a REAL working_orders row as
+  // the FK target; a fabricated id would FK-violate, which is why the seed fixtures no longer mint
+  // one.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
     // Through the table definition: `working_orders.id` is a `$defaultFn` generator only the
     // insert BUILDER runs, so a raw INSERT omitting it is refused

@@ -40,10 +40,10 @@ let supervisorSessionId: string;
 let managerSessionId: string;
 let staffSessionId: string;
 
-// PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
-// the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
-// non-superuser one. `sale.not_found` and `sale.series_not_found` are asserted below for a
-// genuinely ABSENT row, which is what those codes mean with one tenant per database.
+// One venue file for everything here (`useVenueDb`): the guards are pure logic (an unknown id, a
+// series of the wrong purpose, an unsettled corrective), none of which turns on who is connected
+// or on two writers contending. `sale.not_found` and `sale.series_not_found` are asserted below
+// for a genuinely ABSENT row, which is what those codes mean with one tenant per database.
 const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -57,7 +57,7 @@ beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
-  // Seeded on the fixture connection, like the record-void suite.
+  // Seeded on the suite's own handle, like the record-void suite.
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
@@ -70,7 +70,7 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
+/** A person of `role` whose PIN is "1234", inserted on the suite's own handle. The role makes the
  * display name distinct because this fixture creates several live people in one tenant.
  *
  * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
@@ -196,8 +196,8 @@ function correctionInput(
   };
 }
 
-/** Records an ORIGINAL sale exactly as the application will: as `app_user`, in one transaction,
- * on a node already registered with the backend. */
+/** Records an ORIGINAL sale exactly as the application will: in one transaction, on a node
+ * already registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
@@ -206,7 +206,7 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-/** Runs `recordCorrection` as `app_user`, in one transaction — the real write path. */
+/** Runs `recordCorrection` in one transaction — the real write path. */
 async function correct(
   backend: FiscalBackend,
   correctsSaleId: SaleId,

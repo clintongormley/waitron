@@ -50,7 +50,7 @@ import {
  * WHERE THE HALVES LIVE. Both halves are here: the name pin and the behaviour. Nothing about these
  * triggers is proven in `packages/db`, so a reader looking there will find nothing and should look
  * here. (`packages/db`'s own `schema/orders.transition.test.ts`,
- * `schema/device-profiles.trigger.pg.test.ts` and `schema/park-retrieve.test.ts` exercise the same
+ * `schema/device-profiles.trigger.test.ts` and `schema/park-retrieve.test.ts` exercise the same
  * rules through the product's write paths; they are a different claim — that the CALLER is refused
  * — and they do not establish that the database refuses a caller that goes around them.)
  *

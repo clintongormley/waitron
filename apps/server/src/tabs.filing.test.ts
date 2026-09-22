@@ -35,6 +35,13 @@ import "./errors.js";
 /**
  * Tabs end to end — opening, appending rounds, paying, and what the pay FILES.
  *
+ * Named `tabs.filing.test.ts` because paying is what separates it from its sibling: every case here
+ * drives `payWorkingOrder` or `recordTillSale` through a real `VerifactuBackend`, either to assert
+ * what gets filed or to assert that a refusal files nothing, and
+ * `grep -n 'payWorkingOrder\|VerifactuBackend' apps/server/src/tabs.test.ts` prints nothing (exit 1,
+ * run 2026-09-22), so the sibling stops at what the tab verbs write and never reaches the record a
+ * settle files.
+ *
  * ## H2: the huella is independent of table/tab membership — the static receipts
  *
  * The fiscal core is UNTOUCHED by table-service: pay reuses `payWorkingOrder`/`recordSale`
@@ -213,7 +220,7 @@ async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db
   });
 }
 
-// The fiscal backend + clock the pay path files through — ported from `working-order.pg.test.ts`'s
+// The fiscal backend + clock the pay path files through — ported from `working-order.pay-and-dispatch.test.ts`'s
 // own scaffolding (the pay-closes-tab and huella tests file real chained records, so the suite needs a
 // real `VerifactuBackend`). `resolveClient` REJECTS: `recordSale` must never contact AEAT (spec §4).
 let backend: FiscalBackend;
@@ -235,7 +242,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("tabs.pg.test: anchor() is not used by recordSale");
+      throw new Error("tabs.filing.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -250,7 +257,9 @@ beforeAll(() => {
       environment: deploymentEnvironment(process.env),
       deploymentEnvironment: deploymentEnvironment(process.env),
       resolveClient: () =>
-        Promise.reject(new Error("tabs.pg.test: resolveClient must never be called by recordSale")),
+        Promise.reject(
+          new Error("tabs.filing.test: resolveClient must never be called by recordSale"),
+        ),
     });
   backend = makeBackend(suite.db);
   backendB = makeBackend(suiteB.db);
@@ -370,7 +379,7 @@ function fixedClock(instant: Date): TrustedClock {
       anchorAgeSeconds: 0,
     }),
     anchor: () => {
-      throw new Error("tabs.pg.test: anchor() unused");
+      throw new Error("tabs.filing.test: anchor() unused");
     },
     currentAnchor: () => null,
   };

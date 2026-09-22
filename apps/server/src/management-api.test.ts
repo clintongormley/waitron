@@ -157,7 +157,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 
 /** Build the venue's `TillConfig` from an `applyVenue` result — the tenant + location the zone/table
  *  config verbs scope to (the other fiscal ids are inert on the config surface). Mirrors the same
- *  helper in `move-merge.pg.test.ts`; `boot.ts` threads the real `till` config here in production. */
+ *  helper in `move-merge.filing.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     tillId: brandTillId(venue.tillId),

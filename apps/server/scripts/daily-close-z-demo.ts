@@ -11,7 +11,7 @@
 //
 // Everything shown here is deterministic logic over immutable commercial rows: the snapshot, the
 // per-till variance arithmetic, the hash chain. What a demo cannot show is what happens when two
-// closers run at once; that is `packages/reporting/src/record-daily-close.pg.test.ts`, whose own
+// closers run at once; that is `packages/reporting/src/record-daily-close.concurrency.test.ts`, whose own
 // header records which of its cases survived the move off PostgreSQL and which did not.
 //
 // LOST with the storage swap: every write below used to run through `asAppUser`, to show the POS

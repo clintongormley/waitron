@@ -48,6 +48,12 @@ import "./errors.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one migrated venue file.
 //
+// Named `till-sale-integrated.db.test.ts` because opening a database is exactly what separates it
+// from its sibling: `grep -c useVenueDb apps/server/src/till-sale-integrated.test.ts` prints 0 (run
+// 2026-09-22), because that file covers `toPayOutcome` — the pure mapper over a provider result —
+// and nothing else, while every case here drives `payWorkingOrderIntegrated` itself against a
+// provisioned venue.
+//
 // ## What this file was built around, and what is left of it
 //
 // It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
@@ -75,7 +81,7 @@ import "./errors.js";
 const LOCALE = "es-ES";
 
 // The accountable operator a placing amendment is attributed to — a fixed fixture uuid standing in for
-// the session's `personId` (no FK on `order_amendments.actor_id`), the shape `working-order.pg.test.ts` uses.
+// the session's `personId` (no FK on `order_amendments.actor_id`), the shape `working-order.pay-and-dispatch.test.ts` uses.
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useVenueDb({
@@ -86,7 +92,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/** The system wall clock, reported confident/anchored — the stub `working-order.pg.test.ts` uses. */
+/** The system wall clock, reported confident/anchored — the stub `working-order.pay-and-dispatch.test.ts` uses. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -100,7 +106,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("till-sale-integrated.pg.test: anchor() is not used by recordSale");
+      throw new Error("till-sale-integrated.db.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -462,7 +468,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("till-sale-integrated.pg.test: resolveClient must never be called")),
+      Promise.reject(new Error("till-sale-integrated.db.test: resolveClient must never be called")),
   });
 });
 

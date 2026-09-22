@@ -66,10 +66,15 @@ describe("quoteLiteral", () => {
   });
 
   it("doubles a single quote, so a password cannot end the literal early", () => {
-    // `applyInstance` and `InstanceAction` are exported (`index.ts`) and `password` is typed
-    // `string`, so the old safety was a property of ONE caller rather than of the code — and this
-    // package's own `instance-apply.pg.test.ts` already passes a hand-written password through
-    // that path.
+    // The caller this used to argue about is gone: nothing in the tree declares `applyInstance` or
+    // `InstanceAction` any more (grepped over every `.ts` and `.md` in the worktree — only
+    // historical plans under `docs/superpowers/plans/` still name them), and this package emits no
+    // `CREATE ROLE … PASSWORD` literal at all. What the case pins is unchanged and is about the FUNCTION, not a caller:
+    // `quoteLiteral` takes a plain `string` (`packages/shared/src/sql-literal.ts`, re-exported by
+    // `./identifiers.ts`), so a value carrying a quote must not be able to close the literal early
+    // whoever passes it. Its one live caller in the tree today is the change feed, which quotes the
+    // `CREATE TRIGGER` arguments it builds (`packages/db/src/change-feed.ts`); this package only
+    // re-exports it, and this suite is the only file here that calls it.
     expect(quoteLiteral("a'b")).toBe("'a''b'");
     expect(quoteLiteral("'; alter role waitron_app superuser; --")).toBe(
       "'''; alter role waitron_app superuser; --'",

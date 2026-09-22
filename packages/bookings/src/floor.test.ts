@@ -11,9 +11,9 @@ import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
 
-// The reserved-on-floor annotator is a correlated read with no privilege/concurrency dimension, so
-// PGlite is enough (the moved-from `apps/server/src/tables.test.ts` cases ran on PGlite too). The whole
-// manifest, not [core, bookings]: the shared ordered set lands bookings on top of its dependencies.
+// The reserved-on-floor annotator is a correlated read, exercised here against a real migrated
+// SQLite venue database. The whole manifest, not [core, bookings]: the shared ordered set lands
+// bookings on top of its dependencies.
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
@@ -94,7 +94,8 @@ async function insertBooking(
   });
 }
 
-/** Run the annotator as `app_user`, exactly as production does. */
+/** Run the annotator in one transaction, the shape production uses. The `asAppUser` call inside is
+ * an empty body on this engine (`packages/db/src/testing/roles.ts`) and asserts nothing. */
 function annotate(
   v: Venue,
   now: Date,

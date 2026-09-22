@@ -23,10 +23,11 @@ import "./errors.js";
  * (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the one
  * connection. Nothing now checks that the deployment role's grants are part of the refusal.
  *
- * What survives is the reason the file is worth keeping beside `recipe-api.test.ts`: that sibling
- * gates the ingredients LIST route only, and the case below sweeps all five authoring routes with the
- * PATCH and the two `/recipe` routes aimed at ids that really exist, so a 403 cannot be a not-found in
- * disguise.
+ * What survives is the reason the file is worth keeping beside `recipe-api.test.ts`, and the reason
+ * it is now named `recipe-api.gate-sweep.test.ts`: that sibling gates the ingredients LIST route
+ * only ("rejects an absent session with 401 and a staff session with 403" — its one `staffCookie`
+ * case, 2026-09-22), and the case below sweeps all five authoring routes with the PATCH and the two `/recipe`
+ * routes aimed at ids that really exist, so a 403 cannot be a not-found in disguise.
  *
  * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
  * per file, so the one venue provisioned here needs no unique-tax-id dance.
@@ -127,7 +128,7 @@ async function setupVenue(): Promise<Venue> {
 }
 
 /** A Hono app with the recipe routes mounted — the same per-suite shape
- * `purchasing-api.pg.test.ts` uses. `mountRecipeApi` reads `cfg.nodeId` in no route
+ * `purchasing-api.gate-sweep.test.ts` uses. `mountRecipeApi` reads `cfg.nodeId` in no route
  * (`recipe-api.ts`'s `RecipeApiDeps` doc), so the app is bound to nothing but `db`. */
 function mountApp(): Hono {
   const app = new Hono();

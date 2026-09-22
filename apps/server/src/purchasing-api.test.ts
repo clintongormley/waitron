@@ -18,7 +18,7 @@ import "./errors.js";
 // There are no roles on this engine: `asAppUser` is an inert function
 // (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection, so the
 // refusals here are the route gate alone and nothing checks that a deployment role's grants back
-// them up. The wider five-route sweep is `purchasing-api.pg.test.ts`, which says the same.
+// them up. The wider five-route sweep is `purchasing-api.gate-sweep.test.ts`, which says the same.
 const noopLog: Logger = () => {};
 
 let managerCookie: string;

@@ -20,7 +20,7 @@
  * `array[...]` spellings are syntax this parser refuses (`unrecognized token: ":"`).
  *
  * The "(real Postgres)" in the five describes below is stale and is left for the branch's single
- * rename sweep, the choice `apps/server/src/device.pg.test.ts:24` records.
+ * rename sweep, the choice `apps/server/src/device.test.ts:24` records.
  */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";

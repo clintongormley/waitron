@@ -17,6 +17,11 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 /**
  * One composed scheduler pass against a real migrated database.
  *
+ * Named `pass.db.test.ts` for the one thing that separates it from its sibling: it opens a migrated
+ * database and runs the REAL drain and reconcile duties against it, where `pass.test.ts` hands
+ * `runPass` inline fake duties and opens no database at all — `grep -c useVenueDb
+ * apps/server/src/pass.test.ts` prints 0 (run 2026-09-22).
+ *
  * ## The role this file was built around is gone, and is replaced by nothing
  *
  * Every call below used to run on `server_pass_probe`, a non-superuser LOGIN role inheriting
@@ -48,11 +53,6 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
  * They were kept, converted and red, rather than deleted, because this is the ONLY suite that runs
  * `runPass` against a real database — `pass.test.ts` beside it is all fakes — so deleting them
  * would have left the composed drain + reconcile + ledger pass covered by nothing.
- *
- * The stale `.pg.` in this file's name, and the "non-superuser deployment role" in the describe
- * below, are left for the branch's single rename sweep rather than changed here. Two comments
- * elsewhere repeat the same retired claim about this file and are not this file's to correct:
- * `apps/server/src/boot.ts:720-722` and `apps/server/src/boot.test.ts:125`.
  */
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
@@ -67,7 +67,7 @@ const suite = useVenueDb({
 const ring = loadKeyRing(KEY_ENV);
 
 /** A settlement report that finds nothing — the audit's clean case. The point of this suite is the
- * database path as the deployment role, not the audit's classification, which has its own suites. */
+ * database path a composed pass takes, not the audit's classification, which has its own suites. */
 const emptyStripe = {
   balanceTransactions: {
     list: () => ({ autoPagingEach: () => Promise.resolve() }),
@@ -79,7 +79,7 @@ const emptyStripe = {
   },
 } as unknown as Stripe;
 
-describe("one pass as the non-superuser deployment role", () => {
+describe("one composed pass against a migrated database", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>

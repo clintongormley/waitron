@@ -26,7 +26,7 @@ import "./errors.js";
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.pg.test.ts`);
+// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.full-manifest.test.ts`);
 // PGlite connects as a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
@@ -1572,7 +1572,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 describe("mountCatalogueApi — null request bodies map to the route's own 4xx, never a 500", () => {
   // A literal JSON `null` body parses to `null`; each write route coerces it with `?? {}` so a field
   // access is the route's documented 4xx (or, for PATCH, the empty-body 204) rather than a TypeError →
-  // opaque 500 — the same guard the management routes carry (management-api.pg.test.ts).
+  // opaque 500 — the same guard the management routes carry (management-api.accounts-and-receipt-config.test.ts).
   it("POST /catalogues null body → 400 management.request_invalid", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: null });
     expect(res.status).toBe(400);

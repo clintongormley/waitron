@@ -455,7 +455,7 @@ describe("/management-api/service-statuses", () => {
   it("PATCH with a null / empty body → 204 no-op (never a 500), the status unchanged", async () => {
     // A `null` body coerces to `{}` (`?? {}`) and carries no mutable field: the route answers a 204
     // no-op WITHOUT reaching updateStatus's empty `.set()` (which Drizzle rejects → a 500). Mirrors the
-    // staff PATCH route's "null body → 204 no-op" (management-api.pg.test.ts).
+    // staff PATCH route's "null body → 204 no-op" (management-api.accounts-and-receipt-config.test.ts).
     const { id } = (await (
       await request(
         "",

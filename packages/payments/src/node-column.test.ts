@@ -12,10 +12,10 @@ import { freshNif, seedWorkingOrder } from "../test/seed.js";
  * node_id scaffolding (Task 3 of the node rekey): `payments` gains a NULLABLE `node_id` with a
  * plain FK to core's `nodes`, and stays nullable in this slice — no writer yet (design §5).
  *
- * PGlite (via useVenueDb): a column-existence, nullability and FK-round-trip test, none of which
- * needs the non-superuser deployment role or lock contention that would require real Postgres
- * (CLAUDE.md §4). Each test seeds its own tenant (via `freshNif`), so payments accumulate in the
- * shared database without colliding on `payments_provider_ref_key`.
+ * One venue file (`useVenueDb`): a column-existence, nullability and FK-round-trip test, none of
+ * which turns on who is connected or on two writers contending. The FK half is only refused
+ * because the venue store opens every connection with `pragma foreign_keys = on`
+ * (`packages/store/src/index.ts`) — SQLite checks no foreign key without it.
  */
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 

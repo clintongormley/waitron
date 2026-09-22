@@ -8,20 +8,26 @@ import { describe, expect, it } from "vitest";
  * NAME that no source file may write again.
  *
  * What this guard is for has changed with the storage swap, and the new job is the smaller one.
- * While both helpers existed it stopped a suite reaching past the seam. `usePgliteDb` is now
- * defined nowhere — `git grep -l usePgliteDb -- "*.ts"` answers with this file alone, taken
- * 2026-09-22 — so what it holds today is that the name stays retired: a reintroduced PGlite helper,
- * or a comment pointing a reader at one, is reported rather than quietly accumulating. That is a
- * thin subject, and it is stated plainly so nobody mistakes this for a check on how suites open
- * databases. CLAUDE.md §4 states the rule this file enforces; the two travel together.
+ * While both helpers existed it stopped a suite reaching past the seam. Nothing defines
+ * `usePgliteDb` any more — `git grep -nE "(function|const|let|class) +usePgliteDb" -- "*.ts"` finds
+ * nothing, taken 2026-09-22 — so what it holds today is that the name stays retired: a reintroduced
+ * PGlite helper, or a comment pointing a reader at one, is reported rather than quietly
+ * accumulating. That is a thin subject, and it is stated plainly so nobody mistakes this for a check
+ * on how suites open databases. CLAUDE.md §4 states the rule this file enforces; the two travel
+ * together.
+ *
+ * Two `.ts` files still write the name, and both are describing the rule rather than using it: this
+ * one, and the ROOT `vitest.config.ts`, which is outside the two roots walked below and so outside
+ * the rule as well as the guard.
  *
  * It lives in the ROOT Vitest project rather than beside the helper in `packages/db`, for the same
  * reason `scripts/column-vocabulary.test.ts` does, and the reason runs in the direction a reader
  * easily gets backwards. Both gates build `--filter "...<pkg>"` from the shared classifier's output
  * (`.husky/pre-push:112`, `.github/workflows/ci.yml:302`), and that expands a package to its
  * DEPENDENTS — so a scoped run reaches a check inside `packages/db` only when `@waitron/db` is
- * pulled in as a dependent, which is to say only when `db` DEPENDS on the changed package. It
- * depends on three (`membership`, `shared`, `sync-enrolment`), so it is almost never pulled in.
+ * pulled in as a dependent, which is to say only when `db` DEPENDS on the changed package. Its own
+ * workspace dependencies are few (`membership`, `shared`, `store` and `sync-enrolment` today), so it
+ * is almost never pulled in.
  * Measured on this tree, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` lists six
  * packages and `@waitron/db` is not among them — so the scoped run for a pull request adding a suite
  * in `packages/bookings` would not have reached a check that lived there. Two paths do still reach

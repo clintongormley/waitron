@@ -24,7 +24,7 @@ import "./errors.js";
 // There are no roles on this engine: `asAppUser` is an inert function
 // (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection, so a
 // refusal here is the route gate alone. The wider five-route sweep, with a manager's 201 and 200 as
-// positive controls, is `recipe-api.pg.test.ts`.
+// positive controls, is `recipe-api.gate-sweep.test.ts`.
 const noopLog: Logger = () => {};
 
 // The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s

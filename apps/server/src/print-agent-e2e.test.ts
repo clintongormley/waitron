@@ -36,7 +36,7 @@ import "./errors.js";
 // the agent package cannot reach the routes it must be proven against, so the wiring that joins them
 // is proven here. PGlite (not real Postgres) is enough: this asserts the request/response flow and the
 // byte path (register → pull-with-inventory → deliver → done → revoke-halts); grants and the derived
-// authorization boundary are proven as `app_user` on real Postgres in `print-api.pg.test.ts` and
+// authorization boundary are proven as `app_user` on real Postgres in `print-api.printer-wiring.test.ts` and
 // `packages/printing`'s `runtime.eligibility.test.ts`.
 const noopLog: Logger = () => {};
 

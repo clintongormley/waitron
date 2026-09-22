@@ -7,9 +7,9 @@ import { isAppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
 
-// PGlite (superuser, one backend) is the right target: the seat reads a sealed credential and maps
-// SumUp REST calls through an injected `fetch`, so nothing here depends on the deployment role or on
-// concurrency. It seeds a sealed `payments.sumup` credential the seat then reads.
+// One venue file (`useVenueDb`): the seat reads a sealed credential and maps SumUp REST calls
+// through an injected `fetch`, so nothing here turns on who is connected or on two writers
+// contending. It seeds a sealed `payments.sumup` credential the seat then reads.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

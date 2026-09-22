@@ -33,6 +33,11 @@ import "./errors.js";
  * `categoryDependants` takes its optional-table branch. The sibling migrates core + catalogue +
  * identity only and covers the absent-table arm, asserting `routes: []`.
  *
+ * That is what the file is now named for — `catalogue-api.full-manifest.test.ts` — and the property
+ * to check is the `migrations:` argument each suite hands `useVenueDb`:
+ * `migrationOptionsFor(manifestSets(), null)` here, against the three-entry
+ * `[CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS]` list in the sibling.
+ *
  * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
  * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.
  */

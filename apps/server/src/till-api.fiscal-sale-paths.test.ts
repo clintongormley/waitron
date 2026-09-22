@@ -68,6 +68,12 @@ import { createStation } from "./kitchen.js";
 // fiscal write proves. Setup mirrors `till-sale.test.ts` (Task 3) — a provisioned venue + a seeded
 // catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
 //
+// That split is what the name `till-api.fiscal-sale-paths.test.ts` records, and its checkable half
+// is the backend each suite mounts: `grep -n 'backend:' apps/server/src/till-api.test.ts` returns
+// two lines, one of them prose — the fiscal seat it passes is `backend: {} as FiscalBackend`, an
+// empty object, so a case over there that reached the fiscal write would fail rather than file (its
+// own comments at the prep and collect routes say the same). Run 2026-09-22.
+//
 // It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
 // PostgreSQL template. Two subjects went with that harness and NOTHING here replaces either:
 //
@@ -124,7 +130,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("till-api.pg.test: anchor() is not used by recordSale");
+      throw new Error("till-api.fiscal-sale-paths.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -499,7 +505,9 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(
-        new Error("till-api.pg.test: resolveClient must never be called by recordSale"),
+        new Error(
+          "till-api.fiscal-sale-paths.test: resolveClient must never be called by recordSale",
+        ),
       ),
   });
 });
@@ -1294,7 +1302,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     const { cfg, available, operatorId } = await setupVenue();
     // Flip this venue's location to `ticket_then_pay` (Mode T) — `setupVenue` provisions the DEFAULT
     // `prepay`, so both the DB column and the in-memory cfg are updated together, the same two-part
-    // flip `working-order.pg.test.ts`'s `modeVenue` makes.
+    // flip `working-order.pay-and-dispatch.test.ts`'s `modeVenue` makes.
     await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
     );

@@ -1,5 +1,14 @@
 # @waitron/bench-pglite
 
+> **2026-09-22 — the product's storage engine has changed since this was written.** Waitron no
+> longer runs on PostgreSQL or PGlite at all: a venue is a directory of SQLite files opened by
+> `@waitron/store` (branch `feat/sqlite-slice1-flip`). So the question this spike answered — can
+> embedded PGlite carry the throughput the local-server topology implies — is no longer a question
+> the product faces. **The benchmark itself still runs.** It imports no `@waitron/*` package and
+> carries its own `@electric-sql/pglite`, `pg` and Testcontainers dependencies, so the switch did
+> not touch it; `pnpm --filter @waitron/bench-pglite typecheck` is clean on that branch. Everything
+> below is left as it was written, as the record of that measurement.
+
 A spike, not a product package. Measures whether embedded PGlite can carry the throughput the
 §5 local-server deployment topology implies, before any schema exists to build on top of it.
 

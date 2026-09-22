@@ -20,7 +20,7 @@ import { ALL_MODULES } from "../modules.js";
 import type { TillConfig } from "../till-config.js";
 
 // Shared venue provisioning for the real-Postgres device/join-request suites — extracted from
-// device-api.pg.test.ts (which had the original) so join-requests.test.ts can stand up the same
+// device-api.test.ts (which had the original) so join-requests.test.ts can stand up the same
 // fixture without duplicating it. Lives under apps/server/src/testing/ (coverage-excluded, per
 // vitest.config.ts) alongside fiscal-fixtures.ts, which follows the same pattern.
 

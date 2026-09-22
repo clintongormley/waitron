@@ -22,8 +22,9 @@ import {
 /**
  * The lifecycle of a staff-entered reservation (design §1). `booked` on creation; `seated` when the
  * party arrives and a tab is opened (TS-1 `openTab`); then a terminal `completed` / `no_show` /
- * `cancelled`. There is no hard-delete — a booking is CANCELLED, never removed (hence app_user holds
- * no DELETE, see the custom migration) — so every reservation stays auditable.
+ * `cancelled`. There is no hard-delete — a booking is CANCELLED, never removed — so every
+ * reservation stays auditable. The grant that used to refuse a DELETE outright went with the
+ * PostgreSQL engine; nothing in the database enforces this now, only the verbs in `bookings.ts`.
  */
 export const bookingStatus = enumType(["booked", "seated", "completed", "no_show", "cancelled"]);
 

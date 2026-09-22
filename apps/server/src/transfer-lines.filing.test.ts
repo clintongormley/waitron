@@ -34,6 +34,9 @@ import "./errors.js";
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
  *
+ * Named `transfer-lines.filing.test.ts` because paying is what separates it from its sibling — see
+ * "Why the surviving case stays here" below.
+ *
  * ## The case this file LOST, and what covers it now — nothing
  *
  * It held a second case: two reverse-orientation `transferLines` over the SAME pair of tabs, on two
@@ -58,6 +61,8 @@ import "./errors.js";
  *
  * The sibling `apps/server/src/transfer-lines.test.ts` never pays a tab, so it cannot see whether a
  * transferred café double-files. This is the only case that transfers and then settles both tabs.
+ * Checkable: `grep -n 'payWorkingOrder\|VerifactuBackend' apps/server/src/transfer-lines.test.ts`
+ * prints nothing (exit 1, run 2026-09-22).
  */
 const LOCALE = "es-ES";
 

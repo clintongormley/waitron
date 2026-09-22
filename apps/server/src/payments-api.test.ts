@@ -208,7 +208,7 @@ const PROVIDERS: readonly CardProviderContribution[] = [stripeSeat];
 const evicted: string[] = [];
 const pool: CardProviderPool = {
   get: async () => {
-    throw new Error("payments-api.pg.test: pool.get is never called by these routes");
+    throw new Error("payments-api.test: pool.get is never called by these routes");
   },
   evict: (providerId) => {
     evicted.push(providerId);

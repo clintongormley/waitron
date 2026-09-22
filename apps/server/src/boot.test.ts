@@ -117,7 +117,7 @@ beforeEach(() => {
 
 /**
  * `startServer`'s only test subject. Everything else in this package tests one composed piece
- * (`pass.pg.test.ts` builds its own, separate wiring around the composed PASS); nothing before
+ * (`pass.db.test.ts` builds its own, separate wiring around the composed PASS); nothing before
  * this file called `startServer` itself, so the field mapping in
  * `boot.ts` — `config.scheduler.*` into `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into
  * `recordPass`, the `settlementLagMs` conditional spread, the migrations-root default, and the

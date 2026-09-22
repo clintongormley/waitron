@@ -13,7 +13,7 @@
  * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
  * shape through `device_binding_rule_insert` / `_update`, created by
  * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
- * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.pg.test.ts`.
+ * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.test.ts`.
  *
  * ## The disposition document expected a seventh case to be RED here, and it is not
  *
@@ -24,9 +24,6 @@
  * cases pass. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
  * giving the colliding device a name that does NOT collide ("Caja 2") fails the case with
  * `promise resolved "{ …(2) }" instead of rejecting`, and the name restored, it passes again.
- *
- * The stale `.pg.` in this file's own name, and the "(real Postgres)" in the describe below, are
- * left for the branch's single rename sweep rather than changed here.
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -137,7 +134,7 @@ async function deviceRow(deviceId: string): Promise<{
   return rows[0]!;
 }
 
-describe("device join-and-accept binds the device by its profile's form factor (real Postgres)", () => {
+describe("device join-and-accept binds the device by its profile's form factor", () => {
   it("a till profile auto-creates exactly ONE register named after the device and binds it (station NULL)", async () => {
     // The `till` branch (spec §2.2): the device describes itself as a till, so resolveDeviceBinding
     // MINTS the cash register it rings against, names it after the device, and binds it. What the

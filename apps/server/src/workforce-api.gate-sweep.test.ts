@@ -17,6 +17,17 @@ import "./errors.js";
  * The workforce write group's `schedule.manage` gate, and what a decide writes, on the engine the box
  * now runs.
  *
+ * Named `workforce-api.gate-sweep.test.ts` because sweeping is what separates it from its sibling:
+ * the two gate cases below hit EVERY route of a write group with a staff cookie, where
+ * `workforce-api.test.ts` refuses ONE route per group. Checkable:
+ * `grep -n staffCookie apps/server/src/workforce-api.test.ts` prints six lines, two of them the
+ * declaration and its assignment, and the remaining four are the whole of that file's staff
+ * refusals — `POST /management-api/roster`, `GET /management-api/swaps`,
+ * `GET /management-api/absences`, `GET /management-api/planned-vs-actual` (run 2026-09-22).
+ * The file's other two cases read data back THROUGH a route that the sibling's
+ * equivalents never see — the decider columns a decide stamps, and a populated planned-vs-actual
+ * row where the sibling asserts an empty window.
+ *
  * ## What this file was, and the two things that went with PostgreSQL
  *
  * 1. **The ROLE is gone and is replaced by nothing.** The header said every touch ran
@@ -340,7 +351,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
     );
   });
 
-  it("assembles planned-vs-actual for the tenant's own location as the app role", async () => {
+  it("assembles planned-vs-actual for the tenant's own location", async () => {
     // Seed one shift on a PUBLISHED roster version — the planned side is published-only, so a
     // null-version draft would be excluded — and assert it comes back as a no-show. The windowing and
     // scoping logic itself is covered in `workforce-api.test.ts`.

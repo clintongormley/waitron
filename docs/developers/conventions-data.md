@@ -1033,9 +1033,9 @@ touched the changed schema. Pointer:
 
 The permission check returns the session's tenant; it does not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
-them. Regression: `apps/server/src/location-settings-api.pg.test.ts`, "refuses a manager session
+them. Regression: `apps/server/src/location-settings-api.test.ts`, "refuses a manager session
 belonging to another tenant". Printer routes enforce the same check; their regression is
-`apps/server/src/print-api.pg.test.ts`, "refuses another tenant's manager…".
+`apps/server/src/print-api.printer-wiring.test.ts`, "refuses another tenant's manager…".
 
 **Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
 `git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
@@ -1104,6 +1104,6 @@ statement before that foreign key made the real migration succeed; the journal a
 unchanged.
 
 Receipt, 2026-09-13: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test
-src/variants.pg.test.ts` exercised the migration, actual `app_user` writes and a publication/removal
+src/variants.db.test.ts` exercised the migration, actual `app_user` writes and a publication/removal
 race. The fiscal migration checks also passed with `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
 @waitron/fiscal-verifactu test src/privileges.test.ts src/inmutabilidad.test.ts`.

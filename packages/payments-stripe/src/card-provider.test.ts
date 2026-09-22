@@ -12,9 +12,9 @@ import {
   secretKeyFromSealed,
 } from "./card-provider.js";
 
-// PGlite (superuser, one backend) is the right target: the seat reads a sealed credential and maps
-// Stripe SDK calls through an injected `makeStripe`, so nothing here depends on the deployment role
-// or on concurrency. Mirrors payments-sumup's card-provider.test.ts.
+// One venue file (`useVenueDb`): the seat reads a sealed credential and maps Stripe SDK calls
+// through an injected `makeStripe`, so nothing here turns on who is connected or on two writers
+// contending. Mirrors payments-sumup's card-provider.test.ts.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

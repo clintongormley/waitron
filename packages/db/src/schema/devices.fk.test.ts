@@ -20,7 +20,7 @@ const TOKEN_HASH = "scrypt$00$00";
 // The device FKs (till / receipt_printer / device_profile) are the subject here. Every seed
 // device points at a `till` device profile and names a till — a device is DEFINED by its profile
 // (device_profile_id is NOT NULL) and the binding rule (device_binding_rule_insert / _update, tested in
-// devices.trigger.pg.test.ts) requires a register and no station for a non-kds form factor — so the
+// devices.trigger.test.ts) requires a register and no station for a non-kds form factor — so the
 // ONLY constraint each case leaves violated is the FK under test. `devices` is the only table that
 // carries a device binding FK, so it is the only one with cases here.
 describe("devices FKs (till / receipt_printer / device_profile)", () => {

@@ -1,3 +1,11 @@
+/**
+ * `restoreFiscal` over a node that has actually sold.
+ *
+ * Named for its fixture, which is the only thing separating it from the sibling `restore.test.ts`:
+ * the SIF, the series, the sale and the chain head the restore runs over here are written by the
+ * production path (`seedTill`, `seedSale`, `appendToChain`), where that file's first case asserts
+ * the same properties over rows `test/fixtures.ts`'s `seedSoldRegistro` wrote by hand.
+ */
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";

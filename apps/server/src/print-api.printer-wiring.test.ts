@@ -38,6 +38,16 @@ import "./errors.js";
 /**
  * The print agent, printer and till-configuration routes, on the engine the box now runs.
  *
+ * Named `print-api.printer-wiring.test.ts` for the routes only this half of the pair drives: the
+ * station ↔ printer pairing, a till's receipt printer, a location's print mode and drawer-open
+ * policy, the tills list, the `/management-api/events` change stream and the job resend. Checkable:
+ *     $ grep -nE -e 'stations/|receipt-printer|receipt-print-mode' \
+ *         -e 'drawer-open-policy|/resend|management-api/tills|management-api/events' \
+ *         apps/server/src/print-api.test.ts
+ *     → (no output; exit 1, run 2026-09-22)
+ * The sibling drives the agent join, pull, claim and report surface, the printer CRUD and the
+ * test-print routes.
+ *
  * ## Two things this file argued for that no longer exist
  *
  * Its old header said real PostgreSQL was MANDATORY here rather than PGlite, for two properties
@@ -178,7 +188,7 @@ async function send(
 }
 
 /** Knock (unauth, window open) then accept the join in-process via the verb (the accept ROUTE lives in
- * join-api.ts, proven in join-api.pg.test.ts). The agent's Bearer is the knock's `${joinId}.${secret}`
+ * join-api.ts, proven in join-api.db.test.ts). The agent's Bearer is the knock's `${joinId}.${secret}`
  * and joinId becomes the agent id. */
 async function joinAndAccept(
   app: Hono,
@@ -270,8 +280,8 @@ async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
   return row!.id;
 }
 
-describe("Print API over real Postgres (as the app role)", () => {
-  it("enrol → claim (committed within the request) → report done, all as the app role", async () => {
+describe("Print API — the agent lifecycle end to end", () => {
+  it("enrol → claim (the status written inside the request) → report done", async () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Cocina");
     const printerId = await createPrinter(app, agentId, "Cocina real");
@@ -304,7 +314,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(done.rows[0]!.delivered_at).not.toBeNull();
   });
 
-  it("derived eligibility as the app role: a usb job is NOT claimed by a box that cannot see its key", async () => {
+  it("derived eligibility: a usb job is NOT claimed by a box that cannot see its key", async () => {
     // The key-scoped isolation (design §3/§5) run as the REAL app role: a usb printer's job is claimed
     // only by the box currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job
     // stays queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
@@ -328,7 +338,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     expect(untouched.rows[0]!.status).toBe("queued");
   });
 
-  it("persists the agent host and edits names under the app role", async () => {
+  it("persists the agent host and edits names", async () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Name before edit");
     const pulled = await send(app, "POST", "/print-api/agent/jobs", {
@@ -349,7 +359,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     );
   });
 
-  it("discovered-printers reads registered keys + agent names as the app role (grants)", async () => {
+  it("discovered-printers reads registered keys + agent names", async () => {
     // The two new management routes run their reads through the same `gated` (asAppUser) transaction as
     // the sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
     // `print_agents` — succeeds under the real app grants, and that a device the agent reports appears in
@@ -505,7 +515,7 @@ describe("Print API over real Postgres (as the app role)", () => {
   });
 });
 
-describe("Station ↔ printer mapping routes over real Postgres (printer.manage)", () => {
+describe("Station ↔ printer mapping routes (printer.manage)", () => {
   it("attaches, lists both directions, is idempotent, and detaches a pair as a manager", async () => {
     const app = mountApp(tenantA);
     const agent = await joinAndAccept(app, "Mapping agent");
@@ -648,7 +658,7 @@ async function locationDrawerPolicy(locationId: string): Promise<string> {
   return row.rows[0]!.drawer_open_policy;
 }
 
-describe("Receipt-printer + print-mode config routes over real Postgres (printer.manage)", () => {
+describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
   it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
     const app = mountApp(tenantA);
     const agent = await joinAndAccept(app, "Recibos agent");
@@ -965,7 +975,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
   }
 });
 
-describe("print job resend as the deployment role", () => {
+describe("print job resend", () => {
   it("requires print.resend and copies the original bytes without changing its history", async () => {
     const app = mountApp(tenantA);
     const printerId = await createUsbPrinter(app, randomUUID(), "Resend");

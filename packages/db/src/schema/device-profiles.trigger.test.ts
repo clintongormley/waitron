@@ -1,11 +1,6 @@
-// The name still ends `.pg.test.ts`, and this suite no longer reaches PostgreSQL. Renaming it is
-// not this change's: `scripts/behavioural-triggers.test.ts` names this file, and the storage swap's
-// plan (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the
-// rename for the same sweep that deals with `asAppUser` and `pgErrorCode`.
-//
-// It exercises the form-factor drift-guard trigger (`device_profile_form_factor_locked`), which the
-// SQLite migration set restores in `packages/db/drizzle/0001_behavioural_triggers.sql`. Each
-// mutating case creates its OWN profile so the suite stays order-independent.
+// This suite exercises the form-factor drift-guard trigger (`device_profile_form_factor_locked`),
+// which the SQLite migration set restores in `packages/db/drizzle/0001_behavioural_triggers.sql`.
+// Each mutating case creates its OWN profile so the suite stays order-independent.
 //
 // LOSS, from the storage swap: the concurrency case is deleted. It raced a device INSERT against a
 // form_factor change on two backends and proved that the `for share` row lock the binding-rule
@@ -19,7 +14,7 @@
 //
 // The binding-rule triggers that case leaned on are themselves intact: `device_binding_rule_insert`
 // and `_update`, in the same `packages/db/drizzle/0001_behavioural_triggers.sql`, covered by
-// `packages/db/src/schema/devices.trigger.pg.test.ts`. It is the LOCK they took, and the race that
+// `packages/db/src/schema/devices.trigger.test.ts`. It is the LOCK they took, and the race that
 // observed it, that this suite no longer has.
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

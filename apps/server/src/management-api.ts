@@ -1250,7 +1250,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // `layout.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
   // `getReceipt` itself does NOT authorize (it is shared with the
   // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
-  // `management-api.pg.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
+  // `management-api.accounts-and-receipt-config.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
   // 403 to 200.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {

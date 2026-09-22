@@ -59,17 +59,18 @@ describe("tenant_credentials constraint declarations (forces the lazy extraConfi
 });
 
 /**
- * A COMPILE-TIME case, beside the RUNTIME one in `credentials.test.ts`. They fail for different
- * reasons and neither replaces the other: this one goes red if a column stops DECLARING
- * `Uint8Array`, and that one goes red if the value a real-PostgreSQL read hands back stops BEING
- * one. Measured 2026-09-18 by deleting `fromDriver` from the `bytea` custom type behind `binary`
- * in `packages/db/src/schema/columns.ts`: this case stayed green (tsc clean) and that one failed
- * with `expected true to be false`, its four neighbours still passing.
+ * A COMPILE-TIME case, and since the storage swap the only one on this subject: it goes red if a
+ * column stops DECLARING `Uint8Array`. `pnpm --filter @waitron/credentials typecheck` is what runs
+ * it.
  *
- * It belongs here rather than in a PGlite suite because PGlite's own bytea parser returns a
- * `Uint8Array` whatever the column declares, so this package's four PGlite suites cannot tell the
- * two declarations apart at runtime (measured in `packages/db/src/schema/columns.test.ts` with both
- * mapping functions deleted). `pnpm --filter @waitron/credentials typecheck` is what runs it.
+ * The RUNTIME half it used to sit beside — `credentials.test.ts`'s "hands the three sealed columns
+ * back as plain Uint8Arrays, not node Buffers" — was deleted, because on this engine it can no
+ * longer fail. `node:sqlite` hands a BLOB back as a plain `Uint8Array` whatever the column
+ * declares (measured 2026-09-22 on Node v26.7.0, selecting a `blob` column back through
+ * `openVenueDatabase`: `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`), so no
+ * suite here can tell the column's `fromDriver` from the driver's own value. Nothing now checks at
+ * RUNTIME that what a read hands back is not a node Buffer; `credentials.test.ts`'s own header
+ * records that deletion and the argument behind it.
  */
 describe("what a read hands back for the three sealed columns", () => {
   it("types them as Uint8Array, not as a node Buffer", () => {

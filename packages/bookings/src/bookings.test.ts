@@ -27,13 +27,19 @@ import "./errors.js";
  * tills, working_orders) still carry. */
 type VenueCfg = BookingConfig;
 
-// PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
-// table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
-// race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
-// through `withTransaction` + `asAppUser`, so the app_user grants and the `party_size > 0` CHECK are exercised
-// exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
-// container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
-// into core, so it lands on top of the shared ordered set.
+// A real migrated SQLite venue database, which is the only target there is now. These verbs are
+// plain CRUD plus a conditional-UPDATE state machine over one table, and every read and write below
+// runs through `withTransaction`, the shape production uses, so the `party_size > 0` CHECK is
+// exercised rather than bypassed.
+//
+// WHAT IT DOES NOT SHOW, in two parts. There are no roles and no grants on this engine
+// (`packages/db/src/testing/roles.ts`), so nothing here is a claim about a privilege. And the CAS
+// race is not proven anywhere: the two-backend case `bookings-cas.test.ts` used to stage was
+// DELETED rather than moved, because one write transaction runs on the venue file at a time — that
+// file's header carries the reasoning and the pointer to recover the deleted case.
+//
+// Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs into core, so it lands
+// on top of the shared ordered set.
 const suite = useVenueDb({
   migrations: BOOKINGS_TEST_MIGRATIONS,
   timeoutMs: 60_000,
@@ -125,7 +131,9 @@ async function makeTableInOtherLocation(): Promise<string> {
   return insertDiningTable(otherLocationId, "B-1");
 }
 
-/** Run `fn` as `app_user`, exactly as production routes do. */
+/** Run `fn` in one transaction, the shape production routes use. The `asAppUser` call inside is an
+ * empty body on this engine (`packages/db/src/testing/roles.ts`) and asserts nothing; it is still
+ * made so the suite keeps the production call shape. */
 function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -634,8 +642,10 @@ describe("seatBooking", () => {
 
   // The terminal write is a compare-and-swap on the `booked` predecessor (matching `advanceStatus`),
   // not a bare id write — the concurrency backstop for the window between the lock-free `getBooking`
-  // read and the write. A true race needs real Postgres (PGlite serialises on one backend, §4), so this
-  // pins the guard the way `advanceStatus`'s tests do: a booking that is no longer `booked` is refused
+  // read and the write. No test stages that window as a real race: one write transaction runs on the
+  // venue file at a time, so a cancel cannot land between the read and the write (the reasoning is in
+  // `bookings-cas.test.ts`'s header). This pins the guard directly instead, the way `advanceStatus`'s
+  // tests do: a booking that is no longer `booked` is refused
   // with `booking.invalid_transition`, stays `cancelled`, and leaves NO open tab behind. (Removing the
   // pre-`openTab` `booked` check leaves this green: the CAS then opens a tab, matches nothing on the
   // predecessor, throws, and the tx rollback undoes the tab — proven by deletion, 2026-08-30.)

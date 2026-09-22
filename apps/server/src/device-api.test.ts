@@ -10,10 +10,6 @@
  * identity the routes reach the database as. No case was deleted for it: what each case names is a
  * route's behaviour, and all forty are still driven.
  *
- * The stale `.pg.` in this file's own name, and the "(real Postgres)" in one describe below, are
- * left for the branch's single rename sweep rather than changed here — the choice
- * `device.pg.test.ts` records.
- *
  * ## The two binding refusals, and the unit tests that used to sit beside them
  *
  * `rejects a nonexistent or absent profile — device untouched` and `rejects a receiptPrinterId
@@ -76,7 +72,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 // The accountable operator every placing amendment is attributed to (a plain uuid, no FK — the shape
-// working-order.pg.test.ts uses).
+// working-order.pay-and-dispatch.test.ts uses).
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 let backend: FiscalBackend;
@@ -96,7 +92,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("device-api.pg.test: anchor() is not used here");
+      throw new Error("device-api.test: anchor() is not used here");
     },
     currentAnchor: () => null,
   };
@@ -110,7 +106,7 @@ beforeAll(() => {
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
-      Promise.reject(new Error("device-api.pg.test: resolveClient must never be called")),
+      Promise.reject(new Error("device-api.test: resolveClient must never be called")),
   });
 });
 
@@ -294,7 +290,7 @@ async function knockAndAccept(
       registerId: input.registerId ?? null,
     });
   });
-  if (!accepted.ok) throw new Error("device-api.pg.test: the fixture's own number mismatched");
+  if (!accepted.ok) throw new Error("device-api.test: the fixture's own number mismatched");
   return {
     deviceId: accepted.deviceId,
     jar: deviceCookieFrom(res),
@@ -639,7 +635,7 @@ describe("GET /api/device/join/status", () => {
   });
 });
 
-describe("Device API over real Postgres — the device-guarded routes", () => {
+describe("Device API — the device-guarded routes", () => {
   it("enrols, sets the cookie, auto-creates a till's register, and /me reports it", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);

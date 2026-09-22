@@ -1,8 +1,3 @@
-// The name still ends `.pg.test.ts`, and this suite no longer reaches PostgreSQL. Renaming it is
-// not this change's: `docs/backlog.md` points at the current filename, and the storage swap's plan
-// (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25) records the rename
-// for the same sweep that deals with `asAppUser` and `pgErrorCode`.
-//
 // LOSS, from the storage swap. Three things this suite established are gone and have no counterpart
 // on this engine:
 //  - a fourth case proved `app_user` is refused an INSERT into `tenants` by the GRANT (`42501`)

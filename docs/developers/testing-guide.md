@@ -736,7 +736,7 @@ and separately retain the already-absent 404 retry
 Reader Enable initially accepted a row after Unpair had removed it at SumUp. Successful unpair now
 records a local marker which only provider-verified adoption clears; the concurrent
 Enable/unpair regression locks the reader before deciding
-(`apps/server/src/payments-api.pg.test.ts`).
+(`apps/server/src/payments-api.test.ts`).
 
 ## A fixture no check reads is unverified data, and a green suite resting on it proves nothing about the records production can build.
 

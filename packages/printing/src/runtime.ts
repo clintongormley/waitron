@@ -326,11 +326,15 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
     // `tx.transaction`) or by moving the report out of the `try`.
     try {
       // `claimPrintJobs` reads this row with raw SQL through `tx.execute`, so no column mapping
-      // runs over it and the DRIVER's own value arrives, not the column's: a `Buffer` under
-      // node-postgres (which is what `ClaimedJob.payload` above is hand-declared as), a
-      // `Uint8Array` under PGlite. Copy it into a plain Uint8Array so the transport
-      // interface deals in Uint8Array and the fake sink's capture compares byte-for-byte against an
-      // `esc().bytes()` (also a Uint8Array), free of any Buffer-vs-Uint8Array identity mismatch.
+      // runs over it and the DRIVER's own value arrives, not the column's. On this engine that
+      // value is a plain `Uint8Array`: measured 2026-09-22 on Node v26.7.0 through
+      // `openVenueDatabase` and `execute` itself, selecting a `blob` column back —
+      // `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`. So the copy here is a
+      // copy rather than the Buffer-to-Uint8Array conversion it used to be, and `ClaimedJob.payload`
+      // above still DECLARES `Buffer` — the narrower of the two types, so it now promises more than
+      // the driver delivers. The copy is kept because the transport interface deals in `Uint8Array`
+      // and the fake sink's capture compares byte-for-byte against an `esc().bytes()` (also a
+      // Uint8Array).
       await transport.send(target, new Uint8Array(job.payload));
       await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
       delivered += 1;

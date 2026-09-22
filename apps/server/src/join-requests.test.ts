@@ -85,7 +85,7 @@ const suite = useVenueDb({
 });
 
 // A device_profiles row of the given form factor, seeded directly rather than through a verb — this
-// table is fixture, not subject. Copied from device-api.pg.test.ts:177-188 rather than shared, the
+// table is fixture, not subject. Copied from device-api.test.ts:177-188 rather than shared, the
 // same call this file's sibling suites make (module state — the counter — resets per file).
 let profileCounter = 0;
 async function seedProfile(

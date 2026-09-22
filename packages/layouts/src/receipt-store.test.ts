@@ -15,11 +15,10 @@ import type { ReceiptConfig } from "./types.js";
 // set creates `tenant_receipts`, and the identity set creates the `persons`/`management_sessions`
 // tables `authorizeManager` reads.
 //
-// The header this replaces said the suite needed real PostgreSQL so that every call ran as a
-// non-superuser member of `app_user`. There are no roles and no grants on this engine — one process
-// opens one file — so that justification is gone, and with it the `asAppUser` wrapper. What the
-// suite asserts is the store's own behaviour, which the engine change does not touch, so every
-// assertion is kept.
+// What it does NOT show: no assertion here is about who may write `tenant_receipts`. This engine
+// has no roles and no grants — one process opens one file (`packages/db/src/testing/roles.ts`) —
+// so there is no such property left for a suite to assert, and the store's own gates are the only
+// refusal. Every assertion below is the store's behaviour, which the engine does not touch.
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 

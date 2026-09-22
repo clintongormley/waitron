@@ -51,7 +51,7 @@ import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
-// back and paper enqueued for it. Setup mirrors `till-api.pg.test.ts` (a provisioned venue + a
+// back and paper enqueued for it. Setup mirrors `till-api.fiscal-sale-paths.test.ts` (a provisioned venue + a
 // seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
 // receipt-printer config helpers from `receipt-print.test.ts`.
 //
@@ -71,7 +71,7 @@ let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock, already anchored — the stub `till-api.pg.test.ts` documents; `recordSale` reads
+/** The wall clock, already anchored — the stub `till-api.fiscal-sale-paths.test.ts` documents; `recordSale` reads
  *  `now()` once and touches neither `anchor` nor `currentAnchor`. */
 function systemClock(): TrustedClock {
   return {

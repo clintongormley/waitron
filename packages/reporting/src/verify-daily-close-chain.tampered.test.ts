@@ -24,7 +24,10 @@
  * deletes the head directly and needs no bypass — on PostgreSQL it went through the same helper
  * only because that helper was the file's one mutation path.
  *
- * The pure row-walk cases live in `verify-daily-close-chain.test.ts`.
+ * Named for what separates it from the sibling `verify-daily-close-chain.test.ts`: every break here
+ * is staged by mutating rows `recordDailyClose` itself wrote, with `daily_closes`' append-only
+ * triggers dropped ({@link bypassingImmutability}); that file crafts its breaks with raw INSERTs,
+ * drops no trigger, and is where the pure row-walk cases live.
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";

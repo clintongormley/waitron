@@ -17,11 +17,11 @@ import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
-// PGlite is the right target for the runtime's LOGIC — the happy pull→push→report path, per-printer
-// failure isolation, the retry cap, and the venue-scope filter — none of which depend on concurrency
-// or the deployment role. The one property PGlite CANNOT show is the double-pull race (it serialises
-// every query onto one backend, so two agents never truly contend): that lives in runtime.race.test.ts
-// against real Postgres (CLAUDE.md §4).
+// The runtime's LOGIC, on one venue file (`useVenueDb`) — the happy pull→push→report path,
+// per-printer failure isolation, the retry cap, and the venue-scope filter. Every case below runs
+// its transactions one after another, so none of them observes two agents contending; that property
+// is runtime.race.test.ts's, and what holds it on this engine is the venue file's write queue
+// rather than row locks (`packages/store/src/write-queue.ts`, and that suite's own header).
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** Insert one venue. Through the table definition rather than raw SQL: `locations.id` and

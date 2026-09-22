@@ -61,7 +61,7 @@ function uniqueName(base: string): string {
 }
 
 /** A valid phone canvas with a distinguishing title, so a stored row is never mistaken for a default
- *  and two round-trips can be told apart. Mirrors `canvas-store.pg.test.ts`'s helper. */
+ *  and two round-trips can be told apart. Mirrors `canvas-store.db.test.ts`'s helper. */
 function phoneCanvas(title: string): CanvasDef {
   const base = DEFAULT_CANVASES["phone-portrait"];
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
@@ -143,7 +143,7 @@ function mountApp(): Hono {
       db: suite.db,
       // nodeId sentinel: the canvas/theme management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
-      // sibling management tests (management-api.pg.test.ts, …-status/-passkey).
+      // sibling management tests (management-api.accounts-and-receipt-config.test.ts, …-status/-passkey).
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",

@@ -83,9 +83,10 @@ let node: SeededTill;
  * fiscal record still cannot be rewritten or removed; what no longer refuses anything is the
  * ROLE-level half.
  *
- * `inmutabilidad.test.ts` is where this belongs as a standing guard, and it is RED today for an
- * unrelated reason (`test/fixtures.ts`'s `seedTenantTillSif` raw insert omits
- * `tenants.created_at`), so it could not be cited as a receipt.
+ * `inmutabilidad.test.ts` is where this belongs as a standing guard, and it is the receipt: run on
+ * 2026-09-22 on its own, 1 file and 2 cases passing. An earlier version of this comment said that
+ * suite was red on a `tenants.created_at` fixture omission; that was fixed before this branch's
+ * test conversion finished, and the sentence outlived it.
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 

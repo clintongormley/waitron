@@ -33,8 +33,15 @@ import "./errors.js";
  * on the one connection. A missing grant can no longer fail anything here, because there are no
  * grants.
  *
- * What survives is the reason the file is worth keeping beside `me-api.test.ts`: that sibling covers
- * the "files as P" half, and nothing in it asserts that Q's row is untouched.
+ * ## Which of the two `me-api` suites this is
+ *
+ * This file is `me-api.cross-person.test.ts`: every case below seeds a SECOND person and drives a
+ * route against them — naming them in the request body, or asking whether their rows are visible.
+ * `me-api.test.ts` is the single-session half: whoami, the happy paths, the request-shape 400s and
+ * the not-logged-in 401. It makes ONE cross-person check of its own, and it is on a route this file
+ * does not drive: `IGNORES a body personId naming ANOTHER person`, in its `set your own locale`
+ * block, reads `colleague`'s locale before and after `PUT /management-api/session/me/locale` and
+ * asserts it is unchanged.
  *
  * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
  * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.

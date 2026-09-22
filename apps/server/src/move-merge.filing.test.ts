@@ -34,6 +34,12 @@ import "./errors.js";
 /**
  * Joining and merging tabs, through to what gets FILED — on the engine the box now runs.
  *
+ * Named `move-merge.filing.test.ts` because paying is what separates it from its sibling: every case
+ * here drives `payWorkingOrder` through a real `VerifactuBackend`, and
+ * `grep -n 'payWorkingOrder\|VerifactuBackend' apps/server/src/move-merge.test.ts` prints nothing
+ * (exit 1, run 2026-09-22), so the sibling can only see what the join/merge verbs write to
+ * `working_orders`, never the record a settle files.
+ *
  * ## The four cases this file LOST, and what covers them now
  *
  * It held seven cases; four of them staged two PostgreSQL backends through `suite.pg.connect()` and
@@ -86,7 +92,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("move-merge.pg.test: anchor() is not used by recordSale");
+      throw new Error("move-merge.filing.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -278,7 +284,7 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(
-        new Error("move-merge.pg.test: resolveClient must never be called by recordSale"),
+        new Error("move-merge.filing.test: resolveClient must never be called by recordSale"),
       ),
   });
 });

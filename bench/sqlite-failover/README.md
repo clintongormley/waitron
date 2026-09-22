@@ -1,5 +1,13 @@
 # @waitron/bench-sqlite-failover
 
+> **2026-09-22 — the storage switch this rig was a gate for has since been built.** The product now
+> runs on SQLite: a venue is a directory of files opened by `@waitron/store`, with no PostgreSQL
+> anywhere (branch `feat/sqlite-slice1-flip`). This rig still models the failover loop rather than
+> running the real one, and its verdicts are still about the mechanism, never about the shipped
+> code. **It still runs.** It imports no `@waitron/*` package and carries its own dependencies, so
+> the switch did not touch it; `pnpm --filter @waitron/bench-sqlite-failover typecheck` is clean on
+> that branch. Everything below is left as it was written.
+
 A throwaway rig, not a product package. It is **gate 2** of the storage switch: does the box → object
 store → promote → return-with-a-tail → ship → rejoin loop hold together, and does it hold together
 _fiscally_ — no dropped ledger row, no forked chain, no second submission to the Spanish tax agency.

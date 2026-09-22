@@ -355,7 +355,7 @@ END;
 -- this sequence lands an active device whose binding contradicts its profile: deactivate the
 -- device, change the profile's form factor (`device_profile_form_factor_locked` above permits that
 -- while no ACTIVE device references it), then switch the device back on. Guard: the reactivation
--- case in `packages/db/src/schema/devices.trigger.pg.test.ts`.
+-- case in `packages/db/src/schema/devices.trigger.test.ts`.
 --
 -- The first refusal, on a `device_profile_id` naming no profile, is unreachable through the product:
 -- `devices.device_profile_id` is NOT NULL with an `ON DELETE RESTRICT` foreign key, and the store
@@ -371,7 +371,7 @@ END;
 -- what serialises two writers now is the venue file's write queue
 -- (`packages/store/src/write-queue.ts`). Nothing in this repository re-proves that claim for this
 -- rule — the concurrency case that made it was deleted with the PostgreSQL harness, as
--- `packages/db/src/schema/device-profiles.trigger.pg.test.ts` records.
+-- `packages/db/src/schema/device-profiles.trigger.test.ts` records.
 CREATE TRIGGER device_binding_rule_insert
 BEFORE INSERT ON devices
 FOR EACH ROW

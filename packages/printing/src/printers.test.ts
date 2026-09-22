@@ -16,15 +16,21 @@ import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from ".
 import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
-// pre-check plus the DB's transport CHECK + partial UNIQUE — none of which is a CONCURRENCY or
-// deployment-role-privilege property. The CHECK/UNIQUE integrity is already proven on real Postgres in
-// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4).
+// One venue file (`useVenueDb`). `createPrinter` is a single INSERT gated by an app-layer
+// required-field pre-check plus the DB's transport CHECK and partial UNIQUE, and every case below
+// runs its transactions one after another, so nothing here turns on two writers contending. The
+// CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
+// what this suite adds on top is this package's own behaviour over them — the error codes those
+// refusals are mapped onto, the partial-edit and deactivation paths, the listing, and the layout
+// settings.
+//
+// This engine has no roles and no grants, so no case below is a claim about a privilege
+// (`packages/db/src/testing/roles.ts`), and no suite this branch left behind replaces that half.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /**
- * A fresh tenant + venue per test, seeded on the superuser connection. Each test gets its OWN
- * tenant (via seedTenant's fresh NIF) so rows are order-independent.
+ * A fresh tenant + venue per test. Each test gets its OWN tenant (via seedTenant's fresh NIF) so
+ * rows are order-independent. There is one handle on the venue file and no role to seed under.
  */
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);

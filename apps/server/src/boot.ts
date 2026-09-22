@@ -717,7 +717,7 @@ function makeStartedServer(
  * deployment role, and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
  * mapping (via the logged `loop.sleeping` line, since a duty-neutral pass alone cannot distinguish a
  * swapped mapping from a correct one), both sides of the `settlementLagMs` conditional spread, and
- * `close()`'s own sequencing including its idempotency guard. `pass.pg.test.ts` does NOT import
+ * `close()`'s own sequencing including its idempotency guard. `pass.db.test.ts` does NOT import
  * this file — it builds its own, separate composition of the same pieces to prove the composed pass
  * runs as the non-superuser role; that predates `boot.test.ts` and remains evidence for the same
  * SHAPE of wiring, not a substitute for testing this function directly. The manual end-to-end boot

@@ -26,10 +26,11 @@ beforeEach(async () => {
   await pg.db.execute(sql`delete from payments`);
 });
 
-// beforeEach truncates payments/payment_refunds only — tenants (and the location/till/
-// working_order chain under them) accumulate for the life of the suite. Each test needs its own
-// NIF, or a later seedWorkingOrder's default "B00000000" collides on tenants_country_tax_id_key. `freshNif`
-// is shared from ../../test/seed.js.
+// Nothing carries from one test to the next: `useVenueDb` empties every data table after each one
+// (`resetPerTest` defaults to true and this suite does not set it), which
+// `packages/db/src/testing/venue-db.test.ts` pins in both directions. So the `beforeEach` above
+// and the per-test `freshNif` (../../test/seed.js) are belt-and-braces rather than what keeps two
+// tests off each other's `tenants_country_tax_id_key`.
 
 async function seedTenant(): Promise<Seeded> {
   return seedWorkingOrder(pg.db, freshNif());

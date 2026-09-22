@@ -48,7 +48,7 @@ import "./errors.js";
 // agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
 // (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The property PGlite
 // CANNOT show — the routes running as the non-owner app role with only its grants, the gate proven
-// by DELETION there — lives in `print-api.pg.test.ts` against real Postgres, which is also where
+// by DELETION there — lives in `print-api.printer-wiring.test.ts` against real Postgres, which is also where
 // the pointers to the suites holding the claim's contention behaviour are (CLAUDE.md §4). Tests share the seeded tenant and
 // create their own printers; assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};
@@ -381,7 +381,7 @@ describe("GET /print-api/agent/join/status", () => {
     expect(pending.status).toBe(200);
     expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
 
-    // Accept in-process (the route is proven in join-api.pg.test.ts).
+    // Accept in-process (the route is proven in join-api.db.test.ts).
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });

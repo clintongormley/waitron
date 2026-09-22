@@ -44,8 +44,9 @@ export interface VenueResult {
 }
 
 /**
- * Runs one plan as ONE transaction under `withTransaction`, mirroring provisionNode (NOT applyInstance:
- * there is no cluster DDL here, and a single transaction is what a partial venue must never be).
+ * Runs one plan as ONE transaction under `withTransaction`, mirroring provisionNode. A single
+ * transaction is what a partial venue must never be. (This used to contrast with `applyInstance`,
+ * which ran cluster DDL outside a transaction; that path was deleted with the storage switch.)
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
  * existing location, till, node and series without rerunning module seeds. A different location is
@@ -173,8 +174,11 @@ export async function applyVenue(
           // first (the admin is the only person who can open that session); a hand-built plan that
           // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
           // guards below. Idempotent: find-or-create by name, so a same-venue re-run adds no
-          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's owner
-          // transaction, exercised by venue-apply.pg.test.ts.
+          // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's own
+          // transaction — "owner" named a PostgreSQL role, and this engine has none (`asAppUser` is
+          // a no-op stub, `packages/db/src/testing/roles.ts`). Exercised by `venue-apply.test.ts`:
+          // the three seeded profiles, the re-run that adds no duplicates, and the refusal when a
+          // plan runs this before seed-admin.
           await seedDeviceProfiles(tx, action.profiles);
           break;
         case "create-location": {

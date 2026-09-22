@@ -232,8 +232,12 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
 
 /**
  * Replaces the list's items with the body's, in the body's order. An item the body omits is removed:
- * no foreign key anywhere references `extra_list_items` (2026-09-19,
- * `grep -rn 'REFERENCES "public"."extra_list_items"' --include='*.sql' packages apps` finds nothing),
+ * no foreign key anywhere references `extra_list_items` (re-taken 2026-09-22:
+ * `grep -rn extra_list_items --include='*.sql' packages apps | grep -i references` finds nothing).
+ * The command had to be re-taken, not just re-run: the reading recorded here searched for
+ * `REFERENCES "public"."extra_list_items"`, and this engine's generated SQL carries no `"public".`
+ * qualification at all, so that spelling now finds nothing whether or not such a key exists —
+ * `grep -rln 'REFERENCES "public"' --include='*.sql' packages apps` is empty, which is the control,
  * the one thing that tracks an item by its PRODUCT instead is cleaned up separately
  * ({@link dropStaleMenuOverrides}), and
  * the design has an open order's child line point at the PRODUCT rather than back at the item
@@ -248,8 +252,11 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * the retained rows in place instead left an intermediate state a legal body could break:
  * `extra_list_items_list_product_uq` covers `(list_id, product_id)`, so a body exchanging two
  * retained items' products failed on the first update with `23505 duplicate key value` although its
- * final product set was fine. Seen red that way, on real PostgreSQL, by "saves a body that exchanges
- * two retained items' products" (extras.concurrency.test.ts), which still runs.
+ * final product set was fine. Seen red that way by "saves a body that exchanges two retained items'
+ * products" (extras.concurrency.test.ts), which still runs. That reading was taken on PostgreSQL,
+ * where the refusal was `23505`; it has NOT been re-taken since the storage switch, so what is known
+ * today is that the case passes on this engine, not that deleting the delete-then-insert would still
+ * turn it red.
  *
  * An id that names an item of a DIFFERENT list is refused as `extras.invalid` rather than moving
  * that item, and that refusal is decided on a plain `select` before any insert below. Two saves
@@ -257,9 +264,11 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
  * refuse. Left to the insert's primary-key conflict instead, each save waited on the other's
  * uncommitted delete and PostgreSQL ended one of them with `40P01 deadlock detected` in place of a
  * domain refusal — measured that way on PostgreSQL with the check removed, five runs out of five.
- * That deadlock is not a shape one writer can produce; what still fails without the check is the
- * final assertion of "refuses both of two saves that each claim the other list's item"
- * (extras.concurrency.test.ts), which reads both lists back unchanged.
+ * That deadlock is not a shape one writer can produce, so the reason for the check is now the
+ * domain refusal alone. The case meant to hold it is the final assertion of "refuses both of two
+ * saves that each claim the other list's item" (extras.concurrency.test.ts), which reads both lists
+ * back unchanged; that it fails without the check is inherited from the PostgreSQL reading and has
+ * not been re-taken on this engine.
  */
 async function writeItems(
   tx: Transaction,

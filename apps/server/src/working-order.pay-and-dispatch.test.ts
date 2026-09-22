@@ -76,6 +76,14 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
+// `working-order.pay-and-dispatch.test.ts`: the working-order verbs driven on a venue provisioned
+// through `applyVenue`, with a real `VerifactuBackend` on the settle path, so a case here can
+// follow an order through pay/place/collect to the record it files and on to the kitchen queue.
+// That is what separates it from its sibling —
+// `grep -n 'payWorkingOrder\|collectOrder\|VerifactuBackend' apps/server/src/working-order.test.ts`
+// prints nothing (exit 1, run 2026-09-22): that file stubs the fiscal backend with a bare `{}` and
+// never settles an order, so it covers each verb up to the point of payment and no further.
+//
 // This suite reached the SQLite engine as `useTemplateDb({ template: "manifest" })` — a per-file
 // clone of a shared PostgreSQL template, with `suite.pg.connect()` handing out extra backends. Both
 // are gone. There is ONE venue file and ONE handle, and `withTransaction` IS the write lock
@@ -145,7 +153,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("working-order.pg.test: anchor() is not used by recordSale");
+      throw new Error("working-order.pay-and-dispatch.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -585,7 +593,9 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(
-        new Error("working-order.pg.test: resolveClient must never be called by recordSale"),
+        new Error(
+          "working-order.pay-and-dispatch.test: resolveClient must never be called by recordSale",
+        ),
       ),
   });
 });
@@ -833,7 +843,7 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(1);
   });
 
-  it("concurrent double-pay of a PARKED order files ONE sale (two connections, same id)", async () => {
+  it("concurrent double-pay of a PARKED order files ONE sale (two callers, same id)", async () => {
     const { cfg, cafe } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -979,7 +989,7 @@ describe("payWorkingOrder", () => {
 });
 
 describe("parkOrder concurrent replay", () => {
-  it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two connections)", async () => {
+  it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two concurrent callers)", async () => {
     const { cfg, cafe } = await setupVenue();
     // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
     // `payWorkingOrder`, `parkOrder` reads no existing row first — it goes straight to
@@ -2372,7 +2382,7 @@ async function recalledSlipsSince(before: Set<string>): Promise<number> {
     .length;
 }
 
-describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-backend)", () => {
+describe("coursing editing verbs — sendLines racing recallLines (Task B1, two concurrent callers)", () => {
   it("concurrent sendLines + recallLines on the same held line serialise — one clean winner, no lost update", async () => {
     const { cfg, cafe } = await setupVenue();
 
@@ -2444,7 +2454,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
   });
 });
 
-describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #191, two-backend)", () => {
+describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #191, two concurrent callers)", () => {
   it("concurrent setLineCourse + fireCourse on the same held line never re-courses a fired line", async () => {
     const { cfg, cafe } = await setupVenue();
 
@@ -2534,7 +2544,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
   });
 });
 
-describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191, two-backend)", () => {
+describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191, two concurrent callers)", () => {
   it("concurrent recallLines + fireCourse on the same held line never un-fires a printed line without a RECALLED slip", async () => {
     const { cfg, cafe } = await setupVenue();
 

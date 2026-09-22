@@ -24,12 +24,12 @@ import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 // `computeDailyClose` returns, the per-till variance arithmetic, the chain-position/`prev_entry_hash`
 // bookkeeping, the hash reproduction, and the input validation. None of it turns on the non-superuser
 // deployment role or on two writers contending — the two things PGlite cannot show (CLAUDE.md §4).
-// Those live in `record-daily-close.pg.test.ts` on real Postgres: the single-writer `FOR UPDATE`
+// Those live in `record-daily-close.concurrency.test.ts` on real Postgres: the single-writer `FOR UPDATE`
 // lock, the concurrent `close.already_closed`, and the gap-free sequence under ten racing closers.
 // This mirrors `daily-close.test.ts`, which computes the same close on PGlite for the
 // same reason. The `close.already_closed` catch path is driven by a real unique violation here (the sequential
 // second close, and the raw insert that pins the refusal's table and columns) and again on
-// node-postgres in `record-daily-close.pg.test.ts`, where the two closers actually contend.
+// node-postgres in `record-daily-close.concurrency.test.ts`, where the two closers actually contend.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 

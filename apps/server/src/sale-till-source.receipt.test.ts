@@ -59,7 +59,7 @@ let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock reported as already anchored — the identical stub shape `till-api.pg.test.ts`
+/** The wall clock reported as already anchored — the identical stub shape `till-api.fiscal-sale-paths.test.ts`
  *  documents. `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`. */
 function systemClock(): TrustedClock {
   return {

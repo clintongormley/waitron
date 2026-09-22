@@ -860,7 +860,7 @@ describe("parkOrder", () => {
     // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
     // real non-superuser role to serialise): one connection replaying its own committed write is exactly
     // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.pg.test.ts` ("parkOrder concurrent replay").
+    // proven separately against real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -1914,7 +1914,7 @@ describe("abandonHeldOrder", () => {
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
- *  stored, never joined; mirrors working-order.pg.test.ts's OPERATOR). */
+ *  stored, never joined; mirrors working-order.pay-and-dispatch.test.ts's OPERATOR). */
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 /** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
@@ -2568,7 +2568,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
 // grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
-// job (working-order.pg.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
+// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
 // role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
@@ -3418,7 +3418,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
 // plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
-// real-Postgres's job (working-order.pg.test.ts). Every write runs through `withTransaction` + `asAppUser`,
+// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`,
 // so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
@@ -4145,7 +4145,7 @@ describe("addTabRound hold-on-send (A3)", () => {
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the NODE scoping is real-Postgres's job (working-order.pg.test.ts).
+// single backend proves; the NODE scoping is real-Postgres's job (working-order.pay-and-dispatch.test.ts).
 // Every read/write runs through `withTransaction` + `asAppUser`, so the app role's grants are in force.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
@@ -4394,7 +4394,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
 // dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
-// (working-order.pg.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
+// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
 // `withTransaction` + `asAppUser`, so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 

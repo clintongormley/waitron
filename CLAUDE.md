@@ -755,7 +755,7 @@ Adding a new real-PG test package: the shared-container pattern and its knobs ar
   no equivalent. A survivor's forked row is refused by the chain-position unique index
   (`time_entries_chain_position_uq`, SQLSTATE `23505`) however it reaches the database; nothing
   carries rows between nodes today. Guard:
-  `packages/workforce/src/restore-continuation.pg.test.ts`.
+  `packages/workforce/src/restore-continuation.test.ts`.
 
 ---
 

@@ -1042,9 +1042,9 @@ export async function payWorkingOrderIntegrated(
  *
  * The duplicate path is real and reachable rather than dead code: it is exercised end to end by "two
  * concurrent pays for one parked order file ONE sale; the loser replays (one sale/settlement)"
- * (`apps/server/src/till-sale-integrated.pg.test.ts`). That suite used to stage the race on two
+ * (`apps/server/src/till-sale-integrated.db.test.ts`). That suite used to stage the race on two
  * PostgreSQL connections; it now stages it on the one venue handle, and it RUNS —
- * `pnpm --filter @waitron/server exec vitest run src/till-sale-integrated.pg.test.ts` reported
+ * `pnpm --filter @waitron/server exec vitest run src/till-sale-integrated.db.test.ts` reported
  * 30 passed on 2026-09-22. A replay returns the persisted payment facts without reopening the
  * drawer.
  *

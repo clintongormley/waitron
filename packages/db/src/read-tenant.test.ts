@@ -6,7 +6,7 @@ import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 
 // One SELECT against the singleton row. That `tenants` holds exactly one row, keyed 1, is pinned
-// separately by `schema/tenants.singleton.pg.test.ts`.
+// separately by `schema/tenants.singleton.test.ts`.
 
 describe("readTenant", () => {
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -21,7 +21,7 @@ describe("readTenant", () => {
     // parameter (`schema/columns.ts`) — it is not a SQL DEFAULT, so a statement that does not go
     // through drizzle's insert builder never reaches it, and the row is refused
     // `NOT NULL constraint failed: tenants.created_at`. Every other raw insert into this table
-    // states it for the same reason (`schema/tenants.singleton.pg.test.ts`,
+    // states it for the same reason (`schema/tenants.singleton.test.ts`,
     // `testing/venue-db.test.ts`).
     await pg.db.execute(sql`
       insert into tenants (id, country, tax_id, legal_name, created_at)

@@ -44,9 +44,13 @@
  * unique index catches a pair of writers the pre-check let through. On one file with one writer
  * there is no way to stage it here.
  *
- * The stale `.pg.` in this file's own name, and the "over real Postgres" in one describe below, are
- * left for the branch's single rename sweep rather than changed here — the choice
- * `device.pg.test.ts` records.
+ * ## Which of the two `management-api` end-to-end suites this is
+ *
+ * This file is `management-api.accounts-and-receipt-config.test.ts`. Its `describe` blocks are the
+ * sign-in and staff-administration routes and the two receipt-configuration routes;
+ * `management-api.test.ts`'s are the venue-layout routes — zones, dining tables, table placement,
+ * kitchen stations and kitchen courses — plus a two-case sign-in block that mints the cookie those
+ * routes need.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -85,7 +89,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 // A per-file NIF counter, kept rather than fixed because `setupTenant` is called from several places
-// and `tenants_country_tax_id_key` is unique — the same shape `till-api.pg.test.ts` uses.
+// and `tenants_country_tax_id_key` is unique — the same shape `till-api.fiscal-sale-paths.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -184,7 +188,7 @@ function mountApp(
 ): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
-  // `till-api.pg.test.ts`'s `apiDeps`). `rpId`/`origin` are the loopback passkey Relying Party
+  // `till-api.fiscal-sale-paths.test.ts`'s `apiDeps`). `rpId`/`origin` are the loopback passkey Relying Party
   // values (these suites exercise the staff routes, not the passkey ceremonies — those are covered
   // in Task 5 — but the widened `ManagementApiDeps` requires both).
   mountManagementApi(
@@ -241,7 +245,7 @@ async function countPersonsNamed(displayName: string): Promise<number> {
   return rows.length;
 }
 
-describe("Management API staff + session routes over real Postgres", () => {
+describe("Management API staff + session routes", () => {
   it("lets only one concurrent invitation claim a live display name", async () => {
     await setupTenant();
     const app = mountApp();
