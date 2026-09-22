@@ -412,8 +412,14 @@ describe("runEntry", () => {
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() =>
             Promise.reject(
+              // The shape the engine the box runs produces, wrapped the way drizzle wraps it: the
+              // result code and the message sit on the cause. A missing column used to arrive as
+              // SQLSTATE `42703`, which nothing can raise here any more.
               new Error("Failed query", {
-                cause: Object.assign(new Error("driver"), { code: "42703" }),
+                cause: Object.assign(new Error("no such column: legal_name"), {
+                  errcode: 1,
+                  code: "ERR_SQLITE_ERROR",
+                }),
               }),
             ),
           ),

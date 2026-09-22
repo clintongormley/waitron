@@ -94,7 +94,7 @@ export { perDishOptionQuantity } from "./quantity.js";
 export { deriveDisplayName } from "./derive-display-name.js";
 export { isValidTelephone } from "./telephone.js";
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
-export { sqlStateOf } from "./sql-state.js";
+export { sqliteFailureOf } from "./engine-failure.js";
 export { quoteLiteral } from "./sql-literal.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
 

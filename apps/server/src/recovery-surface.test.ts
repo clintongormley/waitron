@@ -271,12 +271,11 @@ describe("curated operator text", () => {
     expect(missing).toEqual([]);
   });
 
-  // `classifyBootFailure` returns `provisioning.database_unreachable` for three different causes: the
-  // bounded connection wait timing out, and the SQLSTATEs `28P01` (wrong password) and `3D000` (no
-  // such database) (`boot-failure.ts`, `UNREACHABLE_SQL_STATES`). Restarting a box cannot change a
-  // password or create a database, so an action that ends at "restart the box" is advice that cannot
-  // work for two of the three. Both halves are asserted: the retry that DOES fix the transient cause,
-  // and the person who can fix the other two.
+  // `classifyBootFailure` returns `provisioning.database_unreachable` for one cause now: the engine
+  // could not open the box's database file (`boot-failure.ts`, `UNREACHABLE_RESULT_CODES`). A retry
+  // and a restart can fix it — a volume that did not come up — and nothing the operator can do at the
+  // box fixes the rest, so both halves are still asserted: the action they can take themselves, and
+  // the person to escalate to when it does not work.
   it("offers a database_unreachable both a retry and the person a restart cannot replace", () => {
     const text = OPERATOR_TEXT["provisioning.database_unreachable"];
     expect(text).toBeDefined();

@@ -10,14 +10,20 @@ export const MAX_CAUSE_DEPTH = 5;
  * The first `code` in an error's `cause` chain that `accept` recognises, or `null`.
  *
  * The walk exists because the code is not on the error its callers catch: Drizzle wraps the
- * driver's error rather than re-exposing its fields. `sqlStateOf` (`sql-state.ts`) and
- * `classifyBootFailure`'s socket lookup (`apps/server/src/boot-failure.ts`) differ ONLY in the
- * predicate, so THOSE TWO share this loop.
+ * driver's error rather than re-exposing its fields.
  *
- * A third walk exists and does not reuse it: `failureDetail` (`apps/server/src/node-entry.ts`)
- * collects every level's name, message and params rather than stopping at the first match, so it
- * cannot be a predicate over this function. It imports `MAX_CAUSE_DEPTH` above, so the BOUND and
- * the argument for it are still stated once even though the loop is not.
+ * **NOTHING IN THE TREE CALLS IT TODAY**, and that is worth knowing before reading it as a pattern.
+ * Its two callers read a PostgreSQL SQLSTATE and a Node socket code off `code`, and both went with
+ * the storage switch: this engine puts a NUMBER on `errcode` and the fixed string
+ * `"ERR_SQLITE_ERROR"` on `code`, so a predicate over `code` can tell a caller nothing
+ * (`sqliteFailureOf`, `engine-failure.ts`, is what replaced them). It is kept, uncalled, because
+ * `MAX_CAUSE_DEPTH` and the two arguments below are what the tree still shares, and because the
+ * next thing to walk a cause chain for a string code should not write the loop again.
+ *
+ * Two other walks exist and do not reuse it: `sqliteFailureOf` carries a number and a message out
+ * rather than a code, and `failureDetail` (`apps/server/src/node-entry.ts`) collects every level's
+ * name, message and params rather than stopping at the first match. Both import `MAX_CAUSE_DEPTH`
+ * above, so the BOUND and the argument for it are still stated once even though the loop is not.
  *
  * Termination rests on `MAX_CAUSE_DEPTH` ALONE. The `cause === current` line is a redundant early
  * exit, kept because it names the one cycle shape cheaply: measured 2026-09-10, deleting the bound

@@ -136,11 +136,13 @@ backticked path because `scripts/claude-md-pointers.test.ts` would read one as a
 trap it illustrates is unchanged — a migration a shared seeded database cannot satisfy.)
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
-logs `migrations.dev_constraint_violation` with the SQLSTATE and that command, then re-throws the
-original error untouched — including when the log sink itself throws. It fires only when
+logs `migrations.dev_constraint_violation` with the engine's result code and that command, then
+re-throws the original error untouched — including when the log sink itself throws. It fires only when
 `WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`), which both `dev-setup` and
 `dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
-of SQLSTATEs where a constraint met row data.
+of result codes where a constraint met row data. (It read a PostgreSQL SQLSTATE until the storage
+switch; `23502` in the example above is what the old engine reported, and this one reports
+`NOT NULL constraint failed: <table>.<column>`, errcode 1299.)
 
 **What that line may and may not claim.** A constraint violation says a rule was broken. It does not
 say whether the offending rows were already in the table or were inserted by the same migration —

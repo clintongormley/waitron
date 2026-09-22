@@ -1,25 +1,30 @@
-import { sqlStateOf } from "@waitron/shared";
+import { sqliteFailureOf } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 
 /**
- * The SQLSTATEs PostgreSQL raises when a migration asks for something the rows in a table do not
- * satisfy. A pinned membership list, never a class-`23` prefix match, for the same reason
- * `boot-failure.ts` pins its tables: the line below names an action, so each entry has to be
- * unambiguously about a constraint meeting row data.
+ * What the engine reports when a migration asks for something the rows already in a table do not
+ * satisfy. Each is `SQLITE_CONSTRAINT` (19) with the reason in the high byte, and each was taken
+ * from a real refusal on Node v26.7.0, 2026-09-22.
  *
- * Shares no code with any table in `boot-failure.ts`, which a test pins rather than a comment
+ * A pinned membership list, never a test of the low byte, for the same reason `boot-failure.ts`
+ * pins its list: the line below names an ACTION, so each entry has to be unambiguously about rows
+ * failing a constraint. A trigger's own `raise(abort)` (1811) is deliberately absent — it is a rule
+ * this schema chose to enforce, not row data meeting a new constraint, and `ON DELETE RESTRICT`
+ * arrives under the same number (`packages/db/src/sql-state.ts` carries that collision).
+ *
+ * Shares no code with the list in `boot-failure.ts`, which a test pins rather than a comment
  * asserting it: that file's advice for a schema mismatch is to RESTORE the database, and sending a
  * reader to wipe one instead is the failure worth a guard.
  */
-export const MIGRATION_CONSTRAINT_SQL_STATES: readonly string[] = [
-  "23502", // not_null_violation
-  "23503", // foreign_key_violation
-  "23505", // unique_violation
-  "23514", // check_violation
-  "23P01", // exclusion_violation
+export const MIGRATION_CONSTRAINT_RESULT_CODES: readonly number[] = [
+  275, // CHECK
+  787, // FOREIGN KEY
+  1299, // NOT NULL
+  1555, // PRIMARY KEY
+  2067, // UNIQUE index
 ];
 
-const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
+const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_RESULT_CODES);
 
 /**
  * Runs the boot migrations, and when they fail in DEV on a constraint, says so in one line before
@@ -27,8 +32,8 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  *
  * Why this is worth a line: migrations here are written with no data-preservation code on purpose
  * (CLAUDE.md §3 — schema changes drop and recreate until Waitron is in production), while the
- * development Postgres is one shared, seeded volume that every worktree boots against, and moving
- * between worktrees does not normally wipe it (`wa-wt` decides when it does; the guide says where).
+ * development database is one shared, seeded venue directory that every worktree boots against, and
+ * moving between worktrees does not normally wipe it (`wa-wt` decides when it does; the guide says where).
  * So a migration that adds a column no existing row can fill dies at boot with a raw driver stack
  * trace, while the dashboard still loads and shows nothing until someone tries to sign in.
  * `docs/developers/workflow-guide.md` works the case through.
@@ -41,7 +46,7 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  * how `boot-failure.ts` answered the same ambiguity.
  *
  * DEV ONLY, because the remedy named is `wa-wt reset`, which exists nowhere else; on a real box the
- * same SQLSTATE means something else and wiping would be wrong advice. It is a separate seam from
+ * same refusal means something else and wiping would be wrong advice. It is a separate seam from
  * `classifyBootFailure` (`boot-failure.ts`) — not just a separate table — because that function
  * classifies for the box operator's recovery page and takes no `devMode` to gate on.
  *
@@ -59,14 +64,15 @@ export async function withDevMigrationHint(
   try {
     await run();
   } catch (error) {
-    // `sqlStateOf` reports the FIRST SQLSTATE-shaped code in the cause chain, so an outer code
-    // decides: a driver failure wrapped in something carrying its own code is judged on the outer
-    // one, which may fire this line or silence it. Either way the raw failure still reaches the log.
-    const sqlState = devMode ? sqlStateOf(error) : null;
-    if (sqlState !== null && CONSTRAINT.has(sqlState)) {
+    // `sqliteFailureOf` reports the FIRST layer of the cause chain carrying a result code, so an
+    // outer layer decides: a driver failure wrapped in something carrying its own `errcode` is
+    // judged on the outer one, which may fire this line or silence it. Either way the raw failure
+    // still reaches the log.
+    const failure = devMode ? sqliteFailureOf(error) : null;
+    if (failure !== null && CONSTRAINT.has(failure.errcode)) {
       try {
         log("error", "migrations.dev_constraint_violation", {
-          sqlState,
+          errcode: failure.errcode,
           remedyIfStaleDatabase: "wa-wt reset demo <worktree-name>",
         });
       } catch {
