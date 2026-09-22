@@ -53,7 +53,7 @@ import { mountManagementApi } from "./management-api.js";
  * and on this engine a foreign-key refusal names neither: a bad `zone_id` and a bad `location_id`
  * both report `"FOREIGN KEY constraint failed"`, errcode 787, byte-identical. `apps/server/src/tables.ts`
  * reads the zone row first now (`requireZone`) rather than reading the refusal, so the two cases
- * assert what they always did and pass. The file is green — run on its own, 2026-09-23.
+ * assert what they always did and pass. The file is green — run on its own, 2026-09-22.
  */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.

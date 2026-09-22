@@ -57,7 +57,7 @@ import "./errors.js";
  * SQLite's integer reached the JSON body unconverted and the dashboard was handed `0` and `1` where
  * it expects `false` and `true`. The route derives the field in JavaScript now
  * (`apps/server/src/payments-api.ts`, `canEnable: unpairedAt === null`), and this file is green —
- * run on its own, 2026-09-23.
+ * run on its own, 2026-09-22.
  */
 const noopLog: Logger = () => {};
 

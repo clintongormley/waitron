@@ -26,7 +26,7 @@ import { recordTillSale } from "./till-sale.js";
  *    `desglose.map`. `packages/fiscal-verifactu/src/backend.ts` decodes the row it read
  *    (`decodeRegistroRow`).
  *
- * The file is green — run on its own, 2026-09-23.
+ * The file is green — run on its own, 2026-09-22.
  */
 // The full manifest, because the first case files a real fiscal record through `recordTillSale`.
 // `resetPerTest: false`: the venue set up once in `beforeAll` is read by every case, and each case

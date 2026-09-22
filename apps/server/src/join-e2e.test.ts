@@ -17,7 +17,7 @@
  * **A blocker this header used to declare is fixed.** The shared fixture seeded `persons` with raw
  * SQL, which reaches no `$defaultFn` generator, so every case here died on
  * `NOT NULL constraint failed: persons.id`. `apps/server/src/testing/venue-fixtures.ts` writes those
- * rows through the table definition now, and this file is green — run on its own, 2026-09-23.
+ * rows through the table definition now, and this file is green — run on its own, 2026-09-22.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";

@@ -18,12 +18,12 @@ import { describe, expect, it } from "vitest";
  * `SQLiteAsyncDialect.migrate` carries the same two statements at lines 690-692 and 696.
  * The SQLite dialect is the one that RUNS: `packages/db/src/migrate.ts` imports
  * `drizzle-orm/better-sqlite3/migrator`, and the PostgreSQL migrators it used to dispatch to went
- * with the storage switch. A `pg-core/dialect.js` citation stood here until 2026-09-23 and is gone
+ * with the storage switch. A `pg-core/dialect.js` citation stood here until 2026-09-22 and is gone
  * with them.
  *
  * WHAT THIS GUARD CHECKS TODAY, AND WHAT IT DOES NOT. Nearly every set is a single regenerated
  * SQLite baseline — `packages/db` and `packages/media` carry two entries each, `packages/fiscal-none`
- * none at all, and every other set exactly one (counted 2026-09-23 over the journals on disk). A
+ * none at all, and every other set exactly one (counted 2026-09-22 over the journals on disk). A
  * one-entry journal can never be out of order, so those sets' cases below hold BY CONSTRUCTION: they
  * are not evidence that any `when` value in the tree is right, and a reader must not take them as
  * such. What is really exercised today is `outOfOrder` itself, pinned by the synthetic negative

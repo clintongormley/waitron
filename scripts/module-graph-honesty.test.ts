@@ -45,7 +45,7 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   nobody and its FK edge dropped — silently, because a dropped edge looks exactly like an honest
  *   descriptor. `drizzle-kit`'s generated SQL uses backticks, so nothing in the tree does this
  *   today; a migration that starts to is outside this guard.
- * - THE TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN, and this entry said it did not until 2026-09-23.
+ * - THE TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN, and this entry said it did not until 2026-09-22.
  *   The claim was taken on 2026-09-21, when the SQLite regeneration had just replaced every
  *   hand-written custom migration with a generated baseline; two hand-written sets have landed since.
  *   `grep -Ein 'create (constraint )?trigger'` over every `packages/<pkg>/drizzle/*.sql` now matches
