@@ -244,9 +244,6 @@ importers:
       '@waitron/venue-service':
         specifier: workspace:*
         version: link:../../packages/venue-service
-      '@waitron/verifactu':
-        specifier: workspace:*
-        version: link:../../packages/verifactu
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../../packages/workforce
@@ -317,6 +314,9 @@ importers:
       '@waitron/print-agent-app':
         specifier: workspace:*
         version: link:../print-agent
+      '@waitron/verifactu':
+        specifier: ^0.1.0
+        version: 0.1.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -993,8 +993,8 @@ importers:
         specifier: workspace:*
         version: link:../sync-enrolment
       '@waitron/verifactu':
-        specifier: workspace:*
-        version: link:../verifactu
+        specifier: ^0.1.0
+        version: 0.1.0
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
@@ -1509,8 +1509,8 @@ importers:
         specifier: workspace:*
         version: link:../fiscal-verifactu
       '@waitron/verifactu':
-        specifier: workspace:*
-        version: link:../verifactu
+        specifier: ^0.1.0
+        version: 0.1.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -1853,34 +1853,6 @@ importers:
       playwright:
         specifier: ^1.63.0
         version: 1.63.0
-      typescript:
-        specifier: ^7.0.0
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.11
-        version: 4.1.11(@types/node@26.6.2)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.0))
-
-  packages/verifactu:
-    dependencies:
-      fast-xml-parser:
-        specifier: ^5.11.1
-        version: 5.11.1
-    devDependencies:
-      '@stryker-mutator/core':
-        specifier: ^10.0.0
-        version: 10.0.0(@types/node@26.6.2)
-      '@stryker-mutator/vitest-runner':
-        specifier: ^10.0.0
-        version: 10.0.0(@stryker-mutator/core@10.0.0(@types/node@26.6.2))(vitest@4.1.11)
-      '@types/node':
-        specifier: ^26.0.0
-        version: 26.6.2
-      '@vitest/coverage-v8':
-        specifier: ^4.1.11
-        version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
-      fast-check:
-        specifier: ^4.10.1
-        version: 4.10.1
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -3702,6 +3674,9 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
+
+  '@waitron/verifactu@0.1.0':
+    resolution: {integrity: sha512-6eT+y27OmMOttUsoAPbCaI97Wl9XA8uak77pWZjkevB22bM0fnVwTd/cUtnyCqzfdbdO7rLGaQPXMC8OpA0IJA==}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -7242,6 +7217,10 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
+
+  '@waitron/verifactu@0.1.0':
+    dependencies:
+      fast-xml-parser: 5.11.1
 
   abort-controller@3.0.0:
     dependencies:

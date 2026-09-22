@@ -814,8 +814,11 @@ What the product attachment (#456, the plan's Task 6) left behind:
   and both were met here. The cycle is a third thing: the rewrite deletes its own rows first and
   only then inserts rows whose foreign key needs a lock on the parent, while a delete of that parent
   holds the parent row and waits for those same child rows through its cascade. Measured on both
-  kinds of list (`40P01`), fixed by locking the referenced rows before touching the child rows, and
-  pinned by `packages/catalogue/src/product-modifiers.pg.test.ts`. **Next action:** add the third
+  kinds of list (`40P01`), fixed by locking the referenced rows before touching the child rows.
+  Nothing pins it now: one write transaction runs on the venue file at a time, so the three-way
+  choreography cannot be staged and the deadlock is not a shape this engine can produce — the
+  successor suite `packages/catalogue/src/product-modifiers.concurrency.test.ts` says so in its
+  header and asserts the outcome only. **Next action:** add the third
   condition to `CLAUDE.md` §3 with its receipt in
   [conventions-data.md](developers/conventions-data.md) — a root `CLAUDE.md` edit takes the normal
   branch-and-pull-request flow.
@@ -2053,9 +2056,10 @@ image constraints under *Detail → Box image*.
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
 - **A seventh incident, with a cause rather than a hypothesis — FIXED on #469 (2026-09-20).**
-  `test-light-b` timed out in `packages/catalogue/src/extras.pg.test.ts` because the suite's `until`
-  helper polled with a 5s bound inside a 30s test timeout; the sibling
-  `packages/catalogue/src/product-modifiers.pg.test.ts` had already raised the same bound to 15s and
+  `test-light-b` timed out in `packages/catalogue/src/extras.concurrency.test.ts` (named
+  `extras.pg.test.ts` at the time) because the suite's `until` helper polled with a 5s bound inside
+  a 30s test timeout; the sibling
+  `packages/catalogue/src/product-modifiers.concurrency.test.ts` had already raised the same bound to 15s and
   this twin was left behind. Raised to match; it reproduced on no local run, so the fix rests on the
   identified mechanism and the sibling's receipt, not on a reproduction.
 - **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**

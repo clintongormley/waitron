@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { invoiceSeries, sales, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
