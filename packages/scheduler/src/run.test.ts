@@ -1,6 +1,9 @@
-import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 // Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
@@ -9,6 +12,7 @@ import { AppError } from "@waitron/shared";
 // this import is test-only, exactly the reason it is a devDependency here.
 import "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
+import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import * as store from "./store.js";
@@ -23,10 +27,18 @@ const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
 const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  timeoutMs: 60_000,
+});
+
+let db: Database;
+beforeAll(() => {
+  db = suite.db;
+});
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
+  await seedTenant(db);
 });
 
 afterEach(() => {
@@ -47,7 +59,7 @@ function deps(
   duties: SchedulerDeps["duties"],
   overrides: Partial<SchedulerDeps> = {},
 ): SchedulerDeps {
-  return { db: suite.db, duties, ...DEFAULTS, ...overrides };
+  return { db, duties, ...DEFAULTS, ...overrides };
 }
 
 describe("runDue", () => {
@@ -69,13 +81,22 @@ describe("runDue", () => {
 
     // Read the column directly: readSnapshot deliberately omits `summary`, since derivation never
     // needs it and a large one would be read on every tick for nothing.
-    const stored = await withTransaction(suite.db, (tx) =>
-      tx.execute<{ summary: Record<string, unknown> }>(
-        sql`select summary from scheduled_runs where duty = 'test.duty'`,
-      ),
+    //
+    // Through the TABLE OBJECT rather than raw `sql`select summary …``, which is what this read was
+    // on PostgreSQL. `summary` is `json()`, and that helper is `text(name, { mode: "json" })`
+    // (`packages/db/src/schema/columns.ts`) — a text column with a codec on the drizzle column, not
+    // a type the engine knows. A raw `execute` bypasses the codec and hands back the stored STRING:
+    // measured on this tree, the same assertion against a raw select failed with
+    // `expected '{"remediationFailures":[…]}' to deeply equal { remediationFailures: [ … ] }`.
+    // PostgreSQL's driver parsed `jsonb` itself, which is why the raw form used to work.
+    const stored = await withTransaction(db, (tx) =>
+      tx
+        .select({ summary: scheduledRuns.summary })
+        .from(scheduledRuns)
+        .where(eq(scheduledRuns.duty, "test.duty")),
     );
-    expect(stored.rows).toHaveLength(1);
-    expect(stored.rows[0]!.summary).toEqual({
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.summary).toEqual({
       remediationFailures: [{ paymentRef: "pi_1", reason: "x" }],
     });
   });
@@ -101,13 +122,12 @@ describe("runDue", () => {
       outcome: "failed",
       errorCode: "payment.reconcile_unsettled",
     });
-    const snapshot = await withTransaction(suite.db, (tx) =>
+    const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
-    // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Store timestamps are normalised
-    // ISO-8601 via `to_json(col) #>> '{}'`, which renders the offset form
-    // (`"2026-07-25T04:15:00+00:00"`), not the `.000Z` literal — parse-then-compare, as
-    // packages/payments/src/store.test.ts's convention already does.
+    // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Parse-then-compare rather than a
+    // string equality, as packages/payments/src/store.test.ts's convention already does: the
+    // rendering of a stored timestamp belongs to the store, and this case is about the interval.
     expect(new Date(snapshot.rows[0]!.nextAttemptAt!).toISOString()).toBe(
       "2026-07-25T04:15:00.000Z",
     );
@@ -133,7 +153,7 @@ describe("runDue", () => {
     }
     const after = await runDue(deps([duty]), at);
 
-    const snapshot = await withTransaction(suite.db, (tx) =>
+    const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // A parked row is non-terminal in neither sense: it stays visible in the snapshot, but it is
@@ -200,18 +220,26 @@ describe("runDue", () => {
   // reading that stops polling permanently. `Math.min(Infinity, retryAt)` is `retryAt`, which is
   // why this case needs no branch of its own in `runDue`.
   it("reports the skip-retry interval, never `null`, when the snapshot read itself fails", async () => {
-    // A real driver failure rather than a stub: a closed PGlite connection is exactly what a
-    // database that has gone away looks like at this seam, and it costs no cast.
-    const dead = await createPgliteDb();
+    // A real driver failure rather than a stub: a CLOSED venue file is exactly what a database that
+    // has gone away looks like at this seam, and it costs no cast. It is a database of this case's
+    // own rather than the suite's, because `useVenueDb` owns that one's lifecycle and every other
+    // case in the file reads it. Named `dead` rather than `store` so it does not shadow this
+    // module's `import * as store from "./store.js"`.
+    const directory = await mkdtemp(join(tmpdir(), "waitron-scheduler-dead-"));
+    const dead = await openVenueDatabase(directory);
     await dead.close();
 
-    const duty = new FakeDuty();
-    const result = await runDue({ ...deps([duty]), db: dead }, NOW);
+    try {
+      const duty = new FakeDuty();
+      const result = await runDue({ ...deps([duty]), db: dead.venue }, NOW);
 
-    expect(result.ran).toEqual([]);
-    expect(result.skipped).toHaveLength(1);
-    expect(duty.calls).toEqual([]);
-    expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
+      expect(result.ran).toEqual([]);
+      expect(result.skipped).toHaveLength(1);
+      expect(duty.calls).toEqual([]);
+      expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   // THE FOLD, and the reason it is a fold rather than an assignment. Before this, a skip
@@ -295,14 +323,14 @@ describe("runDue", () => {
   // `completeRun` with ITS OWN (now-superseded) `startedAt`, the ownership fence rejects it.
   it("treats a completion lost to a mid-flight reclaim as 'this attempt owns nothing' — absent from ran", async () => {
     const duty = new FakeDuty("test.duty", async (call) => {
-      const snapshot = await withTransaction(suite.db, (tx) =>
+      const snapshot = await withTransaction(db, (tx) =>
         readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
       );
       const row = snapshot.rows.find(
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       );
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTransaction(suite.db, (tx) =>
+      const reclaimed = await withTransaction(db, (tx) =>
         reclaimStale(tx, { id: row!.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       // Confirms the reclaim actually won — otherwise the rest of this test would be asserting
@@ -318,7 +346,7 @@ describe("runDue", () => {
 
     // The row itself must still read exactly as the reclaim left it — running, at the reclaim's
     // attempt count — never overwritten by the lost attempt's (rejected) completion.
-    const snapshot = await withTransaction(suite.db, (tx) =>
+    const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     expect(snapshot.rows[0]).toMatchObject({ state: "running", attempts: 2 });
@@ -356,7 +384,7 @@ describe("runDue", () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     // Simulate a crashed process: claim the period directly (bypassing `runDue`, which always
     // completes what it claims) and never call `completeRun`.
-    const stranded = await withTransaction(suite.db, (tx) =>
+    const stranded = await withTransaction(db, (tx) =>
       claimGap(tx, { duty: "test.duty", period, now: NOW }),
     );
     expect(stranded).not.toBeNull();
@@ -373,7 +401,7 @@ describe("runDue", () => {
     expect(result.ran).toHaveLength(1);
     expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 0 });
 
-    const snapshot = await withTransaction(suite.db, (tx) =>
+    const snapshot = await withTransaction(db, (tx) =>
       readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // Exactly one row for the period — a RECLAIM of the stranded row, not a second row inserted

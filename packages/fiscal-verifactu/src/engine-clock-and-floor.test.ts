@@ -14,11 +14,12 @@ import { raiseInstallationFloor } from "./restore.js";
  * chain-head reset it calls, and in `markDelivered`.
  *
  * The cases live here rather than in `restore.test.ts`, `registro-sif.test.ts` and `acks.test.ts`
- * because all three of those suites die in their own setup before reaching any of it. Run one file
- * at a time (`pnpm --filter @waitron/fiscal-verifactu test -- <file>`, 2026-09-22): the first two
- * report `createPgliteDb is not a function`, the third `near "truncate": syntax error`. Converting
- * those suites is not this change; when they run again, these cases belong beside the code they
- * cover.
+ * because all three of those suites died in their own setup before reaching any of it. Two of the
+ * three no longer do. Measured one file at a time, `pnpm --filter @waitron/fiscal-verifactu exec
+ * vitest run src/<file> --reporter=dot` (2026-09-22): `restore.test.ts` reports 10 passed and
+ * `registro-sif.test.ts` 16 passed, while `acks.test.ts` still reports 10 failed, every one of them
+ * `near "truncate": syntax error`. Moving these cases back beside the code they cover is not this
+ * change — but for the first two it is no longer blocked.
  */
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });

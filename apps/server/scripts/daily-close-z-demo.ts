@@ -3,15 +3,22 @@
 // Where that demo prints the DERIVED close (`computeDailyClose`, a pure read), this one exercises the
 // WRITE path: `recordDailyClose` snapshots the day, reconciles the physical cash counts per till,
 // appends one immutable hash-chained `daily_closes` row, and `verifyDailyCloseChain` re-walks the
-// chain. It boots an in-memory PGlite (a WASM PostgreSQL), applies `@waitron/db`'s CORE_MIGRATIONS
-// (whose 0033 creates `daily_closes` + `daily_close_chain`), and rings a real day of trade through
-// the REAL write path (`recordSale` from `@waitron/core`) against the fake `FiscalBackend` from
-// `@waitron/fiscal` — no external Postgres, no AEAT, no SIF registration.
+// chain. It makes a throwaway venue directory under the OS temp dir, applies the `core` migration
+// set to it through `applyMigrations` (the entry point `dev-setup.ts` also uses; the set creates
+// `daily_closes` + `daily_close_chain`), rings a real day of trade through the REAL write path
+// (`recordSale` from `@waitron/core`) against the fake `FiscalBackend` from `@waitron/fiscal` — no
+// AEAT and no SIF registration — and removes the directory when it finishes.
 //
-// PGlite is the right target for a demo: everything shown here is deterministic logic over immutable
-// commercial rows (the snapshot, the per-till variance arithmetic, the hash chain). The non-superuser
-// deployment role and two-writer contention — two of the things PGlite cannot show — are
-// covered by `record-daily-close.pg.test.ts` on real Postgres, not by a demo.
+// Everything shown here is deterministic logic over immutable commercial rows: the snapshot, the
+// per-till variance arithmetic, the hash chain. What a demo cannot show is what happens when two
+// closers run at once; that is `packages/reporting/src/record-daily-close.pg.test.ts`, whose own
+// header records which of its cases survived the move off PostgreSQL and which did not.
+//
+// LOST with the storage swap: every write below used to run through `asAppUser`, to show the POS
+// closing the day as `app_user` rather than as the owner. SQLite has no roles and no grants, and
+// `asAppUser` is now an empty function (`packages/db/src/testing/roles.ts`), so that part of the
+// demonstration is gone; the calls are deleted rather than left as no-ops that still read like a
+// claim. The same sentence in the suite named above records what nothing buys any more.
 //
 // The day it rings up — business day 2026-08-04, Europe/Madrid, across TWO tills at one node:
 //   Caja 1: base 100.00 @ 21% → 121.00 CASH  ;  base 40.00 @ 10% → 44.00 CARD
@@ -30,7 +37,9 @@
 //   pnpm --filter @waitron/server exec tsx scripts/daily-close-z-demo.ts
 //   # or, via the package script:
 //   pnpm --filter @waitron/server demo:daily-close-z
-import { sql } from "drizzle-orm";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { recordDailyClose, verifyDailyCloseChain } from "@waitron/reporting";
@@ -38,13 +47,16 @@ import type { CashCountInput, DailyCloseRecord } from "@waitron/reporting";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
+  tenants,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   nodeId as brandNodeId,
@@ -52,6 +64,10 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+
+/** The one migration set this demo applies: core carries the commercial tables, `daily_closes` and
+ * `daily_close_chain`. */
+const SETS = ["core"];
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -97,35 +113,44 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location → two tills → node → standard series as the PGlite superuser, exactly
- * as the package's own fixtures do — `app_user` holds no INSERT on `tenants`, deliberately (a
- * running POS cannot create tenants).
+ * Seeds tenant → location → two tills → node → standard series.
+ *
+ * Drizzle inserts rather than the raw SQL that was here: these `id` columns no longer carry a SQL
+ * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
+ * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
+ * text column, not the PostgreSQL `array['es-ES']` this used to write.
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  await db.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name)
-          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
-  );
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till1 = await db.execute<{ id: string }>(
-    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`,
-  );
-  const caja1 = brandTillId(till1.rows[0]!.id);
-  const till2 = await db.execute<{ id: string }>(
-    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 2') returning id`,
-  );
-  const caja2 = brandTillId(till2.rows[0]!.id);
-  const node = await db.execute<{ id: string }>(
-    sql`insert into nodes (location_id, name) values (${locationId}, 'Nodo 1') returning id`,
-  );
-  const nodeId = brandNodeId(node.rows[0]!.id);
-  const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
-  );
-  const seriesId = brandSeriesId(series.rows[0]!.id);
+  await db.insert(tenants).values({ country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till1] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const caja1 = brandTillId(till1!.id);
+  const [till2] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 2" })
+    .returning({ id: tills.id });
+  const caja2 = brandTillId(till2!.id);
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId, name: "Nodo 1" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  const seriesId = brandSeriesId(series!.id);
   const tillNames = new Map<string, string>([
     [caja1, "Caja 1"],
     [caja2, "Caja 2"],
@@ -175,12 +200,11 @@ async function ringSale(
     },
   };
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await recordSale(tx, backend, input);
   });
 }
 
-/** `recordDailyClose` for one business day, run as the application role. */
+/** `recordDailyClose` for one business day. */
 function closeDay(
   db: Database,
   venue: Venue,
@@ -188,7 +212,6 @@ function closeDay(
   cashCounts: CashCountInput[],
 ): Promise<DailyCloseRecord> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return recordDailyClose(tx, {
       nodeId: venue.nodeId,
       businessDay,
@@ -202,7 +225,6 @@ function closeDay(
 
 function verifyChain(db: Database, venue: Venue) {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }
@@ -261,17 +283,22 @@ function printRecord(venue: Venue, rec: DailyCloseRecord): void {
 }
 
 async function main(): Promise<void> {
-  const db = await createPgliteDb();
+  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
+  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; `openVenueDatabase` then
+  // hands back the venue handle every write below takes.
+  const venueDir = await mkdtemp(join(tmpdir(), "daily-close-z-demo-"));
+  const sets = manifestSets().filter((set) => SETS.includes(set.name));
+  await applyMigrations(venueDir, migrationOptionsFor(sets, null));
+  const store = await openVenueDatabase(venueDir);
+  const db = store.venue;
   try {
-    await runMigrations(db, CORE_MIGRATIONS);
     await FakeFiscalBackend.install(db);
     const venue = await seedVenue(db);
     const backend = new FakeFiscalBackend(db);
 
-    // Register the node once (a one-time admin action recordSale itself never performs), as app_user
-    // in its own committed transaction so the later write transactions see it.
+    // Register the node once (a one-time admin action recordSale itself never performs), in its own
+    // committed transaction so the later write transactions see it.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, venue.nodeId);
     });
 
@@ -365,7 +392,8 @@ async function main(): Promise<void> {
     const v2 = await verifyChain(db, venue);
     console.log(`\nverifyDailyCloseChain → ok: ${v2.ok}`);
   } finally {
-    await db.close();
+    await store.close();
+    await rm(venueDir, { recursive: true, force: true });
   }
 }
 

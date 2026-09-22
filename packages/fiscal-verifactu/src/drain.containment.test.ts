@@ -2,11 +2,29 @@ import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
-import { createPgliteDb, runMigrations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
+
+/**
+ * **Every case in this file is RED, and none of them is red for a reason inside this file.**
+ *
+ * `drain()`'s first act is `workIsDue`, which asks the database for
+ * `envios_work_due(<instant>::timestamptz)` (`./drain.ts:148`) — a PostgreSQL scalar function
+ * behind a PostgreSQL cast, and this engine has neither. Measured against a database migrated by
+ * `TEST_MIGRATIONS`, with a control in the other direction:
+ *
+ * - `select envios_work_due('2026-07-21T00:01:00Z'::timestamptz) as due` → `unrecognized token: ":"`
+ * - the same statement with the cast removed → `no such function: envios_work_due`
+ * - the control, `select count(*) as n from envios` → no error
+ *
+ * So the table is there and the connection is sound; it is the function and the cast that are not,
+ * and removing only the cast would not be enough. Nothing in `packages/fiscal-verifactu/drizzle/`
+ * or `packages/store` defines `envios_work_due` on this engine (grepped 2026-09-22). Converting
+ * `drain.ts` is product work, not test work, so these cases are left failing rather than adjusted:
+ * the moment `drain()` runs here, they should go green unchanged.
+ */
 
 // A `now` a minute after the fixtures' fixed `2026-07-21T00:00:00Z`, so the seeded rows are due.
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -37,19 +55,43 @@ function recordingResolver(): { resolveClient: () => Promise<VerifactuClient>; a
 
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
+/**
+ * A second database of its own, for the one case below whose subject is an EMPTY one.
+ *
+ * The dedicated instance this replaces was opened and closed inside the test body. The reason it
+ * existed is unchanged — the tests sharing `pg` leave permanently-due rows behind, and "nothing is
+ * due" has to be true of the whole database — but the helper owns the lifecycle now, so nothing in
+ * this file opens or closes a file itself (CLAUDE.md §4).
+ */
+const idle = useVenueDb({
+  migrations: TEST_MIGRATIONS,
+  // Wrapped rather than passed straight through: `seedTenantWithSif` resolves to the seeded till,
+  // and `setup` is typed `(db) => Promise<void>`. Nothing here reads the till.
+  setup: async (db) => {
+    await seedTenantWithSif(db);
+  },
+});
+
+/**
+ * A third, for the one case that CLOSES its database as the experiment.
+ *
+ * `resetPerTest: false` is required rather than tidy: the helper's `afterEach` empties the tables,
+ * and a database the test just closed refuses that with `database is not open`, which would fail
+ * the case for a reason unrelated to what it asserts. The helper's `afterAll` still closes and
+ * removes it — `StoreHandle.close` is idempotent by construction
+ * (`packages/store/src/index.ts:178`), so the second close is a no-op rather than a throw.
+ */
+const solo = useVenueDb({ migrations: TEST_MIGRATIONS, resetPerTest: false });
+
 describe("drain resolves a client only when it has work", () => {
   it("never asks the resolver when nothing is due", async () => {
     // The negative half, and it is not pedantry: the resolver DECRYPTS a certificate, so resolving
     // one on a pass with no due work would put the venue's private key in memory for nothing.
-    // Its own PGlite instance, not the suite's shared one: the tests below leave permanently-due
-    // rows behind, and "nothing is due" has to be true of the whole database.
-    const idleDb = await createPgliteDb();
-    for (const migrations of TEST_MIGRATIONS) await runMigrations(idleDb, migrations);
-    await seedTenantWithSif(idleDb); // a venue with a till and a SIF, but no envios
+    // `idle` is seeded with a venue, a till and a SIF, but no envios.
     const resolver = recordingResolver();
     const result = await drain(
       {
-        db: idleDb,
+        db: idle.db,
         resolveClient: resolver.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -58,7 +100,6 @@ describe("drain resolves a client only when it has work", () => {
     );
     expect(resolver.asked).toBe(0);
     expect(result.tenantsWithWork).toBe(0);
-    await idleDb.close();
   });
 
   it("reports a pass whose client cannot be resolved, rather than throwing out of the sweep", async () => {
@@ -156,10 +197,9 @@ describe("drain resolves a client only when it has work", () => {
     // already run — makes that first statement throw for real, with nothing inside `drainDue`
     // positioned to catch it.
     //
-    // A dedicated PGlite instance, not the suite's own `pg.db`: this test closes its database,
-    // which the rest of this suite cannot survive sharing.
-    const soloDb = await createPgliteDb();
-    for (const migrations of TEST_MIGRATIONS) await runMigrations(soloDb, migrations);
+    // A dedicated database, not the suite's own `pg.db`: this test closes its database, which the
+    // rest of this suite cannot survive sharing. See `solo`'s own note above.
+    const soloDb = solo.db;
     await seedPendingEnvios(soloDb, { count: 1 });
 
     const result = await drain(
@@ -180,7 +220,7 @@ describe("drain resolves a client only when it has work", () => {
       NOW,
     );
 
-    // `codeOf`'s fallback: PGlite's own error on a closed instance is not an `AppError`.
+    // `codeOf`'s fallback: the driver's own error on a closed database is not an `AppError`.
     expect(result.skipped).toEqual([{ errorCode: "unknown" }]);
   });
 });

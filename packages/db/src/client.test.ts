@@ -1,137 +1,118 @@
-// Real PostgreSQL: exercises the node-postgres driver, including connection and close behavior.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { createPgliteDb, createPostgresDb } from "./client.js";
-import { dockerAvailable, resolveTargets } from "./testing/harness.js";
-import { POSTGRES_IMAGE } from "./testing/postgres.js";
 import { sql } from "drizzle-orm";
+import { afterEach, describe, expect, it } from "vitest";
+import { openVenueDatabase, type VenueDatabase } from "./client.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
+import { runMigrations } from "./migrate.js";
+import { captureError, pgErrorMessage } from "./testing/errors.js";
 
-describe("createPgliteDb", () => {
-  const dirs: string[] = [];
+/**
+ * `openVenueDatabase` — the whole of this module's public surface now that the two PostgreSQL
+ * constructors are gone.
+ *
+ * **What this file does NOT test, because `packages/store/src/index.test.ts` already does.**
+ * `openVenueDatabase` is a thin call onto `openVenueStore`, and that package's own suite covers the
+ * engine settings, the two file names under the directory, creating the directory, and closing.
+ * What is left here is what `client.ts` itself decides, which is one thing: both files are opened
+ * on the SAME schema barrel, so nothing but the FILE separates a venue table from a node one.
+ *
+ * **Five cases went with the two deleted constructors. What nothing checks any more:**
+ *
+ * - `createPgliteDb` "tags itself as the pglite driver" and `createPostgresDb` "tags itself as the
+ *   postgres driver". There is no `driver` tag on a handle (`client.ts:29-31`) and `runMigrations`
+ *   dispatches on nothing, so there is no tag to read and no dispatch to get wrong.
+ * - `createPgliteDb` "is in-memory when no data directory is given". There is no no-argument form:
+ *   `openVenueDatabase` takes a directory and always writes files. The isolation that case
+ *   protected — two databases not seeing each other's tables — is now only ever tested WITHIN one
+ *   store, by the first case below; nothing here checks that two SEPARATE directories are
+ *   independent.
+ * - `createPostgresDb` "fails fast on a connection that cannot succeed". Gone with the connection
+ *   string: there is no pool and no connect-probe, and a bad DIRECTORY is a different failure
+ *   nothing in this package now asserts on.
+ * - `createPostgresDb` "returns a database that answers a query", "rejects a query after close" and
+ *   "honours poolOptions". All three were about a server and a connection pool; neither exists.
+ */
+const opened: VenueDatabase[] = [];
+const directories: string[] = [];
 
-  afterEach(() => {
-    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("returns a database that answers a query", async () => {
-    const db = await createPgliteDb();
-    const result = await db.execute(sql`select 1 as one`);
-    expect(result.rows[0]).toEqual({ one: 1 });
-    await db.close();
-  });
-
-  it("tags itself as the pglite driver", async () => {
-    // runMigrations dispatches on this tag, because drizzle ships a separate
-    // migrator per driver and the shared Database type deliberately erases
-    // which one it is.
-    const db = await createPgliteDb();
-    expect(db.driver).toBe("pglite");
-    await db.close();
-  });
-
-  it("persists to a data directory across close and reopen", async () => {
-    // The standalone backup story in spec §3 is "copy one data directory", so
-    // an in-memory-only client would not be the thing we ship.
-    const dir = mkdtempSync(join(tmpdir(), "waitron-db-"));
-    dirs.push(dir);
-    const first = await createPgliteDb(dir);
-    await first.execute(sql`create table persisted (id integer primary key)`);
-    await first.execute(sql`insert into persisted (id) values (7)`);
-    await first.close();
-
-    const second = await createPgliteDb(dir);
-    const result = await second.execute(sql`select id from persisted`);
-    expect(result.rows).toEqual([{ id: 7 }]);
-    await second.close();
-  });
-
-  it("rejects a query after close", async () => {
-    const db = await createPgliteDb();
-    await db.close();
-    await expect(db.execute(sql`select 1`)).rejects.toThrow();
-  });
-
-  it("is in-memory when no data directory is given", async () => {
-    // Two no-arg clients must not see each other's tables, or every test in
-    // this package would share state with every other and the isolation the
-    // harness promises would be fictional.
-    const first = await createPgliteDb();
-    await first.execute(sql`create table only_in_first (id integer primary key)`);
-    const second = await createPgliteDb();
-    await expect(second.execute(sql`select id from only_in_first`)).rejects.toThrow();
-    await first.close();
-    await second.close();
-  });
+afterEach(async () => {
+  while (opened.length > 0) await opened.pop()!.close();
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
 });
 
-// No container needed for this one: the connect-probe in createPostgresDb
-// (`const probe = await pool.connect(); probe.release();`) exists so a bad
-// connection string fails here, at construction, rather than surfacing at
-// the first query as what looks like a schema fault. That claim was
-// previously unasserted — deleting the probe left all tests green. A
-// connection nothing is listening on is enough to exercise it; it needs no
-// Docker daemon, so unlike the block below this runs unconditionally.
-it("createPostgresDb fails fast on a connection that cannot succeed", async () => {
-  await expect(createPostgresDb("postgresql://nobody@127.0.0.1:1/none")).rejects.toThrow();
-});
+/** A fresh directory nothing else holds, and the store opened on it. */
+const open = async (directory = mkdtempSync(join(tmpdir(), "waitron-client-"))) => {
+  directories.push(directory);
+  const store = await openVenueDatabase(directory);
+  opened.push(store);
+  return { directory, store };
+};
 
-// Whether this run covers the real-Postgres target, decided once via the same
-// loud-skip/hard-fail logic every dual-target suite in this package uses (see
-// src/testing/harness.ts's resolveTargets). A silent `it.skip` with no
-// explanation is exactly the failure mode that logic exists to prevent: on a
-// developer machine without Docker this warns and skips below; under CI's
-// REQUIRE_DOCKER=1 with no daemon it throws here, at collection time.
-const POSTGRES_COVERED = resolveTargets({
-  dockerAvailable: dockerAvailable(),
-  requireDocker: process.env.REQUIRE_DOCKER === "1",
-}).some((target) => target.name === "postgres");
+describe("openVenueDatabase", () => {
+  it("opens two handles, and a table on one is not visible on the other", async () => {
+    const { store } = await open();
 
-// This block starts its own Testcontainers Postgres instead of going through
-// Target.create() (src/testing/harness.ts). That is not an oversight: these
-// are unit tests of createPostgresDb itself, the function Target.create() is
-// built on top of, so they cannot use the seam without testing the seam
-// instead of the constructor. migrate.test.ts's postgres block has the same
-// shape for the same reason.
-describe.runIf(POSTGRES_COVERED)("createPostgresDb", () => {
-  let container: StartedPostgreSqlContainer;
+    store.venue.run(sql`create table only_on_venue (id integer primary key)`);
 
-  beforeAll(async () => {
-    container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
+    expect(store.venue).not.toBe(store.node);
+    // Both directions, because asserting only that the node file lacks the table would also pass
+    // if the venue file had never got it either.
+    expect(
+      store.venue.all(sql`select name from sqlite_master where name = 'only_on_venue'`),
+    ).toHaveLength(1);
+    expect(
+      store.node.all(sql`select name from sqlite_master where name = 'only_on_venue'`),
+    ).toHaveLength(0);
   });
 
-  afterAll(async () => {
-    if (container !== undefined) await container.stop();
+  it("gives both handles the whole schema barrel, and lets the file refuse the query", async () => {
+    // `client.ts:47-53` says both handles are typed on the barrel on purpose, and that a query
+    // naming a venue table on the node handle is refused by the ENGINE rather than by the compiler.
+    // This is that sentence as an experiment: the relational map is present on both sides — so the
+    // compiler is not what stops anything — and after migrating the core set to the venue file
+    // alone, the same read succeeds on one handle and is refused on the other.
+    const { store } = await open();
+    expect(store.venue.query.tenants).toBeDefined();
+    expect(store.node.query.tenants).toBeDefined();
+
+    await runMigrations(store.venue, CORE_MIGRATIONS);
+
+    expect(await store.venue.query.tenants.findMany()).toEqual([]);
+    const refusal = await captureError(() => store.node.query.tenants.findMany());
+    expect(pgErrorMessage(refusal)).toBe("no such table: tenants");
   });
 
-  it("returns a database that answers a query", async () => {
-    const db = await createPostgresDb(container.getConnectionUri());
-    const result = await db.execute(sql`select 1 as one`);
-    expect(result.rows[0]).toEqual({ one: 1 });
-    await db.close();
+  it("closes both files", async () => {
+    const { store } = await open();
+    await store.close();
+    opened.pop();
+
+    // The message is the engine's own, read off `node:sqlite` rather than chosen here.
+    expect(pgErrorMessage(await captureError(async () => store.venue.all(sql`select 1`)))).toBe(
+      "database is not open",
+    );
+    expect(pgErrorMessage(await captureError(async () => store.node.all(sql`select 1`)))).toBe(
+      "database is not open",
+    );
   });
 
-  it("tags itself as the postgres driver", async () => {
-    const db = await createPostgresDb(container.getConnectionUri());
-    expect(db.driver).toBe("postgres");
-    await db.close();
-  });
+  it("persists to its directory across close and reopen", async () => {
+    // Carried over from the deleted `createPgliteDb` case of the same name: the standalone backup
+    // story is "copy one directory", so a store that lost its rows on close would not be the thing
+    // we ship. This is the only case in the tree that runs it: of the five `openVenueStore(` calls
+    // in `packages/store/src/index.test.ts`, three belong to its contention block and none writes
+    // rows, closes, and reads them back.
+    const { directory, store } = await open();
+    store.venue.run(sql`create table persisted (id integer primary key)`);
+    store.venue.run(sql`insert into persisted (id) values (7)`);
+    await store.close();
+    opened.pop();
 
-  it("rejects a query after close", async () => {
-    const db = await createPostgresDb(container.getConnectionUri());
-    await db.close();
-    await expect(db.execute(sql`select 1`)).rejects.toThrow();
-  });
-
-  it("honours poolOptions (a capped pool still answers a query)", async () => {
-    // The `poolOptions` seam exists so a small owner pool can cap its connection count (`{ max: 2 }`);
-    // the observable contract is only that the merged config still opens and queries — the cap itself
-    // is a pg-internal we do not reach into.
-    const db = await createPostgresDb(container.getConnectionUri(), { max: 2 });
-    const result = await db.execute(sql`select 1 as one`);
-    expect(result.rows[0]).toEqual({ one: 1 });
-    await db.close();
+    const reopened = await openVenueDatabase(directory);
+    opened.push(reopened);
+    expect(reopened.venue.all(sql`select id from persisted`)).toEqual([{ id: 7 }]);
   });
 });

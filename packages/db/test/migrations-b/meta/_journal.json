@@ -1,6 +1,6 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     { "idx": 0, "version": "7", "when": 1753000001000, "tag": "0000_probe_b", "breakpoints": true }
   ]

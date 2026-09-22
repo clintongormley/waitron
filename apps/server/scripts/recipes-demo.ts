@@ -3,21 +3,29 @@
 // derived floor unions with the product's own manual overlay (add-only), and a single unreviewed
 // ingredient forces the whole product PENDING — end-to-end and headless.
 //
-// Modelled on `allergens-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather than on the
-// real-database demo it sat beside: this demo never writes a fiscal record, so it needs neither a
-// real backend nor a proof of the grants a fiscal write once had to clear.
-// `CORE_MIGRATIONS` alone suffices — it creates the catalogue tables, the `products.allergens`
-// published column plus its `manual_allergens`/`recipe_derivation` overlays, and (0038/0039) the
-// `ingredients` and `recipe_lines` tables read and written here.
+// Modelled on `allergens-demo.ts` (a throwaway venue directory, self-migrating, tsx-run) rather
+// than on the real-database demo it sat beside: this demo never writes a fiscal record, so it
+// needs no fiscal backend, no AEAT and no SIF registration. Two migration sets carry everything it
+// touches — `catalogue` creates the catalogue tables and the `products.allergens` published column
+// with its `manual_allergens`/`recipe_derivation` overlays, and `core` the `ingredients` and
+// `recipe_lines` tables read and written here.
+//
+// LOST with the storage swap: the story used to run inside an `asAppUser` transaction, to show the
+// POS publishing allergens as `app_user` rather than as the owner. SQLite has no roles and no
+// grants, and `asAppUser` is now an empty function (`packages/db/src/testing/roles.ts`), so that
+// part of the demonstration is gone; the one call is deleted rather than left as a no-op that
+// still reads like a claim. Deleted with it, and worth naming because it was never true: the
+// header also said the demo "seeds a tenant + location as the PGlite superuser", which no code in
+// this file ever did — the version before the storage swap seeded neither row, and the story below
+// still needs neither (`git log -p -- apps/server/scripts/recipes-demo.ts`).
 //
 // It:
-// 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
-// 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
-//    deliberately (a running POS cannot create tenants);
-// 3. as the application role (`withTransaction` opens the transaction, `asAppUser` selects the app
-//    role on PostgreSQL, exactly as the running POS does), walks the six-step story below,
-//    reading the PUBLISHED `products.allergens` column back after each mutation and asserting it
-//    matches.
+// 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`
+//    migration sets to it through `applyMigrations` (the entry point `dev-setup.ts` also uses),
+//    and removes the directory when it finishes;
+// 2. seeds nothing but what the story needs — the ingredients, catalogue and product below;
+// 3. walks the six-step story in one transaction, reading the PUBLISHED `products.allergens`
+//    column back after each mutation and asserting it matches.
 //
 // The story (design D4 — floor ∪ manual, add-only, with PENDING contagion):
 //   3. setProductRecipe(bocadillo, [alioli, pan])            → {eggs, gluten}         (inherited floor)
@@ -31,24 +39,20 @@
 // Run it:
 //   pnpm --filter @waitron/server demo:recipes
 //   # or: pnpm --filter @waitron/server exec tsx scripts/recipes-demo.ts
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  products,
-  runMigrations,
-  withTransaction,
-} from "@waitron/db";
+import { openVenueDatabase, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import {
-  CATALOGUE_MIGRATIONS,
-  createCatalogue,
-  createProduct,
-  updateProduct,
-} from "@waitron/catalogue";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createCatalogue, createProduct, updateProduct } from "@waitron/catalogue";
 import type { ProductAllergens } from "@waitron/catalogue";
 import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/recipes";
+
+/** The migration sets this demo applies, in manifest order — core carries `ingredients` and
+ * `recipe_lines`, catalogue the products and their allergen columns. */
+const SETS = ["core", "catalogue"];
 
 /** Read the PUBLISHED declaration straight off the `products.allergens` column — the surface the till
  * sells from — after each recipe/manual change, as a Drizzle select. Returns null for a PENDING
@@ -92,16 +96,17 @@ function expect(actual: ProductAllergens | null, expected: string[]): void {
 }
 
 async function main(): Promise<void> {
-  const db = await createPgliteDb();
+  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
+  // the end. The migrate goes through `applyMigrations`, which takes the DIRECTORY and opens it
+  // itself; `openVenueDatabase` then hands back the venue handle the story runs against.
+  const venueDir = await mkdtemp(join(tmpdir(), "recipes-demo-"));
+  const sets = manifestSets().filter((set) => SETS.includes(set.name));
+  await applyMigrations(venueDir, migrationOptionsFor(sets, null));
+  const store = await openVenueDatabase(venueDir);
   try {
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, CATALOGUE_MIGRATIONS);
-
-    // The whole story runs in one application-role transaction: every op takes `tx` and runs
-    // inside that `withTransaction` transaction, and each read below sees the writes above it.
-    await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-
+    // The whole story runs in one transaction: every op takes `tx`, and each read below sees the
+    // writes above it.
+    await withTransaction(store.venue, async (tx) => {
       console.log("recipes-demo: allergen inheritance from ingredients to a product, end-to-end");
       console.log("");
 
@@ -185,7 +190,8 @@ async function main(): Promise<void> {
       );
     });
   } finally {
-    await db.close();
+    await store.close();
+    await rm(venueDir, { recursive: true, force: true });
   }
 }
 

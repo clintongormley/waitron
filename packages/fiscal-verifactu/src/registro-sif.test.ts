@@ -1,39 +1,75 @@
 import {
+  UNIQUE_VIOLATION,
   captureError,
-  createPgliteDb,
-  pgErrorCode,
-  runMigrations,
+  refusalOn,
   withTransaction,
+  type Database,
 } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { currentSif, esPrimerRegistro, registerSif, writeReservedSif } from "./registro-sif.js";
+import { registroSif } from "./schema/sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
 
-let db: Awaited<ReturnType<typeof createPgliteDb>>;
+// ONE database for the suite, emptied by the helper after every test.
+//
+// The requirement is the one this suite always had and is unchanged: the counter under test is
+// monotonic and never resets, so a case that shares another case's counter makes every assertion
+// about "strictly greater" depend on execution order. Until the storage switch this suite met it by
+// opening a database per test and said in this comment that it therefore could not use
+// `useVenueDb`. That is no longer true, and the reason is the helper's body rather than an opinion
+// about it: `useVenueDb`'s per-test reset deletes every data table
+// (packages/db/src/testing/venue-db.ts's `buildResetPlan`), and the counter is an ordinary data
+// table — `contadores_instalacion`, ./schema/sif.ts.
+//
+// Two control runs, both `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+// src/registro-sif.test.ts`. With the reset on: 16 passed. With `resetPerTest: false` added below:
+// 15 failed | 1 passed, first error `UNIQUE constraint failed: locations.id` — the per-test
+// `seedTenants` re-inserting rows the reset would have taken away. Then the same run with that one
+// collision swallowed, so accumulated ROWS are the only difference left: 6 failed | 10 passed,
+// among them `revokes the previous registration rather than updating it` reading nine
+// `registro_sif` rows where it asserts two.
+//
+// What neither control shows, stated so nobody reads more into them: the first case's
+// `numeroInstalacion` 1 passes in all three runs, because it runs first and nothing has used the
+// counter yet. Order-independence is what the reset buys, and an order-dependent pass is exactly
+// what would not announce itself.
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
+
+let db: Database;
 
 const SIF_PARAMS = {
   nif: "89890001K",
   idSistemaInformatico: "WT",
 } as const;
 
-beforeEach(async () => {
-  // A fresh database per test. The counter under test is monotonic and never resets, so a shared
-  // database would make every assertion about "strictly greater" depend on test execution order —
-  // and the first reordering would produce a failure that looks like a real defect. That
-  // requirement is why this suite cannot use `useVenueDb`, which owns ONE database for the suite.
-  db = await createPgliteDb();
-  for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
-  await seedTenants(db);
+/**
+ * The key `registro_sif_instalacion_uq` declares, in its own column order (./schema/sif.ts).
+ *
+ * The replacement for `pgErrorCode(error) === "23505"`. SQLite reports no SQLSTATE — every failure
+ * carries `code: "ERR_SQLITE_ERROR"` and the discriminating value is a numeric `errcode`
+ * (packages/db/src/sql-state.ts) — so the two cases below ask `refusalOn`, which matches the class
+ * AND the table and columns the engine's own message named, on one layer of the cause chain.
+ *
+ * Narrower than what it replaces, not wider: `23505` said only "some unique index", where this
+ * names the index's own columns. Control: with the key's `numero_instalacion` entry removed, the
+ * same run reports `2 failed | 14 passed` and the two failures are exactly the two cases below, so
+ * the columns are being matched rather than ignored.
+ */
+const INSTALACION_KEY = {
+  table: "registro_sif",
+  columns: ["nif", "id_sistema_informatico", "numero_instalacion"],
+} as const;
+
+beforeAll(() => {
+  db = suite.db;
 });
 
-// Paired with that `beforeEach`, not an `afterAll`: one database per test needs one close per test.
-// Until 2026-07-31 this suite had no teardown at all, so every WASM PostgreSQL it started stayed
-// open for the rest of the run.
-afterEach(async () => {
-  if (db !== undefined) await db.close();
+beforeEach(async () => {
+  await seedTenants(db);
 });
 
 describe("registerSif", () => {
@@ -274,34 +310,48 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     // guarantee is application discipline wearing a constraint's clothes — and every future
     // caller, migration script and manual fix-up is outside it.
     //
-    // `captureError` + `pgErrorCode`, not `.rejects.toMatchObject({ code: "23505" })`: drizzle
-    // wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the real
-    // SQLSTATE lives on `.cause.code` — so a bare `.rejects.toMatchObject` assertion never sees
-    // it and would fail even against a correctly-enforced constraint. Confirmed live in this
-    // task's red phase.
+    // `captureError` + `refusalOn`, not `.rejects.toMatchObject({ ... })`: drizzle wraps every
+    // failed query, so the refusal's own fields are on a `cause` layer rather than on the error a
+    // caller catches, and a bare `.rejects.toMatchObject` assertion never sees them. That was true
+    // of PostgreSQL's SQLSTATE and is true of SQLite's `errcode`; `refusalOn` owns the walk
+    // (packages/db/src/constraint-target.ts).
+    //
+    // Written through the table definition rather than as raw SQL. It still bypasses the allocator,
+    // which is the point of the case, and it reaches the client-side column defaults a raw
+    // statement does not. Both halves measured, by putting the raw statement back and reading the
+    // error: unchanged, it fails with `no such function: now`; with `now()` replaced by an ISO
+    // string it fails with `NOT NULL constraint failed: registro_sif.id`. The inserted VALUES are
+    // the original ones, `revocado_en` included — a stamped `Date` in place of `now()`.
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
     const error = await captureError(() =>
-      db.execute(sql`
-        insert into registro_sif (node_id, nif, id_sistema_informatico, numero_instalacion, revocado_en)
-        values (${TENANT_A.nodeId2}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
-                ${reg.numeroInstalacion}, now())`),
+      db.insert(registroSif).values({
+        nodeId: TENANT_A.nodeId2,
+        nif: SIF_PARAMS.nif,
+        idSistemaInformatico: SIF_PARAMS.idSistemaInformatico,
+        numeroInstalacion: reg.numeroInstalacion,
+        revocadoEn: new Date(),
+      }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(refusalOn(error, UNIQUE_VIOLATION, INSTALACION_KEY)).toBe(true);
   });
 
   it("rejects a duplicate installation identity raised under a different NIF's node", async () => {
-    // The unique installation identity is (NIF, IdSIF, number) and nothing else.
+    // The unique installation identity is (NIF, IdSIF, number) and nothing else. Through the table
+    // definition for the reason the case above measured; every inserted value is unchanged,
+    // `revocado_en` still left unset.
     const reg = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF_PARAMS, nodeId: TENANT_A.nodeId }),
     );
     const error = await captureError(() =>
-      db.execute(sql`
-        insert into registro_sif (node_id, nif, id_sistema_informatico, numero_instalacion)
-        values (${TENANT_B.nodeId}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
-                ${reg.numeroInstalacion})`),
+      db.insert(registroSif).values({
+        nodeId: TENANT_B.nodeId,
+        nif: SIF_PARAMS.nif,
+        idSistemaInformatico: SIF_PARAMS.idSistemaInformatico,
+        numeroInstalacion: reg.numeroInstalacion,
+      }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(refusalOn(error, UNIQUE_VIOLATION, INSTALACION_KEY)).toBe(true);
   });
 });
