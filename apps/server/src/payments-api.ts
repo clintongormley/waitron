@@ -376,6 +376,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // payments still resolve its name). `deviceCount` comes from a SEPARATE aggregate
       // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
       // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
+      // `canEnable` is derived from `unpairedAt` HERE rather than asked of the engine as
+      // `unpaired_at is null`: a `sql` predicate is an expression, not a declared column, so no read
+      // mapping reaches it and this engine answers 0/1 — which this route then put on the wire,
+      // where `apps/dashboard/src/api/client.ts` declares a boolean.
       const { readers, counts } = await gated(sessionId, async (tx) => ({
         readers: await tx
           .select({
@@ -383,7 +387,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: cardReaders.provider,
             name: cardReaders.name,
             active: cardReaders.active,
-            canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
+            unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
           .orderBy(cardReaders.name),
@@ -396,7 +400,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .groupBy(deviceCardReaders.readerId),
       }));
       const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));
-      return c.json(readers.map((r) => ({ ...r, deviceCount: countByReader.get(r.id) ?? 0 })));
+      return c.json(
+        readers.map(({ unpairedAt, ...r }) => ({
+          ...r,
+          canEnable: unpairedAt === null,
+          deviceCount: countByReader.get(r.id) ?? 0,
+        })),
+      );
     }),
   );
 

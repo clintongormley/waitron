@@ -463,12 +463,16 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ ok: true });
 
-    // DELETE actually stamped ended_at on the row the cookie named (read as superuser).
+    // DELETE actually stamped ended_at on the row the cookie named.
+    // 1, not `true`: the engine has no boolean type, and the `flag` column helper's boolean mapping
+    // (`packages/db/src/schema/columns.ts`) belongs to a declared COLUMN, not to a predicate written
+    // in raw SQL. An unstamped row would come back 0, so the case still fails if DELETE wrote
+    // nothing.
     const sessionId = /waitron_till_session=([^;]+)/.exec(cookie)![1];
-    const rows = await suite.db.execute<{ ended: boolean }>(
+    const rows = await suite.db.execute<{ ended: number }>(
       sql`select ended_at is not null as ended from sessions where id = ${sessionId}`,
     );
-    expect(rows.rows).toEqual([{ ended: true }]);
+    expect(rows.rows).toEqual([{ ended: 1 }]);
   });
 
   it("POST computes canConfigureTill from the operator's ACTUAL role — true for a manager", async () => {

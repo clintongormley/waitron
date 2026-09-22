@@ -427,13 +427,18 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
+      // The category's translated name is read through the TABLE, not the raw select below: `name`
+      // is a `json` column and the decode belongs to drizzle's read mapping, which a raw select
+      // goes around — through raw SQL this engine hands back the stored text
+      // `{"es":"Panader\u00eda"}`.
+      const named = await tx.select({ name: categories.name }).from(categories);
+      expect(named).toEqual([{ name: { es: "Panadería" } }]);
       const category = await tx.execute<{
-        name: Record<string, string>;
         image: string;
-        primary: boolean;
-        member: boolean;
+        primary: number;
+        member: number;
       }>(sql`
-        select c.name, d.image,
+        select d.image,
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
           -- refused with near "primary": syntax error while the quoted form returns the column.
           -- Measured on node:sqlite, Node v26.7.0, with "as member" as the control that needs no
@@ -448,18 +453,15 @@ describe("configuration transfer database path", () => {
         cross join products p
         where p.name = 'Café'
       `);
-      // LEFT FAILING DELIBERATELY, and not narrowed: this reads a `json` column and two boolean
-      // EXPRESSIONS through raw SQL, which skips drizzle's read mapping — the engine answers
-      // `'{"es":"Panadería"}'` and `1`, not an object and `true`. It is the same undecided idiom
-      // the plan records for `packages/identity/src/login.test.ts:121`, and the branch has left
-      // every instance red rather than invent one here. Everything BEFORE this line passed, which
-      // is what says the transfer itself works: the image bytes came back as bytes a few lines up.
+      // 1, not `true`: both are SQL EXPRESSIONS rather than declared columns, so the `flag` helper's
+      // boolean mapping (`packages/db/src/schema/columns.ts`) never reaches them, and this engine
+      // has no boolean type of its own. A category the product did NOT belong to would answer 0
+      // here, so the case still separates a copied relationship from a missing one.
       expect(category.rows).toEqual([
         {
-          name: { es: "Panadería" },
           image: metadata!.filename,
-          primary: true,
-          member: true,
+          primary: 1,
+          member: 1,
         },
       ]);
     });
@@ -581,9 +583,13 @@ describe("configuration transfer database path", () => {
         },
       ),
     );
+    // `first_record` is 1, not `true`: `primer_registro` is a `flag` column, and the boolean read
+    // mapping that helper carries (`packages/db/src/schema/columns.ts`) belongs to a drizzle select
+    // over the column, which this raw statement goes around. The property is unchanged — a
+    // CONTINUED chain would answer 0 here and carry a non-null `anterior_huella`.
     const firstLive = await targetSuite.db.execute<{
       invoice_number: number;
-      first_record: boolean;
+      first_record: number;
       previous_hash: string | null;
     }>(
       sql`
@@ -593,9 +599,7 @@ describe("configuration transfer database path", () => {
         join registros_facturacion r on r.sale_id = s.id
       `,
     );
-    expect(firstLive.rows).toEqual([
-      { invoice_number: 1, first_record: true, previous_hash: null },
-    ]);
+    expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
 });
 

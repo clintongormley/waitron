@@ -32,14 +32,14 @@
  * a seed here would leave the real fixture broken and this suite testing a private copy.
  */
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
-import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { envios, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 // The same test-only entry point the regime's own drain suites (and boot.promote.test.ts) use to seed
 // a due `envios` row + its registro/SIF — but WITHOUT the accompanying `fiscal.aeat` credential, which
 // is the whole point of this suite.
@@ -131,13 +131,17 @@ async function login(app: Hono): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
+// Read through the TABLE, not raw SQL: `incidencia` is a `flag` column and the boolean read mapping
+// that helper carries (`packages/db/src/schema/columns.ts`) belongs to a drizzle select over the
+// column — a raw statement goes around it and this engine answers 0/1.
 async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
-  const rows = await db.execute<{ estado: string; intentos: number; incidencia: boolean }>(
-    sql`select estado, intentos, incidencia from envios where registro_id = ${registroId}`,
-  );
-  return rows.rows[0]!;
+  const rows = await db
+    .select({ estado: envios.estado, intentos: envios.intentos, incidencia: envios.incidencia })
+    .from(envios)
+    .where(eq(envios.registroId, registroId));
+  return rows[0]!;
 }
 
 /** The chain-bearing columns of a registro — what a submit would never touch and a chaining write

@@ -210,9 +210,11 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
   // regime's `provisioning-secret.test.ts` and boot.ts's end-to-end live-seal test; here we only assert
   // the orchestration reaches the seal in order, exactly what the old injected `sealAeat` spy asserted.
-  // `ring` is a sentinel: the recording db never invokes the callback that would use it.
+  // `ring` is a sentinel: the recording db never invokes the callback that would use it. The seam
+  // is `withWriteLock`, not `transaction` — on this engine the transaction IS the write lock
+  // (`packages/db/src/tenancy.ts`), and a fake supplying `transaction` alone is never called.
   const db = {
-    transaction: async () => {
+    withWriteLock: async () => {
       calls.push("sealAeat");
     },
   } as unknown as Database;

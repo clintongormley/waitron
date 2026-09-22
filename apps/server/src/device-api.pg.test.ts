@@ -14,34 +14,31 @@
  * left for the branch's single rename sweep rather than changed here — the choice
  * `device.pg.test.ts` records.
  *
- * ## Two cases are RED, and the reason is a BROKEN PRODUCT PATH, not this file
+ * ## The two binding refusals, and the unit tests that used to sit beside them
  *
  * `rejects a nonexistent or absent profile — device untouched` and `rejects a receiptPrinterId
- * naming no printer of this tenant with device.binding_invalid` each expect a 400 carrying
- * `device.binding_invalid`, and each gets a 500 carrying `server.internal`.
+ * naming no printer of this tenant with device.binding_invalid` are the only cases left proving
+ * that a device write naming a missing binding is refused as `device.binding_invalid` rather than
+ * as a 500.
  *
- * **The disposition ledger's stated cause is wrong, and the measurement is the other way round.**
- * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records these two as BLOCKER 2 on the ground
- * that "the FKs do not exist … the update simply succeeds". Both halves are false here. The keys
- * are in the SQLite baseline (`packages/db/drizzle/0000_baseline.sql`: `device_profile_id` and
- * `receipt_printer_id`, both `REFERENCES … ON DELETE restrict`) and both are enforced. Measured
- * 2026-09-22 in this file, driving each update directly and then the route: the update is REFUSED
- * with errcode 787, message `FOREIGN KEY constraint failed`, and the device row is unchanged
- * afterwards — read back through the table, `deviceProfileId` is still the profile the enrolment
- * set. Control in the other direction: the sibling case `reassigns a device to another of this
- * tenant's profiles` names a real profile, and passes.
+ * A LOSS, from the storage swap: `apps/server/src/device.test.ts` is deleted. It held six
+ * crafted-error unit tests over `bindingFkField`, which read the TABLE and COLUMN a foreign-key
+ * refusal named to decide which of the two bindings was at fault, and pinned the deliberate
+ * near-misses — another FK column of `devices`, the same column name on another table, a different
+ * SQLSTATE, a refusal naming no key. This engine's foreign-key refusal is the whole message
+ * `FOREIGN KEY constraint failed` and names no key at all (`packages/db/src/constraint-target.ts`),
+ * so there is nothing left to read and nothing to tell apart: `device.ts`'s `requireDeviceBinding`
+ * now reads the target row before the write instead. What is no longer checked: that a refusal on
+ * one of the three OTHER foreign keys of `devices` — station, till, location — cannot be mistaken
+ * for a binding fault. Those keys still refuse, and their refusals are now rethrown raw because
+ * nothing inspects them at all.
  *
- * What is broken is the TRANSLATION. `bindingFkField` (`apps/server/src/device.ts`) asks
- * `refusalOn(error, FOREIGN_KEY_VIOLATION, { table: "devices", columns: [...] })`, and SQLite's
- * foreign-key message names no table and no column at all, so that can never be true — measured
- * here, `bindingFkField` returns `undefined` for both refusals. `device-api.ts` then rethrows the
- * driver error raw and the request ends as a 500. So the data-integrity hole the ledger inferred is
- * NOT present: the refusal happens, it is the operator's error message that is lost.
- *
- * Both cases are kept and left red rather than deleted, because the routes they cover are live and
- * a dashboard reassign to a deleted profile answers 500 today. `packages/db/src/constraint-target.ts`
- * states the same gap from the other side and names this file's route module as a caller needing a
- * pre-read instead.
+ * Measured here on 2026-09-22 before the change, driving each update directly and then the route:
+ * the update is REFUSED with errcode 787, message `FOREIGN KEY constraint failed`, and the device
+ * row is unchanged afterwards. The keys are in the SQLite baseline
+ * (`packages/db/drizzle/0000_baseline.sql`: `device_profile_id` and `receipt_printer_id`, both
+ * `REFERENCES … ON DELETE restrict`) and both are enforced — so what the pre-read restores is the
+ * operator's error message, never the data integrity, which never left.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";

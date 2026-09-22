@@ -1,6 +1,5 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
@@ -41,8 +40,12 @@ export function mountConfigurationExportApi(
       if (typeof passphrase !== "string" || passphrase.length < 12) {
         throw new AppError("management.request_invalid", { field: "passphrase" });
       }
+      // The export reads many tables and has to see ONE state of the database across all of them.
+      // On PostgreSQL that was asked for here, with `set transaction isolation level repeatable
+      // read`. This engine has no such statement and does not need one: `withTransaction` opens
+      // `begin immediate`, and `packages/store/src/write-queue.ts` admits one write transaction at
+      // a time, so nothing can commit underneath this read.
       const bundle = await withTransaction(deps.db, async (tx) => {
-        await tx.execute(sql`set transaction isolation level repeatable read`);
         await asAppUser(tx);
         const authorization = await authorizeManager(tx, {
           managementSessionId: sessionId,

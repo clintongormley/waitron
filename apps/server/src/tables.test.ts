@@ -35,7 +35,6 @@ import {
   createZone,
   deactivateTable,
   deactivateZone,
-  isZoneFkViolation,
   listTables,
   listZones,
   setTablePlacement,
@@ -247,12 +246,11 @@ describe("table CRUD", () => {
 
   it("createTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the (location_id) FK
-    // `dining_tables_location_fk` rejects the insert with a 23503 foreign-key violation — NOT the
-    // 23505 label unique NOR the `dining_tables_zone_fk` the zone check matches on. So both
-    // `isUniqueViolation` and `isZoneFkViolation` are false and `createTable` must rethrow the raw
-    // driver error rather than mistranslating any failure into `table.label_taken`/`zone.not_found`
-    // (the false branch of both catch checks — the other side of the two prove-by-deletion tests).
+    // A location id that names no row: the (location_id) FK `dining_tables_location_fk` refuses the
+    // insert — NOT the label unique. So `isUniqueViolation` is false and `createTable` must rethrow
+    // the raw driver error rather than mistranslating any failure into `table.label_taken` (the
+    // false branch of its catch). The engine's message is `FOREIGN KEY constraint failed` and names
+    // neither table nor column, which is why nothing here asks WHICH key refused.
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createTable(tx, badCfg, { label: "5" })).catch(
       (e: unknown) => e,
@@ -261,18 +259,16 @@ describe("table CRUD", () => {
     expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 
-  it("updateTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "6" }));
-    // 10_000_000_000 overflows the int4 `capacity` column (22003 numeric_value_out_of_range) — NOT
-    // the label unique. So `isUniqueViolation` is false and `updateTable` rethrows the raw driver
-    // error rather than mistranslating it (the false branch of its catch).
-    const err = await asApp(cfg, (tx) =>
-      updateTable(tx, cfg, id, { capacity: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(Error); // rejected (a resolved void would fail this)
-    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
-  });
+  // A LOSS, from the storage swap: `updateTable rethrows a NON-unique DB error raw` is deleted.
+  // It drove the false branch of `updateTable`'s catch by overflowing the int4 `capacity` column
+  // (10_000_000_000). SQLite's INTEGER is 64-bit whatever the declared type says, so that value is
+  // now stored without complaint (`packages/db/src/schema/columns.ts` lists the seven refusals the
+  // swap gave up, this one among them), and none of `updateTable`'s three inputs — `label`,
+  // `capacity`, `zoneId` — can make the UPDATE refuse for any reason but the label unique: there
+  // is no CHECK on the columns it writes, and `zoneId` is now settled by `requireZone` before the
+  // statement runs. What is no longer checked: that a refusal which is NOT a unique violation
+  // comes back raw from this verb instead of being relabelled `table.label_taken`. The sibling
+  // `createTable` case above still proves that shape, through the location FK it alone writes.
 });
 
 describe("zone CRUD", () => {
@@ -360,69 +356,37 @@ describe("zone CRUD", () => {
 
   it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
-    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) —
-    // NOT the name unique. So `isUniqueViolation` is false and `createZone` rethrows the raw driver
-    // error rather than mistranslating it (the false branch of its catch — the negative control the
-    // sibling create/update verbs each carry).
-    const err = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
+    // A location id that names no row: the (location_id) FK `floor_zones_location_fk` refuses the
+    // insert — NOT the name unique. So `isUniqueViolation` is false and `createZone` rethrows the
+    // raw driver error rather than mistranslating it (the false branch of its catch). The same
+    // idiom as the `createTable` control above; it replaced an int4 `display_order` overflow, which
+    // this engine's 64-bit INTEGER no longer refuses.
+    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const err = await asApp(cfg, (tx) => createZone(tx, badCfg, { name: "Big" })).catch(
+      (e: unknown) => e,
+    );
     expect(err).toBeInstanceOf(Error); // rejected (a resolved {id} would fail this)
     expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 
-  it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
-    const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Ord" }));
-    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) —
-    // NOT the name unique. So `isUniqueViolation` is false and `updateZone` rethrows the raw driver
-    // error rather than mistranslating it (the false branch of its catch).
-    const err = await asApp(cfg, (tx) =>
-      updateZone(tx, cfg, id, { displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(Error); // rejected (a resolved void would fail this)
-    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
-  });
+  // A LOSS, from the storage swap, the same one `updateTable` above records: `updateZone rethrows
+  // a NON-unique DB error raw` is deleted. It overflowed the int4 `display_order` column, which
+  // this engine's 64-bit INTEGER accepts, and none of `updateZone`'s inputs — `name`,
+  // `displayOrder`, `active` — can make the UPDATE refuse for any reason but the name unique
+  // (`floor_zones` declares no CHECK). What is no longer checked: that a refusal which is NOT a
+  // unique violation comes back raw from this verb instead of being relabelled `zone.name_taken`.
+  // The `createZone` case above still proves that shape, through the location FK.
 });
 
-// The check createTable/updateTable use to tell the zone FK apart from the sibling location/status
-// FKs. Crafted-error unit tests (no DB) pin every branch — the real-DB tests above already prove the
-// true path (a bad zoneId → zone.not_found) and the location-FK false path. A crafted error carries
-// the three fields `refusalOn` reads off one layer — `code`, `table` and `detail`'s `Key (…)=(…)`
-// clause; that this is the real drivers' shape is pinned in
-// packages/db/src/constraint-target.test.ts.
-describe("isZoneFkViolation", () => {
-  const fk = (code: string, table: string, column: string): Record<string, unknown> => ({
-    code,
-    table,
-    detail: `Key (${column})=(0f9e) is not present in table "floor_zones".`,
-  });
-
-  it("matches a 23503 on dining_tables.zone_id, at the top level and nested under .cause", () => {
-    expect(isZoneFkViolation(fk("23503", "dining_tables", "zone_id"))).toBe(true);
-    // Drizzle wraps the driver error; the real code and target live one level down under `.cause`.
-    expect(isZoneFkViolation({ cause: fk("23503", "dining_tables", "zone_id") })).toBe(true);
-  });
-
-  it("does NOT match a sibling FK, a different code, a non-object, or a self-referential cause", () => {
-    // The location and status FKs are 23503s on the SAME table, told apart by their column — a bad
-    // location or status is not a zone fault and must stay raw.
-    expect(isZoneFkViolation(fk("23503", "dining_tables", "location_id"))).toBe(false);
-    expect(isZoneFkViolation(fk("23503", "dining_tables", "status_id"))).toBe(false);
-    // …and a `zone_id` on some other table is not this FK either — `zone_service_policies` carries
-    // one too, so the table half of the comparison is what separates them.
-    expect(isZoneFkViolation(fk("23503", "zone_service_policies", "zone_id"))).toBe(false);
-    expect(isZoneFkViolation(fk("23505", "dining_tables", "zone_id"))).toBe(false);
-    // A 23503 that names no key at all cannot be attributed to the zone FK.
-    expect(isZoneFkViolation({ code: "23503" })).toBe(false);
-    expect(isZoneFkViolation(null)).toBe(false);
-    expect(isZoneFkViolation("nope")).toBe(false);
-    // A self-referential cause must terminate the walk rather than spin forever.
-    const selfRef: { cause?: unknown } = {};
-    selfRef.cause = selfRef;
-    expect(isZoneFkViolation(selfRef)).toBe(false);
-  });
-});
+// ONE LOSS, from the storage swap: the `isZoneFkViolation` crafted-error unit tests are deleted
+// with the function they covered. They pinned that a refusal on `dining_tables_zone_fk` was told
+// apart from the sibling location and status FKs by the TABLE and COLUMN the refusal named. This
+// engine's foreign-key refusal names neither — the whole message is `FOREIGN KEY constraint
+// failed` (`packages/db/src/constraint-target.ts`) — so there is nothing left to tell apart.
+// `zone.not_found` now comes from `tables.ts`'s `requireZone`, an existence check before the
+// write, and the two real-DB cases above are what prove it. What is no longer checked: that a
+// refusal on the location FK or the status FK cannot be mistaken for a zone fault. Those two FKs
+// still refuse, and their refusals are now rethrown raw because nothing inspects them at all.
 
 // FP-2 spatial placement (Task 2). PGlite is enough here — the verb logic is validation + a by-id
 // UPDATE with no privilege/concurrency dimension (the real-PG gate lives on the ROUTE in a later task).

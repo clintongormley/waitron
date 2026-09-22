@@ -22,7 +22,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
-import { bindingFkField } from "./device.js";
+import { requireDeviceBinding } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
@@ -460,28 +460,20 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `management.request_invalid` 400 naming the field), the shared `requireBodyUuid` screen.
       const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
       const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
-      // A non-null target must name a device profile that exists. Rather than
-      // a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
-      // raw FK 500), let the FK `devices_device_profile_fk (device_profile_id)` be
-      // the guard: it is atomic with the UPDATE (no window). Existence is all it can check — every
-      // profile in the database belongs to the one taxpayer. A 23503 on it → `device.binding_invalid`
-      // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.
-      // Any other error rethrows raw.
-      let updated: { id: string }[];
-      try {
-        updated = await gated(sessionId, (tx) =>
-          tx
-            .update(devices)
-            .set({ deviceProfileId })
-            .where(ownDeviceById(id))
-            .returning({ id: devices.id }),
-        );
-      } catch (error) {
-        if (bindingFkField(error) === "deviceProfileId") {
-          throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
-        }
-        throw error;
-      }
+      // The target must name a device profile that exists. `requireDeviceBinding` reads it on the
+      // same transaction as the UPDATE and throws `device.binding_invalid` naming the field — the
+      // SAME code and shape the hardware PATCH below raises through the same helper. The FK
+      // `devices_device_profile_fk (device_profile_id)` still refuses a dangling write; the pre-read
+      // is what turns that refusal into an error the operator can act on, because this engine's
+      // foreign-key message names no key (see the helper).
+      const updated = await gated(sessionId, async (tx) => {
+        await requireDeviceBinding(tx, { deviceProfileId });
+        return tx
+          .update(devices)
+          .set({ deviceProfileId })
+          .where(ownDeviceById(id))
+          .returning({ id: devices.id });
+      });
       // 0 rows updated (unknown device id) → `device.not_found`, the revoke idiom.
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
@@ -526,29 +518,19 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         throw new AppError("management.request_invalid", { field: "hardware" });
       }
       // By-id scope — an unknown device id updates 0 rows → 404, the assign-device-profile / revoke
-      // by-id idiom. A `receiptPrinterId` naming no printer at all
-      // reaches `devices_receipt_printer_fk` and is translated to
-      // `device.binding_invalid` naming the field (the same `bindingFkField` helper + shape the reassign
-      // route uses); any other error rethrows raw.
-      let updated: {
-        id: string;
-        receiptPrinterId: string | null;
-        hasCashDrawer: boolean;
-      }[];
-      try {
-        updated = await gated(sessionId, (tx) =>
-          tx.update(devices).set(set).where(ownDeviceById(id)).returning({
-            id: devices.id,
-            receiptPrinterId: devices.receiptPrinterId,
-            hasCashDrawer: devices.hasCashDrawer,
-          }),
-        );
-      } catch (error) {
-        if (bindingFkField(error) === "receiptPrinterId") {
-          throw new AppError("device.binding_invalid", { field: "receiptPrinterId" });
+      // by-id idiom. A `receiptPrinterId` naming no printer is refused by `requireDeviceBinding` as
+      // `device.binding_invalid` naming the field (the same helper and shape the reassign route
+      // uses); an explicit `null` CLEARS the binding and is accepted.
+      const updated = await gated(sessionId, async (tx) => {
+        if (set.receiptPrinterId !== undefined) {
+          await requireDeviceBinding(tx, { receiptPrinterId: set.receiptPrinterId });
         }
-        throw error;
-      }
+        return tx.update(devices).set(set).where(ownDeviceById(id)).returning({
+          id: devices.id,
+          receiptPrinterId: devices.receiptPrinterId,
+          hasCashDrawer: devices.hasCashDrawer,
+        });
+      });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.json(updated[0], 200);
     }),

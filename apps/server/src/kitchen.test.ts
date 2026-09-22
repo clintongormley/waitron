@@ -218,20 +218,27 @@ describe("kitchen-station config", () => {
   });
 
   it("createStation and updateStation rethrow a NON-unique DB error raw, not as station.name_taken", async () => {
-    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) — NOT
-    // the name unique. So `isUniqueViolation` is false and both verbs rethrow the raw driver error
-    // rather than mistranslating it (the false branch of each catch — the negative control tables.ts's
-    // create/update verbs each carry).
+    // Each half provokes a refusal that is NOT the name unique, so `isUniqueViolation` is false and
+    // the verb must rethrow the raw driver error rather than mistranslating it (the false branch of
+    // each catch — the negative control tables.ts's create/update verbs each carry). Both replaced
+    // an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer refuses.
+    //
+    // CREATE: a location id that names no row trips `kitchen_stations_location_fk`.
+    // UPDATE: `warmAfterMinutes` raised above the row's untouched `overdue_after_minutes` (5 → 99,
+    // default overdue 10) trips `kitchen_stations_thresholds_ordered`, the CHECK that keeps the
+    // three age bands strictly increasing. Nothing in `updateStation` validates the bands, so the
+    // constraint is the only thing that refuses it.
     const cfg = await setupVenue();
-    const createErr = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
+    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
+      (e: unknown) => e,
+    );
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
 
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Ord" }));
     const updateErr = await asApp(cfg, (tx) =>
-      updateStation(tx, cfg, id, { displayOrder: 10_000_000_000 }),
+      updateStation(tx, cfg, id, { warmAfterMinutes: 99 }),
     ).catch((e: unknown) => e);
     expect(updateErr).toBeInstanceOf(Error);
     expect(updateErr).not.toBeInstanceOf(AppError);
@@ -412,21 +419,26 @@ describe("kitchen-course config", () => {
     });
   });
 
-  it("createCourse and updateCourse rethrow a NON-unique DB error raw, not as course.name_taken", async () => {
-    // display_order overflow (22003) is not the name unique — the false branch of each catch, the
-    // negative control the station verbs carry.
+  it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {
+    // A location id that names no row trips `kitchen_courses_location_fk` — not the name unique, so
+    // `isUniqueViolation` is false and `createCourse` rethrows raw (the false branch of its catch).
+    // It replaced an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer
+    // refuses.
+    //
+    // HALF A LOSS, from the storage swap: the `updateCourse` half of this case is deleted. Its
+    // overflow is gone the same way, and unlike the sibling `updateStation` — which still has the
+    // `kitchen_stations_thresholds_ordered` CHECK to trip — `kitchen_courses` declares no CHECK at
+    // all, and none of `updateCourse`'s three inputs (`name`, `displayOrder`, `active`) can make
+    // the UPDATE refuse for any reason but the name unique. What is no longer checked: that a
+    // refusal which is NOT a unique violation comes back raw from `updateCourse` instead of being
+    // relabelled `course.name_taken`.
     const cfg = await setupVenue();
-    const createErr = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
+    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
+      (e: unknown) => e,
+    );
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
-    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Ord" }));
-    const updateErr = await asApp(cfg, (tx) =>
-      updateCourse(tx, cfg, id, { displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
-    expect(updateErr).toBeInstanceOf(Error);
-    expect(updateErr).not.toBeInstanceOf(AppError);
   });
 });
 

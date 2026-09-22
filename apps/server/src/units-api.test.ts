@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { asAppUser, catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { hashPin, IDENTITY_MIGRATIONS, startManagementSession } from "@waitron/identity";
+import { CATALOGUE_MIGRATIONS, productUnits } from "@waitron/catalogue";
+import { hashPin, IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountUnitsApi } from "./units-api.js";
@@ -27,13 +28,42 @@ beforeEach(async () => {
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const session = await startManagementSession(tx, { personId: person.rows[0]!.id });
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators and both columns are NOT NULL, so a raw insert naming neither stops
+    // at `NOT NULL constraint failed: persons.id`. The same holds for every fixture insert below.
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const session = await startManagementSession(tx, { personId: person!.id });
     cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
   });
 });
+
+/** A catalogue to hang fixture products off. Through the table definition for the reason the
+ *  `persons` insert above states: `id`, `created_at` and `updated_at` are `$defaultFn` generators. */
+async function seedCatalogue(tx: Transaction): Promise<string> {
+  const [menu] = await tx
+    .insert(catalogues)
+    .values({ name: "Menu" })
+    .returning({ id: catalogues.id });
+  return menu!.id;
+}
+
+/** One product in `catalogueId`, measured in `unitId`. `unitPrice` is a count of whole cents. */
+async function seedProduct(
+  tx: Transaction,
+  catalogueId: string,
+  name: string,
+  unitId: string,
+): Promise<string> {
+  const [product] = await tx
+    .insert(products)
+    .values({ catalogueId, name, pricingUnit: "each", unitPrice: 100, vatClass: "general" })
+    .returning({ id: products.id });
+  await tx.insert(productUnits).values({ productId: product!.id, unitId });
+  return product!.id;
+}
 
 function app() {
   const app = new Hono();
@@ -171,18 +201,10 @@ describe("unit management routes", () => {
     ).json()) as { id: string };
 
     const [a, b] = await withTransaction(suite.db, async (tx) => {
-      const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (name) values ('Menu') returning id`);
+      const menuId = await seedCatalogue(tx);
       const ids: string[] = [];
       for (const name of ["A", "B"]) {
-        const product = await tx.execute<{ id: string }>(sql`
-          insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${menu.rows[0]!.id}, ${name}, 'each', 100, 'general')
-          returning id`);
-        await tx.execute(sql`
-          insert into product_units (product_id, unit_id)
-          values (${product.rows[0]!.id}, ${from.id})`);
-        ids.push(product.rows[0]!.id);
+        ids.push(await seedProduct(tx, menuId, name, from.id));
       }
       return ids;
     });
@@ -204,18 +226,9 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTransaction(suite.db, async (tx) => {
-      const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (name) values ('Menu') returning id`);
-      const product = await tx.execute<{ id: string }>(sql`
-        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${menu.rows[0]!.id}, 'A', 'each', 100, 'general')
-        returning id`);
-      await tx.execute(sql`
-        insert into product_units (product_id, unit_id)
-        values (${product.rows[0]!.id}, ${unit.id})`);
-      return product.rows[0]!.id;
-    });
+    const p1 = await withTransaction(suite.db, async (tx) =>
+      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+    );
 
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(res.status).toBe(200);
@@ -248,18 +261,9 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const p1 = await withTransaction(suite.db, async (tx) => {
-      const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (name) values ('Menu') returning id`);
-      const product = await tx.execute<{ id: string }>(sql`
-        insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${menu.rows[0]!.id}, 'A', 'each', 100, 'general')
-        returning id`);
-      await tx.execute(sql`
-        insert into product_units (product_id, unit_id)
-        values (${product.rows[0]!.id}, ${unit.id})`);
-      return product.rows[0]!.id;
-    });
+    const p1 = await withTransaction(suite.db, async (tx) =>
+      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+    );
 
     const res = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
       productIds: [p1],
