@@ -29,13 +29,18 @@ export interface SettleSaleInput {
 }
 
 /**
- * SQLSTATE raised by the `tenders_reject_post_settlement` trigger
- * (`packages/db/drizzle/0001_db_baseline_sql.sql` line 270) when a tender INSERT lands after the
- * sale is already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
+ * SQLSTATE raised by the `tenders_reject_post_settlement` trigger when a tender INSERT lands after
+ * the sale is already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
  *
- * It stays here rather than in `@waitron/db`'s `sqlstate.ts`, whose members are codes PostgreSQL
- * itself defines: this one is raised by a `RAISE ... USING ERRCODE` in our own trigger, and this is
- * the only file that reads it.
+ * **THAT TRIGGER DOES NOT EXIST ON THIS ENGINE, and this constant is dead until it does.** The
+ * storage switch's regeneration dropped every hand-written trigger; only the append-only ones came
+ * back. Measured: `grep -ci "create trigger"` over each of the twelve packages' own
+ * `drizzle/0000_baseline.sql` returns 0. So the `isPgError` call below can never
+ * be true, and it does not even typecheck — a refusal class is a list of numeric result codes on
+ * SQLite, not a five-character string. Left in place rather than invented around: what replaces the
+ * trigger is a decision, recorded as the EIGHTH GAP in
+ * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` with the other seven this
+ * trigger keeps company with.
  */
 const POST_SETTLEMENT_VIOLATION = "WT002";
 
@@ -51,14 +56,15 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   //
-  // The subquery is a count of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment. `sales.total` beside it is a typed drizzle column,
-  // so the column's own mapping converts that one and it needs no cast.
+  // The subquery is a count of whole cents read raw, cast to text and converted by
+  // `rawCentsToDecimal` — see its doc comment for why it is text and not an integer cast.
+  // `sales.total` beside it is a typed drizzle column, so the column's own mapping converts that
+  // one and it needs no cast.
   const [sale] = await tx
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));

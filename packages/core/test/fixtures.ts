@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
@@ -8,7 +7,7 @@ import {
   decimalToCents,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
-import { sales } from "@waitron/db";
+import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
 import type { Database } from "@waitron/db";
 
 export interface SeededTenant {
@@ -39,35 +38,41 @@ function freshNif(): string {
  * inserts it.
  */
 export async function seedTenant(db: Database): Promise<SeededTenant> {
-  await db.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', ${freshNif()}, 'Waitron SL')
-    on conflict (id) do nothing
-  `);
+  // Through the table definitions, not raw SQL: `id` and `created_at` are `$defaultFn` generators
+  // that only the insert BUILDER runs, and `invoice_locales` is a list the column's own mapping
+  // encodes. A raw insert omitting them is refused (`NOT NULL constraint failed: tenants.created_at`).
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Waitron SL" })
+    .onConflictDoNothing({ target: tenants.id });
 
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES', 'ca-ES'], 'Venta en establecimiento')
-    returning id
-  `);
-  const locationId = location.rows[0]!.id;
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES", "ca-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
 
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1')
-    returning id
-  `);
-  const tillId = brandTillId(till.rows[0]!.id);
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
 
-  const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${locationId}, 'Nodo 1')
-    returning id
-  `);
-  const nodeId = brandNodeId(node.rows[0]!.id);
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId, name: "Nodo 1" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
 
-  const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${nodeId}, 'A')
-    returning id
-  `);
-  const seriesId = brandSeriesId(series.rows[0]!.id);
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  const seriesId = brandSeriesId(series!.id);
 
   // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES `input.workingOrderId`
   // to `sales.working_order_id`, a real FK onto `working_orders` (sub-project 7b). A fabricated id
@@ -90,11 +95,11 @@ export async function seedRectificativeSeries(
   nodeId: NodeId,
   code = "R",
 ): Promise<SeriesId> {
-  const { rows } = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code, purpose) values (${nodeId}, ${code}, 'rectificative')
-    returning id
-  `);
-  return brandSeriesId(rows[0]!.id);
+  const [row] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code, purpose: "rectificative" })
+    .returning({ id: invoiceSeries.id });
+  return brandSeriesId(row!.id);
 }
 
 /**

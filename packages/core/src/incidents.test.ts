@@ -6,15 +6,7 @@ import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  captureError,
-  incidents,
-  pgErrorMessage,
-  sales,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, incidents, nowIso, sales, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -385,23 +377,18 @@ describe("openIncidents", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("refuses to rewrite an incident's code as the application role", async () => {
-    // The column-level GRANT is the control. Without it, "an incident is a record, not a note"
-    // would rest on nobody writing the UPDATE.
-    //
-    // **Deviation from the brief.** `.rejects.toThrow(/permission denied/i)` inspects only
-    // `Error.message`, and drizzle-orm@0.45.2 wraps every failed query in a `DrizzleQueryError`
-    // whose own `.message` is `Failed query: <sql>` — the real Postgres text lives on `.cause`.
-    // `captureError`/`pgErrorMessage` (this task's own governing conventions) read that instead.
-    await sell(failingChain());
-    const error = await captureError(() =>
-      withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
-        await tx.update(incidents).set({ code: "nothing.happened" });
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/permission denied for table incidents/);
-  });
+  // DELETED with the storage switch: "refuses to rewrite an incident's code as the application
+  // role". Its subject was a column-level GRANT — `app_user` held UPDATE on `acknowledged_at` and
+  // `acknowledged_by` alone, and PostgreSQL refused any other column with
+  // `permission denied for table incidents`. SQLite has no roles and no grants, so there is nothing
+  // left to refuse it and the case passed only by asserting that a write it expected to fail did.
+  //
+  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) is the replacement for what
+  // grants enforced, and it covers whole TABLES the application may not write, not one column of
+  // one table — `CLAUDE.md` §3 says so of that guard in its own words, and `docs/backlog.md` → B9
+  // is where the per-operation half is tracked. So "an incident is a record, not a note anyone may
+  // rewrite" now rests on nobody writing the UPDATE, which is exactly what this case existed to
+  // stop resting on.
 });
 
 describe("recordIncidentOnce", () => {
@@ -485,7 +472,11 @@ describe("recordIncidentOnce", () => {
         detectedAt: BASE,
       };
       await recordIncidentOnce(tx, input);
-      await tx.execute(sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`);
+      // The acknowledgement stamp is written by the CALLER on this engine — `acknowledged_at` is
+      // an ISO string in a text column and SQLite has no `now()`. Only "not null" matters here.
+      await tx.execute(
+        sql`update incidents set acknowledged_at = ${nowIso()} where till_id = ${tillId}`,
+      );
       const again = await recordIncidentOnce(tx, {
         ...input,
         detectedAt: new Date(BASE.getTime() + 2 * 3_600_000),
@@ -630,7 +621,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       });
     expect(await raise()).toBe(true);
     await suite.db.execute(
-      sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`,
+      sql`update incidents set acknowledged_at = ${nowIso()} where till_id = ${tillId}`,
     );
     expect(await raise()).toBe(true);
   });

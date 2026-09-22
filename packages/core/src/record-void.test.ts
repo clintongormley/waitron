@@ -12,6 +12,8 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  constraintTarget,
+  isUniqueViolation,
   incidents,
   invoiceSeries,
   pgErrorCode,
@@ -21,7 +23,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
 import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
@@ -67,13 +69,17 @@ beforeEach(async () => {
 });
 
 /** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
- * display name distinct because this fixture creates several live people in one tenant. */
+ * display name distinct because this fixture creates several live people in one tenant.
+ *
+ * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
+ * `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
+ * so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role)
-        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
-  );
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(persons)
+    .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
+    .returning({ id: persons.id });
+  return row!.id;
 }
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
@@ -174,7 +180,7 @@ async function voidSale(
  * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)}`,
+    sql`select count(*) as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -313,7 +319,13 @@ describe("recordVoid — numbering", () => {
         });
       }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    // WHICH key, not a code that means only "something unique" — see record-sale.test.ts's
+    // identical backstop for why this engine cannot be asserted on a code.
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(constraintTarget(error)).toEqual({
+      table: "sales",
+      columns: ["series_id", "invoice_number"],
+    });
   });
 });
 

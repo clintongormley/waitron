@@ -10,16 +10,19 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  constraintTarget,
+  isPgError,
+  isUniqueViolation,
   incidents,
   invoiceSeries,
-  pgErrorCode,
+  RESTRICT_VIOLATION,
   saleLines,
   saleSubstitutions,
   sales,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { recordSale } from "./record-sale.js";
@@ -52,12 +55,15 @@ beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
   // void below needs an authorizer, exactly as the record-void suite arranges.
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role)
-        values ('P', ${hashPin("1234")}, 'manager') returning id`,
-  );
+  // Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
+  // `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
+  // so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`.
+  const [person] = await suite.db
+    .insert(persons)
+    .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
+    .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { tillId, personId: person!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
 });
@@ -194,7 +200,7 @@ async function substitute(
  * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)}`,
+    sql`select count(*) as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -203,7 +209,7 @@ async function countRows(table: string): Promise<number> {
  * ticket (settled immediately by `sellTicket`) carries tenders and a settlement of its own. */
 async function countForSale(table: string, saleId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where sale_id = ${saleId}`,
+    sql`select count(*) as n from ${sql.raw(table)} where sale_id = ${saleId}`,
   );
   return result.rows[0]!.n;
 }
@@ -271,13 +277,18 @@ describe("recordSubstitution — error propagation", () => {
     // as-is rather than being misreported as `sale.already_substituted` — mirrors record-void.ts's
     // identical "not a unique violation" test.
     //
-    // Provoked by adding a CHECK that no row can satisfy, which is the "a constraint added later"
-    // case stated literally: the insert then fails with 23514, not 23505. The constraint is dropped
-    // in the `finally` so nothing after this case sees it.
+    // Provoked by a `RAISE(ABORT)` trigger that refuses every insert, which is the "a constraint
+    // added later" case stated as this engine states it: SQLite has no
+    // `ALTER TABLE ... ADD CONSTRAINT`, so a CHECK cannot be bolted onto an existing table, and a
+    // trigger is what the tree already uses to refuse a write (`packages/store/src/append-only.ts`).
+    // The refusal arrives under `RESTRICT_VIOLATION` (1811, `SQLITE_CONSTRAINT_TRIGGER`), which is
+    // not `UNIQUE_VIOLATION` — the discrimination the case is for. The trigger is dropped in the
+    // `finally` so nothing after this case sees it.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     await suite.db.execute(
-      sql`alter table sale_substitutions add constraint tmp_refuse_everything check (false) not valid`,
+      sql`create trigger tmp_refuse_everything before insert on sale_substitutions
+          for each row begin select raise(abort, 'refused'); end`,
     );
     try {
       const error = await captureError(() =>
@@ -286,11 +297,10 @@ describe("recordSubstitution — error propagation", () => {
         ),
       );
       expect(error).not.toBeInstanceOf(AppError);
-      expect(pgErrorCode(error)).toBe("23514"); // check_violation, not 23505 (unique)
+      expect(isUniqueViolation(error)).toBe(false);
+      expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
     } finally {
-      await suite.db.execute(
-        sql`alter table sale_substitutions drop constraint tmp_refuse_everything`,
-      );
+      await suite.db.execute(sql`drop trigger tmp_refuse_everything`);
     }
   });
 });
@@ -587,7 +597,10 @@ it("rejects repeated line numbers in a multi-ticket substitution without recordi
   const lines = substitutionInput(ids).lines.map((line) => ({ ...line, lineNo: 1 }));
   const before = await countRows("sales");
   const error = await captureError(() => substitute(backend, ids, { lines }));
-  expect(pgErrorCode(error)).toBe("23505");
+  // WHICH key: the repeated line number, not a code that means only "something unique" — see
+  // record-sale.test.ts's numbering backstop for why this engine cannot be asserted on a code.
+  expect(isUniqueViolation(error)).toBe(true);
+  expect(constraintTarget(error)).toEqual({ table: "sale_lines", columns: ["sale_id", "line_no"] });
   expect(await countRows("sales")).toBe(before);
   expect(await countRows("sale_substitutions")).toBe(0);
 });

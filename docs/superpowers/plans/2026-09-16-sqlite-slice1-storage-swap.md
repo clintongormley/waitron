@@ -4806,6 +4806,51 @@ why the write queue covers it; point at `assertExtraListForWrite`
 (`packages/catalogue/src/extras.ts`) rather than restating the pattern. Do NOT bundle the raw-SQL
 suites in — they are step 25's.
 
+**AN EIGHTH GAP — found 2026-09-22. The regeneration dropped every BEHAVIOURAL trigger, and only
+the append-only ones came back.** Step 13 regenerated each migration set from the TypeScript schema,
+and a trigger has never been declarable in TypeScript, so every one of them lived in hand-written
+`--custom` SQL and went with it. This is the same defect the schema-constraints repair (`9fdae934`)
+fixed for foreign keys, unique indexes and CHECK constraints; that audit counted three kinds of
+thing and triggers are the fourth.
+
+Counted rather than remembered. On `origin/main`, `git show origin/main:<file> | grep -ci
+"create trigger"` over every `packages/*/drizzle/*.sql` gives 28 triggers. Eighteen are the nine
+append-only pairs (`*_enforce_immutability` + `*_block_truncate`), and step group 6 restored those
+at runtime — `installAppendOnlyTriggers`, wired into `applyMigrations`. The other **eight are
+gone with nothing in their place**, and the same grep over this branch's twelve
+`packages/*/drizzle/0000_baseline.sql` files returns **0 in every one**:
+
+| trigger (all `packages/db`'s) | what it refused or did |
+| --- | --- |
+| `sale_settlements_check_coverage` | a settlement whose tenders do not cover the sale (`sales_assert_tenders_cover`) |
+| `tenders_reject_post_settlement` | a tender inserted after the sale is settled — SQLSTATE `WT002` |
+| `working_orders_enforce_transition` | an illegal working-order status transition |
+| `working_order_lines_require_open_parent` | a line written against a working order that is not open |
+| `working_order_lines_check_locales` | descriptions carrying anything but exactly the venue's locales |
+| `working_order_lines_check_variant_locales` | the same, for a variant's descriptions |
+| `working_orders_clear_table_status` | clears `dining_tables.status_id` when its tab settles or is abandoned — the only one that ACTS rather than refuses |
+| `device_profile_form_factor_locked` | a form-factor change under an ACTIVE device using that profile |
+
+Not a silent green: the suites that would catch it are still red for other reasons, so nothing is
+passing today that would stop passing once they run — `packages/db`'s
+`schema/orders.transition.test.ts`, `schema/device-profiles.trigger.pg.test.ts` and
+`schema/park-retrieve.test.ts` all fail before reaching an assertion, measured on this tree.
+`packages/core`'s `settle-sale.ts` shows the shape at the other end: its
+`isPgError(error, POST_SETTLEMENT_VIOLATION)` is one of that package's ten standing typecheck
+errors, because `WT002` is a five-character SQLSTATE and this engine's refusal classes are numbers.
+
+The change feed is a NINTH trigger and is NOT part of this gap — `packages/db/src/change-feed.ts`
+creates `waitron_change` at runtime and its body is still PL/pgSQL. It is a known conversion with an
+owner (task P3 built the row-writing shape it needs); this entry is about the eight above.
+
+**Step:** decide per trigger whether it becomes a SQLite trigger, an application check, or a
+recorded loss — then do it. The three shapes are not interchangeable: a refusal the application
+already makes (settlement coverage is checked in `settleSale` before the insert) loses only its
+backstop against a concurrent writer, which one writer per file may already cover; a refusal
+nothing else makes (`device_profile_form_factor_locked`) has no application half at all. Each
+decision is recorded where the trigger's own test can read it, and a trigger that becomes nothing
+takes its test with it, stated, per step 25's rule that nothing is deleted silently.
+
 - [ ] **Step 29: Run the whole workspace once**
 
 This is the one place in this plan a whole-workspace run is justified: the engine changed under everything.
