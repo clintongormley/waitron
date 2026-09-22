@@ -4976,6 +4976,30 @@ now run.
 says in its own header that it scans `apps/server` only. Whatever step converts them should widen
 the guard to the package it converts, or the same thing happens again.
 
+**GAP THIRTEEN IS DONE — 2026-09-22, commit `6a61efba`.** `packages/workforce` is 16 files of 22
+and 275 tests passing where 5 files and 153 tests were: **122 red→green, zero green→red** over the
+same 299 tests. The consumer suites in `apps/server` that drive the real routes went from 31 failing
+to 117 passing. The shift's local wall date has one home now
+(`packages/workforce/src/shift-local-date.ts`) and the substitution was measured in three directions,
+the zero-offset case being the control. **FOUR LOSSES named at the site**, and one of them is a
+DECISION left open rather than taken: `shifts_interval_ck` stops being an interval check when its two
+endpoints are spelled with different offsets — measured, it ACCEPTS an interval that ends an hour
+before it starts and REFUSES a valid one-hour shift. The application compares instants before
+writing, so the first never reaches the database; the second does, and answers a raw constraint
+failure instead of `shift.invalid`. The fix is one line in `addShift`/`updateShift` (normalise the
+spelling, as `attemptAppend` already does for `event_at`) but it changes what a public read returns.
+Two other findings with reach beyond this package: **`pgErrorCode` answers one code string for every
+failure on this engine**, so every surviving SQLSTATE assertion in the tree is red or vacuous; and **a
+stubbed rejection must carry `errcode`, not `code`** — two cases here forged the latter, so the
+collision they staged was not one and the retry under test never ran. Worth a tree-wide grep for both
+shapes.
+
+**GAP EIGHTEEN IS DONE — 2026-09-22, commit `9910480b`.** The leftover-SQL guard lives in the ROOT
+project now (`scripts/postgres-sql-residue.test.ts`, moved from `apps/server/src/`, which is what the
+three references to the old path above describe — they are historical as of 2026-09-22). It reads
+three packages' trees and CI is scoped, so inside `apps/server` it would not have run for a
+reporting-only or workforce-only change. Proven for each of the three roots from the new home.
+
 **GAP TWELVE IS DONE — 2026-09-22, commit `6ddb1207`.** `packages/reporting` is 18 files of 20
 passing, 206 tests where 88 passed: 114 red→green, zero green→red by sorted name. Every replacement
 was measured against PGlite with a control in the other direction (the business day over 28,800
