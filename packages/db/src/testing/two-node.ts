@@ -6,12 +6,11 @@ import { clusterMutex, type ClusterMutex } from "./cluster-mutex.js";
 
 /**
  * A two-node PostgreSQL cluster on a shared Docker network for exercising native logical
- * replication end-to-end. Imported outside this file by
- * `packages/db/src/change-feed-replication.pg.test.ts`, which starts the cluster and creates its own
- * publication and subscription over it to prove the change feed survives the logical apply worker; by
- * the sibling fixture `two-node-wireguard.ts`, which takes `LOGICAL_REPLICATION_COMMAND` and the
- * `ReplNode`/`StartedNetwork` types from here and re-exports `StartedNetwork`; and by this file's own
- * `two-node.test.ts`.
+ * replication end-to-end. Imported outside this file by the sibling fixture
+ * `two-node-wireguard.ts`, which takes `LOGICAL_REPLICATION_COMMAND` and the
+ * `ReplNode`/`StartedNetwork` types from here and re-exports `StartedNetwork`, and by this file's
+ * own `two-node.test.ts`. The change feed's replicated suite was its other consumer until the
+ * SQLite flip deleted it; nothing else starts this cluster today.
  *
  * Both nodes boot with `wal_level=logical` and `track_commit_timestamp=on`. Neither can be set at
  * runtime (`wal_level` needs a restart, `track_commit_timestamp` too), so they are passed as

@@ -795,9 +795,9 @@ function is owned by `core` (`packages/db/drizzle`) — a cross-set trigger-func
 harmless because both modules already declare `requires.core`, which the "the function must exist
 first" ordering needs anyway; the guard's job is to catch the case where such an edge is NOT declared.
 The outbox's capture triggers, which enrolled OTHER modules' tables, were deleted with the application
-outbox (swap S5). The generic live-update trigger is installed at boot and sits outside this
-migration-text guard; its behavior is exercised by
-`packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` derives
+outbox (swap S5). The live-update triggers are installed at boot and sit outside this
+migration-text guard; their behavior is exercised by `packages/db/src/change-feed.test.ts`.
+`scripts/module-graph-honesty.test.ts` derives
 both edge kinds from the SQL text (reading text, and saying so): it now scans every
 `EXECUTE (FUNCTION|PROCEDURE)` call, resolves the function's owner, and flags a cross-module one — so
 the `reject_mutation` edges surface and any future undeclared edge is caught.

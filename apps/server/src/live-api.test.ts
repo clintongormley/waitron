@@ -1,4 +1,5 @@
-// PGlite checks route authorization and stream lifecycle; change-feed.pg.test.ts checks DB delivery.
+// This suite checks route authorization and stream lifecycle; what the database itself delivers is
+// `packages/db/src/change-feed.test.ts`.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";

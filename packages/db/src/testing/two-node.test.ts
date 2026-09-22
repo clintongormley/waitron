@@ -313,10 +313,11 @@ describe("startTwoNodeCluster cluster mutex", () => {
   });
 });
 
-// Real-Docker smoke test for the two-node logical-replication fixture. It proves exactly the two
-// capabilities the one consumer outside this file leans on — `change-feed-replication.pg.test.ts`,
-// in `packages/db/src`: both nodes run with `wal_level=logical`, and a row published on one node
-// reaches the other over the Docker network. The mechanism check uses a throwaway table so it stays
+// Real-Docker smoke test for the two-node logical-replication fixture. It proves the two
+// capabilities its one consumer outside this file leaned on — the change feed's replicated suite,
+// which the SQLite flip deleted: both nodes run with `wal_level=logical`, and a row published on
+// one node reaches the other over the Docker network. With that consumer gone this file is the
+// fixture's only exercise, so the two capabilities are pinned here or nowhere. The mechanism check uses a throwaway table so it stays
 // uncoupled from any real schema, and the subscription connects as the container's default
 // superuser, which carries REPLICATION — this fixture creates no dedicated replication role.
 

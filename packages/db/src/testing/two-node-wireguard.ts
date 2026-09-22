@@ -12,8 +12,8 @@ export type { StartedNetwork } from "./two-node.js";
  * local stand-in for a box and its cloud twin talking over an untrusted network. The sibling
  * {@link import("./two-node.js")} fixture lets each node dial the other by its Docker DNS name,
  * a trusted, zero-latency LAN; this one puts a real encrypted WireGuard link in the path, so a
- * suite can be run over an untrusted network without a cloud. Its one consumer outside this file is
- * `packages/db/src/change-feed-replication.pg.test.ts`.
+ * suite can be run over an untrusted network without a cloud. It has no consumer outside this
+ * file today: the change feed's replicated suite was the only one, and the SQLite flip deleted it.
  *
  * Each node runs its own `wg0` interface (a kernel WireGuard device — `NET_ADMIN` is the only extra
  * capability, no privileged container and no `/dev/net/tun`, verified on `postgres:18-alpine`). The

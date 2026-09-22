@@ -96,6 +96,12 @@ stop the connection and clear cached values.
 
 ## Verification receipts
 
+> **2026-09-22, the SQLite flip.** The two suites named below are gone. `change-feed.pg.test.ts`
+> is replaced by `packages/db/src/change-feed.test.ts`, which covers the same shapes against a
+> real venue file; `change-feed-replication.pg.test.ts` is deleted outright, its subject being
+> PostgreSQL logical replication. `change-listener.ts` went earlier, with the notification
+> channel. The payload contract this document describes is unchanged.
+
 - `packages/db/src/change-feed.pg.test.ts` checks commit, rollback, related identities and writes
   under a non-superuser `app_user`, with no business values in the notification.
 - `packages/db/src/change-feed-replication.pg.test.ts` copies a row between two real PostgreSQL

@@ -15,7 +15,7 @@ export default defineConfig({
     // `grep -rLE "useVenueDb|useTemplateDb|useRealPostgres|describeEachTarget|createPgliteDb"
     // --include="*.test.ts" src` lists them. That grep measures which DOOR a suite uses, not whether
     // it touches a database: the ones named here reach a real PostgreSQL anyway, by starting or
-    // connecting to a container themselves — `migrate-upgrade.pg`, `change-feed-replication.pg`,
+    // connecting to a container themselves — `migrate-upgrade.pg`,
     // `testing/networked-postgres`, `testing/shared-container`, `testing/postgres`,
     // `testing/two-node` and `testing/two-node-wireguard`. The rest open no database at all.
     //

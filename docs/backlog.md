@@ -3004,8 +3004,17 @@ lane A) and for later tidy-ups:**
 
 - **F1, the flip itself,** must settle: how the drain crosses the two database files given
   `change_log`'s `local` classification — the triggers writing it sit on `venue.db` tables, and the
-  first thing to check is whether SQLite even lets a trigger body write another attached database
-  (unverified, a question not a fact) (P3); stripping three claim functions in step 16, which no
+  first thing to check has now been checked and it decides the question: SQLite REFUSES a trigger
+  body that writes another attached database, both ways round. Measured on Node v26.7.0 against
+  `node:sqlite`, 2026-09-22, with `node.db` attached to the venue connection: a qualified
+  `insert into node.change_log …` inside a trigger is refused at CREATE with `qualified table names
+  are not allowed on INSERT, UPDATE, and DELETE statements within triggers`, and the same statement
+  written unqualified is refused with `no such table: main.change_log`, because an unqualified name
+  inside a trigger resolves to the trigger's OWN database. Nothing is broken today, also measured:
+  `applyMigrations` puts every set on the venue handle, so after a real migrate `venue.db` holds 121
+  tables including `change_log` and `node.db` holds none. So whoever wires the `local` class to
+  `node.db` decides this — either `change_log` is reclassified to the file its writers live on, or
+  the triggers stop writing it directly and something above them does (P3); stripping three claim functions in step 16, which no
   longer end the same way (`claimRows` keeps a conditional update, `claimLock` and `claimLockedRows`
   become ordinary ordered SELECTs), which rests on a one-writer-at-a-time reading of the write queue
   the plan asks be decided deliberately when the step runs (P4b); the 66-test disposition of

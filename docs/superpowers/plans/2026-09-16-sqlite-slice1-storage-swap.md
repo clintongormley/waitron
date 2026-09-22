@@ -5136,6 +5136,58 @@ The change feed is a NINTH trigger and is NOT part of this gap — `packages/db/
 creates `waitron_change` at runtime and its body is still PL/pgSQL. It is a known conversion with an
 owner (task P3 built the row-writing shape it needs); this entry is about the eight above.
 
+**THE NINTH IS DONE — 2026-09-22, plan gap NINETEEN.** `installChangeFeed` emits SQLite triggers:
+three per source (insert, update, delete), with the source's `type` and related columns baked into
+each statement, since SQLite has neither a stored function to read `TG_ARGV` from nor a trigger
+covering more than one event. Dropped and recreated rather than `if not exists`, which is what
+`create or replace trigger` did. Suite: `packages/db/src/change-feed.test.ts` (new, on a real venue
+file), nine cases, each proven by a separate mutation of the production code.
+
+**The specification was MEASURED, not remembered.** `origin/main`'s PL/pgSQL body was run on PGlite
+over three probe tables — keyless, with-id, and nullable-id — and every expectation in the new
+suite is what it wrote. Two answers were not obvious from reading it: a table with NO `id` column
+and a row whose `id` is null BOTH produce `{"type": …}` alone, because the function read
+`changed_row ->> 'id'` out of a row rendered as JSON and `jsonb_strip_nulls` then dropped the key.
+That matters because `new."id"` is a PREPARE error on a keyless table, so the two cases have to be
+told apart before the statement is built — and **sixteen of the eighty-nine declared sources are
+keyless**, counted against a real migrated database rather than the schema.
+
+**Three engine facts behind the shape, each measured on Node v26.7.0 against `node:sqlite`:**
+`NEW is not distinct from OLD` becomes a `when` clause comparing every column with `is not`, read
+back from `pragma table_info` — without it SQLite fires the trigger for an update that changes
+nothing, where PostgreSQL wrote no row. `change_log.id` has to be generated IN SQL (`randomblob`
+plus the version-4 nibbles), because its default is a JavaScript call a trigger's raw INSERT never
+reaches; `random() & 3` rather than `abs(random()) % 4`, `abs()` on the smallest 64-bit integer
+being an overflow error. And the `resources` array is built by concatenating `json_object(…)` text
+and parsing it back with `json()` — `json_group_array` over a subquery referencing `new.*` also
+works inside a trigger body, measured, but the concatenation is one expression with no row ordering
+to reason about.
+
+**ONE LOSS, recorded rather than worked around: there is no `ENABLE ALWAYS`.** On PostgreSQL that
+flag made the trigger fire under a logical-replication apply worker, which skips ordinary triggers.
+SQLite has no apply worker and no such flag.
+
+**Two suites deleted, and what each held.** `change-feed.pg.test.ts` watched the change rows from a
+SECOND connection while the writing transaction was open, to establish that the trigger writes
+inside that transaction rather than out of band; the new suite keeps the one-transaction property
+through its rollback case and loses the second-observer half, there being one writer per file here.
+It also had a `session_replication_role = replica` case, which is the loss above.
+`change-feed-replication.pg.test.ts` proved the trigger survived a real apply worker across two
+containerised nodes — the same loss, and the whole subject retires with the engine. Its two
+fixtures (`testing/two-node.ts`, `two-node-wireguard.ts`) are already on step 27's delete list;
+until then `two-node-wireguard.ts` has no consumer outside its own suite, and both docstrings now
+say so.
+
+**A backlog question closed on the way, because it is about these triggers.** `docs/backlog.md`
+asked whether SQLite allows a trigger body to write a table in another attached database, and
+recorded that nobody had checked. It does not, both ways round: a qualified
+`insert into node.change_log …` inside a trigger is refused at CREATE (`qualified table names are
+not allowed on INSERT, UPDATE, and DELETE statements within triggers`), and unqualified resolves to
+the trigger's own database (`no such table: main.change_log`). Nothing is broken today —
+`applyMigrations` puts every set on the venue handle, so `change_log` and all eighty-nine source
+tables share `venue.db` and `node.db` holds no tables at all — but whoever wires the `local` class
+to the node file has to move `change_log` off the trigger path or reclassify it.
+
 **Step:** decide per trigger whether it becomes a SQLite trigger, an application check, or a
 recorded loss — then do it. The three shapes are not interchangeable: a refusal the application
 already makes (settlement coverage is checked in `settleSale` before the insert) loses only its
