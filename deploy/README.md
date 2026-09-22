@@ -198,11 +198,12 @@ middle of a cold restore, so it is worth reading twice:
 
 `.env.example` documents every line. Two are worth calling out here.
 
-**`POSTGRES_PASSWORD`** is the one secret a box needs before anything runs: the `db` container
-consumes it at first start, and compose derives the app's `WAITRON_BOOTSTRAP_DATABASE_URL` from it.
-`waitron.sh install` generates it and never prints it. Everything else the box holds — the vault key ring,
-the CA and leaf certificates, the node's own secrets — is minted on the first setup boot into the
-`state` volume.
+**`POSTGRES_PASSWORD`** is the `db` container's own password, consumed at its first start.
+`waitron.sh install` generates it and never prints it. **The app no longer reads it, directly or
+derived:** a venue is a directory of SQLite files under the `state` volume, so the server opens no
+database server and holds no database credentials at all. The `db` service itself is retired by a
+later change. Everything else the box holds — the vault key ring, the CA and leaf certificates, the
+node's own secrets — is minted on the first setup boot into the `state` volume.
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,
@@ -251,10 +252,6 @@ services:
     network_mode: bridge
     ports:
       - "443:443"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      WAITRON_BOOTSTRAP_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@host.docker.internal:5432/postgres
 ```
 
 ```bash

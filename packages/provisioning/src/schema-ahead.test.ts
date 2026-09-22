@@ -13,15 +13,27 @@ const PHANTOM: MigrationSetSource = {
   from: "../phantom/drizzle",
 };
 
-/** A database stub that answers the one `select "hash" from …` this module makes. */
+/**
+ * A database stub answering the TWO queries `journalHashes` makes per set, in order: the
+ * `sqlite_master` presence probe, then the journal read. They alternate, so a call with several
+ * sets is answered set by set.
+ *
+ * It was one query until 2026-09-22, when `journalHashes` stopped catching PostgreSQL's `42P01` —
+ * a value `node:sqlite` never produces — and started asking the catalogue instead.
+ */
 function dbWith(hashes: readonly string[]) {
-  return { execute: () => Promise.resolve({ rows: hashes.map((hash) => ({ hash })) }) } as never;
+  let call = 0;
+  return {
+    execute: () =>
+      Promise.resolve(
+        call++ % 2 === 0 ? { rows: [{ n: 1 }] } : { rows: hashes.map((hash) => ({ hash })) },
+      ),
+  } as never;
 }
 
-/** A database whose journal table does not exist — SQLSTATE 42P01, the never-migrated set. */
-const dbWithoutJournal = {
-  execute: () => Promise.reject(Object.assign(new Error("undefined_table"), { code: "42P01" })),
-} as never;
+/** A database whose journal table does not exist: the catalogue reports it absent, and the journal
+ *  read is never reached — the never-migrated set. */
+const dbWithoutJournal = { execute: () => Promise.resolve({ rows: [{ n: 0 }] }) } as never;
 
 describe("unknownHashes", () => {
   it("returns the database hashes the image has no file for", () => {
@@ -29,8 +41,8 @@ describe("unknownHashes", () => {
   });
 
   // Control: a database BEHIND the image is not ahead. Only the ahead direction is a failure — a
-  // behind database is an ordinary upgrade, and `ensureInstance` has already migrated it forward by
-  // the time this runs.
+  // behind database is an ordinary upgrade. The entrypoint runs this check BEFORE anything
+  // migrates (`apps/server/src/node-entry.ts`), so the behind case is the ordinary one.
   it("reports nothing for a database behind the image", () => {
     expect(unknownHashes(["a"], ["a", "b", "c"])).toEqual([]);
   });

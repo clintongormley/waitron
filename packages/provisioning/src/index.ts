@@ -5,13 +5,6 @@ export { assertIdentifier, generatePassword, quoteIdent, withRole } from "./iden
 export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
-export { INSTANCE_ROLES, INSTANCE_MIGRATOR_ROLE, readInstanceState } from "./instance-state.js";
-export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";
-export { planInstance } from "./instance-plan.js";
-export type { InstanceAction, InstanceRequest } from "./instance-plan.js";
-export { applyInstance, withDatabase } from "./instance-apply.js";
-export type { ApplyDeps } from "./instance-apply.js";
-export { formatStatus } from "./status-command.js";
 export { planVenue, describeVenueAction } from "./venue-plan.js";
 export type { AdoptResult, VenueRequest, VenueAction } from "./venue-plan.js";
 export { applyVenue } from "./venue-apply.js";

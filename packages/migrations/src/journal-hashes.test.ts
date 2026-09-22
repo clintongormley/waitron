@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { captureError, openVenueDatabase } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
-import { manifestSets } from "./manifest.js";
+import { manifestSets, migrationOptionsFor } from "./manifest.js";
 import { imageMigrationHashes, journalHashes } from "./journal-hashes.js";
 
 const core = manifestSets().find((set) => set.name === "core")!;
@@ -50,24 +54,52 @@ describe("journalHashes", () => {
     });
   });
 
-  it("returns null when the journal table does not exist", async () => {
-    const db = {
-      execute: () => Promise.reject(Object.assign(new Error("undefined_table"), { code: "42P01" })),
-    };
-    expect(await journalHashes(db as never, core)).toBeNull();
-  });
-
-  it("rethrows any other driver error rather than reporting an unmigrated set", async () => {
-    const db = {
-      execute: () => Promise.reject(Object.assign(new Error("no connection"), { code: "08006" })),
-    };
-    await expect(journalHashes(db as never, core)).rejects.toMatchObject({ code: "08006" });
-  });
-
-  it("returns the hashes the journal carries, in application order", async () => {
+  it("returns the hashes the journal carries", async () => {
     const db = {
       execute: () => Promise.resolve({ rows: [{ hash: "aa" }, { hash: "bb" }] }),
     };
     expect(await journalHashes(db as never, core)).toEqual(["aa", "bb"]);
+  });
+});
+
+// The absent-table and driver-error cases run against the REAL engine. They used to hand the
+// function a fake rejecting with PostgreSQL's SQLSTATE `42P01`, a value `node:sqlite` never
+// produces — so they passed while the product threw `no such table` on every first boot.
+describe("journalHashes — against a real database", () => {
+  const suite = useVenueDb({ migrations: migrationOptionsFor([core], null) });
+
+  it("returns null when the journal table is absent, rather than throwing", async () => {
+    const absentSet = { name: "nope", table: "__drizzle_migrations_absent", from: "x" };
+    expect(await journalHashes(suite.db, absentSet)).toBeNull();
+  });
+
+  it("reads the hashes a real migrate wrote", async () => {
+    const hashes = await journalHashes(suite.db, core);
+    expect(hashes).toEqual(imageMigrationHashes(core, null));
+  });
+
+  it("rethrows a driver error rather than reporting an unmigrated set", async () => {
+    // A closed connection fails with `ERR_INVALID_STATE`, not a missing table — reported as "no
+    // journal" it would let the ahead check read a fully-migrated database as virgin. The code is
+    // asserted, not merely `toBeInstanceOf(Error)`: the absent-table path RETURNS rather than
+    // throwing, so "an Error" would pass against the wrong error too.
+    const directory = mkdtempSync(join(tmpdir(), "waitron-journal-hashes-dead-"));
+    try {
+      const store = await openVenueDatabase(directory);
+      const dead = store.venue;
+      await store.close();
+      const error = await captureError(() => journalHashes(dead, core));
+      expect((error as { code?: string }).code).toBe("ERR_INVALID_STATE");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("is not fooled by a same-named view", async () => {
+    // `sqlite_master` holds views too, so the probe asks for `type = 'table'`. Without that
+    // predicate a view named like a journal table would be read as a journal.
+    const viewSet = { name: "v", table: "__drizzle_migrations_view", from: "x" };
+    suite.db.run(sql.raw(`create view "${viewSet.table}" as select 'x' as "hash"`));
+    expect(await journalHashes(suite.db, viewSet)).toBeNull();
   });
 });

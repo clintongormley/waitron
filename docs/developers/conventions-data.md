@@ -670,8 +670,15 @@ and SQLite has no equivalent, so the thing the flag protected — an apply worke
 row past an ordinary trigger — has no path left to take. The enforcement is no longer written into
 each migration by hand: `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`) puts a
 `RAISE(ABORT)` trigger pair on each named table, and `applyMigrations`
-(`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot, the cold restore,
-`rejoin-command`, `waitron-provision instance` and `dev-setup` all install them.
+(`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot
+(`apps/server/src/boot.ts`), the cold restore (`apps/server/src/restore.ts`) and `rejoin-command` all
+install them. `waitron-provision instance` is NOT one of them any more: the instance-provisioning
+path went with the PostgreSQL deployment model on 2026-09-22, and the `venue` command that survives
+it migrates nothing — no non-test file under `packages/provisioning/src` calls `applyMigrations` at
+all (the one caller left there is `schema-ahead.migrate.test.ts`, which migrates its own fixture).
+The two dev scripts, `apps/server/scripts/dev-setup.ts` and `apps/server/scripts/dev-onboard.ts`,
+still hand `applyMigrations` a PostgreSQL connection string where it now takes a DIRECTORY, so they
+are unconverted as of 2026-09-22 and nothing is established about what they install.
 
 **2026-09-22: the names do NOT come from the `ledger` class, and for one step group they were
 going to.** The first design said "every table the modules classify `ledger`", and the guard that
@@ -723,7 +730,7 @@ own entry point, not one the guard builds and protects itself). The second is na
 in two ways it states itself: it covers those two statement shapes only, because the other two need
 a conflicting key, which is per-table — those are proven once against the trigger pair in
 `packages/store/src/append-only.test.ts`; and it drives the DESCRIPTOR path, leaving the
-manifest-JSON path that `rejoin-command`, `dev-setup` and `waitron-provision instance` take to
+manifest-JSON path that `rejoin-command`, `dev-setup` and `dev-onboard` take to
 `packages/composition/src/composition.test.ts`'s `toEqual` of the two, plus
 `packages/migrations/src/apply-append-only.test.ts`, which runs it end to end. It also PINS the set
 by name rather than counting it, so adding or dropping an append-only table costs a deliberate edit.
@@ -771,68 +778,6 @@ one was written that did, and **the SQLite flip deleted it on 2026-09-21** — S
 publications nor a replication identity, so there is no statement left to make and nothing to
 reproduce. The reasoning above records what was true on PostgreSQL. A per-table check would have to
 read each module's `_CLASSIFICATION` list against its schema file's primary keys.
-
-## `waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a plain admin
-
-The arrangement: `instance` creates the database `OWNER waitron_migrator`
-(`packages/provisioning/src/instance-plan.ts` emits the `create-database` action with that owner, and
-`packages/provisioning/src/instance-apply.ts` runs `create database … owner …`), runs the migrate over
-a connection carrying `options=-c role=waitron_migrator`, and refuses a database owned by anyone else
-(`provisioning.database_not_owned`). Every table the migrate creates is migrator-owned as a
-CONSEQUENCE of those two choices, not as a separate step.
-
-**The reason the migrator was chosen over the admin is gone, and nothing has replaced it.**
-`git log -S "owner waitron_migrator"` names `e82588f3` (#280, 2026-09-08) as the commit that put the
-clause into the `create database` statement; its two other hits are the S2 plan document and a
-`packages/sync` test fixture, plus this branch's own deletion. That diff replaces a bare
-`create database <name>` with the `owner` form, and the comment it adds gives the reason as logical
-replication's `CREATE PUBLICATION … FOR TABLE`, which CLAUDE.md §3 records as owner-only. The same
-commit deletes the two plan actions that had reached the same ability by grant —
-`grant-database-create` and `grant-schema-create`, which before #280 handed the migrator CREATE on the
-database and CREATE WITH GRANT OPTION on schema `public` while the ADMIN created the database, owned
-it and ran the migrate (`git show e82588f3^:packages/provisioning/src/instance-plan.ts` for the
-grants; the `case "migrate"` comment in
-`git show e82588f3^:packages/provisioning/src/instance-apply.ts` for the admin — "Migrate with the
-admin connection string … that admin just created the database and owns it"). So replication is
-exactly why this changed. The failover deletion of 2026-09-19 (`8faa3033`) then took the last
-`CREATE PUBLICATION` out of shipped code:
-`grep -rniE "create (publication|subscription)" packages apps` then matched only test suites — two
-real-PostgreSQL ones in `packages/db`, and one in `packages/catalogue` which created its publication
-on its own container for the stated reason that "nothing in the tree does it today". **The SQLite
-flip deleted that third one on 2026-09-21**; the two in `packages/db` are the flip's own to account
-for.
-
-**What holds the arrangement in place today** — three things, none of them "it could not be otherwise":
-
-- The refusal is a POLICY, not something PostgreSQL forces. `instance` does not try to re-own a
-  database it finds; it refuses it (owner decision 2026-09-07, recorded at the refusal in
-  `packages/provisioning/src/instance-plan.ts`). Do not restate that decision the way its own comment
-  does — "ownership is fixed at CREATE" overstates it. Measured on PostgreSQL 18.6,
-  `alter database probe_db owner to waitron_migrator` SUCCEEDS when the role running it owns the
-  database and is a member of the target role, which is the shape of this tool's own admin on a
-  database it created; the control, the same statement from a `createdb createrole` role that does
-  NOT own the database, fails `must be owner of database probe_db`. The arrangement could be undone
-  in place. Nobody has decided to.
-- Ownership is how the migrator gets CREATE on the database and on schema `public`, which is why the
-  plan carries no CREATE grant at all (`REQUIREMENTS` in
-  `packages/provisioning/src/instance-plan.ts`; `packages/provisioning/src/instance-plan.test.ts`
-  pins that a plan contains neither deleted action). The grant-based alternative is not hypothetical
-  — it is what `apps/server/scripts/dev-setup.ts` does on the shared dev `postgres` database, which
-  the migrator does not own.
-- Callers depend on the consequence: on a migrator-owned `public` a plain admin connection is refused
-  `CREATE TABLE` with `42501`, which is why any new provisioning path that creates schema carries
-  `withRole(uri, waitron_migrator)` (`@waitron/provisioning`). Live receipt:
-  `packages/provisioning/src/instance-apply.pg.test.ts`, "lets the migrator, but not a plain admin,
-  write the migrator-owned schema (C5)" — it runs both halves against a real server and asserts
-  `42501` for the admin. The message text, `permission denied for schema public`, was read off probe A
-  in `docs/superpowers/plans/2026-09-07-outbox-swap-s4-s5-promotion-and-deletion.md`.
-
-Two justifications that do NOT hold. The first was this section's own text until 2026-09-19: that
-`42501` is not the reason for the ownership. The database being migrator-owned is a choice this tool
-makes and the refusal is its consequence, so offering the refusal as the cause argues in a circle.
-The second: saying the migrations issue their own grants from that ownership does not establish it
-either — an admin that had created the tables would own them and could grant just as well, so that
-sentence leaves out the part that makes it the migrator.
 
 ## A module/migration dependency graph has TWO kinds of cross-set edge
 
@@ -960,9 +905,17 @@ real venue is live; add its replacement in the same change.
 
 ## An empty connection string is a valid connection string
 
-`new Client({ connectionString: "" })` resolves to localhost with every default (`pg@8.23.0`).
-Anything reading a URL from env or a prompt refuses `""` explicitly (`isUnset`);
-`waitron-provision instance` would otherwise have stamped whatever answered on localhost.
+`new Client({ connectionString: "" })` resolves to localhost with every default (`pg@8.23.0`), so an
+empty string is never "no value given". Anything reading a URL from env or a prompt refuses `""`
+explicitly: `readAdminUri` (`packages/provisioning/src/cli.ts`) takes `WAITRON_ADMIN_DATABASE_URL` or
+an echo-off prompt and throws `provisioning.admin_uri_missing` on an empty one. The command this was
+first written against, `waitron-provision instance`, went with the PostgreSQL deployment model on
+2026-09-22; `venue` is the reader left, and it is the reader this receipt was re-checked against.
+
+The same "an empty value is a value" trap has a SQLite shape, and the same one-line answer: a path
+variable that is unset OR empty falls back to its default through `isUnset`
+(`apps/server/src/env-value.ts`) and never through `resolve("")`, which is the process's working
+directory. `apps/server/src/config.ts` states it at `stateDir`, `venueDir` and `logDir`.
 
 **Migrations**
 
@@ -1015,15 +968,24 @@ older ref after a newer one has already migrated the database can fail to boot w
 `waitron.sh reset` wipes the database and is the clean way back to a working box; on a production box
 the script refuses to suggest that (a reset there would destroy the fiscal chain) and says to install
 a newer ref instead (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 6,
-§4.1). Its only caller anywhere is `apps/server/src/node-entry.ts`, which runs it after
-`ensureInstance` and before `startServer` (`grep -rn assertNotAhead` before believing otherwise). The
-GAP, stated so nobody assumes coverage: `waitron-provision instance`
-(`packages/provisioning/src/instance-apply.ts`), the cold restore (`apps/server/src/restore.ts`),
-`apps/server/src/rejoin-command.ts` and `apps/server/scripts/dev-setup.ts` each call `applyMigrations`
-against a live database with no ahead check, so an ahead database reached through any of them is
-still undetected. Cost: without the check, an ahead database re-migrates CLEANLY — drizzle applies
-nothing and throws nothing (measured with a control, 2026-09-10) — so the mismatch showed up only as
-an unclassified driver error in whatever query first touched the changed schema. Pointer:
+§4.1). Its only caller anywhere is `apps/server/src/node-entry.ts` (`grep -rn assertNotAhead` before
+believing otherwise), and WHERE it sits changed with the storage switch. It used to run after
+`ensureInstance`, which had already migrated a behind database forward; `ensureInstance` no longer
+exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and BEFORE
+`startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
+(`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that lets a virgin venue
+directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
+
+The GAP, stated so nobody assumes coverage: the cold restore taken from the `waitron-restore` CLI
+(`apps/server/src/restore-command.ts`, which calls `apps/server/src/restore.ts`),
+`apps/server/src/rejoin-command.ts`, `apps/server/scripts/dev-setup.ts` and
+`apps/server/scripts/dev-onboard.ts` each call `applyMigrations` against a live database with no
+ahead check, so an ahead database reached through any of them is still undetected. A restore staged
+at BOOT is the one case that IS covered, because the check runs after it. The `instance` command
+headed this list until 2026-09-22 and no longer exists. Cost: without the check, an ahead database
+re-migrates CLEANLY — drizzle applies nothing and throws nothing (measured with a control,
+2026-09-10) — so the mismatch showed up only as an unclassified driver error in whatever query first
+touched the changed schema. Pointer:
 `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §4.2/§4.5/§9.
 
 ## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries

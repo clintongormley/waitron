@@ -1,36 +1,16 @@
 #!/usr/bin/env node
 import { once } from "node:events";
-import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
-import { fileURLToPath } from "node:url";
 import { ALL_MODULES } from "@waitron/composition";
 import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
-import { applyInstance } from "./instance-apply.js";
-import { readInstanceState } from "./instance-state.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { applyVenue } from "./venue-apply.js";
-
-/**
- * Where the migration SQL lives.
- *
- * `import.meta.url` is the BUNDLE's own location once esbuild has run — `dist/bin.js` — so this
- * resolves to `dist/drizzle`, which is exactly where `scripts/copy-migrations.mjs` puts it. Running
- * from source there is no such folder, and `null` is `migrationOptionsFor`'s own word for "running
- * from source": it then resolves each set against `packages/migrations` instead.
- *
- * `existsSync` picks between the two rather than an environment variable an operator has to know
- * about. If the copy step did not run, this falls back to the from-source resolution and
- * `migrationOptionsFor` throws `migrations.set_missing` naming the folder it looked in — loud, not
- * silent. `apps/server`'s `DEFAULT_MIGRATIONS_ROOT` (boot.ts:52) computes the same path the same
- * way, for the same reason.
- */
-const BUNDLED_MIGRATIONS = fileURLToPath(new URL("drizzle", import.meta.url));
 
 /** `ESC[3J` clears the SCROLLBACK, `ESC[H` homes the cursor, `ESC[2J` clears the screen, in that
  * order — `ESC[2J` alone leaves the scrollback intact, which is the whole point. Written as
@@ -42,7 +22,7 @@ const CLEAR = "\u001B[3J\u001B[H\u001B[2J";
  * The only file in this package that touches the process, so everything else stays testable
  * without one. Excluded from coverage deliberately (`vitest.config.ts`): every decision it could
  * get wrong lives in `cli.ts`, which is injected and fully tested. Its verification is the bundle
- * check in the plan — `node dist/bin.js` printing usage and exiting 2, with `dist/drizzle` present.
+ * check in the plan — `node dist/bin.js` printing usage and exiting 2.
  *
  * There is no `DATABASE_URL` requirement here, unlike `packages/credentials/src/bin.ts`: this tool
  * connects as an ADMIN, per command, and `keyring` connects to nothing at all. Demanding a
@@ -61,9 +41,6 @@ async function main(): Promise<number> {
       },
       env: process.env,
       connect: (uri) => createPostgresDb(uri),
-      migrationsRoot: existsSync(BUNDLED_MIGRATIONS) ? BUNDLED_MIGRATIONS : null,
-      readState: readInstanceState,
-      apply: applyInstance,
       applyVenue,
       modules: ALL_MODULES,
       // Persist the resolved fiscal-slot `modules.json` when this box's state dir is known, so a boot
@@ -146,11 +123,10 @@ const SINK = new Writable({
  * resolve — Node printed `Warning: Detected unsettled top-level await` and exited 0, reporting
  * success for a command that never ran. Observed directly with `printf '' | node <probe>` before
  * this race existed; with it, the same input returns `got=[]` and exits 0 through the normal path.
- * `""` is a value no caller in `cli.ts` acts on. It is REFUSED at each of the three that take one —
- * `--database` by `assertIdentifier` (`provisioning.invalid_identifier`), `--environment` by
- * `assertEnvironment` (`deployment.unknown_environment`), the admin connection string by
- * `resolveAdminUri` (`provisioning.admin_uri_missing`) — and at the "Apply this plan?" prompt it is
- * simply not `y`, so nothing is applied.
+ * `""` is a value no caller in `cli.ts` acts on. It is REFUSED at each of the two that take one —
+ * `--database` by `assertIdentifier` (`provisioning.invalid_identifier`) and the admin connection
+ * string by `resolveAdminUri` (`provisioning.admin_uri_missing`) — and at the "Apply this plan?"
+ * prompt it is simply not `y`, so nothing is applied.
  *
  * An earlier version of this sentence said `""` was "what every caller in `cli.ts` already treats
  * as 'not supplied'". That was false in the one place it mattered: `resolveAdminUri` returned the

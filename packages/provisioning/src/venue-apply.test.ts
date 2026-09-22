@@ -8,10 +8,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
 
-// PGlite's default connection is a SUPERUSER holding every grant, so a privilege or trigger
-// assertion here would be a false pass (CLAUDE.md §4). That is fine: this suite exercises the wiring
-// and idempotency logic, and the run as the non-superuser owner against a real, migrated database is
-// `venue-apply.pg.test.ts`.
+// This suite exercises the wiring and idempotency logic against a migrated venue directory. The run
+// as a non-superuser owner of a real PostgreSQL database that used to sit beside it
+// (`venue-apply.pg.test.ts`) was deleted with the PostgreSQL deployment model: there are no roles
+// left for it to be about.
 //
 // The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
 // 0014 capture migration needs): applyVenue

@@ -28,8 +28,9 @@ import { applyVenue } from "./venue-apply.js";
  * reaches through `ALL_MODULES`. This package's production code no longer imports it at all: the
  * runner takes the module list as an argument and calls whatever seed the list carries.
  *
- * PGlite is sufficient for sale chaining and login behavior; venue-apply.pg.test.ts
- * exercises provisioning as a non-superuser owner on real Postgres.
+ * A migrated venue directory is sufficient for sale chaining and login behaviour. The suite that
+ * exercised provisioning as a non-superuser owner on real PostgreSQL was deleted with the
+ * PostgreSQL deployment model.
  *
  * The full manifest is migrated in dependency order. The real `applyVenue` now seeds an admin
  * `persons` row, so identity's set has to be migrated here too. (`persons` no longer has a foreign

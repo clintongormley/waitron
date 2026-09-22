@@ -4744,6 +4744,30 @@ git commit -s -m "Run every test against SQLite, and account for every PostgreSQ
 
 ### Step group 8 — finish
 
+**A FIFTH GAP — found 2026-09-22, owner-approved the same day. The container entrypoint is not a
+conversion, it is a retirement.** `apps/server/src/node-entry.ts` waited for a PostgreSQL server,
+read a bootstrap superuser connection string handed to it by `deploy/compose.yml`, and called
+`ensureInstance`, which created a database and the `waitron_app` / `waitron_migrator` roles and
+wrote their connection strings into `instance.env`. With one SQLite directory there is no server to
+wait for, no database to create and no roles. So this step DELETES the `waitron-provision instance`
+path — the CLI, the compose bootstrap superuser, `instance.env`, and `packages/provisioning`'s
+instance half (`instance-apply.ts`, `instance-plan.ts`, `instance-state.ts`, `status-command.ts`) —
+while KEEPING the venue half (`applyVenue`, the tenant guard `boot.ts` uses) and `schema-ahead.ts`.
+The entrypoint keeps the ahead check, repointed at the venue directory; `boot.ts` already migrates.
+
+**A SIXTH GAP — found 2026-09-22. The dev stack's own bootstrap is named by no step in this plan.**
+`grep -n "dev-setup\|dev-onboard"` over this file returns nothing. `apps/server/scripts/dev-setup.ts`
+creates a PostgreSQL database, creates `waitron_migrator`, grants it `CREATE` and migrates through a
+`role=` session option, deliberately reproducing the shape `waitron-provision instance` produced
+(its own header, `:22-28`); `dev-onboard.ts` sits on top and carries a SECOND `waitForPostgres`
+(`:29`, `:85`). The nearest step is T2's "remove the `db` service from `deploy/compose.yml` and the
+dev-stack wiring that starts it", which is compose, not this script. It is already red on this
+branch (`scripts/dev-setup.ts(39,21)`, `createPostgresDb` removed) and the instance-half deletion
+adds more (`:48`, `:80`, `:516`, `:523`, `:527` read `INSTANCE_MIGRATOR_ROLE`). **Step:** convert
+both, do not delete them — the dev stack is how the product is run from a worktree, and deleting a
+working developer path with no successor is the defect class `CLAUDE.md` §1 is about.
+
+
 - [ ] **Step 29: Run the whole workspace once**
 
 This is the one place in this plan a whole-workspace run is justified: the engine changed under everything.

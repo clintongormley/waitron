@@ -1487,9 +1487,6 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
     devDependencies:
-      '@testcontainers/postgresql':
-        specifier: ^12.1.0
-        version: 12.1.0
       '@types/node':
         specifier: ^26.0.0
         version: 26.6.2

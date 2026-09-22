@@ -295,24 +295,19 @@ export default tseslint.config(
     // `js.configs.recommended` defines no environment, so a plain Node script has no `process`
     // global — unlike a `.ts` file, where `tseslint.configs.recommended` turns `no-undef` off
     // entirely (TS's own checker already catches that class of error, per ts(2304)/ts(2552)).
-    // `apps/server/scripts/copy-migrations.mjs` was the first `.mjs` in this repo;
-    // `packages/provisioning/scripts/copy-migrations.mjs` is its near-copy, shipping the same
-    // migration folders beside `waitron-provision`'s own bundle. Both need the same one global.
+    // `apps/server/scripts/copy-migrations.mjs` was the first `.mjs` in this repo, and ships the
+    // migration folders beside the server's own bundle. It needs the one global.
     // The repo-root `scripts/` directory holds the two that are not build steps —
     // `changed-packages.mjs` maps a diff onto workspace packages, `changed-scope.mjs` turns a
     // resolved scope into CI's gate lines — and they are the ones that need a SECOND global. The
-    // build steps only ever announce progress on stdout and reach for `process.stdout.write` to do
-    // it (grepped: four calls across the two files, no `console` anywhere); these two have to keep
+    // build step, `copy-migrations.mjs`, only ever announces progress on stdout and reaches for
+    // `process.stdout.write` to do it (grepped: no `console` in that file); these two have to keep
     // two streams apart, because their stdout is read by machine — appended straight to
     // `$GITHUB_OUTPUT` in CI, and `sed`-ed by `.husky/pre-push` — so it must carry `<name>=<value>`
     // lines and nothing else, while the reason for each verdict goes to stderr for a human reading
     // the job log or watching the push. The line COUNT is part of the contract, not just the
     // content: a stray line becomes an extra job output.
-    files: [
-      "apps/server/scripts/**/*.mjs",
-      "packages/provisioning/scripts/**/*.mjs",
-      "scripts/**/*.mjs",
-    ],
+    files: ["apps/server/scripts/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: {
       globals: { console: "readonly", process: "readonly" },
     },

@@ -144,8 +144,8 @@ describe("configuration", () => {
   });
 
   it("excludes provisioning's test files as a documented production-only interim", () => {
-    // Provisioning's e2e/pg tests provision a real Veri*Factu venue and name the Spanish fiscal
-    // TABLES in SQL, which cannot be renamed. Until those tests run against fiscal-none (spec §6
+    // Provisioning's e2e test provisions a real Veri*Factu venue and names the Spanish fiscal
+    // TABLES in SQL, which cannot be renamed. Until that test runs against fiscal-none (spec §6
     // step 5), only provisioning's production is scanned — the ONLY test exemption.
     const files = sourceFilesIn("provisioning");
     expect(files.length).toBeGreaterThan(0);

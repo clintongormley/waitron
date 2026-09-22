@@ -1,29 +1,27 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
+import { sql, type SQL } from "drizzle-orm";
 import type { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { openVenueDatabase } from "@waitron/db";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
-import { recoveryTlsFiles, runEntry, serveRecovery, waitForPostgres } from "./node-entry.js";
+import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 
 function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
   return {
-    baseEnv: { WAITRON_BOOTSTRAP_DATABASE_URL: "postgres://postgres:pg@127.0.0.1/postgres" },
+    baseEnv: {},
     stateDir: "/state",
-    waitForPostgres: vi.fn(() => Promise.resolve()),
-    ensureInstance: vi.fn(() =>
-      Promise.resolve({
-        databaseUrl: "postgres://app",
-        migrationsDatabaseUrl: "postgres://migrator",
-      }),
-    ),
-    // Stubbed here, unlike `runStagedRestore` below it: the real default opens a connection to
-    // whatever `ensureInstance` returned, and these suites hand it a URL nothing answers. One test
-    // (`defaults the ahead check to the real one`) overrides this back to `undefined` on purpose.
+    venueDir: "/venue",
+    // Stubbed here, unlike `runStagedRestore` below it: the real default OPENS the venue directory,
+    // and these suites name one that does not exist. One test (`defaults the ahead check to the
+    // real one`) overrides this back to `undefined` on purpose; the `assertNotAhead` describe at
+    // the bottom of this file calls the real wrapper directly instead.
     assertNotAhead: vi.fn(() => Promise.resolve()),
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
@@ -38,20 +36,13 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
 }
 
 describe("runEntry", () => {
-  it("runs a staged restore after instance bootstrap and before loading box identity", async () => {
+  it("runs a staged restore over the VENUE DIRECTORY, before loading box identity", async () => {
     const order: string[] = [];
     await runEntry(
       deps({
-        ensureInstance: vi.fn(async () => {
-          order.push("instance");
-          return {
-            databaseUrl: "postgres://app",
-            migrationsDatabaseUrl: "postgres://migrator",
-          };
-        }),
         runStagedRestore: vi.fn(async (request) => {
           order.push("restore");
-          expect(request.databaseUrl).toBe("postgres://migrator");
+          expect(request.venueDir).toBe("/venue");
           return true;
         }),
         loadBoxEnv: vi.fn(async (base) => {
@@ -60,19 +51,30 @@ describe("runEntry", () => {
         }),
       }),
     );
-    expect(order).toEqual(["instance", "restore", "identity"]);
+    expect(order).toEqual(["restore", "identity"]);
   });
 
-  it("never passes the superuser URL to the server", async () => {
+  it("starts the server with no database URL of its own in the environment", async () => {
     // The mock is held here, not read back off `deps()`: the spread with the `Partial` override
     // widens every field to a union, and a union has no `.mock`.
     const startServer = vi.fn<StartServer>(() =>
       Promise.resolve({ close: () => Promise.resolve() }),
     );
-    await runEntry(deps({ startServer }));
-    const env = startServer.mock.calls[0]![0];
-    expect(env.WAITRON_BOOTSTRAP_DATABASE_URL).toBeUndefined();
-    expect(env.WAITRON_ADMIN_DATABASE_URL).toBe("postgres://migrator");
+    await runEntry(deps({ baseEnv: {}, startServer }));
+    expect(startServer).toHaveBeenCalled();
+  });
+
+  it("hands the server the environment loadBoxEnv returned, with nothing added or removed", async () => {
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    await runEntry(
+      deps({
+        loadBoxEnv: vi.fn(() => Promise.resolve({ WAITRON_HTTP_PORT: "8080" })),
+        startServer,
+      }),
+    );
+    expect(startServer.mock.calls[0]![0]).toEqual({ WAITRON_HTTP_PORT: "8080" });
   });
 
   it("increments the counter and rethrows when the boot throws", async () => {
@@ -134,17 +136,18 @@ describe("runEntry", () => {
     expect(serveRecovery.mock.calls[0]![1].landing?.boxAddresses).toBeUndefined();
   });
 
-  it("decides BEFORE touching Postgres — the page is served even when the database is unreachable", async () => {
+  it("decides BEFORE touching the venue database — the page is served even when it cannot be read", async () => {
     const d = deps({
       readRecoveryState: vi.fn(() =>
         Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
       ),
-      waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
-      ensureInstance: vi.fn(() => Promise.reject(new Error("must not be called"))),
+      assertNotAhead: vi.fn(() => Promise.reject(new Error("ENOENT"))),
+      runStagedRestore: vi.fn(() => Promise.reject(new Error("must not be called"))),
     });
     await runEntry(d);
     expect(d.serveRecovery).toHaveBeenCalled();
-    expect(d.waitForPostgres).not.toHaveBeenCalled();
+    expect(d.assertNotAhead).not.toHaveBeenCalled();
+    expect(d.runStagedRestore).not.toHaveBeenCalled();
   });
 
   it("increments the counter BEFORE the server starts, so a HANGING boot still escalates", async () => {
@@ -169,14 +172,11 @@ describe("runEntry", () => {
     // URL, then a dead database) each exited 1 and left the state volume EMPTY, so a box with an
     // unreachable Postgres restart-looped for ever and never reached the page.
     for (const failing of [
-      { waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))) },
+      { runStagedRestore: vi.fn(() => Promise.reject(new Error("EACCES"))) },
       {
-        ensureInstance: vi.fn(() =>
+        assertNotAhead: vi.fn(() =>
           Promise.reject(
-            new AppError("provisioning.role_unusable", {
-              role: "waitron_app",
-              missing: ["LOGIN"],
-            }),
+            new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["ff"] }),
           ),
         ),
       },
@@ -194,7 +194,7 @@ describe("runEntry", () => {
   it("escalates to the recovery level on the third failed boot, whatever failed", async () => {
     const d = deps({
       readRecoveryState: vi.fn(() => Promise.resolve({ ...FRESH, failures: 2 })),
-      waitForPostgres: vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
+      assertNotAhead: vi.fn(() => Promise.reject(new Error("ENOENT"))),
     });
     await expect(runEntry(d)).rejects.toThrow();
     expect(d.writeRecoveryState).toHaveBeenCalledWith(
@@ -226,13 +226,12 @@ describe("runEntry", () => {
     );
   });
 
-  it("counts a boot that HANGS in the instance bootstrap, which no failure handler can see", async () => {
+  it("counts a boot that HANGS in the staged restore, which no failure handler can see", async () => {
     // The pre-boot write's own unique job. The wide `try`/`catch` already records every boot step
     // that THROWS, so a control that only moves this write down still passes on the throwing cases;
-    // a hang is what separates them. `ensureInstance` is the reachable hang — `waitForPostgres` is
-    // bounded and throws, and `loadBoxEnv` is filesystem work — and it is the real shape of a
-    // Postgres that accepts TCP and then never answers.
-    const d = deps({ ensureInstance: vi.fn(() => new Promise<never>(() => {})) });
+    // a hang is what separates them. `runStagedRestore` is the boot step with an unbounded wait in
+    // it — it decrypts an archive and writes a whole database file before returning.
+    const d = deps({ runStagedRestore: vi.fn(() => new Promise<never>(() => {})) });
     void runEntry(d);
     await vi.waitFor(() =>
       expect(d.writeRecoveryState).toHaveBeenCalledWith(
@@ -272,23 +271,27 @@ describe("runEntry", () => {
   });
 
   it("passes the server's OWN migrations root, never the bundle-relative null", async () => {
-    let passed: { migrationsRoot: string | null } | undefined;
+    let restoreRoot: string | null | undefined;
+    let aheadRoot: string | undefined;
     const d = deps({
-      ensureInstance: (opts) => {
-        passed = opts;
-        return Promise.resolve({
-          databaseUrl: "postgres://app",
-          migrationsDatabaseUrl: "postgres://migrator",
-        });
-      },
+      runStagedRestore: vi.fn((request) => {
+        restoreRoot = request.migrationsRoot;
+        return Promise.resolve(true);
+      }),
+      assertNotAhead: vi.fn((_venueDir: string, migrationsRoot: string) => {
+        aheadRoot = migrationsRoot;
+        return Promise.resolve();
+      }),
     });
     await runEntry(d);
     // `null` is what fails a real container's first boot with `migrations.set_missing`. The two
     // properties `boot.test.ts` pins on DEFAULT_MIGRATIONS_ROOT itself are asserted here too, so the
-    // entrypoint and the server it starts cannot migrate from two different folders.
-    expect(passed!.migrationsRoot).not.toBeNull();
-    expect(isAbsolute(passed!.migrationsRoot!)).toBe(true);
-    expect(basename(passed!.migrationsRoot!)).toBe("drizzle");
+    // entrypoint's two migration-set readers and the server it starts cannot read three different
+    // folders.
+    expect(restoreRoot).toBe(aheadRoot);
+    expect(aheadRoot).not.toBeUndefined();
+    expect(isAbsolute(aheadRoot!)).toBe(true);
+    expect(basename(aheadRoot!)).toBe("drizzle");
   });
 
   it("serves the page on WAITRON_HTTP_PORT, falling back when it is unset", async () => {
@@ -371,23 +374,6 @@ describe("runEntry", () => {
     // A reset that failed leaves the box in recovery after the restart — the page comes back and the
     // operator can press the button again, which is a better outcome than a crash mid-response.
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
-  });
-
-  it("refuses an unset OR empty bootstrap URL before it can resolve to localhost", async () => {
-    for (const raw of [undefined, ""]) {
-      const d = deps({ baseEnv: { WAITRON_BOOTSTRAP_DATABASE_URL: raw } });
-      await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_missing" });
-      expect(d.waitForPostgres).not.toHaveBeenCalled();
-    }
-  });
-
-  it("refuses a bootstrap URL that is not a URL, rather than handing it to the driver", async () => {
-    const d = deps({ baseEnv: { WAITRON_BOOTSTRAP_DATABASE_URL: "/var/run/postgresql" } });
-    await expect(runEntry(d)).rejects.toMatchObject({
-      code: "provisioning.admin_uri_not_a_url",
-      params: { variable: "WAITRON_BOOTSTRAP_DATABASE_URL" },
-    });
-    expect(d.waitForPostgres).not.toHaveBeenCalled();
   });
 
   it("the recovery page's retry clears the counter and exits, leaving the restart to Docker", async () => {
@@ -653,19 +639,16 @@ describe("runEntry", () => {
     expect(startServer).not.toHaveBeenCalled();
   });
 
-  it("checks for an ahead database after ensureInstance, never before", async () => {
+  it("checks the VENUE DIRECTORY for an ahead database before the server starts", async () => {
     const order: string[] = [];
     await runEntry(
       deps({
-        ensureInstance: vi.fn(() => {
-          order.push("ensureInstance");
-          return Promise.resolve({
-            databaseUrl: "postgres://app",
-            migrationsDatabaseUrl: "postgres://migrator",
-          });
+        runStagedRestore: vi.fn(() => {
+          order.push("runStagedRestore");
+          return Promise.resolve(false);
         }),
-        assertNotAhead: vi.fn(() => {
-          order.push("assertNotAhead");
+        assertNotAhead: vi.fn((venueDir: string) => {
+          order.push(`assertNotAhead:${venueDir}`);
           return Promise.resolve();
         }),
         startServer: vi.fn<StartServer>(() => {
@@ -674,8 +657,9 @@ describe("runEntry", () => {
         }),
       }),
     );
-    // A legitimately BEHIND database must be migrated forward before it is judged.
-    expect(order).toEqual(["ensureInstance", "assertNotAhead", "startServer"]);
+    // A restore replaces the venue files, so the check has to see what the restore left; and it has
+    // to be BEFORE `startServer`, which migrates and then queries the schema.
+    expect(order).toEqual(["runStagedRestore", "assertNotAhead:/venue", "startServer"]);
   });
 
   // `assertNotAhead` used to default to `() => Promise.resolve()`. Not alone in defaulting to a
@@ -685,62 +669,123 @@ describe("runEntry", () => {
   // any caller that forgets the dependency, and silently: nothing throws, nothing logs, the server
   // just starts against a database the image cannot read.
   //
-  // The probe: omit the dependency and hand `ensureInstance` a URL whose port refuses instantly
-  // (127.0.0.1:1). The real default opens a connection there, so the boot fails and the server is
-  // never started. What the FAILING case would print — a no-op default — is a resolved `runEntry`
-  // with `startServer` called, which is what this asserted before the default was changed.
+  // The probe: omit the dependency and name a venue directory that can never be created — a path
+  // UNDER a regular file, which `mkdir` refuses with ENOTDIR. The real default opens the directory,
+  // so the boot fails and the server is never started. What the FAILING case would print — a no-op
+  // default — is a resolved `runEntry` with `startServer` called, which is what this asserted
+  // before the default was changed.
   it("defaults the ahead check to the real one, not to a no-op", async () => {
     const startServer = vi.fn<StartServer>(() =>
       Promise.resolve({ close: () => Promise.resolve() }),
     );
+    const blocker = join(await mkdtemp(join(tmpdir(), "wt-ahead-")), "a-file-not-a-directory");
+    await writeFile(blocker, "x");
     await expect(
-      runEntry(
-        deps({
-          assertNotAhead: undefined,
-          ensureInstance: vi.fn(() =>
-            Promise.resolve({
-              databaseUrl: "postgres://app",
-              migrationsDatabaseUrl: "postgres://waitron@127.0.0.1:1/waitron",
-            }),
-          ),
-          startServer,
-        }),
-      ),
+      runEntry(deps({ assertNotAhead: undefined, venueDir: join(blocker, "venue"), startServer })),
     ).rejects.toThrow();
     expect(startServer).not.toHaveBeenCalled();
   });
 });
 
-describe("waitForPostgres", () => {
-  it("returns as soon as a connection succeeds, after transient failures", async () => {
-    let calls = 0;
-    const delay = vi.fn(() => Promise.resolve());
-    await waitForPostgres("postgres://x", {
-      connect: () => {
-        calls += 1;
-        return calls < 3 ? Promise.reject(new Error("ECONNREFUSED")) : Promise.resolve();
-      },
-      delay,
-      log: vi.fn(),
-      attempts: 10,
-    });
-    expect(calls).toBe(3);
-    expect(delay).toHaveBeenCalledTimes(2);
+/**
+ * A venue directory with EVERY migration set applied, beside a migrations root that resolves to the
+ * same files the image ships.
+ *
+ * `useVenueDb` cannot serve here: it owns the directory privately and exposes only the handle,
+ * where the wrapper under test takes the DIRECTORY. The root is built by symlinking each set's
+ * resolved folder under one parent, which is the layout `<root>/<set name>` that
+ * `resolveExistingMigrationsFolder` expects and `apps/server`'s build produces by copying.
+ *
+ * Every set is migrated deliberately: a set whose journal table does not exist is a different path
+ * through `journalHashes`, not the behind/ahead comparison these two cases are about.
+ */
+async function migratedVenue(): Promise<{ venueDir: string; migrationsRoot: string }> {
+  const sets = manifestSets();
+  const options = migrationOptionsFor(sets, null);
+  const migrationsRoot = await mkdtemp(join(tmpdir(), "wt-migrations-"));
+  for (const [index, set] of sets.entries()) {
+    await symlink(options[index]!.migrationsFolder, join(migrationsRoot, set.name), "dir");
+  }
+  const venueDir = await mkdtemp(join(tmpdir(), "wt-venue-"));
+  await applyMigrations(venueDir, options);
+  return { venueDir, migrationsRoot };
+}
+
+/**
+ * The same root with one set carrying a migration the venue database has never applied: an ordinary
+ * upgrade, which is what the entrypoint's check meets on every release that ships one. The set's
+ * symlink is replaced by a real copy, so the extra file lands in the copy and never in the source
+ * tree.
+ */
+async function shipOneMigrationMoreThanTheDatabaseHas(
+  migrationsRoot: string,
+  set: { name: string },
+): Promise<void> {
+  const folder = join(migrationsRoot, set.name);
+  const source = await readlink(folder);
+  await rm(folder);
+  await cp(source, folder, { recursive: true });
+  await writeFile(join(folder, "9999_future.sql"), "create table future_table (id integer);\n");
+  const journalPath = join(folder, "meta", "_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+    entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[];
+  };
+  journal.entries.push({
+    idx: journal.entries.length,
+    version: "6",
+    when: Date.now(),
+    tag: "9999_future",
+    breakpoints: true,
+  });
+  await writeFile(journalPath, JSON.stringify(journal));
+}
+
+/** Edits a migrated venue database and closes it again, so the wrapper opens it for itself. */
+async function onVenue(venueDir: string, statement: SQL): Promise<void> {
+  const store = await openVenueDatabase(venueDir);
+  try {
+    await store.venue.execute(statement);
+  } finally {
+    await store.close();
+  }
+}
+
+describe("assertNotAhead", () => {
+  const core = manifestSets().find((set) => set.name === "core")!;
+
+  // The entrypoint runs this check BEFORE anything migrates, so the database it judges is routinely
+  // one release BEHIND the image. `unknownHashes` compares in one direction only
+  // (`packages/provisioning/src/schema-ahead.ts`), and this is the case that breaks the moment it
+  // stops: measured by making that function two-directional, this rejects with
+  // `provisioning.database_ahead` naming the migration the image ships and the database lacks.
+  it("does not refuse a venue database BEHIND this image", async () => {
+    const { venueDir, migrationsRoot } = await migratedVenue();
+    await shipOneMigrationMoreThanTheDatabaseHas(migrationsRoot, core);
+    await expect(assertNotAhead(venueDir, migrationsRoot)).resolves.toBeUndefined();
   });
 
-  it("gives up with a classified code that carries no connection string", async () => {
-    const attempt = await waitForPostgres("postgres://u:secret@h/d", {
-      connect: () => Promise.reject(new Error("connect ECONNREFUSED 127.0.0.1:5432")),
-      delay: () => Promise.resolve(),
-      log: vi.fn(),
-      attempts: 3,
-    }).then(
-      () => null,
-      (error: unknown) => error,
+  // A first boot: the entrypoint checks before anything has migrated, so no set has a journal table
+  // yet. This is the case that made every first container start fail until 2026-09-22 —
+  // `journalHashes` keyed its absent-table case on PostgreSQL's `42P01` and rethrew SQLite's
+  // `no such table`. Failing here means a box restart-loops into recovery on its very first boot.
+  it("a VIRGIN venue directory passes the ahead check", async () => {
+    const { migrationsRoot } = await migratedVenue();
+    const venueDir = await mkdtemp(join(tmpdir(), "wt-venue-virgin-"));
+    await expect(assertNotAhead(venueDir, migrationsRoot)).resolves.toBeUndefined();
+  });
+
+  it("refuses a venue database AHEAD of this image", async () => {
+    const { venueDir, migrationsRoot } = await migratedVenue();
+    await onVenue(
+      venueDir,
+      sql.raw(
+        `insert into "${core.table}" ("hash", "created_at") values ('deadbeefhash', 9999999999999)`,
+      ),
     );
-    expect(attempt).toBeInstanceOf(AppError);
-    expect((attempt as AppError).code).toBe("provisioning.database_unreachable");
-    expect(JSON.stringify((attempt as AppError).params)).not.toContain("secret");
+    await expect(assertNotAhead(venueDir, migrationsRoot)).rejects.toMatchObject({
+      code: "provisioning.database_ahead",
+      params: { set: "core", unknownMigrations: ["deadbeefhash"] },
+    });
   });
 });
 

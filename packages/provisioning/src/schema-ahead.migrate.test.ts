@@ -1,50 +1,52 @@
-// Real PostgreSQL. PGlite is a false pass here twice over: every connection is a superuser, and the
-// journal semantics under test are drizzle's against real Postgres (CLAUDE.md §4).
+// Against a real migrated venue directory, not a stub: `schema-ahead.test.ts` answers the module's
+// own `select "hash" from …` from a fake, so it can only pin the set arithmetic. What has to be
+// checked against the engine and against drizzle is the journal itself — the table drizzle creates,
+// the rows it writes, and what it does on a re-migrate — because that is the artefact
+// `findAheadSets` reads and none of it is ours.
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPostgresDb, type Database } from "@waitron/db";
+import { openVenueDatabase, type Database, type VenueDatabase } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { withDatabase } from "./instance-apply.js";
 import { assertNotAhead, findAheadSets } from "./schema-ahead.js";
-import { startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
-const DATABASE = "waitron_ahead_suite";
 const CORE = manifestSets().find((set) => set.name === "core")!;
 /** Above every shipped migration's `folderMillis`, which is what makes the re-migrate a no-op. */
 const AHEAD_WHEN = 9_999_999_999_999;
 
 describe("an ahead database", () => {
-  let pg: RealPostgres;
-  let admin: Database;
+  let directory: string;
+  let store: VenueDatabase;
   let target: Database;
-  let targetUri: string;
 
+  // Its own directory rather than `useVenueDb`'s, because the third case re-runs `applyMigrations`
+  // and that takes the DIRECTORY — which the helper owns and does not hand out.
   beforeAll(async () => {
-    pg = await startBarePostgres();
-    admin = await createPostgresDb(pg.uri);
-    await admin.execute(sql.raw(`create database "${DATABASE}"`));
-    targetUri = withDatabase(pg.uri, DATABASE);
-    await applyMigrations(targetUri, migrationOptionsFor(manifestSets(), null));
-    target = await createPostgresDb(targetUri);
-  }, 180_000);
+    directory = await mkdtemp(join(tmpdir(), "waitron-schema-ahead-"));
+    await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+    store = await openVenueDatabase(directory);
+    target = store.venue;
+  }, 120_000);
 
   afterAll(async () => {
-    // Guarded: an earlier step may have thrown before the handle was assigned.
-    if (target !== undefined) await target.close();
-    if (admin !== undefined) await admin.close();
-    if (pg !== undefined) await pg.stop();
+    // Guarded, and in order: the files close before the directory holding them is removed, and a
+    // run whose `applyMigrations` threw still removes the directory it made.
+    if (store !== undefined) await store.close();
+    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
   });
 
   /** The journal's row count for `core`, which is what a re-migrate would change if it applied anything. */
   async function coreJournalRows(): Promise<number> {
     const result = await target.execute<{ n: number }>(
-      sql`select count(*)::int as n from ${sql.identifier(CORE.table)}`,
+      sql`select count(*) as n from ${sql.identifier(CORE.table)}`,
     );
-    return result.rows[0]!.n;
+    return Number(result.rows[0]!.n);
   }
 
   // The NEGATIVE CONTROL runs first, and it is what makes the next test a probe rather than a
-  // measurement where both answers look alike: a freshly migrated database must be accepted.
+  // measurement where both answers look alike: a freshly migrated directory must be accepted.
   it("is not reported for a database this image migrated itself", async () => {
     expect(await findAheadSets(target, manifestSets(), null)).toEqual([]);
     await expect(assertNotAhead(target, manifestSets(), null)).resolves.toBeUndefined();
@@ -55,9 +57,9 @@ describe("an ahead database", () => {
     // Written directly rather than by running a synthetic migration, because the row IS the artefact
     // the check reads — and drizzle records nothing else about a migration.
     const unknown = "f".repeat(64);
-    // The table name reaches SQL as an identifier (Postgres binds no placeholder for one), but the
-    // VALUES are bound — CLAUDE.md §3 forbids concatenating them and explicitly rejects "the callers
-    // only pass safe values" as a defence.
+    // The table name reaches SQL as an identifier (no placeholder binds one), but the VALUES are
+    // bound — CLAUDE.md §3 forbids concatenating them and explicitly rejects "the callers only pass
+    // safe values" as a defence.
     await target.execute(
       sql`insert into ${sql.identifier(CORE.table)} ("hash", "created_at")
           values (${unknown}, ${AHEAD_WHEN})`,
@@ -79,7 +81,7 @@ describe("an ahead database", () => {
     // mismatch would therefore sail past it — this check is the only thing that names the case.
     const before = await coreJournalRows();
     await expect(
-      applyMigrations(targetUri, migrationOptionsFor(manifestSets(), null)),
+      applyMigrations(directory, migrationOptionsFor(manifestSets(), null)),
     ).resolves.toBeUndefined();
     expect(await coreJournalRows()).toBe(before);
     expect(await findAheadSets(target, manifestSets(), null)).toEqual([

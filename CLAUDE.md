@@ -470,12 +470,6 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in hand-written migration SQL, is invisible to it. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
-- **`waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a
-  plain admin** — the database is created `OWNER waitron_migrator`, and a plain admin connection to
-  such a database cannot even `CREATE TABLE` in `public` (`42501`), so the migrate has to run as the
-  migrator and every table it creates is migrator-owned. Receipt, run against a real server:
-  `packages/provisioning/src/instance-apply.pg.test.ts` (C5). Any new provisioning path that creates
-  schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
   trigger executing a function owned by a different migration set. Only the first has an instance
   today: the SQLite baselines carry no `CREATE TRIGGER` at all — a `create trigger` grep over

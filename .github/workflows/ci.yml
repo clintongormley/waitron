@@ -677,9 +677,10 @@ jobs:
   #
   # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, so a runner without Docker
   # fails loudly instead of skipping the suites that need a container. What still needs one here is
-  # three test files that start a container themselves — src/instance-bootstrap.pg.test.ts,
-  # scripts/dev-onboard.test.ts and scripts/dev-setup.test.ts (grepped on this tree for the container
-  # helpers). The storage switch is removing that need; whoever removes the last one removes this too.
+  # two test files that start a container themselves — scripts/dev-onboard.test.ts and
+  # scripts/dev-setup.test.ts (grepped on this tree for the container helpers;
+  # src/instance-bootstrap.pg.test.ts was the third and went with the instance path). The storage
+  # switch is removing that need; whoever removes the last one removes this too.
   # `test-server-merge` below is the coverage gate.
   test-server:
     timeout-minutes: 15

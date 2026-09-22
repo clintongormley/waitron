@@ -1009,19 +1009,18 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     { name: "secrets/modules.json", bytes: Buffer.from(MODULES_JSON) },
   ];
 
-  it("restores both onto a FRESH state dir, leaving the box's OWN instance.env untouched", async () => {
-    // instance.env is per-hardware and deliberately NEVER captured — the restored box keeps its own.
-    // Write a distinct one into the fresh target and prove the restore does not overwrite it.
-    await writeFile(join(stateDir, "instance.env"), "WAITRON_NODE_HARDWARE=box-002\n");
+  it("restores both onto a FRESH state dir, leaving the box's OWN recovery.json untouched", async () => {
+    // `recovery.json` is this box's own escalation counter (`recovery-state.ts:48,:69`), written by
+    // the entrypoint and deliberately NEVER captured — the restored box keeps its own. Write a
+    // distinct one into the fresh target and prove the restore does not overwrite it.
+    await writeFile(join(stateDir, "recovery.json"), '{"failures":2}\n');
     await restoreFromArtifact(
       makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
     );
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(BACKUP_ENV);
     expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
-    // Per-hardware safety: instance.env is not in the archive, so it is left exactly as it was.
-    expect(await readFile(join(stateDir, "instance.env"), "utf8")).toBe(
-      "WAITRON_NODE_HARDWARE=box-002\n",
-    );
+    // Per-box safety: recovery.json is not in the archive, so it is left exactly as it was.
+    expect(await readFile(join(stateDir, "recovery.json"), "utf8")).toBe('{"failures":2}\n');
   });
 
   it("skipSecrets (rejoin) restores NEITHER file — a rejoining mirror keeps its own config", async () => {
