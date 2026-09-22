@@ -28,13 +28,13 @@ jobs:
   mutation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report
           path: packages/ui/reports/mutation/
@@ -116,13 +116,13 @@ jobs:
     env:
       REQUIRE_DOCKER: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -148,7 +148,7 @@ jobs:
 
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report-db-shard-${{ matrix.shard }}
           path: packages/db/reports/mutation/
@@ -164,18 +164,21 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # No pnpm on this runner and none needed: the scorer is one plain `node` script over the
-      # downloaded reports, and it installs nothing. setup-node caches the package manager by
-      # default, which shells out to pnpm and fails the job before it starts.
-      - uses: actions/setup-node@v5
+      # downloaded reports, and it installs nothing. `package-manager-cache: false` is set as
+      # explicit policy so setup-node never tries to cache pnpm here — under setup-node@v5's default
+      # it auto-detected this repo's `packageManager: pnpm` and shelled out to pnpm on RESTORE,
+      # failing this job before its own steps ran (its first real run, 35504169506). Our pinned v6+
+      # limits automatic caching to npm and no longer auto-detects pnpm, but the flag stays explicit.
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
       - name: Download every shard report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: mutation-report-db-shard-*
           path: mutation-reports

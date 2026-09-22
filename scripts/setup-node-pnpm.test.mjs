@@ -1,10 +1,12 @@
 // A job that lets GitHub's setup-node action cache the package manager has to have pnpm on the
 // runner AND a populated pnpm store.
 //
-// `actions/setup-node@v5` caches the package manager by DEFAULT — `package-manager-cache` is true
-// unless a job says otherwise — and this repository declares `packageManager: pnpm` in its root
-// manifest, so the action goes looking for pnpm. Two different jobs have been broken by it, at
-// opposite ends of the job:
+// `actions/setup-node` can cache the package manager, and this repository declares
+// `packageManager: pnpm` in its root manifest, so the action may go looking for pnpm. Whether it
+// does so on its own varies by version — setup-node@v5 cached pnpm by DEFAULT (`package-manager-cache`
+// true unless a job said otherwise), while v6+ limits automatic caching to npm — so a step that
+// wants pnpm caching now asks for it, and this check holds regardless of the version pinned. Two
+// different jobs have been broken by pnpm caching, at opposite ends of the job:
 //
 //   - RESTORE, at the start: a job that never ran `pnpm/action-setup` dies with `Unable to locate
 //     executable file: pnpm` before any of its own steps run. That is what `mutation-db-aggregate`
