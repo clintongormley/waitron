@@ -17,7 +17,9 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
+// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+function run<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
@@ -121,10 +123,13 @@ describe("endSession", () => {
     const first = await run((tx) => endSession(tx, session.id));
     expect(first).toBe(true);
 
-    const rows = await suite.db.execute<{ ended: boolean }>(
-      sql`select ended_at is not null as ended from sessions where id = ${session.id}`,
+    // The COLUMN, not `ended_at is not null` — a raw select of a boolean expression answers 0 or 1
+    // on this engine, so reading the stamp itself is what survives the storage swap. `expect.any`
+    // rather than a fixed instant: the stamp is the server clock at close time.
+    const rows = await suite.db.execute<{ ended_at: string | null }>(
+      sql`select ended_at from sessions where id = ${session.id}`,
     );
-    expect(rows.rows).toEqual([{ ended: true }]);
+    expect(rows.rows).toEqual([{ ended_at: expect.any(String) }]);
 
     // The row is already closed, so the WHERE ... AND ended_at IS NULL matches nothing: no second
     // close, and the caller learns it changed nothing.

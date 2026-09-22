@@ -85,8 +85,12 @@ function reservationGraceFloor(venueNow: string): string {
  *
  * Scoped by location. A plain per-`tableIds` query (`inArray`), NOT a correlated
  * subquery, so the scalar-subquery trap does not apply. Ordered by `(tableId, bookingTime asc)`: the
- * first row seen per table is its earliest imminent booking. `booking_time` is a `time` (`HH:MM:SS`);
- * normalised to `HH:MM` at the presentation edge, as the floor renders "Reserved HH:MM".
+ * first row seen per table is its earliest imminent booking. `booking_time` is stored `HH:MM:SS`
+ * (`storedTime`, ./bookings.ts); cut to `HH:MM` at the presentation edge, as the floor renders
+ * "Reserved HH:MM". The `gte` below compares TEXT on this engine rather than the `time` values
+ * PostgreSQL compared, and it stays chronological only while BOTH operands keep a two-digit hour:
+ * `reservationGraceFloor` pads its own, and `routes.ts`'s `TIME_HHMM` refuses a stored time without
+ * one. Drop either and the comparison silently reorders the day.
  */
 export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
   async annotate(tx, cfg, now, tableIds) {

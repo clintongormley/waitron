@@ -1,4 +1,4 @@
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./index.js";
 import * as api from "./index.js";

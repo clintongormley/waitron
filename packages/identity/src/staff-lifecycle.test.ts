@@ -286,10 +286,12 @@ describe("invited person lifecycle", () => {
       deactivatePerson(tx, { managementSessionId: sessionId, personId: target.personId }),
     );
 
-    const rows = await suite.db.execute<{ ended: boolean }>(
-      sql`select ended_at is not null as ended from sessions where id = ${tillSession.id}`,
+    // The COLUMN, not `ended_at is not null` — a raw select of a boolean expression answers 0 or 1
+    // on this engine, so reading the stamp itself is what survives the storage swap.
+    const rows = await suite.db.execute<{ ended_at: string | null }>(
+      sql`select ended_at from sessions where id = ${tillSession.id}`,
     );
-    expect(rows.rows).toEqual([{ ended: true }]);
+    expect(rows.rows).toEqual([{ ended_at: expect.any(String) }]);
   });
 
   it("clears a PIN instead of letting an administrator choose its replacement", async () => {

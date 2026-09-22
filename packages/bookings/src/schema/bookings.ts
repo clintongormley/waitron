@@ -29,9 +29,11 @@ export const bookingStatus = enumType(["booked", "seated", "completed", "no_show
 
 /**
  * WALL-CLOCK, NOT AN INSTANT (design §2b, the #52 lesson): a booking is a future intention
- * ("Tuesday 20:00 at the venue"), not a moment that has occurred, so `booking_date` is a plain `date`
- * and `booking_time` a plain `time` — the `day` and `timeOfDay` helpers — both venue-local, never a
- * UTC instant. There is no instant to misrender, so this cannot repeat #52; the one place "now"
+ * ("Tuesday 20:00 at the venue"), not a moment that has occurred, so `booking_date` is a calendar day
+ * and `booking_time` a time of day — the `day` and `timeOfDay` helpers — both venue-local, never a
+ * UTC instant. Neither helper is a dedicated engine type here (both emit `text`), so neither
+ * normalises nor refuses what it is handed: `storedTime` in `../bookings.ts` chooses the one stored
+ * spelling of a time, and `routes.ts`'s `TIME_HHMM` is what refuses a malformed one. There is no instant to misrender, so this cannot repeat #52; the one place "now"
  * matters (the reserved-on-floor imminence read, FP-1) computes the venue wall-clock from
  * `locations.time_zone` at read time.
  *

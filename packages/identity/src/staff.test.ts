@@ -39,7 +39,9 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
+// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+function run<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 

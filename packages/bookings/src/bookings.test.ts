@@ -180,15 +180,10 @@ describe("createBooking + listBookings", () => {
       }),
     );
 
-    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. The point of the assertion is the
-    // booking_time ORDERING (13:30 before 20:00), not the seconds — but the values it names are
-    // PostgreSQL's. `booking_time` was a `time`, which normalised `20:00` to `20:00:00` on the way
-    // back out; `timeOfDay` is plain `text` on this engine
-    // (`packages/db/src/schema/columns.ts`), so what comes back is the `20:00` that was written.
-    // Changing the expected values is a change to what this case ASSERTS, not a translation of
-    // PostgreSQL-only SQL, so it is left for the owner to decide. The same value appears in
-    // `./routes.test.ts`'s happy path and in `./schema/bookings.test.ts`'s column round-trip, both
-    // already annotated this way.
+    // Two things at once: the booking_time ORDERING (13:30 before 20:00), and the seconds. The
+    // seconds used to be PostgreSQL's — a `time` column normalised `20:00` on the way in — and are
+    // now `storedTime`'s, in `./bookings.ts`, since `timeOfDay` is plain `text` here and normalises
+    // nothing. Deleting that call reddens this line and `./routes.test.ts`'s happy path.
     const listed = await scoped(cfg, (tx) => listBookings(tx, cfg, { date: "2026-08-20" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["13:30:00", "20:00:00"]);
 
@@ -256,6 +251,29 @@ describe("createBooking + listBookings", () => {
       tabId: null,
       tableId: null,
     });
+  });
+
+  // The OTHER side of `storedTime`: `routes.ts`'s `TIME_HHMM` accepts `HH:MM:SS` as well as `HH:MM`,
+  // so a caller can hand the write path a time already in the stored form, and both spellings of one
+  // wall-clock time must land on one stored value.
+  it("stores an already-HH:MM:SS time unchanged, so one wall-clock time has one stored value", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    for (const [time, name] of [
+      ["18:15:00", "Sent with seconds"],
+      ["18:15", "Sent without"],
+    ] as const) {
+      await scoped(cfg, (tx) =>
+        createBooking(tx, cfg, {
+          bookingDate: "2026-08-21",
+          bookingTime: time,
+          partySize: 2,
+          contactName: name,
+          createdBy,
+        }),
+      );
+    }
+    const listed = await scoped(cfg, (tx) => listBookings(tx, cfg, { date: "2026-08-21" }));
+    expect(listed.map((b) => b.bookingTime)).toEqual(["18:15:00", "18:15:00"]);
   });
 });
 

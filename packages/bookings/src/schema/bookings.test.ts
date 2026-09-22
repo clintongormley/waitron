@@ -17,27 +17,27 @@ import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
 // The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does
-// not need a database. Pins the foreign keys, the two indexes and the checks — the shapes the
-// migration proofs assert at the SQL level. `getTableConfig` now comes from
+// not need a database. Pins the foreign keys' NAMES — which this engine records nowhere else — and
+// the two indexes and the checks, whose shapes the migration proofs assert at the SQL level. `getTableConfig` now comes from
 // `drizzle-orm/sqlite-core`; the `pg-core` one threw `Cannot convert undefined or null to object`
 // on a SQLite table.
 describe("the bookings Drizzle table config", () => {
-  it("declares the location FK, two indexes, no unique key and the party-size check", () => {
+  it("declares all three FKs, two indexes, no unique key and both checks", () => {
     const config = getTableConfig(bookings);
     expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
-    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT — twice over. Both lists below describe a
-    // drizzle object this branch CHANGED, not a PostgreSQL feature it translated, so updating them
-    // is a change to what the case asserts rather than a conversion, and it is left for the owner:
+    // THE ONLY PLACE THE THREE KEYS' NAMES ARE PINNED. SQLite does not record a foreign key's name
+    // — drizzle's generator emits all three unnamed and `pragma foreign_key_list` has no name
+    // column — so the engine can be asked for each key's SHAPE and never for what it is called.
+    // `../migrations.test.ts` asks a migrated database for the shapes and points here for the names.
     //
-    //  - `foreignKeys` now answers all three (`bookings_location_fk`, `bookings_table_fk`,
-    //    `bookings_tab_fk`). The comment above is stale with it: the table and tab keys used to be
-    //    hand-written `--custom` migration SQL and were therefore absent from the drizzle object;
-    //    on this branch `./bookings.ts` declares all three with `foreignKey({...})`.
-    //  - `checks` now answers two (`bookings_party_size_ck`, `bookings_status_ck`). `status` was a
-    //    PostgreSQL ENUM TYPE, which the engine enforced; `enumType` emits a CHECK constraint here.
-    //
-    // Measured 2026-09-22 on Node v26.7.0 by calling `getTableConfig` on this branch's `bookings`.
-    expect(config.foreignKeys.map((fk) => fk.getName())).toEqual(["bookings_location_fk"]);
+    // All three, where this list held one: the table and tab keys were hand-written `--custom`
+    // migration SQL (main's `drizzle/0001_bookings_baseline_sql.sql`) and so were absent from the
+    // drizzle object, and `./bookings.ts` now declares all three with `foreignKey({...})`.
+    expect(config.foreignKeys.map((fk) => fk.getName())).toEqual([
+      "bookings_location_fk",
+      "bookings_table_fk",
+      "bookings_tab_fk",
+    ]);
     expect(config.uniqueConstraints).toEqual([]);
     expect(
       config.indexes.map((i) => [
@@ -51,7 +51,14 @@ describe("the bookings Drizzle table config", () => {
         ["table_id", "status", "booking_date", "booking_time"],
       ],
     ]);
-    expect(config.checks.map((c) => c.name)).toEqual(["bookings_party_size_ck"]);
+    // Two, where this list held one: `status` was a PostgreSQL ENUM TYPE the engine enforced (main's
+    // baseline opens `CREATE TYPE "public"."booking_status" AS ENUM(...)`), and `enumType` enforces
+    // the same five values with a CHECK here. A name is not a vocabulary, so the case below drives
+    // a real refusal through the constraint that replaced the type.
+    expect(config.checks.map((c) => c.name)).toEqual([
+      "bookings_party_size_ck",
+      "bookings_status_ck",
+    ]);
   });
 });
 
@@ -129,7 +136,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await seedParents();
     const id = await seedBooking("20:00", { table_id: TABLE });
     // Read back through the Drizzle `bookings` export (not raw SQL) — exercises the produced table
-    // export, its column mapping, the `status` default and `booking_time`'s rendering.
+    // export, its column mapping and the `status` default.
     const [row] = await withTransaction(suite.db, (tx: Transaction) =>
       tx.select().from(bookings).where(eq(bookings.id, id)),
     );
@@ -137,13 +144,13 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     expect(row!.locationId).toBe(LOCATION);
     expect(row!.tableId).toBe(TABLE);
     expect(row!.bookingDate).toBe("2026-09-01");
-    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. `booking_time` was a PostgreSQL `time`,
-    // which normalised `20:00` to `20:00:00` on the way back out. `timeOfDay` is plain `text` on
-    // this engine (`packages/db/src/schema/columns.ts`), so what comes back is the `20:00` that was
-    // written. Changing the expected value is a change to what this case ASSERTS, not a translation
-    // of PostgreSQL-only SQL, so it is left for the owner to decide. The same value appears in
-    // `../routes.test.ts`'s happy path and in `../bookings.test.ts`'s ordering case.
-    expect(row!.bookingTime).toBe("20:00:00");
+    // DELETED, AND NO LONGER CHECKED HERE: that the COLUMN normalises `20:00` to `20:00:00`.
+    // `booking_time` was a PostgreSQL `time` and the engine did that on the way in; `timeOfDay` is
+    // plain `text` (`packages/db/src/schema/columns.ts`) and this insert is raw SQL, which reaches
+    // the column without Drizzle's mapping — so no column-level normalising is expressible here at
+    // all. The guarantee moved to the module's WRITE PATH (`storedTime` in `../bookings.ts`) and is
+    // asserted where it now lives: `../bookings.test.ts`'s ordering case and `../routes.test.ts`'s
+    // happy path each send `HH:MM` and read `HH:MM:SS` back.
     expect(row!.partySize).toBe(2);
     expect(row!.contactName).toBe("Ana");
     expect(row!.status).toBe("booked");
@@ -166,6 +173,16 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     // The CHECK's message DOES carry its name here, unlike the foreign keys' — so this one case
     // can still say which constraint refused it.
     expect(pgErrorMessage(e)).toMatch(/bookings_party_size_ck/);
+  });
+
+  // The refusal that changed HANDS at the flip: `status` was a PostgreSQL ENUM TYPE, so the engine
+  // itself refused a value outside the five; here it is an ordinary CHECK that `enumType` builds
+  // from the same list. Nothing asserted the replacement refuses anything, so this drives one.
+  it("rejects a status outside the five (CHECK bookings_status_ck)", async () => {
+    await seedParents();
+    const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));
+    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] });
+    expect(pgErrorMessage(e)).toMatch(/bookings_status_ck/);
   });
 
   it("refuses a table_id with no dining_tables row (bookings_table_fk)", async () => {

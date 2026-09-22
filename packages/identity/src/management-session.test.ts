@@ -22,7 +22,10 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
+// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
+// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
+  withTransaction(suite.db, fn);
 
 /**
  * An instant `minutes` before now, as the exact string the column stores.

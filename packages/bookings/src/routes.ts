@@ -82,11 +82,14 @@ function requireInteger(v: unknown, field: string): number {
 
 const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
-/** Screen a `HH:MM` / `HH:MM:SS` wall-clock time before it reaches the `time` column (where a malformed
- * value would `22007` → an opaque 500), refusing an absent/wrong-typed/mis-shaped one as
- * `management.request_invalid` naming the field. The regex validates the RANGE at the screen — hours
- * `00-23`, minutes `00-59`, optional seconds `00-59` — so an out-of-range but well-shaped value like
- * `25:61` is a clean 400 here, never a downstream `22007` 500. */
+/** Screen a `HH:MM` / `HH:MM:SS` wall-clock time, refusing an absent/wrong-typed/mis-shaped one as
+ * `management.request_invalid` naming the field. The regex validates the RANGE here — hours `00-23`,
+ * minutes `00-59`, optional seconds `00-59` — because the column is plain `text` on this engine and
+ * refuses nothing itself, where PostgreSQL's `time` answered an out-of-range value like `25:61` with
+ * a `22007` the route could only surface as an opaque 500.
+ *
+ * It passes both spellings through unchanged. Choosing ONE of them is the write path's job, not this
+ * screen's: `storedTime` in `./bookings.ts` normalises to `HH:MM:SS` for every caller, HTTP or not. */
 function requireTime(v: unknown, field: string): string {
   if (typeof v !== "string" || !TIME_HHMM.test(v)) {
     throw new AppError("management.request_invalid", { field });
