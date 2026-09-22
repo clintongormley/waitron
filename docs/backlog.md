@@ -12,6 +12,10 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 
 **Companion documents, not duplicated here:**
 
+- **[Cloud documentation ownership](cloud-ownership.md)** and the
+  **[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)**
+  own cloud services and infrastructure. This backlog retains the node application's
+  integration work and shared technical prerequisites.
 - **[ui-review.md](ui-review.md)** — the live tracker for the UI/UX walkthrough (Track A): which areas
   are examined, which remain, and the corrections logged against each.
 - **[compliance/action-plan.md](compliance/action-plan.md)** — the legal/administrative track
@@ -29,8 +33,9 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **The north star (revised 2026-09-12): a standalone on-prem primary a real operator can install
   and run.** A blank box to selling, printing, paying and closing, with its backups leaving the box
   and the things that go wrong visible on a screen. **Afterwards, in this order:** the on-prem mirror
-  it can fail over to, then a cloud primary. Nothing is built for Waitron Cloud now, but every decision
-  must keep a node usable in the cloud unchanged (the rules below).
+  it can fail over to, then a cloud primary. Waitron Cloud product planning and service work are
+  tracked in its [own backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md).
+  Every node decision must keep the application usable in the cloud (the rules below).
 - **Soundness, not the calendar** (2026-08-02). Waitron will be finished before the deli must trade,
   so 1-Jan-2027 ranks nothing above anything. Order by dependency, correctness, and de-risking the
   most-reused or most-uncertain foundations first.
@@ -39,8 +44,9 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 - **Docs land direct to `main`** (2026-08-02): the `main protection` ruleset grants Repository-admin a
   bypass, so a docs-only change is branched, `commit -s`, fast-forwarded and pushed — no PR, no CI
   wait. Feature and code changes still go through a PR.
-- **Residency:** cloud instances will be hosted in Spain (owner, 2026-09-05), so asesor Q16 does not
-  arise.
+- **Residency:** the Spanish rollout retains Spain as its hosting target (owner, 2026-09-05).
+  Country placement for the wider Cloud product is now discussed in
+  [Waitron Cloud](https://github.com/waitron-io/waitron-cloud/blob/main/docs/product-and-platform.md).
 
 **The shape we build for:**
 
@@ -2902,18 +2908,22 @@ replication it was rewritten against went too (2026-09-19); the `ledger` classif
 tables survives both. Superseded twice over — remove it once the owner confirms nothing in its
 uncommitted diff is wanted.
 
-### The cloud primary — back burner, docs only
+### Cloud integration and SQLite work
 
-Waitron Cloud itself; the control plane; cloud-only redundancy (a managed/HA Postgres host versus a
-second cloud node); the cloud trial on-ramp; WireGuard on the box image and `@waitron/tunnel`'s
-retirement; the cloud-standby end-to-end proof; first-contact trust bootstrap for an untrusted-network
-primary. **Per-tenant cloud provisioning is not this repository:** Waitron Cloud — a separate
-closed-source service, not started — spawns the instance, sets up WireGuard and hands back a URL and
-credentials; this repo only ever *talks to* a provisioned instance. **Do not restart the cloud-standby
-work until the Waitron↔Waitron-Cloud boundary contract is settled.** The proof to run then: on-prem
-primary → adopt → mirror → human promotion → tills reroute to the promoted cloud → the venue sells
-and files. [Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md)
-is a discussion, not an approved spec. **SQLite + Litestream replaces PostgreSQL** — owner decision
+Cloud product and infrastructure work moved to the
+[Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
+on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration
+and cloud operations. See [documentation ownership](cloud-ownership.md).
+
+**Waitron retains:** signup and account-linking UI once the contract is agreed; box-side networking
+and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
+proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
+settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
+to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
+[Box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md);
+its cloud support-service proposal is tracked in Cloud and is not approved by this move.
+
+**SQLite + Litestream replaces PostgreSQL** — owner decision
 2026-09-16, taken on the infrastructure simplification alone, which retired the density measurement
 that used to gate it. The feasibility reads are in
 [SQLite instead of PostgreSQL](superpowers/specs/2026-09-16-sqlite-instead-of-postgres-discussion.md)
@@ -2936,11 +2946,11 @@ any of this code, so you can still read how something worked under PostgreSQL.
 
 **What the gate left open (index; the receipts are in the results note):**
 
-- **Re-run the store's conditional-write check against the real store** when Waitron Cloud picks one,
-  and against any self-host target the product claims to support. Every store result in the note is
-  MinIO's, and topology §12.2 demands this one against the actual store, so the gate is NOT discharged
-  on that point; an older S3-compatible target may lack the conditional write, without which the
-  promotion tie-break is unsafe (risk 11).
+- **Validate every supported object store.** Cloud owns its production-provider checks in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
+  Waitron retains the engine's required semantics and checks for claimed self-host targets.
+  Every store result in the prototype note is MinIO's. Topology §12.2's real-store gate remains
+  open; the conditional-write promotion tie-break must be demonstrated on each target (risk 11).
 - **Build the restart reset** — a node must, on restart and before it files anything, reset every
   sale it inherited in the "being filed right now" state, with no five-minute wait. Written into
   topology §5.2, not built. Today the only reset is `recoverStaleClaims`'s five-minute one in
@@ -2950,8 +2960,11 @@ any of this code, so you can still read how something worked under PostgreSQL.
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
   nothing, and dropping `wal_autocheckpoint = 0` changes nothing either. So whatever bounds that log
   has to stop or detach the daemon, and doing that on the sale path is what risk 9 forbids.
-- **The cloud's own generation and the store pointer are UNOWNED.** Nothing streams a promoted node's
-  generation and no scenario restores by following `current.json`.
+- **The promoted generation and store pointer remain unproven.** The prototype does not stream a
+  promoted node's generation or restore by following `current.json`. Cloud recovery orchestration
+  is tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
+  Waitron retains the engine behaviour and integration proof. Settle their contract before assigning
+  implementation work; this ownership split does not close the gap.
 - **250 sales a day is still an assumption** nothing in this repository measures, so the days-per-GiB
   figure rescales but does not hold.
 - **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
@@ -3269,8 +3282,9 @@ today); generalise archive entry routing off declared source ids when a second n
   adopt cycle, and if so drops the leftover slot (`pg_drop_replication_slot`) before the upgrade.
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
-- Later kiosk options, none built: Chromium `--kiosk` in the box image, Fully Kiosk resale for
-  dedicated tablets, Android Management API enrolment as a Waitron Cloud feature. The counter till
+- Later kiosk options, none built: Chromium `--kiosk` in the box image and Fully Kiosk resale for
+  dedicated tablets. Cloud-managed device enrolment is tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md). The counter till
   boots into the app with no operating-system login — automatic console login, one full-screen
   browser, and the till's own PIN as the boundary. Four traps to establish when the image is built
   (the crash-restore dialog, Chromium's separate certificate store, screen blanking, BIOS power-loss
@@ -3385,10 +3399,12 @@ build slices: rectificativas de facturas recibidas (casilla 40/41, needs a
 **No fiscal advisor is engaged**, and [compliance/who-to-ask.md](compliance/who-to-ask.md) says every
 candidate turned out to be a marketing page — so engaging is itself a task with a lead time, in
 parallel, blocking nothing. Before paying for answers, re-read every question in
-[asesor-questions.md](compliance/asesor-questions.md) against the cloud-as-sync-root and server-as-SIF
-designs (several assumed Waitron hosts the client's fiscal system) and add the three ROF hosting
-questions from [cloud-storage-model §8a](superpowers/specs/2026-07-31-cloud-storage-model-design.md).
-Q16 (operating from abroad) is closed by the Spain-residency decision; do not send it.
+[asesor-questions.md](compliance/asesor-questions.md) against the current Waitron architecture.
+Cloud archive and hosting questions, including the historical cloud-storage document's §8a,
+are now tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md).
+Keep core fiscal questions here and coordinate shared assumptions with that review.
+Q16 (operating from abroad) remains outside the Spanish rollout's question set under its
+Spain-hosting assumption; wider country policy belongs to Cloud.
 
 | Q | Assumption in the tree | Status |
 | --- | --- | --- |
