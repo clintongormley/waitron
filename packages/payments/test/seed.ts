@@ -1,6 +1,17 @@
-import { sql } from "drizzle-orm";
 import { decimal, decimalToCents, nodeId as brandNodeId } from "@waitron/shared";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  sales,
+  tenants,
+  tenders,
+  tills,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
@@ -13,11 +24,11 @@ export interface SeededForSale extends Seeded {
   seriesId: string;
 }
 
-// Each of this package's test files runs against its own isolated PGlite instance, and within a
-// file tenants accumulate for the life of the suite (nothing truncates `tenants`), so every test
-// that seeds a tenant needs its own NIF or collides with a prior one on `tenants_country_tax_id_key`. A
-// single shared counter is enough — the per-file base-offset each test file used to carry bought
-// nothing, since the DBs never see each other's rows.
+// Each of this package's test files runs against its own venue database, and within a file tenants
+// accumulate for the life of the suite unless the helper's per-test reset empties them, so every
+// test that seeds a tenant needs its own NIF or collides with a prior one on
+// `tenants_country_tax_id_key`. A single shared counter is enough — the databases never see each
+// other's rows.
 let nifCounter = 0;
 
 /** Returns a NIF unused so far in this test run. */
@@ -26,27 +37,48 @@ export function freshNif(): string {
   return `${String(10_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
+/**
+ * Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
  * is what the fiscal chain/series/SIF identity is keyed on; it is
- * created at the same location as the till. Uses the fixture connection directly. */
+ * created at the same location as the till. Uses the fixture connection directly.
+ *
+ * Written through the table definitions rather than as raw SQL, and that is not a style choice:
+ * `id` and `created_at` are `$defaultFn` generators only the insert BUILDER runs, and
+ * `invoice_locales` is a list the column's own mapping encodes. The raw-SQL version this replaced
+ * was refused `NOT NULL constraint failed: tenants.created_at` — measured 2026-09-22, the baseline
+ * `pnpm --filter @waitron/payments test` run recorded at `/tmp/payments-baseline.txt`, where it was
+ * the failure under `seedWorkingOrder test/seed.ts:33` in every wiring suite. The same shape is in
+ * `packages/core/test/fixtures.ts`'s `seedTenant`.
+ */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
-  await db.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Test SL')
-    on conflict (id) do nothing`);
-  const l = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Retail') returning id`);
-  const locationId = l.rows[0].id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`);
-  const tillId = till.rows[0].id;
-  const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${locationId}, 'Node 1') returning id`);
-  const nodeId = node.rows[0].id;
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nif, legalName: "Test SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  const [location] = await db
+    .insert(locations)
+    .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Till 1" })
+    .returning({ id: tills.id });
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId, name: "Node 1" })
+    .returning({ id: nodes.id });
   // order_number is NOT NULL since park & retrieve (@waitron/db Task 1); this seed just needs a value.
-  const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
-  return { tillId, nodeId, workingOrderId: wo.rows[0].id };
+  const [wo] = await db
+    .insert(workingOrders)
+    .values({ tillId: till!.id, orderNumber: 1 })
+    .returning({ id: workingOrders.id });
+  return { tillId: till!.id, nodeId: node!.id, workingOrderId: wo!.id };
 }
+
+/** The instant the seeded sale and its covering tender are stamped with. A literal rather than the
+ * engine's clock: SQLite has no `now()`, and a timestamp column here holds an ISO string. */
+const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();
 
 /**
  * Seeds one `invoice_series` row for the node, one `sales` row against it, and the one `tenders`
@@ -65,24 +97,38 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * NULL column on `sales` (`packages/db/src/schema/sales.ts`) is supplied, `locale` is a member of
  * `invoice_locales`, `issued_offset_minutes` is within range, and this is the series' first (and
  * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
- * sale and its covering tender are wrapped in one `db.transaction` for atomic setup — not for the
+ * sale and its covering tender are wrapped in one transaction for atomic setup — not for the
  * FK (which a committed `sales` row satisfies across separate transactions too), but so a
  * partial failure can never leave a sale without its covering tender. Uses the fixture connection
  * directly, like `seedWorkingOrder`.
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
-  const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${seeded.nodeId}, 'A') returning id`);
-  const seriesId = series.rows[0].id;
-  return db.transaction(async (tx) => {
-    const sale = await tx.execute<{ id: string }>(sql`
-      insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
-        1000, '[]'::jsonb, 'es', array['es'], 'fake', 'not_applicable'
-      ) returning id`);
-    const saleId = sale.rows[0].id;
-    await tx.execute(sql`
-      insert into tenders (sale_id, method, amount, settled_at) values (${saleId}, 'card', 1000, now())`);
-    return saleId;
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId: seeded.nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  return withTransaction(db, async (tx) => {
+    const [sale] = await tx
+      .insert(sales)
+      .values({
+        tillId: seeded.tillId,
+        nodeId: seeded.nodeId,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: SEEDED_AT,
+        issuedOffsetMinutes: 60,
+        total: 1000,
+        vatBreakdown: [],
+        locale: "es",
+        invoiceLocales: ["es"],
+        fiscalBackend: "fake",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await tx
+      .insert(tenders)
+      .values({ saleId: sale!.id, method: "card", amount: 1000, settledAt: SEEDED_AT });
+    return sale!.id;
   });
 }
 
@@ -107,13 +153,14 @@ export async function seedForSale(
   nif?: string,
 ): Promise<SeededForSale> {
   const seeded = await seedWorkingOrder(db, nif);
-  const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${seeded.nodeId}, 'A') returning id`);
-  const seriesId = series.rows[0].id;
-  await db.transaction(async (tx) => {
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId: seeded.nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  await withTransaction(db, async (tx) => {
     await backend.registerNode(tx, brandNodeId(seeded.nodeId));
   });
-  return { ...seeded, seriesId };
+  return { ...seeded, seriesId: series!.id };
 }
 
 /** Seeds the venue's one `payment_policy` row (`id = 1`) through the fixture connection. `cap` is
@@ -123,7 +170,7 @@ export async function seedPaymentPolicy(
   mode: "accept_offline" | "cash_only",
   cap: string,
 ): Promise<void> {
-  await db.execute(sql`
-    insert into payment_policy (offline_mode, offline_amount_cap)
-    values (${mode}, ${decimalToCents(decimal(cap))})`);
+  await db
+    .insert(paymentPolicy)
+    .values({ offlineMode: mode, offlineAmountCap: decimalToCents(decimal(cap)) });
 }

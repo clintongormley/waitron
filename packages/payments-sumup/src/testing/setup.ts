@@ -1,5 +1,5 @@
 import { withTransaction } from "@waitron/db";
-import type { PgliteSuite } from "@waitron/db/testing/lifecycle.js";
+import type { Database } from "@waitron/db";
 import {
   decimal,
   tillId as brandTillId,
@@ -12,11 +12,15 @@ import { SumUpCloudProvider } from "../provider.js";
 
 const NODE = "11111111-1111-4111-8111-111111111111";
 
-/** The PGlite fixture shared by the hermetic adapter suites (`provider.test.ts`, `reverse.test.ts`):
- * a seeded working order, a `FakeSumUp`, and a provider wired to the seeded tenant (stamped on the
- * incidents it raises). `makeProvider` builds another provider against the same db and fake. `row`
- * reads a payment back by ref (asserting the persisted state). */
-export async function setup(suite: PgliteSuite, tune?: (f: FakeSumUp) => void) {
+/** The fixture shared by the adapter suites (`provider.test.ts`, `reverse.test.ts`): a seeded
+ * working order, a `FakeSumUp`, and a provider wired to the seeded venue (stamped on the incidents
+ * it raises). `makeProvider` builds another provider against the same db and fake. `row` reads a
+ * payment back by ref (asserting the persisted state).
+ *
+ * It takes the accessor OBJECT rather than a `Database` because the suites call it inside an `it`
+ * body: `useVenueDb`'s `db` getter throws when read before `beforeAll`, and destructuring it at
+ * module scope is exactly the mistake that getter exists to catch. */
+export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSumUp) => void) {
   const t = await seedWorkingOrder(suite.db, freshNif());
   const fake = new FakeSumUp();
   tune?.(fake);

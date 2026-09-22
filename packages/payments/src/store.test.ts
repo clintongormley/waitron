@@ -406,9 +406,8 @@ describe("findPaymentByRef", () => {
 });
 
 describe("findCapturedPaymentForWorkingOrder", () => {
-  // PGlite: this asserts the STATE filter and column projection only — no privileges, no
-  // concurrency — so the hermetic superuser target is the right one (CLAUDE.md §4). The REPLAY
-  // branch (a non-null `saleId`) is asserted in store.pg.test.ts, on real Postgres.
+  // This asserts the STATE filter and column projection only. The REPLAY branch (a non-null
+  // `saleId`) is asserted in store.card-and-replay.test.ts.
   it("returns a captured payment for the working order, ignoring non-captured states", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { provider: "stripe", workingOrderId: s.workingOrderId };
