@@ -20,11 +20,16 @@ import { registrosFacturacion } from "./schema/registros.js";
 
 /**
  * Three, not one and not ten. One is not a retry. Ten converts a genuine duplicate — a real bug,
- * or a second process writing the same position by some path that never takes the lock — into ten
- * pointless round trips before the same failure. The retry exists only for the narrow window in
- * which two writers race to CREATE a chain head that does not yet exist and therefore cannot be
- * locked (`lockChainHead`'s own doc comment); once that row exists, `FOR UPDATE` serialises
- * everything, so a further collision means something is wrong that retrying will not fix.
+ * or a second process writing the same position by some path that does not go through the venue
+ * file's write queue — into ten pointless round trips before the same failure.
+ *
+ * What the retry is FOR narrowed when the engine changed. It used to cover the window in which two
+ * writers race to create a chain head that does not exist yet and so cannot be locked; one write
+ * transaction runs on the file at a time now, so there is no such race to cover. It is kept
+ * because the chain's actual guarantee is the unique index on the position, not any lock, and that
+ * index refuses a forked position whatever wrote it — including a writer that never went through
+ * this file. Keeping the loop means such a collision is retried once or twice before it is
+ * reported, rather than reaching a till screen on the first attempt.
  */
 const MAX_APPEND_ATTEMPTS = 3;
 
@@ -72,10 +77,26 @@ export interface ChainHead {
   ultimaHuella: string | null;
 }
 
-async function selectHeadForUpdate(
-  tx: Transaction,
-  nodeId: NodeId,
-): Promise<ChainHead | undefined> {
+/**
+ * This node's chain head, or `undefined` when it has none yet.
+ *
+ * This was `selectHeadForUpdate` and it took `for update` on the head row: the sequence number
+ * read here decides the NEXT one several statements later, so a second append reading the same
+ * head would compute the same position. There is no second append to overlap with — one write
+ * transaction runs on the venue file at a time, and the pattern is stated once, with its
+ * measurement and its control, on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). Drizzle's SQLite query builder has no `.for()` at all.
+ * Renamed with the clause: a function named for a lock it does not take is a false claim.
+ *
+ * The lock was never the chain's safety. `registros_facturacion`'s unique index on the chain
+ * position is, and it refuses a forked position whatever wrote it — which the `rejects a second
+ * record claiming an occupied chain position` case in `chain.test.ts` proves by inserting the fork
+ * WITHOUT going through this file.
+ *
+ * `packages/workforce/src/chain.ts` made the same change for the working-time chain, and its
+ * `selectHead` is the sibling of this one.
+ */
+async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
   const [row] = await tx
     .select({
       secuencia: cadenas.secuencia,
@@ -83,30 +104,30 @@ async function selectHeadForUpdate(
       ultimaHuella: cadenas.ultimaHuella,
     })
     .from(cadenas)
-    .where(eq(cadenas.nodeId, nodeId))
-    .for("update");
+    .where(eq(cadenas.nodeId, nodeId));
   return row;
 }
 
 /**
- * Takes the chain-head row lock, creating the head if this is a fresh node.
+ * This node's chain head, creating it if this is a fresh node.
  *
- * Exported separately from `appendToChain` because art. 7.i verification (a future `verifyChain`,
- * Task 15) must read the last two records under the SAME lock, in the SAME transaction — a
- * verification that examines a predecessor another writer is concurrently replacing has verified
- * nothing. Re-acquiring the lock inside `appendToChain` afterwards is free: the transaction
- * already holds it, and Postgres row locks are reentrant within one transaction.
+ * Exported separately from `appendToChain` because art. 7.i verification (`verifyChain`) must read
+ * the last two records in the SAME transaction — a verification that examines a predecessor
+ * another writer is concurrently replacing has verified nothing. That requirement is unchanged;
+ * what satisfies it is now the transaction itself rather than a row lock inside it, because one
+ * write transaction runs on the venue file at a time ({@link selectHead}).
  *
- * `insert ... on conflict do nothing` followed by a re-select, not an upsert-returning: when a
- * concurrent transaction has inserted the head but not yet committed, Postgres makes THIS
- * transaction's speculative insert wait on that other transaction and then do nothing once it
- * sees the conflict, so the re-select below runs only after the other transaction's outcome is
- * decided and observes the COMMITTED row rather than a row that might still roll back invisibly.
- * That ordering is why this is two statements rather than a single `... returning` that would
- * return nothing for a conflicting row and leave the caller with no head to act on.
+ * `insert ... on conflict do nothing` then a re-select, not an upsert-returning. On PostgreSQL that
+ * shape was about a concurrent uncommitted insert; here it is the plain read-back of whichever row
+ * exists, and it is still two statements because a single `... returning` gives nothing back for a
+ * conflicting row and would leave the caller with no head to act on.
+ *
+ * This was `lockChainHead` and it took no lock of its own — {@link selectHead} did, and that clause
+ * is gone for the reason stated there. Renamed with it, the same way
+ * `packages/workforce/src/chain.ts` renamed its own.
  */
-export async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, nodeId);
+export async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
+  const existing = await selectHead(tx, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
@@ -114,12 +135,12 @@ export async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<Ch
     .values({ nodeId })
     .onConflictDoNothing({ target: [cadenas.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, nodeId);
+  const created = await selectHead(tx, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
-    // Unreachable in practice: the insert above either commits a fresh row or a concurrent
-    // transaction's insert wins the conflict and commits one, and the re-select then locks
-    // whichever row exists. Left in rather than asserted away because a NOT NULL narrowing here
+    // Unreachable in practice: the insert above either commits a fresh row or finds one already
+    // there, and the re-select then reads whichever exists. Left in rather than asserted away
+    // because a NOT NULL narrowing here
     // is cheaper than a `!` that would hide a real defect behind a TypeError instead of an
     // AppError if this invariant were ever wrong.
     throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
@@ -134,7 +155,7 @@ async function attemptAppend(
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
-  const head = await lockChainHead(tx, nodeId);
+  const head = await readChainHead(tx, nodeId);
   // Chain identity is sif_id, resolved independently of `secuencia` — the two must never be
   // conflated (spec's own finding: secuencia is OUR outbox ordering aid, sif_id is which SIF
   // identity actually generated the record, and neither is derived from the other or from the

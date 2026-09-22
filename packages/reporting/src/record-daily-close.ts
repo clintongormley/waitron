@@ -256,7 +256,8 @@ async function selectHeadForUpdate(
  * do nothing` then a locking re-select, not an upsert-returning: when a concurrent transaction has
  * inserted the head but not committed, this transaction's speculative insert waits on it and then does
  * nothing on the conflict, so the re-select observes the COMMITTED row rather than one that might roll
- * back. Same shape as workforce's `lockChainHead`, keyed by node.
+ * back. Same shape as workforce's chain head, keyed by node — which is now `readChainHead` and
+ * takes no lock (`packages/workforce/src/chain.ts`). This one has not been converted yet.
  */
 async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
   const existing = await selectHeadForUpdate(tx, nodeId);

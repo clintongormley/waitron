@@ -156,7 +156,7 @@ type OriginalAltaForCorrection = Pick<
 
 /**
  * The real Veri*Factu `FiscalBackend`. Wires the pieces Tasks 12-15 already built —
- * `registerSif`/`currentSif`, `appendToChain` (which itself calls `lockChainHead`/`verifyChain`'s
+ * `registerSif`/`currentSif`, `appendToChain` (which itself calls `readChainHead`/`verifyChain`'s
  * own row lock), `toRegistroRow`'s hashing via `@waitron/verifactu`'s `buildAltaRecord`, and the
  * `envios` sidecar — into the interface `packages/core`'s `recordSale` (spec §4 steps 1-7) calls
  * through.

@@ -129,7 +129,7 @@ declare module "@waitron/shared" {
      * Thrown by `appendToChain` (./chain.ts) only after `MAX_APPEND_ATTEMPTS` savepoint retries
      * each lost the race on SQLSTATE 23505 — in practice, several tabs/processes racing to create
      * the very first `cadenas` row for a node that has never sold before (the one window
-     * `lockChainHead`'s row lock cannot cover, because there is no row yet to lock). Keyed by node
+     * `readChainHead`'s row lock cannot cover, because there is no row yet to lock). Keyed by node
      * (node-id rekey, 2026-08-03: the chain is the node's, #33). A bare `throw new Error(...)` here
      * would reach a till screen as untranslatable prose (Global Constraint, spec §9) for exactly the
      * failure a human most needs explained in their own language.

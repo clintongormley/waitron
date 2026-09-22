@@ -912,8 +912,13 @@ export async function tillsForWorkingOrders(
  * `recordVoid`/`recordRefund` calls against the same payment serialise: the second reversal blocks
  * until the first commits, then re-reads the updated state (and, for refund, the updated
  * `payment_refunds` total) instead of racing on a stale snapshot. Throws `payment.not_found` when
- * absent, and mirrors the fiscal layer's `lockChainHead` (`.for("update")`). Read-only callers
- * (`getPaymentByRef`/`findPaymentByRef`) stay UNLOCKED. */
+ * absent. Read-only callers (`getPaymentByRef`/`findPaymentByRef`) stay UNLOCKED.
+ *
+ * The clause is still here and this engine has no such thing — drizzle's SQLite query builder has
+ * no `.for()` at all, so this is one of the row-lock sites the storage swap has not reached yet.
+ * It used to say it mirrored the fiscal layer's `lockChainHead`; that function is
+ * `readChainHead` now and takes no lock, for the reason stated on
+ * `packages/fiscal-verifactu/src/chain.ts`'s `selectHead`. */
 async function requireRowForUpdate(tx: Transaction, params: Key): Promise<PaymentRow> {
   const [row] = await tx
     .select(PAYMENT_COLUMNS)

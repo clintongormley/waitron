@@ -1,11 +1,12 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { captureError, pgErrorCode } from "@waitron/db";
+import { captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
-import { appendToChain, lockChainHead } from "./chain.js";
+import { registrosFacturacion } from "./schema/registros.js";
+import { appendToChain, readChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
@@ -35,19 +36,21 @@ async function records(): Promise<
     num_serie_factura: string;
   }[]
 > {
-  const { rows } = await pg.db.execute<{
-    secuencia: number;
-    huella: string;
-    primer_registro: boolean;
-    anterior_huella: string | null;
-    num_serie_factura: string;
-  }>(sql`
-    select secuencia, huella, primer_registro, anterior_huella, num_serie_factura
-    from registros_facturacion
-    where node_id = ${till.nodeId}
-    order by secuencia
-  `);
-  return rows;
+  // Through the table definition, not raw SQL: `primer_registro` is a flag, which this engine
+  // stores as 0 or 1, and only the builder maps it back to a boolean. A raw read returns the
+  // number, so `toBe(true)` reads `expected 1 to be true` against a perfectly correct row. The
+  // keys are aliased to the column names so every assertion below is unchanged.
+  return pg.db
+    .select({
+      secuencia: registrosFacturacion.secuencia,
+      huella: registrosFacturacion.huella,
+      primer_registro: registrosFacturacion.primerRegistro,
+      anterior_huella: registrosFacturacion.anteriorHuella,
+      num_serie_factura: registrosFacturacion.numSerieFactura,
+    })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.nodeId, till.nodeId))
+    .orderBy(registrosFacturacion.secuencia);
 }
 
 describe("appendToChain", () => {
@@ -206,17 +209,33 @@ describe("appendToChain", () => {
     // undefined; the real SQLSTATE lives on `.cause.code`, so a bare `.rejects.toMatchObject`
     // assertion never sees it and fails even against a correctly-enforced constraint.
     const error = await captureError(() =>
-      pg.db.execute(sql`
-        insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-          id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-          primer_registro, sistema_informatico,
-          fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella)
-        values (${till.tillId}, ${till.nodeId}, ${till.sifId}, ${b}, 1, 'alta', '89890001K', 'A/2',
-          '2026-07-20', 'Waitron SL', true, '{}'::jsonb,
-          '2026-07-20T19:20:31+02:00', 120, '01', ${"0".repeat(64)})
-      `),
+      pg.db.insert(registrosFacturacion).values({
+        tillId: till.tillId,
+        nodeId: till.nodeId,
+        sifId: till.sifId,
+        saleId: b,
+        secuencia: 1,
+        tipoRegistro: "alta",
+        idEmisorFactura: "89890001K",
+        numSerieFactura: "A/2",
+        fechaExpedicionFactura: "2026-07-20",
+        nombreRazonEmisor: "Waitron SL",
+        primerRegistro: true,
+        sistemaInformatico: {},
+        fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
+        offsetMinutos: 120,
+        tipoHuella: "01",
+        huella: "0".repeat(64),
+      }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    // The class, and then WHICH key — stronger than the SQLSTATE this used to assert, which said
+    // only that something unique was violated. This engine names the table and the columns for a
+    // unique index over plain columns (`packages/db/src/constraint-target.ts`).
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(constraintTarget(error)).toEqual({
+      table: "registros_facturacion",
+      columns: ["node_id", "secuencia"],
+    });
   });
 
   it("retries inside a savepoint, so a real collision does not poison the whole transaction", async () => {
@@ -229,21 +248,39 @@ describe("appendToChain", () => {
     // first 23505 aborted the outer transaction and the second attempt's first statement came back
     // 25P02, which isUniqueViolation does not recognise, so appendToChain rethrew a raw driver
     // error instead of chain.append_contention. That mechanism is gone — SQLite backs out the
-    // refused statement and leaves the transaction open. Whether this case still discriminates the
-    // savepoint on SQLite is UNMEASURED: the control could not be re-run, because this suite does
-    // not pass on this branch yet for reasons of its own. Treat it as a case about exhaustion
-    // surfacing as a structured error until somebody re-runs the deletion (CLAUDE.md §4, "a
-    // proof-by-deletion belongs to the SHAPE of the code it was taken against").
+    // refused statement and leaves the transaction open.
+    //
+    // THE CONTROL HAS NOW BEEN RUN, and it says this case does NOT discriminate the savepoint on
+    // this engine: replacing `tx.transaction((nested) => attemptAppend(nested, …))` with a plain
+    // `attemptAppend(tx, …)` leaves this case PASSING. Two other cases go red under that deletion
+    // and neither is evidence either — both stub `tx` with a `transaction` method and nothing
+    // else, so they fail because the stub has no other method, not because the savepoint matters.
+    //
+    // So this is a case about exhaustion surfacing as a structured error, and the savepoint is
+    // held by nothing here. Its remaining job (undoing what a losing attempt wrote before the
+    // refused statement) is not reachable from this path either: the refused insert is the FIRST
+    // write an attempt makes, and the only earlier write is `readChainHead` creating a missing
+    // head row, which is idempotent. CLAUDE.md §4, "a proof-by-deletion belongs to the SHAPE of
+    // the code it was taken against" — the shape changed and the proof did not survive it.
     const occupied = await seedSale(pg.db, till, 1);
-    await pg.db.execute(sql`
-      insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-        id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-        primer_registro, sistema_informatico,
-        fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella)
-      values (${till.tillId}, ${till.nodeId}, ${till.sifId}, ${occupied}, 1, 'alta', '89890001K', 'A/999',
-        '2026-07-20', 'Waitron SL', true, '{}'::jsonb,
-        '2026-07-20T19:20:31+02:00', 120, '01', ${"1".repeat(64)})
-    `);
+    await pg.db.insert(registrosFacturacion).values({
+      tillId: till.tillId,
+      nodeId: till.nodeId,
+      sifId: till.sifId,
+      saleId: occupied,
+      secuencia: 1,
+      tipoRegistro: "alta",
+      idEmisorFactura: "89890001K",
+      numSerieFactura: "A/999",
+      fechaExpedicionFactura: "2026-07-20",
+      nombreRazonEmisor: "Waitron SL",
+      primerRegistro: true,
+      sistemaInformatico: {},
+      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
+      offsetMinutos: 120,
+      tipoHuella: "01",
+      huella: "1".repeat(64),
+    });
 
     const saleId = await seedSale(pg.db, till, 2);
     const error = await pg.db
@@ -267,7 +304,19 @@ describe("appendToChain", () => {
     // exactly that one method and nothing else — a wider fake would let the test keep passing if
     // the retry loop started doing something else.
     const alwaysCollides = {
-      transaction: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+      transaction: () =>
+        Promise.reject(
+          // The `errcode` + `message` pair this engine reports for a unique-index collision, not
+          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal the case
+          // above now asserts on, so the stub and the database agree.
+          Object.assign(new Error("UNIQUE constraint failed: registros_facturacion.node_id"), {
+            cause: {
+              errcode: 2067,
+              message:
+                "UNIQUE constraint failed: registros_facturacion.node_id, registros_facturacion.secuencia",
+            },
+          }),
+        ),
     } as never;
 
     const error = await appendToChain(
@@ -321,18 +370,18 @@ describe("appendToChain — pre-fetched SIF", () => {
   });
 });
 
-describe("lockChainHead", () => {
+describe("readChainHead", () => {
   it("creates the chain head row from scratch when a till has none yet", async () => {
-    // Every other test in this file reaches lockChainHead through appendToChain on a till that
+    // Every other test in this file reaches readChainHead through appendToChain on a till that
     // seedTill already provisioned via registerSif — which itself always inserts (or resets) a
-    // cadenas row as its own last step (./registro-sif.ts). That leaves lockChainHead's OWN
+    // cadenas row as its own last step (./registro-sif.ts). That leaves readChainHead's OWN
     // create-the-head-if-missing branch — the one Task 14 exists to build, for "the residual
     // window where there is no head row yet to lock" — untouched by every test above. Deleting the
     // row this fixture's registerSif already created reproduces that cold-start state directly,
     // without inventing a second, non-SIF-registered kind of till fixture just to reach it.
     await pg.db.execute(sql`delete from cadenas where node_id = ${till.nodeId}`);
 
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, till.nodeId));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
     expect(head).toEqual({ secuencia: 0, ultimoRegistroId: null, ultimaHuella: null });
 
     const { rows } = await pg.db.execute<{ secuencia: number }>(
@@ -344,19 +393,19 @@ describe("lockChainHead", () => {
 
   it("locks the existing head row rather than creating a second one", async () => {
     // The common case, exercised directly rather than only through appendToChain: a till that
-    // already sold once must have lockChainHead read that same row, not silently create a rival.
+    // already sold once must have readChainHead read that same row, not silently create a rival.
     const saleId = await seedSale(pg.db, till, 1);
     await pg.db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 1, 1)),
     );
 
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, till.nodeId));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
     expect(head.secuencia).toBe(1);
     expect(head.ultimoRegistroId).not.toBeNull();
     expect(head.ultimaHuella).not.toBeNull();
 
     const { rows } = await pg.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from cadenas where node_id = ${till.nodeId}`,
+      sql`select count(*) as count from cadenas where node_id = ${till.nodeId}`,
     );
     expect(rows[0]?.count).toBe(1);
   });
