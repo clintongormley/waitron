@@ -10,10 +10,13 @@ import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: the request→approve flow, the supervisor gate and reprojection are all
-// LOGIC — no privilege set, no concurrency (CLAUDE.md §4, plan §7). The append-only floor
-// that stops a correction being UPDATE-d is proven as the app role in immutability.test.ts, which
-// covers every row of `time_entries`, corrections included; it is not re-proven here.
+// A venue database, not real Postgres: the request→approve flow, the supervisor gate and
+// reprojection are all LOGIC — no privilege set, no concurrency (CLAUDE.md §4, plan §7). The
+// append-only floor that stops a correction being UPDATE-d covers every row of `time_entries`,
+// corrections included, and is not re-proven here. It is proven at the product's own migrate path
+// by `packages/migrations/src/apply-append-only.test.ts`, which names `time_entries` and carries a
+// control in the other direction; this package's own `immutability.test.ts` was deleted by task F1
+// (2026-09-22) — it rested on the app role's PRIVILEGES, and this engine has no roles.
 const backend = new WorkforceBackend();
 
 let locationId: string;

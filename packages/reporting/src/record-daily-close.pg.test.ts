@@ -1,239 +1,132 @@
 /**
- * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `for update` on the `daily_close_chain` head row that `recordDailyClose` took is gone.
+ * Closes started together leave one row per business day, on one contiguous chain.
  *
- * The clause this suite was built around is deleted, not translated: SQLite has no row locks and
- * drizzle's SQLite query builder has no `.for()`. What serialises the writers instead is the venue
- * file's write queue — one write transaction on the file at a time — stated once, with its
- * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
- * The function the comments below name, `selectHeadForUpdate`, is `selectHead` now, and
- * `lockChainHead` is `readChainHead`, renamed with the clause so a function is not named for a lock
- * it does not take.
+ * ## What this suite was, and what converting it cost
  *
- * The `select … for update` in the second test's `holder` transaction is raw SQL inside a `sql`
- * template, and it is deliberately NOT converted here — the raw-SQL suites are a later step's, and
- * its treatment there is "a contention test becomes a test that the write queue serialises
- * writers", with `racePair` (`packages/catalogue/test/fixtures.ts`) as the shape that replaces it.
+ * It ran against real PostgreSQL through `useTemplateDb`, opened one backend per closer, and was
+ * written around the `select … for update` on the `daily_close_chain` head row that
+ * `recordDailyClose` took. That clause is gone — SQLite has no row locks — and what serialises
+ * closers now is the venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`)
+ * runs its body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues
+ * `begin immediate` / `commit` around it. The mechanism, its measurement and its control in the
+ * other direction are recorded once on `racePair` (`packages/catalogue/test/fixtures.ts`).
  *
- * The two proofs-by-deletion recorded below (the comments on the third and fourth tests) cannot be
- * re-run to say whether they still discriminate, because this suite does not COLLECT:
- * `useTemplateDb` throws
- * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
- * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
- * this branch removed. Measured 2026-09-22 on `pnpm --filter @waitron/reporting test`, where it
- * reports `4 tests | 4 skipped` and then fails the FILE. Both of them describe a lock that no
- * longer exists: "remove the `.for("update")` from `selectHeadForUpdate`" names a clause that is
- * already removed, and "only the FOR UPDATE head lock keeps the sequence numbers distinct" names
- * the wrong mechanism now. The `lock_timeout` / `55P03` assertion in the third test is
- * PostgreSQL's and has no SQLite equivalent.
+ * **Two cases did not survive:**
  *
- * It is left in place rather than deleted because its behavioural subjects still have to hold on
- * this engine and nothing asserts them yet: that two closes of the SAME business day leave exactly
- * one row with the loser refused (second test), and that N concurrent closes of DIFFERENT days get
- * distinct, gap-free sequence numbers and a chain that re-verifies (fourth). The first test — that
- * the writers run on distinct backend processes — is the one subject that does not survive at all:
- * this engine has one connection per file, so there is nothing for it to assert.
+ * 1. `runs its writers on distinct backend processes` — `pg_backend_pid()` has no counterpart and
+ *    there are no backends. Nothing now confirms the closers below are genuinely separate callers;
+ *    what they are is separate `withTransaction` calls started without awaiting each other.
+ * 2. `blocks a second closer while the chain head is locked (the single-writer lock)` — it held the
+ *    head row on one connection and asserted SQLSTATE `55P03` from the other's `lock_timeout`.
+ *    There is no lock to hold, no second connection and no `lock_timeout`, so the case is deleted
+ *    outright rather than reworded. It was one of this file's two proof-by-deletion targets (remove
+ *    `.for("update")` and the second closer sails through); that control cannot be re-run, because
+ *    the clause it deleted is already deleted.
+ *
+ * The suite also no longer switches to the application role: `asAppUser`
+ * (`packages/db/src/testing/roles.ts`) is an empty body on this branch and there are no grants, so
+ * a call to it here would read like a privilege check that is not happening. What that used to buy
+ * — that a missing GRANT on `daily_closes`/`daily_close_chain` would show up — is not bought by
+ * anything now.
  */
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { CORE_MIGRATIONS, dailyCloses, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable (the
-// package's vitest `globalSetup` throws when Docker is absent rather than degrading to a skip). Every
-// assertion below turns on
-// something PGlite cannot show: PGlite serialises every query onto ONE backend, so the single-writer
-// FOR UPDATE lock reads the same, whether present or removed, and a "concurrency" test on it is a
-// FALSE pass. It also runs every connection as a superuser holding every grant, so a missing GRANT on
-// `daily_closes`/`daily_close_chain` — without which `recordDailyClose` could not run at all — is
-// invisible there. The deterministic LOGIC — snapshot, per-till variance, chaining, validation —
-// lives in `record-daily-close.test.ts` on PGlite, where it belongs (CLAUDE.md §4).
-
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 const WRITERS = 10;
 
-const suite = useTemplateDb({ template: "core" });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 let venue: SeededVenue;
-// A FRESH tenant/node/chain per test (seedVenue mints a new tenant): daily_closes is append-only and
-// un-truncatable, so each test writes into its own chain rather than cleaning up.
+// A fresh venue per test. On PostgreSQL this had to mint a new TENANT each time, because
+// `daily_closes` was append-only and un-truncatable so nothing could clear it; `useVenueDb`'s reset
+// drops each append-only trigger, empties the table and recreates the trigger from its own stored
+// text (`packages/db/src/testing/venue-db.ts`), so each test starts from an empty database.
 beforeEach(async () => {
-  venue = await seedVenue(suite.admin);
+  venue = await seedVenue(suite.db);
 });
 
-/** Runs `recordDailyClose` on `db` under the real app role, inside `withTransaction` — the exact shape
- * the running POS uses. Each caller passes its own `db` (a distinct backend) so two of them
- * genuinely contend. */
-function record(
-  db: Database,
-  businessDay: string,
-  cashCounts: CashCountInput[],
-): Promise<DailyCloseRecord> {
-  return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
-    return recordDailyClose(tx, {
+/** Runs `recordDailyClose` inside `withTransaction` — the exact shape the running POS uses, and
+ * the thing concurrent callers queue on. */
+function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
+  return withTransaction(suite.db, (tx) =>
+    recordDailyClose(tx, {
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
       closedBy: CLOSED_BY,
       cashCounts,
-    });
-  });
+    }),
+  );
 }
 
-async function closeCount(): Promise<number> {
-  const { rows } = await suite.admin.execute<{ n: number }>(sql`
-    select count(*)::int as n from daily_closes
-     where node_id = ${venue.nodeId}`);
-  return rows[0]!.n;
+/** The node's committed closes, in chain order. */
+function readChain() {
+  return suite.db
+    .select({
+      sequenceNo: dailyCloses.sequenceNo,
+      prevEntryHash: dailyCloses.prevEntryHash,
+      entryHash: dailyCloses.entryHash,
+    })
+    .from(dailyCloses)
+    .where(eq(dailyCloses.nodeId, venue.nodeId))
+    .orderBy(dailyCloses.sequenceNo);
 }
 
-async function readChain(): Promise<
-  Array<{ sequenceNo: number; prevEntryHash: string; entryHash: string }>
-> {
-  const { rows } = await suite.admin.execute<{
-    sequence_no: number;
-    prev_entry_hash: string;
-    entry_hash: string;
-  }>(sql`
-    select sequence_no, prev_entry_hash, entry_hash from daily_closes
-     where node_id = ${venue.nodeId}
-     order by sequence_no`);
-  return rows.map((r) => ({
-    sequenceNo: r.sequence_no,
-    prevEntryHash: r.prev_entry_hash,
-    entryHash: r.entry_hash,
-  }));
-}
-
-describe("recordDailyClose under real contention", () => {
-  it("runs its writers on distinct backend processes", async () => {
-    // THE LOAD-BEARING GUARD. PGlite serialises every query onto one backend, so this returns the
-    // same pid twice there and everything below would be theatre. Mirrors the fiscal/workforce
-    // concurrency suites' first test.
-    const dbs = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        dbs.map(async (db) => {
-          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-          return rows[0]?.pid;
-        }),
-      );
-      expect(new Set(pids).size).toBe(2);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
-  });
-
+describe("recordDailyClose under concurrent closers", () => {
   it("serialises two concurrent closes of the same day: one wins, one errors, exactly one row", async () => {
-    const dbs = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const results = await Promise.allSettled(dbs.map((db) => record(db, "2026-08-04", [])));
+    // Started without awaiting each other: nothing but the write queue keeps the second out.
+    const results = await Promise.allSettled([record("2026-08-04", []), record("2026-08-04", [])]);
 
-      const fulfilled = results.filter((r) => r.status === "fulfilled");
-      const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-      expect(fulfilled).toHaveLength(1);
-      expect(rejected).toHaveLength(1);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
 
-      // The loser fails CLEANLY — a translated domain error naming the day, never a raw driver throw.
-      const reason = rejected[0]!.reason;
-      expect(isAppError(reason)).toBe(true);
-      if (isAppError(reason)) {
-        expect(reason.code).toBe("close.already_closed");
-        expect(reason.params).toEqual({ businessDay: "2026-08-04" });
-      }
-
-      // Exactly one immutable row, at sequence 1.
-      expect(await closeCount()).toBe(1);
-      expect((await readChain()).map((c) => c.sequenceNo)).toEqual([1]);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
+    // The loser fails CLEANLY — a translated domain error naming the day, never a raw driver throw.
+    const reason = rejected[0]!.reason;
+    expect(isAppError(reason)).toBe(true);
+    if (isAppError(reason)) {
+      expect(reason.code).toBe("close.already_closed");
+      expect(reason.params).toEqual({ businessDay: "2026-08-04" });
     }
-  });
 
-  it("blocks a second closer while the chain head is locked (the single-writer lock)", async () => {
-    // Deterministic rather than timing-based, and the proof-by-deletion target: hold the head-row
-    // lock open, then a second closer that must take FOR UPDATE on the same head waits until its
-    // lock_timeout. Remove the `.for("update")` from `selectHeadForUpdate` and this closer no longer
-    // blocks — it sails through and returns a record — so this test goes red exactly when the lock is
-    // gone. Mirrors workforce/fiscal "blocks a second appender".
-    await record(suite.admin, "2026-08-01", []); // create + advance the head so there is a row to lock
-
-    const holder = await suite.pg.connect();
-    const waiter = await suite.pg.connect();
-    let release: () => void = () => {};
-    let holding: Promise<unknown> | undefined;
-    try {
-      const held = new Promise<void>((resolve) => (release = resolve));
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
-      holding = holder.transaction(async (tx) => {
-        await tx.execute(
-          sql`select 1 from daily_close_chain where node_id = ${venue.nodeId} for update`,
-        );
-        acquire();
-        await held;
-      });
-      await acquired;
-
-      const error = await captureError(() =>
-        withTransaction(waiter, async (tx) => {
-          await asAppUser(tx);
-          await tx.execute(sql`set local lock_timeout = '250ms'`);
-          return recordDailyClose(tx, {
-            nodeId: venue.nodeId,
-            businessDay: "2026-08-02",
-            timeZone: "Europe/Madrid",
-            dayCutover: "05:00",
-            closedBy: CLOSED_BY,
-            cashCounts: [],
-          });
-        }),
-      );
-      expect(pgErrorCode(error)).toBe("55P03"); // lock_not_available — it was made to wait on the held head lock
-    } finally {
-      release();
-      if (holding) await holding.catch(() => {});
-      await holder.close();
-      await waiter.close();
-    }
+    // Exactly one immutable row, at sequence 1.
+    const chain = await readChain();
+    expect(chain.map((c) => c.sequenceNo)).toEqual([1]);
   });
 
   it("assigns every one of many concurrent closes a distinct, gap-free sequence and a valid chain", async () => {
-    // The second proof-by-deletion target, in the direction the brief names ("double sequence /
-    // duplicate"). Pre-create the head, then race N closes on DISTINCT business days — so the
-    // business_day unique key does NOT catch a lost race, and only the FOR UPDATE head lock keeps
-    // the sequence numbers distinct. With the lock: sequences 2..N+1, chain intact. WITHOUT it: the
-    // racers read the same head, compute the same next sequence, and collide on
-    // daily_closes_sequence_key (23505) — Promise.all rejects and this test goes red.
-    await record(suite.admin, "2026-08-01", []); // head → sequence 1
+    // The direction the brief named ("double sequence / duplicate"). Pre-create the head, then
+    // start N closes of DISTINCT business days together — so `daily_closes_business_day_key` does
+    // NOT catch a lost race, and only serialisation keeps the sequence numbers distinct. On
+    // PostgreSQL without the head lock these racers read the same head, computed the same next
+    // sequence and collided on `daily_closes_sequence_key`. Here they queue.
+    await record("2026-08-01", []); // head → sequence 1
 
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const days = Array.from(
-        { length: WRITERS },
-        (_, i) => `2026-08-${String(2 + i).padStart(2, "0")}`,
-      );
-      const results = await Promise.all(dbs.map((db, i) => record(db, days[i]!, [])));
-      expect(results).toHaveLength(WRITERS);
+    const days = Array.from(
+      { length: WRITERS },
+      (_, i) => `2026-08-${String(2 + i).padStart(2, "0")}`,
+    );
+    const results = await Promise.all(days.map((day) => record(day, [])));
+    expect(results).toHaveLength(WRITERS);
 
-      const chain = await readChain();
-      // The pre-created genesis plus every concurrent close, contiguous 1..N+1 with no gap or repeat.
-      expect(chain.map((c) => c.sequenceNo)).toEqual(
-        Array.from({ length: WRITERS + 1 }, (_, i) => i + 1),
-      );
-      expect(chain[0]!.prevEntryHash).toBe(""); // genesis
-      for (let i = 1; i < chain.length; i++) {
-        expect(chain[i]!.prevEntryHash).toBe(chain[i - 1]!.entryHash); // every link holds
-      }
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
+    const chain = await readChain();
+    // The pre-created genesis plus every concurrent close, contiguous 1..N+1 with no gap or repeat.
+    expect(chain.map((c) => c.sequenceNo)).toEqual(
+      Array.from({ length: WRITERS + 1 }, (_, i) => i + 1),
+    );
+    expect(chain[0]!.prevEntryHash).toBe(""); // genesis
+    for (let i = 1; i < chain.length; i++) {
+      expect(chain[i]!.prevEntryHash).toBe(chain[i - 1]!.entryHash); // every link holds
     }
   });
 });

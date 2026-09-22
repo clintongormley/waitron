@@ -1,62 +1,82 @@
-import { sql } from "drizzle-orm";
+/**
+ * `listActivePersonsWithPermission` returns the active holders of a permission, name-sorted, and
+ * nothing else about them.
+ *
+ * ## What this suite was, and what converting it cost
+ *
+ * It ran against real PostgreSQL through `useTemplateDb` and read through `identity_rls_probe`, a
+ * LOGIN role holding `app_user`'s grants, so that the read was shown to work for an ordinary
+ * application connection and not only for the owner. **That is the whole of what was lost:** there
+ * are no roles on this engine, and `asAppUser` (`packages/db/src/testing/roles.ts`) is an empty
+ * body, so nothing here now distinguishes "the query is permitted" from "the query runs". The
+ * filtering, the projection and the ordering — which is what the case actually asserts — are
+ * unchanged.
+ *
+ * This is the only suite in the package that covers this function, which is why it is converted
+ * rather than deleted with the role it used to exercise.
+ *
+ * The `.pg` in the filename now names an engine this suite does not touch. It is left alone here
+ * for the reason the branch's other converted `.pg.test.ts` files were
+ * (`packages/db/src/schema/tenants.singleton.pg.test.ts`,
+ * `packages/fiscal-verifactu/src/restore.pg.test.ts`): renaming them is one sweep, not twelve.
+ */
 import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import type { PersonRoleValue } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
+import { persons } from "./schema/persons.js";
 import { listActivePersonsWithPermission } from "./staff.js";
 
-// Real PostgreSQL reads filtered person rows through an app_user member login.
-const PROBE_ROLE = "identity_rls_probe";
-const PROBE_PASSWORD = "probe";
 const PIN = hashPin("1234");
 
-const suite = useTemplateDb({ template: "core_identity" });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-/** Seed one active-by-default person of `role` as the owner, returning its id. The query under test
- * then reads them back as the app_user probe. */
+/**
+ * Seed one person of `role`, returning its id. Through the table definition, not raw SQL: `id` and
+ * `created_at` are Drizzle `$defaultFn` generators that only the insert BUILDER runs.
+ */
 async function seedPerson(
-  admin: Database,
+  db: Database,
   name: string,
   role: PersonRoleValue,
   status: "active" | "suspended" = "active",
 ): Promise<string> {
-  const rows = await admin.execute<{ id: string }>(sql`
-    insert into persons (display_name, pin_hash, role, status)
-    values (${name}, ${PIN}, ${role}, ${status}) returning id`);
-  return rows.rows[0]!.id;
+  const [row] = await db
+    .insert(persons)
+    .values({ displayName: name, pinHash: PIN, role, status })
+    .returning({ id: persons.id });
+  return row!.id;
 }
 
 describe("listActivePersonsWithPermission", () => {
   it("returns active persons whose role holds the permission — supervisor/manager/admin in, staff and inactive out, name-sorted", async () => {
+    await seedTenant(suite.db);
     // Insert out of alphabetical order so a sorted result proves the orderBy, not insertion order.
-    const mgr = await seedPerson(suite.admin, "Carla", "manager");
-    const sup = await seedPerson(suite.admin, "Bea", "supervisor");
-    const adm = await seedPerson(suite.admin, "Ada", "admin");
-    const staff = await seedPerson(suite.admin, "Dora", "staff");
-    const goneSup = await seedPerson(suite.admin, "Eva", "supervisor", "suspended");
+    const mgr = await seedPerson(suite.db, "Carla", "manager");
+    const sup = await seedPerson(suite.db, "Bea", "supervisor");
+    const adm = await seedPerson(suite.db, "Ada", "admin");
+    const staff = await seedPerson(suite.db, "Dora", "staff");
+    const goneSup = await seedPerson(suite.db, "Eva", "supervisor", "suspended");
 
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const rows = await withTransaction(probe, (tx) =>
-        listActivePersonsWithPermission(tx, "cash.drawer"),
-      );
+    const rows = await withTransaction(suite.db, (tx) =>
+      listActivePersonsWithPermission(tx, "cash.drawer"),
+    );
 
-      // cash.drawer holders only, active only, sorted by displayName: Ada(admin), Bea(sup), Carla(mgr).
-      expect(rows).toEqual([
-        { personId: adm, displayName: "Ada" },
-        { personId: sup, displayName: "Bea" },
-        { personId: mgr, displayName: "Carla" },
-      ]);
-      // Only id + name reach a caller — no PIN material, role or status leaks.
-      expect(Object.keys(rows[0]!)).toEqual(["personId", "displayName"]);
-      // The staff person (no cash.drawer) and the SUSPENDED supervisor (status filter) are excluded.
-      const ids = new Set(rows.map((r) => r.personId));
-      expect(ids.has(staff)).toBe(false);
-      expect(ids.has(goneSup)).toBe(false);
-    } finally {
-      await probe.close();
-    }
+    // cash.drawer holders only, active only, sorted by displayName: Ada(admin), Bea(sup), Carla(mgr).
+    expect(rows).toEqual([
+      { personId: adm, displayName: "Ada" },
+      { personId: sup, displayName: "Bea" },
+      { personId: mgr, displayName: "Carla" },
+    ]);
+    // Only id + name reach a caller — no PIN material, role or status leaks.
+    expect(Object.keys(rows[0]!)).toEqual(["personId", "displayName"]);
+    // The staff person (no cash.drawer) and the SUSPENDED supervisor (status filter) are excluded.
+    const ids = new Set(rows.map((r) => r.personId));
+    expect(ids.has(staff)).toBe(false);
+    expect(ids.has(goneSup)).toBe(false);
   });
 });

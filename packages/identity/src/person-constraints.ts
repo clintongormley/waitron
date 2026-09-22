@@ -6,8 +6,10 @@ import type { ConstraintTarget } from "@waitron/db";
  *
  * A column here is the expression the index is declared over, spelled the way PostgreSQL rendered it
  * into the refusal's detail. Each of the three below was read back off a real refusal driven through
- * a real PostgreSQL in `persons.constraint-target.pg.test.ts`, which fails if a rendering differs
- * from what is written here.
+ * a real PostgreSQL in `persons.constraint-target.pg.test.ts`. **Nothing checks these three values
+ * any more:** task F1 deleted that suite on 2026-09-22, because on this engine it could only ever
+ * assert that all three matchers miss — see the paragraph below, whose probe F1 re-ran against the
+ * real identity migrations and confirmed value for value.
  *
  * **None of the three can match on SQLite**, and the reason is the engine's, not this file's: all
  * three indexes are over an EXPRESSION, and SQLite's refusal for one of those names the INDEX and

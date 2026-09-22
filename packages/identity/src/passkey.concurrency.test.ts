@@ -1,37 +1,44 @@
 /**
- * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — no clause was deleted from `passkey.ts` — its consume is a DELETE-and-return, which still works — but this suite stages its race with a raw `select … for update` of its own, which this engine has no syntax for.
+ * One challenge handle yields at most ONE session, however many finishes arrive for it.
  *
- * The clause this suite was built around is deleted, not translated: SQLite has no row locks and
- * drizzle's SQLite query builder has no `.for()`. What serialises the writers instead is the venue
- * file's write queue — one write transaction on the file at a time — stated once, with its
- * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * ## What this suite was, and what converting it cost
  *
- * The old proof-by-deletion recorded below cannot be re-run to say whether it still discriminates,
- * because this suite does not COLLECT: `useTemplateDb` throws
- * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
- * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
- * this branch removed. Measured 2026-09-21 on the whole package run. It is left in place rather
- * than deleted because its behavioural subject — a challenge handle yields at most one session however many finishes
- * arrive — still has to hold. The MECHANISM sentence it shares with `consumeChallenge` has
- * changed, and that docstring has been corrected.
+ * No clause was deleted from `passkey.ts` for this one: `consumeChallenge` is a DELETE-and-return
+ * and still is, and that single statement is what enforces single use. What was deleted is this
+ * SUITE's own staging. It took two backends, parked one real ceremony inside a mocked `verify` —
+ * after its consume-DELETE, before its commit — and then asked, from the other backend, whether
+ * the challenge row was LOCKED: `select 1 … for update` with a `lock_timeout`, expecting SQLSTATE
+ * `55P03`. SQLite has no row locks, no `for update` and no `lock_timeout`, and a venue file has one
+ * connection.
+ *
+ * **What stopped being checked:** that the consume takes a LOCK. The `55P03` probe was this file's
+ * proof by deletion — it discriminated a locking DELETE from a non-locking SELECT — and there is no
+ * counterpart, because the property it distinguished is not a property this engine has. What
+ * serialises two finishes now is the venue file's write queue: `withTransaction`
+ * (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, so the second finish's
+ * `begin` does not run until the first has committed and the challenge row is gone. The mechanism,
+ * its measurement and its control in the other direction are recorded once on `racePair`
+ * (`packages/catalogue/test/fixtures.ts`).
+ *
+ * The verify gate goes with it: there is no longer a moment to park a ceremony in, because a parked
+ * ceremony holds the write lock and the second finish cannot reach the database at all. `verify` is
+ * still mocked — a genuine authenticator response cannot be synthesised in a test — but it now
+ * simply returns.
+ *
+ * What remains is the subject: two finishes for one handle, started together, leave exactly one
+ * management session, and the loser is refused `passkey.verification_failed`.
  */
-import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { captureError, pgErrorCode, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { IDENTITY_MIGRATIONS } from "./migrations.js";
+import { managementSessions } from "./schema/management-sessions.js";
+import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
-// Real PostgreSQL — deliberately NOT skippable. PGlite serialises every query onto ONE backend
-// (CLAUDE.md §4), so two "concurrent" finishes never actually overlap there and the single-use race
-// this file exists to prove cannot occur — a PGlite run of this suite would be a false pass. The
-// shared container this clones is booted in the package globalSetup, whose `dockerRequired` throws
-// with guidance rather than degrading to a skip when Docker is absent (see src/testing/global-setup.ts).
-//
-// Only the VERIFY call is mocked (a genuine authenticator response cannot be synthesised in a test);
-// the mock is made to BLOCK on a gate this suite controls, so one real `finishPasskeyAuthentication`
-// can be parked mid-ceremony — after it has consumed the challenge, before its transaction commits —
-// while a second connection probes whether the challenge row is locked. That gate is the deterministic
-// hook that turns the race into a fixed outcome rather than a flaky `Promise.all`.
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),
   verifyRegistrationResponse: vi.fn(),
@@ -64,30 +71,35 @@ function authVerified(
   };
 }
 
-const suite = useTemplateDb({ template: "core_identity" });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
-beforeEach(() => {
+beforeEach(async () => {
   mockVerifyAuth.mockReset();
+  await seedTenant(suite.db);
 });
 
-/** One active person, one registered credential, and one login challenge on file.
- * Seeded as the owner — the property under test is row-locking, proven on distinct backends. */
-async function seedFixture(): Promise<{ personId: string; handle: string }> {
-  const personId = await seedPerson(suite.admin);
-  await suite.admin.execute(sql`
-    insert into webauthn_credentials (person_id, credential_id, public_key, counter)
-    values (${personId}, ${CREDENTIAL_ID}, ${PUBLIC_KEY}, 0)`);
-  const chal = await suite.admin.execute<{ id: string }>(sql`
-    insert into webauthn_challenges (person_id, challenge)
-    values (null, 'chal-concurrency') returning id`);
-  return { personId, handle: chal.rows[0]!.id };
+/**
+ * One active person, one registered credential, and one login challenge on file.
+ *
+ * Written through the table definitions, not as raw inserts: `id` and `created_at` on both tables
+ * are Drizzle `$defaultFn` generators that only the insert BUILDER runs, so the raw inserts this
+ * fixture used on PostgreSQL — where both had server-side defaults — are refused
+ * `NOT NULL constraint failed` here.
+ */
+async function seedFixture(db: Database): Promise<{ personId: string; handle: string }> {
+  const personId = await seedPerson(db);
+  await db
+    .insert(webauthnCredentials)
+    .values({ personId, credentialId: CREDENTIAL_ID, publicKey: PUBLIC_KEY, counter: 0 });
+  const [challenge] = await db
+    .insert(webauthnChallenges)
+    .values({ personId: null, challenge: "chal-concurrency" })
+    .returning({ id: webauthnChallenges.id });
+  return { personId, handle: challenge!.id };
 }
 
-const finishAuth = (
-  db: Parameters<typeof withTransaction>[0],
-  handle: string,
-): Promise<{ personId: string }> =>
-  withTransaction(db, (tx) =>
+const finishAuth = (handle: string): Promise<{ personId: string }> =>
+  withTransaction(suite.db, (tx) =>
     finishPasskeyAuthentication(tx, {
       challengeHandle: handle,
       response: { id: CREDENTIAL_ID } as never,
@@ -96,66 +108,34 @@ const finishAuth = (
     }),
   );
 
-describe("finishPasskeyAuthentication under real concurrency", () => {
-  it("consume-first row-locks the challenge, so a concurrent finish on the same handle is rejected — one session only", async () => {
-    const { personId, handle } = await seedFixture();
+describe("finishPasskeyAuthentication under concurrent finishes", () => {
+  it("consumes the challenge once, so a concurrent finish on the same handle is refused — one session only", async () => {
+    const { personId, handle } = await seedFixture(suite.db);
+    mockVerifyAuth.mockImplementation(() => Promise.resolve(authVerified(1)));
 
-    // Park the first ceremony inside verify — AFTER its consume-DELETE has run (and row-locked the
-    // challenge), BEFORE its transaction commits — by making the mocked verify await a gate we hold.
-    let releaseVerify: () => void = () => {};
-    const verifyGate = new Promise<void>((resolve) => (releaseVerify = resolve));
-    mockVerifyAuth.mockImplementation(async () => {
-      await verifyGate;
-      return authVerified(1);
-    });
+    // Both started without awaiting each other; nothing but the write queue keeps the second out.
+    const [winner, loser] = await Promise.allSettled([finishAuth(handle), finishAuth(handle)]);
 
-    const c1 = await suite.pg.connect();
-    const c2 = await suite.pg.connect();
-    let c1Done: Promise<unknown> | undefined;
-    try {
-      // C1: a real finish. Its consume-DELETE row-locks the challenge, then it parks in verify. Launch,
-      // do NOT await — its transaction stays open, holding the lock.
-      c1Done = finishAuth(c1, handle);
-      // Deterministic: proceed only once C1 has actually reached verify — i.e. it is PAST its consume
-      // step. True on BOTH the fixed and the unfixed code (both reach verify), so this wait never hangs.
-      await vi.waitFor(() => expect(mockVerifyAuth).toHaveBeenCalledTimes(1));
+    // One ceremony completes and returns a session for the credential's owner.
+    const settled = [winner, loser];
+    const fulfilled = settled.filter((r) => r.status === "fulfilled");
+    expect(fulfilled).toHaveLength(1);
+    expect((fulfilled[0] as PromiseFulfilledResult<{ personId: string }>).value.personId).toBe(
+      personId,
+    );
 
-      // Probe, on a distinct backend, whether the challenge row is locked while C1 sits mid-ceremony.
-      // The fixed code consumed it with a locking DELETE, so this FOR UPDATE blocks and lock_timeout
-      // fires → 55P03. The UNFIXED code loaded it with a non-locking SELECT, so this acquires the lock
-      // at once and returns without error — captureError then throws "expected ... rejected" and fails
-      // the test. That contrast IS the single-use-under-concurrency guarantee, proven by deletion.
-      const probeErr = await captureError(() =>
-        c2.transaction(async (tx) => {
-          await tx.execute(sql`set local lock_timeout = '250ms'`);
-          return tx.execute(sql`select 1 from webauthn_challenges where id = ${handle} for update`);
-        }),
-      );
-      expect(pgErrorCode(probeErr)).toBe("55P03");
+    // The losing side finds zero rows at consume — the challenge was deleted and committed by the
+    // winner — and that is reported as a failed ceremony, never as a second session.
+    expect(settled.filter((r) => r.status === "rejected")).toHaveLength(1);
+    // Re-run through the same path so the refusal is read as a domain CODE rather than as whatever
+    // object the settled result carries.
+    expect(await codeOf(() => finishAuth(handle))).toBe("passkey.verification_failed");
 
-      // Let C1 finish: verify resolves, the counter bumps, the session mints, the tx commits — so the
-      // challenge DELETE is now durable and the row is gone.
-      releaseVerify();
-      const session = await c1Done;
-      expect((session as { personId: string }).personId).toBe(personId);
-
-      // The losing side, played out on a real finish: the SAME handle now finds zero rows at consume →
-      // passkey.verification_failed. Under live contention this is the path C2 takes the instant C1
-      // commits and releases the lock.
-      expect(await codeOf(() => finishAuth(c2, handle))).toBe("passkey.verification_failed");
-
-      // Exactly ONE management session was minted for the person across both attempts.
-      const sessions = await suite.admin.execute<{ count: string }>(
-        sql`select count(*) as count from management_sessions where person_id = ${personId}`,
-      );
-      expect(sessions.rows[0]!.count).toBe("1");
-    } finally {
-      // Always release the gate and settle C1's transaction BEFORE closing — a failed assertion above
-      // must never leave the parked ceremony open, or close() hangs on it.
-      releaseVerify();
-      if (c1Done) await c1Done.catch(() => {});
-      await c1.close();
-      await c2.close();
-    }
+    // Exactly ONE management session was minted for the person across every attempt.
+    const sessions = await suite.db
+      .select({ id: managementSessions.id })
+      .from(managementSessions)
+      .where(eq(managementSessions.personId, personId));
+    expect(sessions).toHaveLength(1);
   });
 });

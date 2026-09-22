@@ -238,8 +238,10 @@ describe("setEmail", () => {
 });
 
 // The duplicate-email → person.email_taken translation, proven end to end against the DB unique
-// index in staff.email.test.ts (real Postgres) and against the reported table and columns in
-// persons.constraint-target.pg.test.ts. Here we pin the translator's two branches directly with
+// index in staff.email.test.ts. It used to be proven against the reported table and columns as well,
+// in persons.constraint-target.pg.test.ts; task F1 deleted that suite on 2026-09-22 because this
+// engine reports an expression index's NAME and no columns, so all three of person-constraints.ts's
+// matchers miss (that file carries the measurement). Here we pin the translator's two branches directly with
 // crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
 // exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
