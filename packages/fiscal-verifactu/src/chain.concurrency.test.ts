@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { captureError, pgErrorCode } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
 import {
@@ -16,258 +17,258 @@ import {
 const WRITERS = 20;
 
 let node: SeededTill;
-let other: SeededTill;
 
 /**
- * Real PostgreSQL via a clone of the shared container's `manifest` template — deliberately NOT
- * `describe.skipIf(!dockerAvailable)` anywhere in this file. Docker-absence throws rather than
- * degrading to a skip: the throw now happens at the package globalSetup
- * (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker, instead of at a
- * per-file container start. A concurrency suite that silently vanishes reports a green CI run that
- * proves nothing about the one property this file exists to establish (spec's own framing, restated
- * in ./chain.pglite-cannot-test-contention.test.ts). If Docker genuinely is unavailable in this
- * environment, the WHOLE package fails loudly with that thrown error, which is the intended,
- * load-bearing behaviour — not a defect in this file.
+ * Twenty appends started together against ONE venue file.
  *
- * Keyed by NODE (node-id rekey, 2026-08-03): the chain is per-node, so a busy node must never stall
- * a quiet one, and the head lock is on the per-node `cadenas` row.
+ * ## What this file used to be, and the three things that went with PostgreSQL
+ *
+ * It opened twenty separate backends through a shared container and had them race the per-node
+ * chain-head row lock. None of that survives the engine change, and the losses are named here
+ * rather than left for a reader to infer:
+ *
+ * 1. **`runs its writers on distinct backend processes` is DELETED.** It was the suite's premise
+ *    check — `select pg_backend_pid()` twenty times, expecting twenty distinct pids — and it
+ *    exists to rule out the "every query serialises onto one backend" false pass PGlite gives.
+ *    SQLite has no backend process and no `pg_backend_pid`. The premise it guarded has INVERTED:
+ *    one writer at a time is now the product's design, not the thing that would make this suite
+ *    theatre. What replaces it as the discriminating observation is
+ *    `holds a second appender on the same chain until the first commits` below, which watches the
+ *    second body fail to START.
+ * 2. **`does not block an appender on a different node` is DELETED, and the property it asserted
+ *    IS GONE.** Per-node parallelism — a busy node never stalling a quiet one — was a real
+ *    guarantee of the row lock, and the venue file's write queue does not provide it: every
+ *    writer serialises on the FILE, whichever node it is appending to. Nothing replaces this and
+ *    nothing can while one file holds every node's chain. Recorded here because a future reader
+ *    would otherwise assume the guarantee still holds.
+ * 3. **The deployment ROLE.** This file never used `asAppUser`, so it loses nothing there; the
+ *    role loss is recorded on `privileges.test.ts`, which was deleted for it.
+ *
+ * ## What still holds, and why these cases are worth keeping
+ *
+ * The chain's actual guarantee was never the lock — it is the unique index on
+ * (`node_id`, `secuencia`), which refuses a forked position whatever wrote it (proven by deletion
+ * in `chain.test.ts`, "rejects a second record claiming an occupied chain position"). Twenty
+ * appends started together and NOT awaited in turn still have to land on twenty distinct,
+ * contiguous positions, each linked to its predecessor's huella. A queue that failed to serialise
+ * breaks exactly that, because twenty appends reading the same head all compute the same next
+ * position — which is the measurement recorded on the serialisation case below.
+ *
+ * Keyed by NODE (node-id rekey, 2026-08-03): the chain is per-node.
  */
-const suite = useTemplateDb({ template: "manifest" });
+/**
+ * ## The append-only refusal, measured on this engine (the receipt the deleted `privileges.test.ts`
+ * used to share with the grants)
+ *
+ * `registros_facturacion`'s immutability rested on three things on PostgreSQL: the `REVOKE ALL`
+ * and the `app_user` grant matrix, the append-only trigger, and the TRUNCATE-blocking trigger
+ * (`CLAUDE.md` §5). The GRANTS are gone — SQLite has no roles — so the trigger is what is left,
+ * and that was worth measuring rather than assuming.
+ *
+ * Measured 2026-09-22 on this file's own `useVenueDb` database (a temporary probe added here,
+ * run, and removed), against a registro written through `appendToChain`:
+ *
+ * ```
+ * update registros_facturacion set huella = 'X' where sale_id = ?
+ *   -> REFUSED: "registros_facturacion is append-only"
+ * delete from registros_facturacion where sale_id = ?
+ *   -> REFUSED: "registros_facturacion is append-only"
+ * select huella ... -> 1 row, huella still 3E5EBDA0...
+ * ```
+ *
+ * Both refusals arrive as that message with no SQLSTATE and no `errcode` on the cause — it is the
+ * trigger's own `RAISE(ABORT)`, not a constraint. The triggers reach the database because
+ * `TEST_MIGRATIONS` carries each set's `appendOnlyTables` and `useVenueDb` installs them
+ * (`packages/migrations/src/manifest.ts:163`, `packages/db/src/testing/venue-db.ts`). So a stored
+ * fiscal record still cannot be rewritten or removed; what no longer refuses anything is the
+ * ROLE-level half.
+ *
+ * `inmutabilidad.test.ts` is where this belongs as a standing guard, and it is RED today for an
+ * unrelated reason (`test/fixtures.ts`'s `seedTenantTillSif` raw insert omits
+ * `tenants.created_at`), so it could not be cited as a receipt.
+ */
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-// No truncate-and-reseed here: registros_facturacion's append-only trigger
-// (registros_facturacion_block_truncate) fires on a CASCADEd TRUNCATE from `tenants` too, and
-// blocks it unconditionally — verified live, the immutable table cannot be wiped even by its own
-// owner without first disabling that trigger. seedTill mints a FRESH node (and therefore a fresh
-// nif) on every call instead, so each test's rows are simply new and independent
-// of whatever a previous test already committed; nothing here ever needs the previous run's rows gone.
+// `useVenueDb` empties every data table between tests, dropping and recreating the append-only
+// triggers around the delete (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/
+// `applyReset`) — so the reseed-without-truncate reasoning this file used to carry, about
+// `registros_facturacion_block_truncate` refusing a CASCADEd TRUNCATE, no longer applies. Each
+// call still mints a FRESH node and nif, which is what keeps `registro_sif`'s
+// (nif, id_sistema_informatico, numero_instalacion) unique across a file's many `beforeEach`es.
 beforeEach(async () => {
-  node = await seedTill(suite.admin, "A");
-  other = await seedTill(suite.admin, "B");
+  node = await seedTill(suite.db, "A");
 });
 
-describe("appendToChain under real contention", () => {
-  it("runs its writers on distinct backend processes", async () => {
-    // THE LOAD-BEARING ASSERTION. PGlite serialises every query onto one backend, so this returns
-    // the same pid twice there and the rest of this suite would be theatre. If this ever fails,
-    // nothing below it means anything, whatever colour it reports.
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const pids = await Promise.all(
-        dbs.map(async (db) => {
-          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-          return rows[0]?.pid;
-        }),
-      );
-      expect(new Set(pids).size).toBe(WRITERS);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
+/** A promise plus the function that settles it. */
+function latch(): { waited: Promise<void>; open: () => void } {
+  let open!: () => void;
+  const waited = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { waited, open };
+}
+
+/** Seeds one sale per writer and starts `appendToChain` for all of them together, without awaiting
+ * any of them in turn. Nothing but the venue file's write queue keeps the second out of the
+ * first's transaction. */
+async function appendTogether(count: number): Promise<unknown[]> {
+  const sales = await Promise.all(
+    Array.from({ length: count }, (_, i) => seedSale(suite.db, node, i + 1)),
+  );
+  return Promise.all(
+    sales.map((saleId, i) =>
+      withTransaction(suite.db, (tx) =>
+        appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, i + 1, i)),
+      ),
+    ),
+  );
+}
+
+describe("appendToChain from many callers started together", () => {
+  it("commits all 20 simultaneously-started appends to one chain", async () => {
+    const results = await appendTogether(WRITERS);
+
+    // Naive read-then-write committed 3 of 20 here on the old engine (measured, see chain.ts's own
+    // doc comment). Anything below 20 is that failure, not a flake.
+    expect(results).toHaveLength(WRITERS);
+    // `cast(count(*) as int)`, not `count(*)::int`: the PostgreSQL cast spelling is
+    // `unrecognized token: ":"` on this engine. Same row, same column name.
+    const { rows } = await suite.db.execute<{ count: number }>(sql`
+      select cast(count(*) as int) as count from registros_facturacion where node_id = ${node.nodeId}
+    `);
+    expect(rows[0]?.count).toBe(WRITERS);
   });
 
-  it("commits all 20 concurrent appends to one chain", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, node, i + 1)));
-      const results = await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) =>
-            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
-          ),
-        ),
-      );
-
-      // Naive read-then-write committed 3 of 20 here (measured, see chain.ts's own doc comment).
-      // Anything below 20 is that failure, not a flake.
-      expect(results).toHaveLength(WRITERS);
-      const { rows } = await suite.admin.execute<{ count: number }>(sql`
-        select count(*)::int as count from registros_facturacion where node_id = ${node.nodeId}
-      `);
-      expect(rows[0]?.count).toBe(WRITERS);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
-  });
-
-  it("assigns every concurrent append a distinct position with no gaps", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, node, i + 1)));
-      await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) =>
-            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
-          ),
-        ),
-      );
-      const { rows } = await suite.admin.execute<{ secuencia: number }>(sql`
-        select secuencia from registros_facturacion where node_id = ${node.nodeId} order by secuencia
-      `);
-      expect(rows.map((r) => r.secuencia)).toEqual(
-        Array.from({ length: WRITERS }, (_, i) => i + 1),
-      );
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
+  it("assigns every simultaneously-started append a distinct position with no gaps", async () => {
+    await appendTogether(WRITERS);
+    const { rows } = await suite.db.execute<{ secuencia: number }>(sql`
+      select secuencia from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+    `);
+    expect(rows.map((r) => r.secuencia)).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
   });
 
   it("leaves every record correctly chained to its predecessor", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, node, i + 1)));
-      await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) =>
-            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
-          ),
-        ),
-      );
-      const { rows } = await suite.admin.execute<{
-        secuencia: number;
-        huella: string;
-        anterior_huella: string | null;
-        primer_registro: boolean;
-      }>(sql`
-        select secuencia, huella, anterior_huella, primer_registro
-        from registros_facturacion where node_id = ${node.nodeId} order by secuencia
-      `);
-      expect(rows[0]?.primer_registro).toBe(true);
-      // Walking the WHOLE chain, not spot-checking the ends: a single crossed pair in the middle
-      // is precisely what a lost race produces.
-      for (let i = 1; i < rows.length; i++) {
-        expect(rows[i]?.anterior_huella).toBe(rows[i - 1]?.huella);
-      }
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
+    await appendTogether(WRITERS);
+    // `primer_registro` is read through this raw select as `0`/`1`, not a boolean — a raw select
+    // skips drizzle's read mapping — so the first row is checked against `1`. The other three
+    // columns are text either way. What is asserted is unchanged.
+    const { rows } = await suite.db.execute<{
+      secuencia: number;
+      huella: string;
+      anterior_huella: string | null;
+      primer_registro: number;
+    }>(sql`
+      select secuencia, huella, anterior_huella, primer_registro
+      from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+    `);
+    expect(rows[0]?.primer_registro).toBe(1);
+    // Walking the WHOLE chain, not spot-checking the ends: a single crossed pair in the middle
+    // is precisely what a lost race produces.
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i]?.anterior_huella).toBe(rows[i - 1]?.huella);
     }
   });
 
-  it("blocks a second appender on the same chain", async () => {
-    // Deterministic rather than timing-based: hold the head-row lock open, then prove a second
-    // writer on that chain waits until lock_timeout.
-    const holder = await suite.pg.connect();
-    const waiter = await suite.pg.connect();
-    let release: () => void = () => {};
-    let holding: Promise<unknown> | undefined;
+  it("holds a second appender on the same chain until the first commits", async () => {
+    // THE DISCRIMINATING CASE, replacing `blocks a second appender on the same chain`. That one
+    // held the `cadenas` row lock open on one backend and proved a second backend waited until
+    // `lock_timeout` fired (`55P03`). There is no row lock, no second backend and no
+    // `lock_timeout` here, so the thing to observe moved: not "the second one is BLOCKED", but
+    // "the second one has not STARTED". `withTransaction` (`packages/db/src/tenancy.ts`) runs its
+    // body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues
+    // `begin immediate` … `commit`, so the next caller's `begin` does not run until that `commit`
+    // has returned. Same observation, and the same reasoning, as `racePair` in
+    // `packages/catalogue/test/fixtures.ts`; written out here rather than imported because that
+    // helper lives in another package's test directory.
+    //
+    // NOT a translation of the old assertion: `pgErrorCode` answers the same string for every
+    // failure on this engine (`packages/db/src/testing/errors.ts`), so a `.toBe("55P03")` kept as
+    // `.toBe(<something>)` would have been a check that passes for the wrong reason.
+    //
+    // CONTROL RUN, 2026-09-22: with both bodies calling `appendToChain(suite.db, …)` directly
+    // instead of through `withTransaction` — no queue — this case reported
+    // `secondStarted === true` and failed at the `toBe(false)` below. So the `false` it reports is
+    // not a reading that could never have printed anything else.
+    const first = await seedSale(suite.db, node, 1);
+    const second = await seedSale(suite.db, node, 2);
+
+    const hold = latch();
+    const reached = latch();
+    let secondStarted = false;
+
+    const one = withTransaction(suite.db, async (tx) => {
+      const appended = await appendToChain(tx, node.nodeId, altaFor(node.tillId, first, 1, 1));
+      reached.open();
+      await hold.waited;
+      return appended;
+    });
+    // Started without awaiting `one`.
+    const two = withTransaction(suite.db, async (tx) => {
+      secondStarted = true;
+      return appendToChain(tx, node.nodeId, altaFor(node.tillId, second, 2, 2));
+    });
+    const settled = Promise.allSettled([one, two]);
     try {
-      const saleId = await seedSale(suite.admin, node, 1);
-      await suite.admin.transaction((tx) =>
-        appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, 1, 1)),
-      );
-
-      const held = new Promise<void>((resolve) => (release = resolve));
-      // Wait until the holder has ACTUALLY taken the lock before racing the waiter. Without this the
-      // waiter can win the race under load, acquire the still-free lock and SUCCEED — which fails the
-      // assertion below AND leaves `holding` open forever (stuck on `await held`), so the finally's
-      // holder.close() blocks on a transaction that never returns. That is the 120s hang this test
-      // flaked with on CI (reproduced locally by delaying the holder's own lock acquisition).
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
-      holding = holder.transaction(async (tx) => {
-        await tx.execute(sql`select 1 from cadenas where node_id = ${node.nodeId} for update`);
-        acquire();
-        await held;
-      });
-      await acquired;
-
-      const second = await seedSale(suite.admin, node, 2);
-      const error = await captureError(() =>
-        waiter.transaction(async (tx) => {
-          await tx.execute(sql`set local lock_timeout = '250ms'`);
-          return appendToChain(tx, node.nodeId, altaFor(node.tillId, second, 2, 2));
-        }),
-      );
-      // captureError + pgErrorCode, not `.rejects.toMatchObject({ code: "55P03" })` — the same
-      // DrizzleQueryError-wrapping reason chain.test.ts's own bypass-insert test documents.
-      expect(pgErrorCode(error)).toBe("55P03");
+      await reached.waited;
+      // A real pause, not a microtask turn: this has to give the second transaction every chance
+      // to run the statement it must not run.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(secondStarted, "the second append started while the first was still open").toBe(false);
     } finally {
-      // Always release the holder and settle its transaction BEFORE closing — an assertion failure
-      // (or any throw) above must never leave the head-lock transaction open, or close() hangs.
-      release();
-      if (holding) await holding.catch(() => {});
-      await holder.close();
-      await waiter.close();
+      hold.open();
     }
-  });
 
-  it("does not block an appender on a different node", async () => {
-    // Per-node parallelism is the reason the lock is on a row rather than an advisory key: a busy
-    // node must never stall a quiet one.
-    const holder = await suite.pg.connect();
-    const writer = await suite.pg.connect();
-    let release: () => void = () => {};
-    let holding: Promise<unknown> | undefined;
-    try {
-      const first = await seedSale(suite.admin, node, 1);
-      await suite.admin.transaction((tx) =>
-        appendToChain(tx, node.nodeId, altaFor(node.tillId, first, 1, 1)),
-      );
-
-      const held = new Promise<void>((resolve) => (release = resolve));
-      // Wait until the holder actually holds node A's lock before the writer touches node B —
-      // otherwise this proves nothing (no lock was held), and a throw before release() would leave
-      // `holding` open and hang the finally's close() (see the sibling test above).
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
-      holding = holder.transaction(async (tx) => {
-        await tx.execute(sql`select 1 from cadenas where node_id = ${node.nodeId} for update`);
-        acquire();
-        await held;
-      });
-      await acquired;
-
-      // Invoice number 2, not 1: `registros_identidad_uq` is (emisor, num_serie, fecha, tipo) and
-      // one database files for one obligado, so the two nodes cannot both issue "A/1". The subject
-      // here is the LOCK, and node B taking its own chain's lock while node A's is held.
-      const elsewhere = await seedSale(suite.admin, other, 2);
-      const result = await writer.transaction(async (tx) => {
-        await tx.execute(sql`set local lock_timeout = '250ms'`);
-        return appendToChain(tx, other.nodeId, altaFor(other.tillId, elsewhere, 2, 2));
-      });
-      expect(result.secuencia).toBe(1);
-    } finally {
-      release();
-      if (holding) await holding.catch(() => {});
-      await holder.close();
-      await writer.close();
-    }
+    // And once the first commits, the second does not merely start — it lands at the NEXT
+    // position, chained to what the first wrote. A queue that let it start early would have
+    // computed position 1 twice.
+    const [a, b] = await settled;
+    expect(a.status).toBe("fulfilled");
+    expect(b.status).toBe("fulfilled");
+    const { rows } = await suite.db.execute<{ secuencia: number; anterior_huella: string | null }>(
+      sql`select secuencia, huella, anterior_huella from registros_facturacion
+          where node_id = ${node.nodeId} order by secuencia`,
+    );
+    expect(rows.map((r) => r.secuencia)).toEqual([1, 2]);
+    expect(rows[1]?.anterior_huella).toBe(
+      (rows[0] as unknown as { huella: string } | undefined)?.huella,
+    );
   });
 });
 
-describe("registerSif's installation-number counter under real contention", () => {
+describe("registerSif's installation-number counter, from many callers started together", () => {
   // Deferred here from Task 13, which proved mintNumeroInstalacion correct BY CONSTRUCTION (one
   // statement — INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING — with no read-then-write
-  // window for a second registration to slip into) but had no real-Postgres harness to prove it
-  // under actual contention; this task built that harness for a different reason and this test
-  // rides along, closing the tracked gap rather than leaving it deferred a second time.
+  // window for a second registration to slip into) but had no harness to exercise it under
+  // simultaneous callers.
   //
-  // 20 DISTINCT nodes of ONE obligado (one shared NIF), each registered exactly once, concurrently
-  // — not fewer nodes hit multiple times each (node-id rekey, 2026-08-03: the SIF is the node, so
-  // the counter's clients are nodes). registerSif's revoke-then-insert is two statements, and
-  // firing it twice concurrently against the SAME node races a DIFFERENT, out-of-scope hazard
+  // 20 DISTINCT nodes of ONE obligado (one shared NIF), each registered exactly once, started
+  // together — not fewer nodes hit multiple times each (node-id rekey, 2026-08-03: the SIF is the
+  // node, so the counter's clients are nodes). registerSif's revoke-then-insert is two statements,
+  // and firing it twice against the SAME node races a DIFFERENT, out-of-scope hazard
   // (registro_sif_activo_uq, concurrent re-registration of one node). This fixture isolates the
-  // property Task 13 actually deferred: the (NIF, IdSistemaInformatico) counter's own contention
-  // handling, exercised across many nodes the way a chain's rollout to a multi-node venue would.
+  // property Task 13 deferred: the (NIF, IdSistemaInformatico) counter's own allocation.
+  //
+  // LOST with PostgreSQL: the twenty callers were on twenty distinct backends and genuinely
+  // overlapped inside the counter's one statement. Here they are twenty transactions started
+  // together on one file and serialised by its write queue, so what is proven is that the
+  // allocator hands out twenty distinct, strictly increasing numbers to twenty callers — not that
+  // it survives a true overlap, which this engine cannot stage.
   it("mints 20 distinct, strictly increasing installation numbers across many nodes of one obligado", async () => {
-    const fixture = await seedNodesForSifContention(suite.admin, WRITERS);
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const results = await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) =>
-            registerSif(tx, {
-              nodeId: fixture.nodeIds[i]!,
-              nif: fixture.nif,
-              idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
-            }),
-          ),
+    const fixture = await seedNodesForSifContention(suite.db, WRITERS);
+    const results = await Promise.all(
+      fixture.nodeIds.map((nodeId) =>
+        withTransaction(suite.db, (tx) =>
+          registerSif(tx, {
+            nodeId,
+            nif: fixture.nif,
+            idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
+          }),
         ),
-      );
+      ),
+    );
 
-      const numbers = results.map((r) => r.numeroInstalacion).sort((a, b) => a - b);
-      expect(numbers).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
-      expect(new Set(numbers).size).toBe(WRITERS);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
+    const numbers = results.map((r) => r.numeroInstalacion).sort((a, b) => a - b);
+    expect(numbers).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
+    expect(new Set(numbers).size).toBe(WRITERS);
   });
 });

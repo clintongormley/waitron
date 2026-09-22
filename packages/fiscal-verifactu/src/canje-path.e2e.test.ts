@@ -7,23 +7,37 @@ import { fromRegistroRow, toRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 
 /**
- * Store an F3 record as app_user on PostgreSQL and serialize its stored columns through
- * the drainer path. Both Destinatarios and FacturasSustituidas must reach the wire.
- * The fixture builds the record directly to isolate storage and serialization.
+ * Store an F3 record and serialize its stored columns through the drainer path. Both
+ * Destinatarios and FacturasSustituidas must reach the wire. The fixture builds the record
+ * directly to isolate storage and serialization.
+ *
+ * LOST in the PostgreSQL → SQLite conversion: this file used to run its insert as `app_user`, a
+ * distinct database role holding only the deployment grants, so a write the fiscal table's ACL
+ * refuses would have failed here. `asAppUser` is an inert function on this engine
+ * (`packages/db/src/testing/roles.ts`) and SQLite has no roles at all, so the insert below now
+ * runs with whatever the one connection can do. What still refuses a rewrite of a stored fiscal
+ * record is the append-only trigger, installed here because `TEST_MIGRATIONS` carries each set's
+ * `appendOnlyTables` (`packages/migrations/src/manifest.ts:163`). That refusal was MEASURED on
+ * this engine rather than assumed — the probe, its output and why `inmutabilidad.test.ts` could
+ * not be cited are in `chain.concurrency.test.ts`'s header. The ROLE half is covered by nothing,
+ * which is the whole loss recorded against the deleted `privileges.test.ts`.
  */
-// A clone of the shared container's `manifest` template (the full migration manifest).
-const suite = useTemplateDb({ template: "manifest" });
+// The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
+// template this file used to clone.
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
 
 beforeEach(async () => {
-  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
-  // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
-  // `correction-path.e2e.test.ts` documents.
-  till = await seedTill(suite.admin, "A");
+  // Each call mints a fresh node (and NIF). `useVenueDb` also empties every data table between
+  // tests, dropping and recreating the append-only triggers around the delete
+  // (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/`applyReset`) — which is why the
+  // reseed-without-truncate reasoning this comment used to carry no longer applies.
+  till = await seedTill(suite.db, "A");
 });
 
 /** An F3 canje record carrying BOTH the substituted ticket's identity (FacturasSustituidas) and the
@@ -66,7 +80,7 @@ function f3CanjeRecord(): RegistroAlta {
 
 /** Insert the flattened record under a fresh sale as app_user and return the sale id. */
 async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
-  const saleId = await seedSale(suite.admin, till, 1);
+  const saleId = await seedSale(suite.db, till, 1);
   const row = toRegistroRow(record, {
     tillId: till.tillId,
     nodeId: till.nodeId,
@@ -78,7 +92,7 @@ async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
     offsetMinutes: 120,
     entorno: "production",
   });
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(registrosFacturacion).values(row);
   });
@@ -86,9 +100,20 @@ async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
 }
 
 /** One `select *` row in the raw snake_case `RegistroRow` shape `fromRegistroRow` reads — never
- * Drizzle's camelCase `.select()` (see `./registro-row.ts`'s own note on why the two differ). */
+ * Drizzle's camelCase `.select()` (see `./registro-row.ts`'s own note on why the two differ).
+ *
+ * STILL RED ON THIS ENGINE, and deliberately not worked around here. A raw `select *` skips
+ * drizzle's read mapping, so `facturas_sustituidas`, `destinatarios` and `desglose` come back as
+ * the stored TEXT and `primer_registro` as `0`/`1`. `fromRegistroRow` spreads them as objects, so
+ * the rebuilt record's `IDFacturaSustituida` is `undefined` and `serializeEnvio` throws
+ * `Cannot read properties of undefined (reading 'map')` — measured by running this file,
+ * 2026-09-22. That is the PRODUCT's read path, not this fixture's: `drain.ts:562`
+ * (`select r.*, e.intentos from envios e ...`) and `verify.ts:55` read `RegistroRow` exactly this
+ * way. Parsing the columns here would turn this case green while leaving the drainer broken —
+ * which is the one thing this case exists to catch. It stays red until the `RegistroRow` raw-read
+ * path is converted. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await suite.admin.execute<RegistroRow>(
+  const { rows } = await suite.db.execute<RegistroRow>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
@@ -96,12 +121,12 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
   return row;
 }
 
-describe("the F3 canje drain path against real Postgres", () => {
-  it("stores an F3 registro carrying the recipient and substituted tickets under the deployment role", async () => {
+describe("the F3 canje drain path", () => {
+  it("stores an F3 registro carrying the recipient and substituted tickets", async () => {
     // Check the stored recipient and substitution blocks before serialization.
     const saleId = await storeF3AsAppUser(f3CanjeRecord());
 
-    const [row] = await suite.admin
+    const [row] = await suite.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
