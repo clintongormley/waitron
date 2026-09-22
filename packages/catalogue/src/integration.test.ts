@@ -175,14 +175,18 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
     // The staff name reaches `sale_lines.name` (NOT NULL) frozen from the catalogue row, and the
     // customer-facing snapshot falls back to it because this product carries no customer name.
+    // `descriptions` comes back as its stored TEXT here, not as an object: the json codec belongs
+    // to the column declaration (`packages/db/src/schema/orders.ts`) and a raw `execute` never
+    // reaches it. Parsed at the read, the way the other raw-SQL readers of a json column on this
+    // engine do (`packages/fiscal-verifactu/src/canje-columns.test.ts`).
     const { rows } = await suite.db.execute<{
       category: string | null;
       name: string;
-      descriptions: Record<string, string>;
+      descriptions: string;
     }>(sql`select category, name, descriptions from sale_lines where sale_id = ${saleId}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.category).toBe("Food");
     expect(rows[0]!.name).toBe("sliced ham");
-    expect(rows[0]!.descriptions).toEqual({ en: "sliced ham" });
+    expect(JSON.parse(rows[0]!.descriptions)).toEqual({ en: "sliced ham" });
   });
 });

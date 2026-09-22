@@ -6,6 +6,7 @@ import {
   isUuid,
   locationId,
   nodeId,
+  normaliseUuid,
   saleId,
   saleLineId,
   seriesId,
@@ -47,10 +48,11 @@ describe("id constructors", () => {
     expect(locationId(UUID_A)).toBe(UUID_A);
   });
 
-  it("accepts an upper-case uuid and preserves its case", () => {
-    // Postgres `uuid` comparison is case-insensitive, so normalising here would be a silent
-    // reformat of a value the caller supplied — and nothing formatted is ever stored.
-    expect(tillId(UUID_A.toUpperCase())).toBe(UUID_A.toUpperCase());
+  it("accepts an upper-case uuid and folds it to lower case", () => {
+    // An id column is plain `text` and compares byte for byte, so the spelling that leaves this
+    // constructor is the spelling that gets stored and looked up. Folding here is what makes one
+    // id one row whichever case the caller sent.
+    expect(tillId(UUID_A.toUpperCase())).toBe(UUID_A);
   });
 
   it("rejects a non-uuid string with shared.invalid_id", () => {
@@ -93,6 +95,12 @@ describe.each(ALL_ID_CONSTRUCTORS)("%s", (label, kind, construct) => {
     expect(construct(UUID_A)).toBe(UUID_A);
   });
 
+  it("folds an upper-case uuid", () => {
+    // Per kind, not once: a wrapper that stopped delegating to brandId would keep the caller's
+    // case while every other kind folded, and only this table would see it.
+    expect(construct(UUID_A.toUpperCase())).toBe(UUID_A);
+  });
+
   it("rejects an invalid uuid, naming its own kind", () => {
     try {
       construct("nope");
@@ -126,6 +134,43 @@ describe("brand assignability", () => {
     // with no unwrapping step, while a string does not go into a LocationId slot without one.
     const asPlain: string = locationId(UUID_A);
     expect(asPlain).toBe(UUID_A);
+  });
+});
+
+describe("normaliseUuid", () => {
+  it("folds an upper-case uuid to lower case", () => {
+    expect(normaliseUuid(UUID_A.toUpperCase(), "ProductId")).toBe(UUID_A);
+  });
+
+  it("returns an already lower-case uuid unchanged", () => {
+    expect(normaliseUuid(UUID_A, "ProductId")).toBe(UUID_A);
+  });
+
+  it("refuses a value that is not a uuid rather than folding it", () => {
+    // The counter-case for the fold. Case carries no information in a uuid — every character is a
+    // hex digit — which is why folding one loses nothing. It is NOT true of the case-sensitive
+    // references this system also carries: a Stripe object id, a SumUp pairing code, an AEAT
+    // invoice number. None of them is uuid-shaped, so `UUID_PATTERN` is what keeps them out of the
+    // fold: this refuses the value instead of quietly returning "pi_3abcdefghijklmnop".
+    expect(() => normaliseUuid("pi_3ABCdefGHIjklMNOP", "ProviderRef")).toThrowError(AppError);
+  });
+
+  it("echoes the caller's own spelling in the rejection, unfolded", () => {
+    // A refusal exists to show the caller the bytes they sent. Folding the echoed value would
+    // hand back something they never typed, and would hide the case as the thing that was wrong
+    // if the pattern ever narrowed. `kind` is PascalCase and is not folded either.
+    try {
+      normaliseUuid("NOT-A-UUID", "ProductId");
+      expect.unreachable("normaliseUuid should have thrown");
+    } catch (error) {
+      expect((error as AppError).code).toBe("shared.invalid_id");
+      expect((error as AppError).params).toEqual({ kind: "ProductId", value: "NOT-A-UUID" });
+    }
+  });
+
+  it("rejects the empty string and a uuid with trailing content", () => {
+    expect(() => normaliseUuid("", "ProductId")).toThrowError(AppError);
+    expect(() => normaliseUuid(`${UUID_A} drop table x`, "ProductId")).toThrowError(AppError);
   });
 });
 

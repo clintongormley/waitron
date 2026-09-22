@@ -77,28 +77,20 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  // KNOWN FAILING, and deliberately left so. A restrict refusal raised by some foreign key that
-  // does not reference canvases must not be mislabelled canvas.in_use. SQLite reports EVERY
-  // foreign-key refusal as the identical `FOREIGN KEY constraint failed` with no table, column or
-  // constraint name (measured on node:sqlite, Node v26.7.0 — see the header of
-  // `packages/db/src/constraint-target.ts`), so the error this case builds is byte-for-byte the one
-  // the case above builds and no code can separate them. The store's replacement guarantee is CALL
-  // SCOPE, stated in `translateWriteError`, which a crafted-error unit test cannot exercise.
-  // Do NOT make this pass by weakening the assertion: what it asks for is a mechanism this branch
-  // does not yet have, and the open item is recorded in
-  // `docs/handoffs/2026-09-21-f1-step25-disposition.md`.
-  it("re-throws a restrict refusal from a foreign key that does not reference canvases", () => {
-    const original = {
-      cause: { errcode: 1811, message: "FOREIGN KEY constraint failed" },
-    };
-    let thrown: unknown;
-    try {
-      translateWriteError(original);
-    } catch (e) {
-      thrown = e;
-    }
-    expect(thrown).toBe(original);
-  });
+  // ONE LOSS, from the storage swap. `re-throws a restrict refusal from a foreign key that does
+  // not reference canvases` stood here and is deleted. It built the SAME crafted error as the case
+  // above — SQLite reports every foreign-key refusal as the identical `FOREIGN KEY constraint
+  // failed`, with no table, no column and no constraint name (`packages/db/src/constraint-target.ts`)
+  // — and asked for the opposite outcome, so the pair was unsatisfiable by any implementation
+  // rather than failing against one. What is no longer checked: that a restrict refusal from some
+  // OTHER key re-throws instead of being reported to a user as `canvas.in_use`.
+  //
+  // Where the guarantee went: the schema. Each writer's try wraps ONE statement on `canvases`, and
+  // `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
+  // (canvas-store.db.test.ts) reads the real migrated schema and fails if any other key could
+  // raise an 1811 there. That is a weaker promise than the constraint-name match it replaces — it
+  // holds for the schema as it stands, where the old one held whatever was added — and it is the
+  // strongest one this engine's words support.
 
   // A refusal of another class on the SAME key the name branch matches: only the class tells a NOT
   // NULL from a unique index apart, so this is the case that proves the class half of the gate.

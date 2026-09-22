@@ -391,17 +391,17 @@ describe("reading and writing a product's attachment list", () => {
    * column settles it, so the row a write in upper case leaves behind is found by a read in lower
    * case, a second write in the other case REPLACES it rather than landing beside it (which
    * `product_modifiers_product_extra_uq` would refuse), and the map comes back keyed lower-case
-   * either way. That is why `writeProductModifiers` lower-cases the LIST ids and not the product
-   * id — the list ids are the ones it compares in JavaScript.
+   * either way.
    *
-   * **LEFT RED BY THE STORAGE SWITCH, deliberately.** The column that settled the case was a
-   * PostgreSQL `uuid`, which normalises its input; it is a plain `text` column here
-   * (`packages/db/src/schema/columns.ts`), and text compares byte for byte. Measured on
-   * node:sqlite (Node v26.7.0), a parent row keyed lower-case and a child naming it in upper case:
-   * the child is refused `FOREIGN KEY constraint failed` (errcode 787), while the same insert in
-   * lower case is accepted — the control. So the behaviour this case asserts is GONE, not merely
-   * spelled differently, and the assertion is left exactly as it was rather than narrowed to
-   * whatever the engine now does. Whoever decides how ids are normalised owns this one.
+   * WHO settles it changed with the engine. It was the column: a PostgreSQL `uuid` normalises its
+   * input, so the file lower-cased only the LIST ids, which it also compares in JavaScript. An id
+   * is a plain `text` column here (`packages/db/src/schema/columns.ts`) and text compares byte for
+   * byte, so the product id went unnormalised by anything — an upper-cased one reached
+   * `product_modifiers.product_id` as a foreign key naming no product and came back as a raw
+   * `FOREIGN KEY constraint failed` rather than a domain refusal. `writeProductModifiers` now
+   * normalises the product id at the same boundary it normalises the list ids, which is what this
+   * case is the RED for: put the id back unnormalised and the first write here fails with that
+   * message.
    */
   it("settles a product id sent in upper case in the database, and keys the map lower-case", async () => {
     await run((tx) =>

@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "./client.js";
-import { constraintTarget, refusalOn, sameTarget, triggerRaised } from "./constraint-target.js";
+import {
+  checkFailed,
+  constraintTarget,
+  indexViolated,
+  refusalOn,
+  sameTarget,
+  triggerRaised,
+} from "./constraint-target.js";
 import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
@@ -228,5 +235,139 @@ describe("reading a trigger's raise", () => {
     expect(triggerRaised(new Error(RAISED), RAISED)).toBe(false);
     expect(triggerRaised(undefined, RAISED)).toBe(false);
     expect(triggerRaised(RAISED, RAISED)).toBe(false);
+  });
+});
+
+/**
+ * WHICH CHECK refused this write — the question a table carrying several of them has to ask.
+ *
+ * `constraintTarget` returns `undefined` for every CHECK, because a CHECK names no key; what
+ * SQLite puts after the colon is the constraint's NAME. That is enough to tell one CHECK on a
+ * table from another, which `isPgError(error, CHECK_VIOLATION)` on its own is not.
+ */
+describe("reading which CHECK refused a write", () => {
+  it("names the constraint a refused row broke, and declines its sibling on the same table", async () => {
+    const db = await open();
+    db.run(sql`alter table child add column rank integer
+               constraint child_rank_ck check (rank is null or rank < 10)`);
+    const amount = await refusal(
+      db,
+      sql`insert into child (id, parent_id, amount) values ('c6', 1, 0)`,
+    );
+    expect(isPgError(amount, CHECK_VIOLATION)).toBe(true);
+    expect(checkFailed(amount, "child_amount_ck")).toBe(true);
+    // The control, and the whole point: the class alone cannot separate these two, because both
+    // are 275 on the same table.
+    expect(checkFailed(amount, "child_rank_ck")).toBe(false);
+
+    const rank = await refusal(
+      db,
+      sql`insert into child (id, parent_id, rank) values ('c7', 1, 99)`,
+    );
+    expect(checkFailed(rank, "child_rank_ck")).toBe(true);
+    expect(checkFailed(rank, "child_amount_ck")).toBe(false);
+  });
+
+  it("declines every other class of refusal, however it is worded", async () => {
+    const db = await open();
+    const unique = await refusal(db, sql`insert into parent (id, name) values (2, 'one')`);
+    expect(checkFailed(unique, "child_amount_ck")).toBe(false);
+    const fk = await refusal(db, sql`delete from parent where id = 1`);
+    expect(checkFailed(fk, "child_amount_ck")).toBe(false);
+  });
+
+  it("cannot name an ANONYMOUS check, which reports its expression instead", async () => {
+    // The hedge stated on the predicate, measured rather than assumed: a CHECK declared with no
+    // name reports the EXPRESSION, so there is no name to ask for and this can only ever be false.
+    const db = await open();
+    db.run(sql`create table anon (a integer, check (a > 0))`);
+    const error = await refusal(db, sql`insert into anon (a) values (0)`);
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(checkFailed(error, "anon_a_ck")).toBe(false);
+  });
+
+  // Crafted for the reason `triggerRaised`'s twin states: no engine produces the result code on
+  // one layer and the wording on another, and that is the shape the same-layer rule rules out.
+  it("does not join a result code on one layer to a message on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("some other refusal"), {
+        errcode: 275,
+        cause: new Error("CHECK constraint failed: child_amount_ck"),
+      }),
+    });
+    expect(checkFailed(split, "child_amount_ck")).toBe(false);
+  });
+
+  it("is false for anything that is not a refusal at all", () => {
+    expect(
+      checkFailed(new Error("CHECK constraint failed: child_amount_ck"), "child_amount_ck"),
+    ).toBe(false);
+    expect(checkFailed(undefined, "child_amount_ck")).toBe(false);
+  });
+});
+
+/**
+ * WHICH INDEX refused this write, when the engine names an index rather than a key.
+ *
+ * SQLite reports a unique index over an EXPRESSION as `UNIQUE constraint failed: index '<name>'` —
+ * the index's own name, and no columns — so {@link constraintTarget} returns `undefined` for it and
+ * every `sameTarget` comparison against such an index is false. The name is the identity, the same
+ * way a CHECK's is.
+ *
+ * The hedge, and it is the thing a reader must not have to discover: this is NOT how a plain-column
+ * index is reported. That one names its TABLE and COLUMNS and no index name at all, so asking
+ * `indexViolated` for it can only ever be false — `refusalOn` is its question. Both shapes are
+ * driven below, each against the other as its control.
+ */
+describe("reading which INDEX refused a write", () => {
+  it("names the index an expression-index collision refused, and declines another name", async () => {
+    const db = await open();
+    const error = await refusal(db, sql`insert into expr (a) values ('x')`);
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(indexViolated(error, "expr_lower_uq")).toBe(true);
+    // Both ways: a refusal on some OTHER index must not answer yes, or the predicate would let a
+    // caller translate a refusal it never read.
+    expect(indexViolated(error, "expr_some_other_uq")).toBe(false);
+    // And the reciprocal that made this predicate necessary: there is no key to compare.
+    expect(constraintTarget(error)).toBeUndefined();
+  });
+
+  it("cannot name a PLAIN-column index, which reports its table and columns instead", async () => {
+    const db = await open();
+    db.run(sql`create table named_uq (a text)`);
+    db.run(sql`create unique index named_uq_a_uq on named_uq (a)`);
+    db.run(sql`insert into named_uq (a) values ('K')`);
+    const error = await refusal(db, sql`insert into named_uq (a) values ('K')`);
+    // The index has a name and the refusal does not carry it — measured, not assumed.
+    expect(indexViolated(error, "named_uq_a_uq")).toBe(false);
+    // The control in the other direction: this shape IS identifiable, by its key.
+    expect(refusalOn(error, UNIQUE_VIOLATION, { table: "named_uq", columns: ["a"] })).toBe(true);
+  });
+
+  it("declines every other class of refusal, however it is worded", async () => {
+    const db = await open();
+    const notNull = await refusal(db, sql`insert into parent (id, name) values (3, null)`);
+    expect(indexViolated(notNull, "expr_lower_uq")).toBe(false);
+    const fk = await refusal(db, sql`delete from parent where id = 1`);
+    expect(indexViolated(fk, "expr_lower_uq")).toBe(false);
+  });
+
+  // Crafted for the reason the two sibling predicates state: no engine puts the result code on one
+  // layer and the wording on another, and that is the shape the same-layer rule rules out.
+  it("does not join a result code on one layer to a message on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("some other refusal"), {
+        errcode: 2067,
+        cause: new Error("UNIQUE constraint failed: index 'expr_lower_uq'"),
+      }),
+    });
+    expect(indexViolated(split, "expr_lower_uq")).toBe(false);
+  });
+
+  it("is false for anything that is not a refusal at all", () => {
+    expect(
+      indexViolated(new Error("UNIQUE constraint failed: index 'expr_lower_uq'"), "expr_lower_uq"),
+    ).toBe(false);
+    expect(indexViolated(undefined, "expr_lower_uq")).toBe(false);
   });
 });

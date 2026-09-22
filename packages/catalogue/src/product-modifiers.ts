@@ -35,25 +35,29 @@ export function isModifierListKind(value: unknown): value is ProductModifierRef[
 }
 
 /**
- * A uuid column compares either case in SQL and hands its value back LOWER-CASED, so an id also
- * compared in JAVASCRIPT has to be lower-cased first, or it finds its row in SQL and then matches
- * nothing in a set. Every LIST id is normalised here, at the boundary, because the two checks in
- * {@link assertRefsExist} compare them — deleting this call turns "refuses a duplicate that
- * differs only in case" and "matches a list id the caller sent in upper case"
- * (product-modifiers.test.ts) red. `updateExtraList` (extras.ts) and `updateOptionList`
- * (options.ts) normalise their caller's id for the same reason.
+ * An id may arrive in either case, and settling it is this file's job rather than the column's.
  *
- * The PRODUCT id is deliberately NOT normalised: nothing here compares it in JavaScript, it only
- * ever reaches SQL, and the file was run both ways with no test able to tell.
+ * It USED to be the column's: an id was a PostgreSQL `uuid`, which compares either case in SQL and
+ * hands its value back lower-cased. It is a plain `text` column now
+ * (`packages/db/src/schema/columns.ts`) and text compares byte for byte, so an id the caller sent
+ * in upper case finds no row at all — measured on node:sqlite (Node v26.7.0): a child naming a
+ * lower-cased parent in upper case is refused `FOREIGN KEY constraint failed`, while the same
+ * insert in lower case is accepted.
+ *
+ * Every id this file writes or looks up therefore passes through here — the LIST ids, which
+ * {@link assertRefsExist} also compares in JavaScript, and the PRODUCT id, which reaches SQL as a
+ * foreign key and comes back as a map key. `updateExtraList` (extras.ts) and `updateOptionList`
+ * (options.ts) normalise their caller's id at the same boundary.
  */
 const normalise = (value: string) => value.toLowerCase();
 
 /**
  * Every named product's attachment list, in `sort` order, keyed by product id.
  *
- * The keys, and every list id in the values, are the LOWER-CASED form the uuid columns hand back,
- * whatever case the caller asked in — so a caller holding an upper-cased product id has to
- * lower-case it before looking one up. `readProductEditor` (product-editor.ts) does exactly that;
+ * The keys, and every list id in the values, are LOWER-CASED whatever case the caller asked in —
+ * {@link normalise} settles the ids on the way in and {@link writeProductModifiers} stores them
+ * that way, so a caller holding an upper-cased product id may still look one up, and may also key
+ * by its own lower-cased form. `readProductEditor` (product-editor.ts) lower-cases before it asks;
  * `readProductExtras` (extra-projection.ts) hands the keys on as its own, and `listProducts`
  * (operations.ts) looks up ids that came straight out of the database and are lower-cased already.
  *
@@ -79,7 +83,7 @@ export async function readProductModifiers(
       optionListId: productModifiers.optionListId,
     })
     .from(productModifiers)
-    .where(inArray(productModifiers.productId, productIds))
+    .where(inArray(productModifiers.productId, productIds.map(normalise)))
     .orderBy(productModifiers.sort, productModifiers.id);
   for (const row of rows) {
     // `product_modifiers_one_reference_ck` is what makes this pair exhaustive: exactly one of the
@@ -195,14 +199,15 @@ export async function writeProductModifiers(
   productId: string,
   refs: ProductModifierRef[],
 ): Promise<void> {
+  const product = normalise(productId);
   const normalised = refs.map((ref) => ({ kind: ref.kind, id: normalise(ref.id) }));
   await assertRefsExist(tx, normalised);
-  await tx.delete(productModifiers).where(eq(productModifiers.productId, productId));
+  await tx.delete(productModifiers).where(eq(productModifiers.productId, product));
   if (normalised.length === 0) return;
   await tx.insert(productModifiers).values(
     normalised.map((ref, sort) => ({
       id: randomUUID(),
-      productId,
+      productId: product,
       sort,
       extraListId: ref.kind === "extras" ? ref.id : null,
       optionListId: ref.kind === "options" ? ref.id : null,

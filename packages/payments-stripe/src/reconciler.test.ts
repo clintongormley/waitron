@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
@@ -11,7 +12,15 @@ import { FakeStripe } from "./testing/fake-stripe.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await pg.db.execute("truncate incidents, payment_refunds, payments cascade");
+  // One `delete from` per table in place of `truncate incidents, payment_refunds, payments cascade`:
+  // SQLite has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time.
+  // Child before parent, because `payment_refunds.payment_id` references `payments(id)` ON DELETE
+  // restrict (`packages/payments/drizzle/0000_baseline.sql`). `incidents` is independent — the only
+  // foreign key into any of these three is that one — so the CASCADE this replaces reached no
+  // fourth table. Same repair as `packages/payments/src/store.test.ts`.
+  await pg.db.execute(sql`delete from payment_refunds`);
+  await pg.db.execute(sql`delete from payments`);
+  await pg.db.execute(sql`delete from incidents`);
 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");

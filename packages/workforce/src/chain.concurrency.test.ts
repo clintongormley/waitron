@@ -38,6 +38,24 @@
  * distinct and gap-free, the links hold, and two NODES writing one location never collide — the
  * last of those because `node_id` is in `time_entries_chain_position_uq`, which is an index, not a
  * lock, and is untouched.
+ *
+ * ## A FOURTH LOSS: the suite that stood beside this one is deleted
+ *
+ * `chain.pglite-cannot-test-contention.test.ts` was this suite's counter-example — an executable
+ * demonstration that PGlite serialises every query onto one backend, so a green contention run on
+ * it proved nothing. Its whole subject was a property of a database this branch removes, and its
+ * purpose was to stop someone dropping the Testcontainers dependency, which no longer exists
+ * either. It went red on `no such function: pg_backend_pid`. Deleted rather than reworded: a suite
+ * whose subject is gone cannot be repointed at a different one without becoming a test of
+ * something nobody decided to test. The twin in `packages/fiscal-verifactu/src` went for the same
+ * reason earlier on this branch, and `docs/developers/testing-guide.md` carries the disposition.
+ *
+ * What is no longer checked, in this package, by anything: that a "concurrent" run which comes
+ * back green had any concurrency in it at all. There is no engine-level premise check to replace
+ * `pg_backend_pid()` with. The nearest thing is `racePair`
+ * (`packages/catalogue/test/fixtures.ts`), which measures that a second writer has not STARTED
+ * while the first is open — a different question, taken in a different package, and the reason
+ * this file does not re-take it.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";

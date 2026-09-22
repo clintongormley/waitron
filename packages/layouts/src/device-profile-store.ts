@@ -105,14 +105,18 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * name (measured on node:sqlite, Node v26.7.0; the codes are driven in
  * `packages/db/src/constraint-target.sqlite.test.ts`). The one thing it does separate is the
  * DIRECTION, and that is exactly the separation these two branches need: 787 for a written value
- * naming no parent, 1811 for a delete refused by an `ON DELETE RESTRICT` key. CALL SCOPE supplies
- * the rest: nothing outside this file calls `translateWriteError`; `canvas_id` is the only foreign
- * key `device_profiles` declares, so a 787 raised by these writes can only be a canvas reference
- * that names no row; and `devices.device_profile_id` is the only key referencing a profile, so an
- * 1811 can only be a profile a device still binds (`packages/db/drizzle/0000_baseline.sql`). What
- * that costs, stated because a reader would otherwise assume the old guarantee: a refusal of
- * either direction raised inside these functions by some unrelated key would now be translated
- * rather than re-thrown.
+ * naming no parent, 1811 for a delete refused by an `ON DELETE RESTRICT` key. STATEMENT SCOPE
+ * supplies the rest: each writer's `try` wraps ONE statement on `device_profiles` (the gate and
+ * the validators run before it); `canvas_id` is the only foreign key `device_profiles` declares,
+ * so a 787 raised by these writes can only be a canvas reference that names no row; and
+ * `devices.device_profile_id` is the only key referencing a profile, so an 1811 can only be a
+ * profile a device still binds. Those last two are facts about the SCHEMA, held by
+ * `has ONE key out of device_profiles and ONE key into it` (device-profile-store.db.test.ts),
+ * which reads the migrated database rather than the DDL text.
+ *
+ * What that costs, stated because a reader would otherwise assume the old guarantee: widen one of
+ * those `try` blocks to cover a second statement and a refusal it raises would be translated, with
+ * nothing to catch it — the schema guard cannot see the scope of a `try`.
  *
  * Exported for the crafted-error unit test (`device-profile-store.test.ts`), NOT from the package
  * barrel — the same shape as `canvas-store.ts`'s `translateWriteError`.

@@ -144,7 +144,9 @@ export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTransaction } from "./tenancy.js";
 export { isPgError, isUniqueViolation } from "./unique-violation.js";
 export {
+  checkFailed,
   constraintTarget,
+  indexViolated,
   refusalOn,
   sameTarget,
   triggerRaised,

@@ -340,13 +340,20 @@ interface QueryItem {
  *
  * This is where PostgreSQL's text search stopped being available, and the difference is not only
  * the tokenizer. `media_search_vector` ran each translation through the STEMMER for its own
- * language, so a search for `pera` found `Peras` and `formatge` found `Formatges`; SQLite has no
- * stemmer and no dictionary, and none is reachable from here without a new dependency on the box.
- * Matching is by whole token, so a plural in the text is no longer found by its singular. The
- * suites that assert the stemming are left failing rather than narrowed —
- * `images.test.ts`'s "matches 'ca'/'eu' word forms" pair and the `pera` and `bread`/`Breads`
- * assertions inside "ranks name words above alt words" — because a recorded loss is a decision and
- * a quietly weakened test is not.
+ * language — `media_text_config` mapped thirty language codes onto snowball dictionaries — so a
+ * search for `pera` found `Peras` and `formatge` found `Formatges`. Nothing here stems: matching is
+ * by whole lowercased token, so a plural in the text is found only by that plural. The cases that
+ * asserted the stemming are deleted, with the loss recorded at the head of `images.test.ts`.
+ *
+ * No PER-LANGUAGE stemmer is reachable from JavaScript without a new dependency on the box, and
+ * that is the part that is genuinely gone. One English stemmer IS reachable and is deliberately not
+ * taken: this SQLite is built with FTS5 (`sqlite_compileoption_used('ENABLE_FTS5')` returns 1 on
+ * the bundled SQLite 3.53.4 under node v26.7.0), whose `porter` tokenizer stems `Breads`→`bread`,
+ * `Peras`→`pera` and `formatges`→`formatge` but not `etxeak`→`etxe` — measured 2026-09-22 by
+ * reading the stored terms back through `fts5vocab`. Using it would mean an FTS5 virtual table and
+ * triggers keeping it in step with this one, which is a migration change, and it would apply
+ * English suffix rules to every language, which is a product decision about search quality rather
+ * than a storage conversion.
  *
  * Stopwords are kept, as they were: `media_text_vector` unioned the language vector with a `simple`
  * one precisely so that `the` stayed searchable.

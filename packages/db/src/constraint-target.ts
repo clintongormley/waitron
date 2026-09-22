@@ -1,5 +1,5 @@
 import { MAX_CAUSE_DEPTH } from "@waitron/shared";
-import { TRIGGER_ABORT } from "./sql-state.js";
+import { CHECK_VIOLATION, TRIGGER_ABORT, UNIQUE_VIOLATION } from "./sql-state.js";
 import type { RefusalClass } from "./sql-state.js";
 
 /** The table and columns a database refusal named. */
@@ -205,6 +205,71 @@ export function refusalOn(
  * with this one is a different guard, and a caller translating it to a domain error would be
  * translating a refusal it cannot have read.
  */
+/**
+ * Did the unique index named `index` refuse this write?
+ *
+ * The question {@link constraintTarget} cannot answer. An index over an EXPRESSION is reported as
+ * `UNIQUE constraint failed: index '<name>'` — the index's own name and no columns — so
+ * `constraintTarget` returns `undefined` for it and every `sameTarget` comparison against it is
+ * false. Where the engine names the index instead of the key, the name IS the identity, the same
+ * way a CHECK constraint's is.
+ *
+ * **It answers only for an index the engine names that way, which is an index over an expression.**
+ * A plain-column index reports its TABLE and COLUMNS and no name at all, so asking this about one
+ * can only ever be false — `refusalOn` is that index's question. Both shapes are driven, each as
+ * the other's control, in `constraint-target.sqlite.test.ts`. There is no single call that covers
+ * both, and a caller has to know which kind of index it is translating; that is a property of the
+ * DECLARATION, not of the refusal.
+ *
+ * Today three indexes in this repository are over an expression, all on `persons`
+ * (`packages/identity/src/person-constraints.ts`): every generated `CREATE UNIQUE INDEX` line
+ * under the drizzle directories was read on 2026-09-22 and only those three carry a call in the
+ * column list. Every other unique index in the tree is over plain columns and is `refusalOn`'s.
+ *
+ * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
+ */
+export function indexViolated(error: unknown, index: string): boolean {
+  const expected = `UNIQUE constraint failed: index '${index}'`;
+  // Widened from the literal tuple, for the reason {@link checkFailed}'s own line states.
+  const refusal: RefusalClass = UNIQUE_VIOLATION;
+  for (const layer of causeLayers(error)) {
+    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
+    if (layer.message === expected) return true;
+  }
+  return false;
+}
+
+/**
+ * Did the CHECK named `constraint` refuse this write?
+ *
+ * The question a write path asks when the table it writes carries SEVERAL checks and it translates
+ * only one of them. {@link constraintTarget} answers `undefined` for every CHECK, because a CHECK
+ * names no key — what SQLite puts after the colon is the constraint's NAME — so
+ * `isPgError(error, CHECK_VIOLATION)` was all a caller had, and it accepts every sibling check on
+ * the table alike. `printers` carries seven, one of which means "this transport is short of a
+ * field it needs" and six of which mean something else entirely.
+ *
+ * **Only a NAMED check can be identified.** An anonymous one reports its EXPRESSION in the same
+ * position, so this can only ever be false for it. Every CHECK in this repository's migrations is
+ * declared with a name; the case is recorded rather than handled because there is no name to ask
+ * for. Measured against `node:sqlite` on Node v26.7.0, one real refusal of each, in
+ * `constraint-target.sqlite.test.ts`.
+ *
+ * Matched on ONE layer of the cause chain, for the reason {@link refusalOn} states.
+ */
+export function checkFailed(error: unknown, constraint: string): boolean {
+  const expected = `CHECK constraint failed: ${constraint}`;
+  // Widened from the literal tuple `CHECK_VIOLATION` declares, so `includes` takes any number.
+  // `TRIGGER_ABORT` carries the same annotation at its declaration; this one is local because
+  // `CHECK_VIOLATION[0]` is read as a literal elsewhere in the tree.
+  const refusal: RefusalClass = CHECK_VIOLATION;
+  for (const layer of causeLayers(error)) {
+    if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
+    if (layer.message === expected) return true;
+  }
+  return false;
+}
+
 export function triggerRaised(error: unknown, raised: string): boolean {
   for (const layer of causeLayers(error)) {
     if (typeof layer.errcode !== "number" || !TRIGGER_ABORT.includes(layer.errcode)) continue;

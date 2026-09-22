@@ -335,3 +335,41 @@ describe("layout canvas store against a real migrated database", () => {
     expect(code).toBe("canvas.name_taken");
   });
 });
+
+/**
+ * The property `translateWriteError`'s restrict branch rests on, read off the real migrated schema.
+ *
+ * It used to match a CONSTRAINT NAME, so a refusal from some other foreign key re-threw. SQLite
+ * reports every foreign-key refusal as the identical `FOREIGN KEY constraint failed` — no table,
+ * no column, no name (`packages/db/src/constraint-target.ts`) — so the branch can only ask the
+ * CLASS, and what keeps `canvas.in_use` honest is that no other key can raise 1811 inside the one
+ * statement each writer wraps: `canvases` declares no foreign key of its own to trip, and exactly
+ * one key references it.
+ *
+ * That is a fact about the SCHEMA, which is why it is checked here rather than in the crafted-error
+ * unit suite — where the two refusals are byte-for-byte identical and no assertion can separate
+ * them. Add a second key into `canvases`, or a key out of it, and this fails; `canvas.in_use`
+ * would then be reported for a refusal the store never read.
+ *
+ * The "no key OUT of it" half needs its own control, because an empty answer is also what a broken
+ * query returns: the same disjunct over `device_profiles`, in the twin of this case in
+ * `device-profile-store.db.test.ts`, DOES return that table's outgoing `canvas_id` key. So the
+ * query finds outgoing keys where there are any, and `canvases` has none.
+ */
+describe("what can refuse a write to canvases", () => {
+  it("has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it", async () => {
+    const { rows } = await suite.db.execute<{
+      child: string;
+      column: string;
+      parent: string;
+      on_delete: string;
+    }>(sql`
+      select m.name as child, f."from" as column, f."table" as parent, f.on_delete
+      from sqlite_master m join pragma_foreign_key_list(m.name) f
+      where m.type = 'table' and (f."table" = 'canvases' or m.name = 'canvases')
+      order by child, column`);
+    expect(rows).toEqual([
+      { child: "device_profiles", column: "canvas_id", parent: "canvases", on_delete: "RESTRICT" },
+    ]);
+  });
+});

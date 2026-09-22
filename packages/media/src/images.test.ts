@@ -37,11 +37,27 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 // mapping left to get wrong, because there are no dictionaries. Recover the case with
 // `git show origin/main:packages/media/src/images.test.ts` if the engine ever regains them.
 //
-// THREE CASES ARE LEFT FAILING ON PURPOSE, and are not this conversion's to touch: the
-// "matches 'ca'/'eu' word forms" pair and the stemming assertions inside "ranks name words above
-// alt words". `packages/media/src/images.ts`'s `searchTokens` records the decision — SQLite has no
-// stemmer, so a plural in the text is no longer found by its singular, and the suites asserting it
-// were left red rather than narrowed.
+// STEMMING IS GONE, AND WITH IT THREE MORE CASES. The "matches 'ca'/'eu' word forms" pair is
+// deleted outright, and two assertions are deleted from the search case below (the `bread` query
+// expecting the alt-text row "Breads on a plate" to rank second, and the `pera` query expecting the
+// Spanish name "Peras maduras"). PostgreSQL ran each translation through the snowball dictionary for
+// its own language — `media_text_config` mapped thirty language codes, Basque and Catalan among
+// them — so a singular found a plural in any of them. `listImages` now matches whole lowercased
+// tokens in JavaScript (`packages/media/src/images.ts`, `searchTokens`), so a plural in the text is
+// found only by that plural. The `ca`/`eu` pair could not have been narrowed in any case: its
+// control was `to_tsvector`/`plainto_tsquery`, PostgreSQL statements with no SQLite spelling.
+//
+// WHAT WOULD RECOVER IT, so the next reader does not re-derive it: this SQLite does ship one
+// stemmer. `select sqlite_compileoption_used('ENABLE_FTS5')` returns 1 on the bundled SQLite
+// 3.53.4 under node v26.7.0, and an FTS5 table tokenized `porter unicode61` stems `Breads`→`bread`,
+// `Peras`→`pera` and `formatges`→`formatge` — measured 2026-09-22, reading the stored terms back
+// through `fts5vocab`. It is the ENGLISH porter algorithm, so the Spanish and Catalan hits are its
+// `-s`/`-es` rule landing by luck, not per-language stemming; the Basque `etxeak`→`etxe` of the
+// deleted `eu` case it does NOT make (measured the same way: `etxeak` stores as `etxeak`, the query
+// `etxe` stems to `etx`, and the match is false). Taking it would mean an FTS5 virtual table and
+// triggers to keep it in step, which is a migration change and a product decision about search
+// quality, not a conversion. Recover any deleted case with
+// `git show origin/main:packages/media/src/images.test.ts`.
 
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
@@ -260,7 +276,13 @@ describe("metadata, labels and references", () => {
 });
 
 describe("search and sorting", () => {
-  it("ranks name words above alt words, stems translations, searches labels and combines label filters", async () => {
+  // Two assertions deleted here with the stemmer (see the file header): `query: "bread"` expected
+  // `[name.id, alt.id]`, the alt-text row matching through "Breads"; and `query: "pera"` expected
+  // the Spanish name "Peras maduras". The name-above-alt RANKING those two rode on is still pinned,
+  // by "keeps a name match above repeated alt-text matches when sorting by relevance" below, which
+  // needs no stemmer. `alt` and `spanish` stay seeded as negative controls: they are the rows the
+  // label and phrase queries must leave out.
+  it("searches labels, matches a quoted phrase and combines a label filter", async () => {
     await withTransaction(suite.db, async (tx) => {
       const add = async (
         marker: number,
@@ -275,19 +297,13 @@ describe("search and sorting", () => {
             { fallbackLanguage: "en", maxUploadBytes: 100 },
           )
         ).image;
-      const alt = await add(1, { en: "Bakery" }, { en: "Breads on a plate" }, ["Food"]);
+      await add(1, { en: "Bakery" }, { en: "Breads on a plate" }, ["Food"]);
       const name = await add(2, { en: "Bread", es: "Pan recién horneado" }, { en: "A loaf" }, [
         "Food",
         "Summer menu",
       ]);
       const label = await add(3, { en: "Cake" }, { en: "A slice" }, ["Sweet", "Summer menu"]);
-      const spanish = await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, [
-        "Fruit",
-      ]);
-      expect((await listImages(tx, { query: "bread" })).images.map((row) => row.id)).toEqual([
-        name.id,
-        alt.id,
-      ]);
+      await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, ["Fruit"]);
       expect(
         (await listImages(tx, { query: "bread", label: " SUMMER MENU " })).images.map(
           (row) => row.id,
@@ -298,9 +314,6 @@ describe("search and sorting", () => {
           (row) => row.id,
         ),
       ).toEqual([name.id, label.id]);
-      expect((await listImages(tx, { query: "pera" })).images.map((row) => row.id)).toEqual([
-        spanish.id,
-      ]);
       expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
       expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
@@ -525,34 +538,6 @@ it("sorts by the default when the requested language was disabled while retainin
     expect(result.images[0]!.names.en).toBe("Zebra");
   });
 });
-
-it.each([
-  { language: "ca", plural: "formatges", singular: "formatge" },
-  { language: "eu", plural: "etxeak", singular: "etxe" },
-])(
-  "matches $language word forms rather than requiring an exact token",
-  async ({ language, plural, singular }) => {
-    await withTransaction(suite.db, async (tx) => {
-      const { image } = await uploadImage(
-        tx,
-        {
-          bytes: photo,
-          names: { en: "Photograph", [language]: plural },
-          altText: { en: "A photograph" },
-          labels: [],
-        },
-        { maxUploadBytes: 100 },
-      );
-      const exactToken = await tx.execute<{ matched: boolean }>(
-        sql`select to_tsvector('pg_catalog.simple', ${plural}) @@ plainto_tsquery('pg_catalog.simple', ${singular}) as matched`,
-      );
-      expect(exactToken.rows).toEqual([{ matched: false }]);
-      expect((await listImages(tx, { query: singular })).images.map((row) => row.id)).toEqual([
-        image.id,
-      ]);
-    });
-  },
-);
 
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");

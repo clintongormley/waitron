@@ -64,13 +64,17 @@ const CANVAS_NAME: ConstraintTarget = { table: "canvases", columns: ["name"] };
  * both directions (measured on node:sqlite, Node v26.7.0; the codes are driven in
  * `packages/db/src/constraint-target.sqlite.test.ts`). What it does separate is the direction: 1811
  * for a delete refused by an `ON DELETE RESTRICT` key, 787 for a written value naming no parent. So
- * the target this branch used to match on is unavailable, and CALL SCOPE stands in its place:
- * nothing outside this file calls `translateWriteError`, `canvases` declares no foreign key of its
- * own to trip, and `device_profiles.canvas_id` is the only key referencing it
- * (`packages/db/drizzle/0000_baseline.sql`) — so a restrict refusal reaching here can only be a
- * canvas a profile still binds. What that costs, stated because a reader would otherwise assume
- * the old guarantee: a restrict refusal raised inside these four functions by some unrelated key
- * would now be labelled `canvas.in_use` rather than re-thrown.
+ * the target this branch used to match on is unavailable, and STATEMENT SCOPE stands in its place:
+ * each writer's `try` wraps ONE statement on `canvases` (`authorizeManager` and `validateCanvas`
+ * both run before it), `canvases` declares no foreign key of its own to trip, and
+ * `device_profiles.canvas_id` is the only key referencing it — so a restrict refusal reaching here
+ * can only be a canvas a profile still binds. That last half is a fact about the SCHEMA, held by
+ * `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
+ * (canvas-store.db.test.ts), which reads the migrated database rather than the DDL text.
+ *
+ * What that costs, stated because a reader would otherwise assume the old guarantee: widen one of
+ * those `try` blocks to cover a second statement and a refusal it raises would be labelled
+ * `canvas.in_use`, with nothing to catch it — the schema guard cannot see the scope of a `try`.
  *
  * No other PRODUCTION file calls it — exported for the unit test, NOT from the package barrel — so
  * the only refusals it ever sees are the ones this store's own statements raise.

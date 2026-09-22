@@ -835,7 +835,8 @@ it asserts.
 concurrency must therefore run against real Postgres through Testcontainers.** Both halves of that
 advice retired with the engine: there is no PGlite, no Testcontainers, and no `FOR UPDATE`. The
 executable demonstration it pointed at — a suite named chain.pglite-cannot-test-contention.test.ts,
-beside the chain suites in `packages/fiscal-verifactu/src` until the SQLite flip deleted it — existed
+beside the chain suites in `packages/fiscal-verifactu/src` and again in `packages/workforce/src`
+until the SQLite flip deleted both — existed
 to keep someone from dropping the Testcontainers dependency, and there is no such dependency to
 protect. It is named here without a backticked path deliberately: the pointer guard
 (`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and this one no longer

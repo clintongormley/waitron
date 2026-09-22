@@ -513,3 +513,50 @@ describe("device-profile store against a real migrated database", () => {
     expect(code).toBe("device_profile.name_taken");
   });
 });
+
+/**
+ * The property `translateWriteError`'s two foreign-key branches rest on, read off the real migrated
+ * schema.
+ *
+ * Both used to match a CONSTRAINT NAME. SQLite reports every foreign-key refusal as the identical
+ * `FOREIGN KEY constraint failed` — no table, no column, no name
+ * (`packages/db/src/constraint-target.ts`) — so each branch can only ask the DIRECTION: 787 for a
+ * written value naming no parent, 1811 for a delete a RESTRICT key refused. What keeps the two
+ * domain codes honest is that inside the one statement each writer wraps, only one key can raise
+ * either: `canvas_id` is the only key out of `device_profiles`, so a 787 can only be a canvas
+ * reference naming no row, and `devices.device_profile_id` is the only key into it, so an 1811 can
+ * only be a profile a device still binds.
+ *
+ * That is a fact about the SCHEMA, which is why it is checked here rather than in the crafted-error
+ * unit suite — where the two refusals are byte-for-byte identical and no assertion can separate
+ * them. Add a second key in either direction and this fails; one of the two codes would then be
+ * reported for a refusal the store never read.
+ */
+describe("what can refuse a write to device_profiles", () => {
+  it("has ONE key out of device_profiles and ONE key into it", async () => {
+    const { rows } = await suite.db.execute<{
+      child: string;
+      column: string;
+      parent: string;
+      on_delete: string;
+    }>(sql`
+      select m.name as child, f."from" as column, f."table" as parent, f.on_delete
+      from sqlite_master m join pragma_foreign_key_list(m.name) f
+      where m.type = 'table' and (f."table" = 'device_profiles' or m.name = 'device_profiles')
+      order by child, column`);
+    expect(rows).toEqual([
+      {
+        child: "device_profiles",
+        column: "canvas_id",
+        parent: "canvases",
+        on_delete: "RESTRICT",
+      },
+      {
+        child: "devices",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "RESTRICT",
+      },
+    ]);
+  });
+});

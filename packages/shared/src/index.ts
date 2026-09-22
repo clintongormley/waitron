@@ -31,6 +31,7 @@ export {
   isUuid,
   locationId,
   nodeId,
+  normaliseUuid,
   saleId,
   saleLineId,
   seriesId,
