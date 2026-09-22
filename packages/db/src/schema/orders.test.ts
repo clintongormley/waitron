@@ -3,6 +3,15 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { refusalOn, triggerRaised } from "../constraint-target.js";
+import {
+  CHECK_VIOLATION,
+  FOREIGN_KEY_VIOLATION,
+  RESTRICT_VIOLATION,
+  UNIQUE_VIOLATION,
+} from "../sql-state.js";
+import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
+import { isPgError } from "../unique-violation.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -150,7 +159,12 @@ describe("working_orders", () => {
     expect(row.settledAt).toBeNull();
   });
 
-  it("rejects a status outside the enum", async () => {
+  it("rejects a status outside the allowed set", async () => {
+    // The column was a PostgreSQL enum TYPE and is now TEXT under a named CHECK listing the four
+    // statuses (`working_orders_status_ck`, drizzle/0000_baseline.sql). The refusal survives the
+    // change of mechanism, so this pins the CHECK class and the constraint's name instead of the
+    // enum type's name — measured on this case: errcode 275,
+    // `CHECK constraint failed: working_orders_status_ck`.
     const error = await captureError(() =>
       db.execute(
         // The two `::` casts this statement carried are gone: SQLite has no cast operator, and run
@@ -165,7 +179,21 @@ describe("working_orders", () => {
              values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'paid', ${AT})`,
       ),
     );
-    expect(pgErrorMessage(error)).toMatch(/invalid input value for enum working_order_status/);
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/working_orders_status_ck/);
+
+    // The control in the other direction. A CHECK that refused everything would satisfy the
+    // assertion above just as well; `placed` is a listed status and no other case in this file
+    // writes one, so it is the value that separates "this list is enforced" from "nothing gets in".
+    await db.execute(
+      sql`insert into working_orders (id, till_id, order_number, status, opened_at)
+           values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'placed', ${AT})`,
+    );
+    const placed = await rows<{ status: string }>(
+      db,
+      sql`select status from working_orders where status = 'placed'`,
+    );
+    expect(placed).toEqual([{ status: "placed" }]);
   });
 
   it("amends an open order", async () => {
@@ -222,6 +250,14 @@ describe("working_orders", () => {
     expect(pgErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
   });
 
+  // WHAT THE SIX TRANSITION CASES BELOW LOST. The PostgreSQL guard interpolated both states into
+  // its message (`cannot transition from settled to open`), so each case pinned the states the
+  // trigger had read as well as the refusal. `working_orders_enforce_transition` now raises ONE
+  // fixed sentence for every refused transition (`TRANSITION_REFUSAL`, ../trigger-refusals.ts), so
+  // the states are not in the error at all and no assertion here can reach them. Everything else
+  // each case pins is unchanged: the transition it drives is refused, and refused by THIS trigger
+  // — `triggerRaised` matches the class and the exact words, which excludes an `ON DELETE
+  // RESTRICT` refusal (same result code 1811, different message) and every other trigger's raise.
   it("rejects settled → open", async () => {
     const id = await openOrder(db);
     await db
@@ -234,7 +270,7 @@ describe("working_orders", () => {
         .set({ status: "open", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to open/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects settled → abandoned", async () => {
@@ -251,7 +287,7 @@ describe("working_orders", () => {
         .set({ status: "abandoned", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to abandoned/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects abandoned → open", async () => {
@@ -260,7 +296,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to open/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects abandoned → settled", async () => {
@@ -272,7 +308,7 @@ describe("working_orders", () => {
         .set({ status: "settled", settledAt: AT })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to settled/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects a no-op update of a settled order", async () => {
@@ -285,7 +321,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to settled/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects a no-op update of an abandoned order", async () => {
@@ -298,7 +334,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to abandoned/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("carries a nullable node_id column referencing nodes", async () => {
@@ -342,7 +378,11 @@ describe("working_orders", () => {
         nodeId: "99999999-9999-4999-8999-999999999999",
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
+    // The whole message is `FOREIGN KEY constraint failed` — SQLite names neither the constraint
+    // nor the column, so the CLASS is all there is to assert (measured on this case: errcode 787,
+    // `constraintTarget` undefined). That is what the PostgreSQL regex pinned too: it matched
+    // `violates foreign key constraint` and read no name out of it either.
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -368,7 +408,17 @@ describe("working_order_lines", () => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
-    expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
+    // The key itself, not just the class: SQLite names the table and the colliding columns in the
+    // message, so this pins `working_order_lines_line_no_key`'s (working_order_id, line_no) rather
+    // than accepting any uniqueness refusal on this table — `id`'s primary key would satisfy the
+    // class alone. Measured on this case: errcode 2067,
+    // `UNIQUE constraint failed: working_order_lines.working_order_id, working_order_lines.line_no`.
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "working_order_lines",
+        columns: ["working_order_id", "line_no"],
+      }),
+    ).toBe(true);
   });
 
   it("rejects a line added to a settled order", async () => {
@@ -602,7 +652,7 @@ describe("working_order_lines — the draft line's links", () => {
   it("refuses to delete a product an open order's child line names, and allows one nothing names", async () => {
     const orderId = await openOrder(db);
     const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
-    await insertLine({
+    const [child] = await insertLine({
       workingOrderId: orderId,
       lineNo: 2,
       productId: productA,
@@ -611,7 +661,22 @@ describe("working_order_lines — the draft line's links", () => {
     const error = await captureError(() => db.delete(products).where(eq(products.id, productA)));
     // `ON DELETE restrict`, not SET NULL: a live basket line must keep naming what the kitchen is
     // cooking (spec §3.5).
-    expect(pgErrorMessage(error)).toContain("working_order_lines_product_fk");
+    //
+    // WHAT THIS LOST. It named the constraint — `working_order_lines_product_fk` — and SQLite
+    // reports no constraint name for a foreign key: the whole message is `FOREIGN KEY constraint
+    // failed` (measured on this case, errcode 1811). The name still exists in the drizzle schema
+    // (../orders.ts) and in the snapshots, but it is not in the refusal, so no assertion can read
+    // it. Two things stand in for it, and neither is the name:
+    //  - the result code separates a RESTRICT reference from the schema's other kind. SQLite
+    //    implements `ON DELETE RESTRICT` with an internal trigger, so it arrives as 1811
+    //    (`RESTRICT_VIOLATION`) while an `ON DELETE NO ACTION` parent-delete arrives as 787 —
+    //    `products` carries one reference of each (working_order_lines restrict, recipe_lines no
+    //    action). Measured with one real refusal of each against `node:sqlite` on node v26.7.0.
+    //  - the message, which excludes a trigger's own `RAISE(ABORT)`: those share code 1811 and
+    //    report their own words instead (../sql-state.ts's `TRIGGER_ABORT`).
+    // The last step of this case closes the gap behaviourally.
+    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
 
     // The control, in the other direction: an unnamed product deletes, so the refusal above is the
     // reference and not the delete itself failing.
@@ -627,6 +692,15 @@ describe("working_order_lines — the draft line's links", () => {
       .returning({ id: products.id });
     await db.delete(products).where(eq(products.id, spare.id));
     expect(await db.select({ id: products.id }).from(products)).toHaveLength(1);
+
+    // Attribution, which is what the constraint name used to give and the refusal no longer can:
+    // the SAME product deletes once the two lines naming it are gone, so what refused above was
+    // those lines and not some other reference onto `products`. Child before parent — the
+    // self-link is `ON DELETE no action`, so removing the parent first would dangle the child.
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, child.id));
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, parent.id));
+    await db.delete(products).where(eq(products.id, productA));
+    expect(await db.select({ id: products.id }).from(products)).toHaveLength(0);
   });
 
   it("defaults option_snapshots to an empty list and refuses a null", async () => {

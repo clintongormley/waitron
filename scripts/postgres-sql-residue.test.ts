@@ -35,8 +35,8 @@ import { describe, expect, it } from "vitest";
  *   judgement: it holds no `sql` template today, so adding it would fail this file's own
  *   "every root yields templates" control. A residual statement written into that directory
  *   tomorrow is seen by nothing.
- * - One file is excluded BY NAME ({@link UNSWEPT}) and still carries residue. It is not a false
- *   positive; it is debt this guard is recording rather than hiding.
+ * - A file can be excluded BY NAME ({@link UNSWEPT}), and nothing re-checks that an exclusion is
+ *   still earning its place. The list is empty today, so every root is scanned whole.
  * - Its list of PostgreSQL-only constructs is hand-written, and it grew as the sweep met more of
  *   them. It catches the shapes this package actually carried; one nobody has met yet passes.
  * - It over-reports in one direction, which costs a reader time rather than hiding anything: the
@@ -77,25 +77,22 @@ const ROOTS: readonly string[] = [
 /**
  * Files that still carry PostgreSQL-only SQL, and the reason each is left alone.
  *
- * This list held seven entries until 2026-09-22, on the grounds that each asked for the
- * real-PostgreSQL test harness and so never reached an engine at all. That harness has since been
- * deleted and every one of the seven converted to `useVenueDb`, which retires the grounds AND most
- * of the list: emptying `UNSWEPT` and running this file reports exactly ONE offender,
- * `packages/scheduler/src/migrations.test.ts:91`. The other six carry no residue this scan can see
- * any more, so they are removed — an exemption nobody earns is one nobody notices covering the next
- * offender. Nothing here CHECKS that, which is the hedge to keep in mind: an entry that stops
- * offending sits here silently until somebody re-runs that experiment.
+ * **Empty, and that is the point of the mechanism rather than the end of it.** The list held seven
+ * entries until 2026-09-22, on the grounds that each asked for the real-PostgreSQL test harness and
+ * so never reached an engine at all. That harness was deleted and all seven converted to
+ * `useVenueDb`, which retired the grounds and left exactly one offender —
+ * `packages/scheduler/src/migrations.test.ts`, a `count(*)::int` in a suite that was also red for
+ * two reasons this scan cannot see (SQLSTATE assertions against an engine that answers
+ * `ERR_SQLITE_ERROR`, and raw inserts omitting a `$defaultFn` id). That suite is converted too: the
+ * cast is gone, the refusals are asserted through `packages/db/src/sql-state.ts`'s classes, and the
+ * package runs green — so every root below is now scanned whole, with nothing held back.
  *
- * `packages/scheduler/src/migrations.test.ts` is what is left. It collects, it RUNS, and it is red
- * on this branch for reasons this guard cannot see (6 failed, measured 2026-09-22): it
- * asserts SQLSTATEs (`23514`, `23505`) against an engine that answers `ERR_SQLITE_ERROR`, and its
- * raw inserts omit `id`, which is a JavaScript `$defaultFn` here rather than a column default, so
- * the row is refused `NOT NULL constraint failed: scheduled_runs.id` — the second of the two blind
- * spots this file's header names. Its residue by this guard's own list is a `count(*)::int`.
- * Converting that suite is its own piece of work; naming it here keeps the debt visible rather
- * than letting the scheduler root pass by omission. Measured 2026-09-22 by running the package.
+ * An entry here is debt this guard RECORDS rather than hides, and it is worth adding one for a file
+ * that cannot be converted in the same change. The hedge to keep in mind is that nothing checks an
+ * entry is still earning its place: one that stops offending sits here silently, covering whatever
+ * offends next in the same file, until somebody empties the list and re-runs the scan.
  */
-const UNSWEPT: readonly string[] = ["packages/scheduler/src/migrations.test.ts"];
+const UNSWEPT: readonly string[] = [];
 
 /** PostgreSQL-only spellings, each with what SQLite answers when one reaches the engine. */
 const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] = [

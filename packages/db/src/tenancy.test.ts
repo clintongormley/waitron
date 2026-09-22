@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
+import { refusalCode } from "./constraint-target.js";
 import { locations, tenants } from "./schema/tenants.js";
+import { CHECK_VIOLATION, type RefusalClass } from "./sql-state.js";
 import { withTransaction } from "./tenancy.js";
 import { pgErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -15,15 +17,32 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from tenants`);
 });
 
-/** Match the underlying PostgreSQL error, not Drizzle's SQL wrapper message. */
-async function rejectsWithCauseMatching(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
+/**
+ * Asserts that `promise` is refused by the engine, with `refusal`'s class and a message matching
+ * `pattern`.
+ *
+ * Both halves are needed and each rules out a different wrong answer: the class alone also accepts
+ * a sibling CHECK on the same table, and the message alone also accepts any error whose text
+ * happens to name the constraint — a wrapper reproducing the failed SQL among them.
+ *
+ * The identity comes from `errcode` rather than from a wrapped driver error because this driver
+ * wraps nothing. Measured on Node v26.7.0 by logging the rejection of the empty-list case below:
+ * a plain `Error` whose own properties are `stack`, `message`, `code`, `errcode` and `errstr`, with
+ * `code` the constant `"ERR_SQLITE_ERROR"`, `errcode` 275 and `cause` undefined — which is why the
+ * `.cause` this helper used to require is not there to require.
+ */
+async function rejectsWithRefusal(
+  promise: Promise<unknown>,
+  refusal: RefusalClass,
+  pattern: RegExp,
+): Promise<void> {
   await promise.then(
     () => {
       throw new Error("expected promise to reject, but it resolved");
     },
     (err: unknown) => {
       expect(err).toBeInstanceOf(Error);
-      expect((err as Error).cause).toBeInstanceOf(Error);
+      expect(refusal).toContain(refusalCode(err));
       expect(pgErrorMessage(err)).toMatch(pattern);
     },
   );
@@ -65,15 +84,18 @@ describe("invoice_locales", () => {
   });
 
   it("rejects an empty locale list", async () => {
-    // The trap this constraint exists for: array_length('{}', 1) is NULL, and
-    // a CHECK whose expression is NULL is SATISFIED, so an array_length-based
-    // constraint would accept this row. cardinality('{}') is 0.
-    await rejectsWithCauseMatching(insertLocales([]), /locations_invoice_locales_len/);
+    // The trap this constraint exists for, which survives the engine change: a CHECK whose
+    // expression is NULL is SATISFIED, so a length function returning NULL on an empty list would
+    // let this row through. `json_array_length('[]')` is 0, not NULL — measured on Node v26.7.0
+    // against `node:sqlite`, with `json_array_length(null)` as the control, which IS null and is
+    // accepted by the same CHECK.
+    await rejectsWithRefusal(insertLocales([]), CHECK_VIOLATION, /locations_invoice_locales_len/);
   });
 
   it("rejects three locales", async () => {
-    await rejectsWithCauseMatching(
+    await rejectsWithRefusal(
       insertLocales(["es", "ca", "en"]),
+      CHECK_VIOLATION,
       /locations_invoice_locales_len/,
     );
   });

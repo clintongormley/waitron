@@ -1,50 +1,90 @@
-// Every drizzle table and enum declaration in this package, compared with the database the core
-// migrations actually build: table name, column names and SQL types, nullability, column defaults,
-// primary keys, foreign keys with the actions they take on delete and on update, unique
-// constraints, indexes, check-constraint names, and each enum's labels in order. Plus one rule the
-// database cannot state: every column spells its own name out rather than letting drizzle derive
-// one from the property key.
+// Every drizzle table declaration in this package, compared with the database the core migrations
+// actually build: table name, column names and SQL types, nullability, column defaults, primary
+// keys, foreign keys with the actions they take on delete and on update, unique and non-unique
+// indexes with their columns and their filters, and check constraints by name AND by what they
+// say. Plus every closed vocabulary a column declares, and one rule the database cannot state:
+// every column spells its own name out rather than letting drizzle derive one from the property
+// key.
 //
 // Nothing else in the suite reads a declaration and checks it against the schema, so a declaration
 // that drifts from its migration — a renamed column, a foreign key pointing at the wrong table, a
 // money column declared as free text — is invisible until a query fails at runtime.
+//
+// HOW THE DATABASE SIDE IS READ, because it changed with the engine. PostgreSQL had a queryable
+// catalogue (`pg_attribute`, `pg_constraint`, `pg_index`) and a renderer (`pg_get_constraintdef`,
+// `pg_get_expr`) that normalised an expression on the way back out. SQLite has neither. What it
+// has is `pragma table_info` / `foreign_key_list` / `index_list` / `index_info` for the structural
+// facts, and `sqlite_master.sql` — the CREATE statement stored VERBATIM as the migration wrote it
+// — for everything else. So check constraints and index filters are read by parsing that text,
+// which is a real limit on this file and is stated at each parser below.
+//
+// The one place that made the translation easy: because SQLite stores the statement verbatim and
+// drizzle-kit WROTE that statement with the same renderer this file calls, a declared expression
+// and a built one are directly comparable as text, with nothing normalising either side. The
+// scratch-schema round trip the PostgreSQL version needed (`create table … (like …)`, add the
+// declared constraints, read them back through `pg_get_constraintdef`) is therefore gone, and the
+// comparison is TIGHTER than it was rather than looser: a difference of wording alone now fails,
+// where PostgreSQL rewrote `in (…)` into `= ANY (ARRAY[…])` on both sides and hid it. Measured
+// 2026-09-22 across all 47 core tables: zero differences between the rendered declaration and the
+// stored DDL, for every check constraint and every index filter.
+//
+// The three allowance lists this file used to carry — foreign keys, indexes and checks the
+// migrations created that no declaration held — are gone with them, and NOT because anything was
+// given up. They existed because those objects were written by hand in `--custom` migrations that
+// drizzle-kit had never diffed. The flip regenerated every set as one baseline, so every one of
+// them is a declaration now; measured the same day, comparing each table's declared foreign keys,
+// indexes and checks against the catalogue with no allowance at all and finding nothing on either
+// side unmatched. A hand-written object reappearing in a migration fails this file, which is what
+// an empty allowance list buys.
 import { is, SQL, sql } from "drizzle-orm";
 import {
   getTableConfig,
-  isPgEnum,
-  PgDialect,
-  type PgColumn,
-  PgTable,
-  type PgEnum,
-} from "drizzle-orm/pg-core";
+  SQLiteSyncDialect,
+  SQLiteTable,
+  type SQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
+import { assertSafeIdentifier } from "../testing/identifiers.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { deployment } from "./deployment.js";
-import { mirrorConfig } from "./mirror-config.js";
-import { nodeMembership } from "./node-membership.js";
+import { enumCheck } from "./columns.js";
 import * as barrel from "./index.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
+const dialect = new SQLiteSyncDialect();
+
 /**
- * Every table a module exports, plus the three that are deliberately not in the schema barrel —
- * `deployment`, `mirror_config` and `node_membership`. Each of those three says why at the top of
- * its own file: all three come from the hand-written baseline migration, which drizzle-kit never
- * diffed into a snapshot.
+ * Every table a module exports.
+ *
+ * `deployment`, `mirror_config` and `node_membership` used to be handed in separately, because a
+ * hand-written `--custom` migration created them and they were kept out of the barrel. The flip
+ * brought all three into it (`./index.js`), so listing them again here would declare each table
+ * twice — a duplicate case per table, and an inventory comparison that never matches.
  */
-function tablesIn(module: Record<string, unknown>, ...extra: PgTable[]): PgTable[] {
-  return [
-    ...Object.values<unknown>(module).filter((value): value is PgTable => is(value, PgTable)),
-    ...extra,
-  ];
+function tablesIn(module: Record<string, unknown>): SQLiteTable[] {
+  return Object.values<unknown>(module).filter((value): value is SQLiteTable =>
+    is(value, SQLiteTable),
+  );
 }
 
-function enumsIn(module: Record<string, unknown>): PgEnum<[string, ...string[]]>[] {
-  return Object.values<unknown>(module).filter((value): value is PgEnum<[string, ...string[]]> =>
-    isPgEnum(value),
-  );
+/**
+ * Every column declared with a closed vocabulary, table name and all, in declaration order.
+ *
+ * This is what a `pgEnum` declaration became. PostgreSQL held the permitted values as a TYPE, which
+ * could be read back out of `pg_enum` label by label; SQLite has no such type, and `enumText`
+ * carries the values in TypeScript while `enumCheck` puts the same array into a `check()`
+ * constraint at each table (`./columns.ts`). So the question "can the application write a value the
+ * database refuses, or the other way round?" is now asked of the constraint.
+ */
+function vocabularyColumns(tables: SQLiteTable[]): { table: string; column: SQLiteColumn }[] {
+  return tables.flatMap((table) => {
+    const config = getTableConfig(table);
+    return config.columns
+      .filter((column) => column.enumValues !== undefined)
+      .map((column) => ({ table: config.name, column: column as SQLiteColumn }));
+  });
 }
 
 // Reloads the declarations INSIDE the calling test. The comparisons below would read the same
@@ -52,125 +92,61 @@ function enumsIn(module: Record<string, unknown>): PgEnum<[string, ...string[]]>
 // declaration executes when its module loads, not while a test runs, so Stryker's `perTest`
 // coverage credits each of those mutants to whatever test happened to be running when the module
 // first loaded — in a whole-package run, some unrelated file's test, which is then the only test
-// the mutant is run against. Receipt: mutation run 35498146363 on this branch, shard 7, where the
-// surviving mutant in `src/schema/printers.ts` is covered-by six cases in a suite that has since
-// been deleted with the PostgreSQL test harness, and by none of the cases here; the file scored
-// 5.8%. The run is the receipt; the file it names is not in this tree any more.
-// Re-importing in the test body puts the declaration's execution inside the test.
-async function reload(): Promise<{ tables: PgTable[]; enums: PgEnum<[string, ...string[]]>[] }> {
+// the mutant is run against. Re-importing in the test body puts the declaration's execution inside
+// the test.
+async function reload(): Promise<SQLiteTable[]> {
   vi.resetModules();
   const fresh: Record<string, unknown> = await import("./index.js");
-  const { deployment: freshDeployment } = await import("./deployment.js");
-  const { mirrorConfig: freshMirrorConfig } = await import("./mirror-config.js");
-  const { nodeMembership: freshNodeMembership } = await import("./node-membership.js");
-  return {
-    tables: tablesIn(fresh, freshDeployment, freshMirrorConfig, freshNodeMembership),
-    enums: enumsIn(fresh),
-  };
+  return tablesIn(fresh);
 }
 
-const declared: PgTable[] = tablesIn(barrel, deployment, mirrorConfig, nodeMembership);
+const declared: SQLiteTable[] = tablesIn(barrel);
+const declaredVocabulary = vocabularyColumns(declared);
 
-// Foreign keys the migrations create that no declaration here carries. Each one is hand-written in
-// SQL for a stated reason at the column — most often that declaring it would make this file import
-// the file holding the target table and close an import cycle (`locations.catalogue_id` states it
-// at `tenants.ts`), and for a self-reference (`working_order_lines.parent_line_id`,
-// `sale_lines.parent_line_id`, `dining_tables.tab_id`) that the table cannot reference itself while
-// it is being declared. They are listed rather than ignored so that dropping one from a migration
-// fails this test.
-const SQL_ONLY_FOREIGN_KEYS: Readonly<Record<string, readonly string[]>> = {
-  categories: ["station_id -> kitchen_stations(id) on delete no action on update no action"],
-  device_profiles: ["canvas_id -> canvases(id) on delete restrict on update no action"],
-  devices: [
-    "device_profile_id -> device_profiles(id) on delete restrict on update no action",
-    "receipt_printer_id -> printers(id) on delete restrict on update no action",
-    "station_id -> kitchen_stations(id) on delete no action on update no action",
-    "till_id -> tills(id) on delete restrict on update no action",
-  ],
-  dining_tables: [
-    "tab_id -> working_orders(id) on delete no action on update no action",
-    "zone_id -> floor_zones(id) on delete no action on update no action",
-  ],
-  drawer_opens: [
-    "sale_id -> sales(id) on delete no action on update no action",
-    "till_id -> tills(id) on delete no action on update no action",
-  ],
-  location_catalogues: [
-    "catalogue_id -> catalogues(id) on delete no action on update no action",
-    "location_id -> locations(id) on delete no action on update no action",
-  ],
-  locations: ["catalogue_id -> catalogues(id) on delete no action on update no action"],
-  print_jobs: [
-    "claimed_by -> print_agents(id) on delete no action on update no action",
-    "printer_id -> printers(id) on delete no action on update no action",
-  ],
-  products: [
-    "course_id -> kitchen_courses(id) on delete no action on update no action",
-    "station_id -> kitchen_stations(id) on delete no action on update no action",
-  ],
-  sale_lines: ["parent_line_id -> sale_lines(id) on delete no action on update no action"],
-  station_printers: [
-    "printer_id -> printers(id) on delete no action on update no action",
-    "station_id -> kitchen_stations(id) on delete no action on update no action",
-  ],
-  ticket_items: [
-    "course_id -> kitchen_courses(id) on delete no action on update no action",
-    "node_id -> nodes(id) on delete no action on update no action",
-    "station_id -> kitchen_stations(id) on delete no action on update no action",
-    "working_order_line_id -> working_order_lines(id) on delete cascade on update no action",
-  ],
-  tills: ["receipt_printer_id -> printers(id) on delete no action on update no action"],
-  working_order_lines: [
-    "course_id -> kitchen_courses(id) on delete no action on update no action",
-    "parent_line_id -> working_order_lines(id) on delete no action on update no action",
-  ],
-  working_orders: [
-    "delivery_table_id -> dining_tables(id) on delete no action on update no action",
-  ],
-};
-
-// Unique indexes and check constraints the migrations create that no declaration here carries —
-// each written by hand in SQL, the file named beside it. Listed rather than ignored so that
-// dropping one from a migration fails this test.
-const SQL_ONLY_INDEXES: Readonly<Record<string, readonly string[]>> = {
-  incidents: ["unique incidents_open_dedup(till_id,code,sale_id)"], // 0001_db_baseline_sql.sql
-  kitchen_stations: ["unique kitchen_stations_default_key(location_id)"], // 0001, re-made by 0034
-  printers: ["unique printers_local_key_key(location_id,local_key)"], // 0032/0034
-  tills: ["unique tills_tenant_location_name_key(location_id,name)"], // 0006, re-made by 0034
-};
-
-const SQL_ONLY_CHECKS: Readonly<Record<string, readonly string[]>> = {
-  deployment: ["deployment_environment_ck"], // 0001_db_baseline_sql.sql
-  kitchen_stations: ["kitchen_stations_thresholds_ordered"], // 0001_db_baseline_sql.sql
-  printers: ["printers_transport_fields_ck"], // 0001, widened by 0014
-};
-
-// A column whose stored type the declaration cannot spell. `deployment.fence_lsn` is `pg_lsn` in
-// `drizzle/0001_db_baseline_sql.sql` and `label()` here because drizzle has no pg_lsn type, which
-// its own comment in `deployment.ts` states is safe only because that table is outside the schema
-// barrel.
-const STORED_TYPE: Readonly<Record<string, string>> = { "deployment.fence_lsn": "pg_lsn" };
-
-const dialect = new PgDialect();
+/**
+ * A declared fragment as text, refusing one that renders with bind parameters.
+ *
+ * A placeholder can never equal what the database stored, so a fragment carrying one would fail the
+ * comparison with a `?` in the diff and no hint about why. `enumCheck` calls `.inlineParams()` for
+ * exactly this reason (`./columns.ts`); a helper such as `eq(column, false)` does not, and a
+ * declaration using one has to be rewritten as an inline `sql` template before it can be compared.
+ * The refusal names the fragment so the message points at the declaration rather than at this file.
+ */
+function render(what: string, fragment: SQL): string {
+  const query = dialect.sqlToQuery(fragment);
+  if (query.params.length > 0) {
+    throw new Error(
+      `${what} renders with bind parameters (${query.sql}); write it as an inline sql\`…\` ` +
+        `template so it can be compared with the statement the migration stored`,
+    );
+  }
+  return query.sql;
+}
 
 /**
  * The default the declaration asks the DATABASE for, in the words the database renders it back in
  * — `undefined` where it asks for none. A default drizzle computes in JavaScript (`$defaultFn`) is
  * one the database does not hold, so it reads as none here.
  */
-function declaredDefault(column: PgColumn): string | undefined {
+function declaredDefault(column: SQLiteColumn): string | undefined {
   if (!column.hasDefault || column.defaultFn !== undefined) return undefined;
   const value = column.default;
   if (value === undefined) return undefined;
-  if (is(value, SQL)) return normaliseDefault(dialect.sqlToQuery(value).sql);
-  if (typeof value === "object") return normaliseDefault(JSON.stringify(value));
-  return normaliseDefault(String(value));
+  if (is(value, SQL)) return unquote(render(`a column default on ${column.name}`, value));
+  if (typeof value === "object") return unquote(JSON.stringify(value));
+  return unquote(String(value));
 }
 
-/** Drops the type cast PostgreSQL renders on a stored default, and the quotes around a literal. */
-function normaliseDefault(expression: string): string {
-  const withoutCast = expression.replace(/::[a-z0-9_ ".]+(\[\])?$/i, "");
-  return withoutCast.replace(/^'([\s\S]*)'$/, "$1");
+/**
+ * Drops the quotes around a stored literal: `pragma table_info` reports a text default as
+ * `'Europe/Madrid'` and a numeric one as `1`.
+ *
+ * Blind to a default whose own text contains a quote, which SQLite would store doubled. No column
+ * in this schema has one, and the comparison is symmetric, so such a default would fail visibly on
+ * one side rather than pass wrongly.
+ */
+function unquote(expression: string): string {
+  return expression.replace(/^'([\s\S]*)'$/, "$1");
 }
 
 interface TableShape {
@@ -178,26 +154,32 @@ interface TableShape {
   readonly columns: Record<string, { type: string; notNull: boolean; default?: string }>;
   readonly primaryKey: readonly string[];
   readonly foreignKeys: readonly string[];
-  readonly uniques: readonly string[];
   readonly indexes: readonly string[];
   readonly checks: readonly string[];
 }
 
-/** `numeric(12, 2)` and `numeric(12,2)` are the same type; `time` is `time without time zone`. */
-function normaliseType(type: string): string {
-  return type
-    .toLowerCase()
-    .replaceAll(", ", ",")
-    .replace(/^time$/, "time without time zone");
+/**
+ * One index, in the form both sides are put into: `[unique ]name(columns)[ filtered]`.
+ *
+ * Unique CONSTRAINTS and unique INDEXES share this list, where PostgreSQL kept them apart. They are
+ * the same object on SQLite: drizzle-kit emits `create unique index` for `unique()` and for
+ * `uniqueIndex()` alike (both appear in `drizzle/0000_baseline.sql` in that one form), and
+ * `pragma index_list` reports both with `origin = 'c'`. Nothing observable separates them, so
+ * nothing here tries to.
+ */
+function indexEntry(unique: boolean, name: string, columns: readonly string[], filtered: boolean) {
+  return `${unique ? "unique " : ""}${name}(${columns.join(",")})${filtered ? " filtered" : ""}`;
 }
 
-function fromDeclaration(table: PgTable): TableShape {
+function fromDeclaration(table: SQLiteTable): TableShape {
   const config = getTableConfig(table);
   const columns: Record<string, { type: string; notNull: boolean; default?: string }> = {};
   for (const column of config.columns) {
     const value = declaredDefault(column);
     columns[column.name] = {
-      type: STORED_TYPE[`${config.name}.${column.name}`] ?? normaliseType(column.getSQLType()),
+      // `pragma table_info` reports the type as written in the CREATE statement, which drizzle-kit
+      // wrote from this same call, differing only in case.
+      type: column.getSQLType().toLowerCase(),
       notNull: column.notNull,
       ...(value === undefined ? {} : { default: value }),
     };
@@ -206,339 +188,264 @@ function fromDeclaration(table: PgTable): TableShape {
     ...config.columns.filter((column) => column.primary).map((column) => column.name),
     ...config.primaryKeys.flatMap((key) => key.columns.map((column) => column.name)),
   ].sort();
-  const foreignKeys = [
-    ...(SQL_ONLY_FOREIGN_KEYS[config.name] ?? []),
-    ...config.foreignKeys.map((key) => {
+  const foreignKeys = config.foreignKeys
+    .map((key) => {
       const reference = key.reference();
       const target = getTableConfig(reference.foreignTable);
       // The two referential actions are part of the key: dropping `onDelete: "restrict"` turns a
-      // refused delete into one PostgreSQL performs. A key that declares neither gets the SQL
+      // refused delete into one the engine performs. A key that declares neither gets the SQL
       // default, which is `no action`.
       const actions = `on delete ${key.onDelete ?? "no action"} on update ${key.onUpdate ?? "no action"}`;
       return `${reference.columns.map((column) => column.name).join(",")} -> ${target.name}(${reference.foreignColumns.map((column) => column.name).join(",")}) ${actions}`;
-    }),
-  ].sort();
-  const uniques = [
-    ...config.columns
-      .filter((column) => column.isUnique)
-      .map((column) => `${column.uniqueName ?? ""}(${column.name})`),
-    ...config.uniqueConstraints.map(
-      (constraint) =>
-        `${constraint.name}(${constraint.columns.map((column) => column.name).join(",")})`,
-    ),
-  ].sort();
+    })
+    .sort();
   const indexes = [
-    ...(SQL_ONLY_INDEXES[config.name] ?? []),
     ...config.indexes.map((index) => {
-      const { name, unique, columns: parts } = index.config;
-      // A part is either one of the table's columns or a raw SQL expression; an expression index
-      // is compared by name and uniqueness alone, because the two sides render it differently.
+      const { name, unique, columns: parts, where } = index.config;
+      // A part is either one of the table's columns or a raw SQL expression, and SQLite reports an
+      // expression part as a null column name. So an index over an EXPRESSION is compared by name,
+      // uniqueness and the POSITION of the expression among its columns — never by what the
+      // expression says. `incidents_open_dedup` is the one such index in this package; changing its
+      // `case … end` moves nothing here. That gap is the PostgreSQL version's unchanged, which
+      // recorded it for the same reason. An index FILTER is a different thing and is compared in
+      // full, below.
       const columnNames = parts.map((part) =>
         "name" in part ? String(part.name) : "(expression)",
       );
-      return `${unique === true ? "unique " : ""}${name}(${columnNames.join(",")})`;
+      return indexEntry(unique === true, name, columnNames, where !== undefined);
     }),
+    ...config.uniqueConstraints.map((constraint) => {
+      // Drizzle lets a `unique()` go unnamed and drizzle-kit derives a name for the migration.
+      // This file compares by the name both sides SAY, and it does not know the derived one, so
+      // an unnamed constraint is refused here rather than compared against a guess. No
+      // declaration in this package has one.
+      if (constraint.name === undefined) {
+        throw new Error(`${config.name} declares an unnamed unique constraint; give it a name`);
+      }
+      return indexEntry(
+        true,
+        constraint.name,
+        constraint.columns.map((column) => column.name),
+        false,
+      );
+    }),
+    ...config.columns
+      .filter((column) => column.isUnique)
+      .map((column) => indexEntry(true, column.uniqueName ?? "", [column.name], false)),
   ].sort();
-  const checks = [
-    ...(SQL_ONLY_CHECKS[config.name] ?? []),
-    ...config.checks.map((check) => check.name),
-  ].sort();
-  return { name: config.name, columns, primaryKey, foreignKeys, uniques, indexes, checks };
+  const checks = config.checks.map((check) => check.name).sort();
+  return { name: config.name, columns, primaryKey, foreignKeys, indexes, checks };
+}
+
+/** The CREATE statement SQLite stored for one object, or `undefined` when it holds none. */
+function ddlOf(db: Database, type: "table" | "index", name: string): string | undefined {
+  const [row] = db.all<{ sql: string | null }>(
+    sql`select sql from sqlite_master where type = ${type} and name = ${name}`,
+  );
+  return row?.sql ?? undefined;
+}
+
+/**
+ * Every named check constraint in a CREATE TABLE statement, keyed by name, as the text between the
+ * parentheses of its `CHECK(…)`.
+ *
+ * SQLite has no catalogue of check constraints at all — no pragma reports one, and there is no
+ * counterpart to `pg_constraint`. The stored statement is the only record, so this READS TEXT. Two
+ * consequences worth knowing before trusting it: an ANONYMOUS check, written without a
+ * `CONSTRAINT <name>` clause, is invisible to it (this schema has none — all 69 checks in
+ * `drizzle/0000_baseline.sql` are named, and an unnamed one would surface as a table whose declared
+ * check count exceeds what this returns); and the parentheses are balanced by scanning, skipping
+ * anything inside a quote, so a check is read correctly only while the engine keeps writing the
+ * statement back the way it was given.
+ */
+function checksInDdl(ddl: string): Record<string, string> {
+  const found: Record<string, string> = {};
+  const opening = /CONSTRAINT\s+"([^"]+)"\s+CHECK\s*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = opening.exec(ddl)) !== null) {
+    found[match[1]!] = balancedFrom(ddl, opening.lastIndex);
+  }
+  return found;
+}
+
+/**
+ * The text from `start` up to the `)` closing the parenthesis that was just opened, ignoring
+ * parentheses inside a quoted string or a quoted identifier.
+ */
+function balancedFrom(text: string, start: number): string {
+  let depth = 1;
+  let quote: string | undefined;
+  let at = start;
+  for (; at < text.length && depth > 0; at++) {
+    const character = text[at]!;
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+    } else if (character === "'" || character === '"' || character === "`") quote = character;
+    else if (character === "(") depth++;
+    else if (character === ")") depth--;
+  }
+  return text.slice(start, at - 1);
+}
+
+/**
+ * The filter on one index — the `where` clause of its CREATE INDEX — or the empty string when it
+ * has none.
+ *
+ * Read from the stored statement for the reason `checksInDdl` states: `pragma index_list` reports
+ * only THAT an index is partial, never what it filters on. The column list is skipped by balancing
+ * its parentheses, which is what keeps an expression index containing its own parentheses
+ * (`incidents_open_dedup`, a `case … end`) from being mistaken for the end of the list.
+ */
+function indexFilterInDdl(ddl: string): string {
+  const listOpens = ddl.indexOf("(");
+  if (listOpens < 0) return "";
+  const afterList = ddl.slice(listOpens + 1 + balancedFrom(ddl, listOpens + 1).length + 1);
+  const where = /^\s*WHERE\s+/i.exec(afterList);
+  return where === null ? "" : afterList.slice(where[0].length).trim();
 }
 
 interface ColumnRow {
   name: string;
   type: string;
-  not_null: boolean;
-  column_default: string | null;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
 }
 
-interface ConstraintRow {
-  kind: string;
-  name: string;
-  columns: string[];
-  foreign_table: string | null;
-  foreign_columns: string[] | null;
-  delete_action: string | null;
-  update_action: string | null;
+interface ForeignKeyRow {
+  id: number;
+  seq: number;
+  table: string;
+  from: string;
+  to: string | null;
+  on_update: string;
+  on_delete: string;
 }
-
-/** `pg_constraint.confdeltype` / `confupdtype`, in the words drizzle uses for the same actions. */
-const REFERENTIAL_ACTION: Readonly<Record<string, string>> = {
-  a: "no action",
-  r: "restrict",
-  c: "cascade",
-  n: "set null",
-  d: "set default",
-};
 
 interface IndexRow {
   name: string;
-  is_unique: boolean;
-  columns: (string | null)[];
+  unique: number;
+  /** `c` for a CREATE INDEX, `u` for an inline UNIQUE, `pk` for the index behind a primary key. */
+  origin: string;
+  partial: number;
 }
 
-async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
-  const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
-  return Array.isArray(result) ? result : result.rows;
-}
-
-/** A schema nothing else uses, where a copy of a table can be given the declared constraints. */
-const SCRATCH_SCHEMA = "schema_conformance_scratch";
-
-/**
- * Every check constraint on one table, keyed by name, in the words `pg_get_constraintdef` renders
- * it back in.
- */
-async function checkExpressionsIn(
-  db: Database,
-  schema: string,
-  name: string,
-): Promise<Record<string, string>> {
-  const found = await rows<{ name: string; def: string }>(
-    db,
-    sql`
-      select c.conname as name, pg_get_constraintdef(c.oid) as def
-      from pg_constraint c
-      where c.conrelid = ${`${schema}."${name}"`}::regclass and c.contype = 'c'
-    `,
-  );
-  return Object.fromEntries(found.map((row) => [row.name, row.def]));
-}
-
-/** Every index predicate on one table, keyed by index name — the empty string where there is none. */
-async function indexPredicatesIn(
-  db: Database,
-  schema: string,
-  name: string,
-): Promise<Record<string, string>> {
-  const found = await rows<{ name: string; predicate: string | null }>(
-    db,
-    sql`
-      select i.relname as name, pg_get_expr(ix.indpred, ix.indrelid) as predicate
-      from pg_index ix
-      join pg_class i on i.oid = ix.indexrelid
-      where ix.indrelid = ${`${schema}."${name}"`}::regclass
-    `,
-  );
-  return Object.fromEntries(found.map((row) => [row.name, row.predicate ?? ""]));
+interface IndexColumnRow {
+  seqno: number;
+  /** `null` where the indexed part is an expression rather than a column. */
+  name: string | null;
 }
 
 /**
- * What the declaration asks for, put through the SAME renderer the database side is read with: a
- * bare copy of the table in a scratch schema, given the declared check constraints and indexes,
- * read back out of the catalog. Comparing the two rendered forms compares what the declaration
- * MEANS — PostgreSQL rewrites `in (…)` into `= ANY (ARRAY[…])` either way — where comparing the
- * text as typed would differ on wording alone.
+ * A pragma with the table name written into it.
  *
- * The copy keeps the ORIGINAL table's name, in a schema nothing else uses, because a rendered
- * check expression qualifies its columns with that name.
+ * SQLite binds no identifier — `pragma table_info(?)` is a syntax error — so the name arrives as
+ * text or not at all, which is the case `CLAUDE.md` §3 allows and `assertSafeIdentifier` is the
+ * "validate and throw" half of. The names reaching here come from this package's own declarations
+ * and from `sqlite_master`.
  */
-async function declaredOnACopy(
-  db: Database,
-  table: PgTable,
-): Promise<{ checks: Record<string, string>; indexPredicates: Record<string, string> }> {
-  const config = getTableConfig(table);
-  if (config.checks.length === 0 && config.indexes.length === 0)
-    return { checks: {}, indexPredicates: {} };
-  await db.execute(sql.raw(`create schema ${SCRATCH_SCHEMA}`));
-  try {
-    const copy = `${SCRATCH_SCHEMA}."${config.name}"`;
-    await db.execute(sql.raw(`create table ${copy} (like public."${config.name}")`));
-    for (const check of config.checks) {
-      const expression = dialect.sqlToQuery(check.value).sql;
-      await db.execute(
-        sql.raw(`alter table ${copy} add constraint "${check.name}" check (${expression})`),
-      );
-    }
-    // No declared index in this package carries a `where` today —
-    // `grep -rn "\.where(" packages/db/src/schema/` matches nothing, though four indexes in
-    // OTHER packages do — so the predicate half of
-    // this comparison is exercised only by putting one in by hand. What a real one would meet:
-    // drizzle renders a helper such as `eq(column, false)` as a bind placeholder, and
-    // `create index … where ($1)` is refused by PostgreSQL with 42P02, "there is no parameter
-    // $1". The refusal below fires first so the message points at the declaration rather than at
-    // the harness that rendered it.
-    for (const index of config.indexes) {
-      const { name, unique, columns: parts, where } = index.config;
-      const columns = parts
-        .map((part) =>
-          is(part, SQL)
-            ? dialect.sqlToQuery(part).sql
-            : `"${String((part as { name?: unknown }).name ?? "")}"`,
-        )
-        .join(", ");
-      let predicate = "";
-      if (where !== undefined) {
-        const rendered = dialect.sqlToQuery(where);
-        if (rendered.params.length > 0)
-          throw new Error(
-            `index ${name} declares a where clause drizzle renders with bind parameters ` +
-              `(${rendered.sql}); write it as an inline sql\`…\` template so it can be compared`,
-          );
-        predicate = ` where (${rendered.sql})`;
-      }
-      await db.execute(
-        sql.raw(
-          `create ${unique === true ? "unique " : ""}index "${name}" on ${copy} (${columns})${predicate}`,
-        ),
-      );
-    }
-    return {
-      checks: await checkExpressionsIn(db, SCRATCH_SCHEMA, config.name),
-      indexPredicates: await indexPredicatesIn(db, SCRATCH_SCHEMA, config.name),
-    };
-  } finally {
-    await db.execute(sql.raw(`drop schema ${SCRATCH_SCHEMA} cascade`));
-  }
+function pragmaRows<T>(db: Database, pragma: string, name: string): T[] {
+  return db.all<T>(sql.raw(`pragma ${pragma}("${assertSafeIdentifier("table", name)}")`));
 }
 
-async function fromDatabase(db: Database, name: string): Promise<TableShape> {
-  const columnRows = await rows<ColumnRow>(
-    db,
-    sql`
-      select
-        a.attname as name,
-        format_type(a.atttypid, a.atttypmod) as type,
-        a.attnotnull as not_null,
-        pg_get_expr(d.adbin, d.adrelid) as column_default
-      from pg_attribute a
-      left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
-      where a.attrelid = ${`public.${name}`}::regclass and a.attnum > 0 and not a.attisdropped
-      order by a.attnum
-    `,
-  );
-  const constraintRows = await rows<ConstraintRow>(
-    db,
-    sql`
-      select
-        c.contype as kind,
-        c.conname as name,
-        c.confdeltype as delete_action,
-        c.confupdtype as update_action,
-        (
-          select array_agg(a.attname order by k.ord)
-          from unnest(c.conkey) with ordinality k(attnum, ord)
-          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
-        ) as columns,
-        cf.relname as foreign_table,
-        (
-          select array_agg(a.attname order by k.ord)
-          from unnest(c.confkey) with ordinality k(attnum, ord)
-          join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum
-        ) as foreign_columns
-      from pg_constraint c
-      left join pg_class cf on cf.oid = c.confrelid
-      where c.conrelid = ${`public.${name}`}::regclass and c.contype in ('p', 'f', 'u', 'c')
-    `,
-  );
+function fromDatabase(db: Database, name: string): TableShape {
+  const ddl = ddlOf(db, "table", name);
+  if (ddl === undefined) throw new Error(`no CREATE TABLE stored for ${name}`);
+  const columnRows = pragmaRows<ColumnRow>(db, "table_info", name);
   const columns: Record<string, { type: string; notNull: boolean; default?: string }> = {};
   for (const column of columnRows)
     columns[column.name] = {
-      type: normaliseType(column.type),
-      notNull: column.not_null,
-      ...(column.column_default === null
-        ? {}
-        : { default: normaliseDefault(column.column_default) }),
+      type: column.type.toLowerCase(),
+      notNull: column.notnull === 1,
+      ...(column.dflt_value === null ? {} : { default: unquote(column.dflt_value) }),
     };
-  const primaryKey = constraintRows
-    .filter((row) => row.kind === "p")
-    .flatMap((row) => row.columns)
+  // `pk` is the column's 1-based position in the primary key, and 0 for a column outside it.
+  const primaryKey = columnRows
+    .filter((column) => column.pk > 0)
+    .map((column) => column.name)
     .sort();
-  const foreignKeys = constraintRows
-    .filter((row) => row.kind === "f")
-    .map(
-      (row) =>
-        `${row.columns.join(",")} -> ${row.foreign_table}(${(row.foreign_columns ?? []).join(",")}) on delete ${REFERENTIAL_ACTION[row.delete_action ?? "a"]} on update ${REFERENTIAL_ACTION[row.update_action ?? "a"]}`,
-    )
+  // One row per COLUMN of a key, so a composite key arrives as several rows sharing an `id` and
+  // ordered by `seq`. Reading each row as a key of its own would turn one two-column key into two
+  // one-column ones.
+  const byKey = new Map<number, ForeignKeyRow[]>();
+  for (const row of pragmaRows<ForeignKeyRow>(db, "foreign_key_list", name)) {
+    const group = byKey.get(row.id) ?? [];
+    group.push(row);
+    byKey.set(row.id, group);
+  }
+  const foreignKeys = [...byKey.values()]
+    .map((group) => {
+      const parts = [...group].sort((left, right) => left.seq - right.seq);
+      const first = parts[0]!;
+      // `to` is null where a key names no target column, which means the parent's primary key.
+      // Every key in this schema names one, so a null here is a difference worth seeing rather
+      // than one worth resolving.
+      const target = parts.map((part) => part.to ?? "(parent primary key)").join(",");
+      return `${parts.map((part) => part.from).join(",")} -> ${first.table}(${target}) on delete ${first.on_delete.toLowerCase()} on update ${first.on_update.toLowerCase()}`;
+    })
     .sort();
-  const uniques = constraintRows
-    .filter((row) => row.kind === "u")
-    .map((row) => `${row.name}(${row.columns.join(",")})`)
+  // The index SQLite builds for a primary key is that key's, and is compared above. Everything
+  // else is an index some declaration asked for by name.
+  const indexes = pragmaRows<IndexRow>(db, "index_list", name)
+    .filter((index) => index.origin !== "pk")
+    .map((index) => {
+      const parts = pragmaRows<IndexColumnRow>(db, "index_info", index.name)
+        .sort((left, right) => left.seqno - right.seqno)
+        .map((part) => part.name ?? "(expression)");
+      return indexEntry(index.unique === 1, index.name, parts, index.partial === 1);
+    })
     .sort();
-  const checks = constraintRows
-    .filter((row) => row.kind === "c")
-    .map((row) => row.name)
-    .sort();
-  // Indexes PostgreSQL builds for a primary key or a unique constraint are that constraint's, and
-  // are compared above; only the ones a declaration asks for by name are listed here.
-  const indexRows = await rows<IndexRow>(
-    db,
-    sql`
-      select
-        i.relname as name,
-        ix.indisunique as is_unique,
-        (
-          select array_agg(
-            case when k.attnum = 0 then null else (
-              select a.attname from pg_attribute a where a.attrelid = ix.indrelid and a.attnum = k.attnum
-            ) end
-            order by k.ord
-          )
-          from unnest(ix.indkey) with ordinality k(attnum, ord)
-        ) as columns
-      from pg_index ix
-      join pg_class i on i.oid = ix.indexrelid
-      where ix.indrelid = ${`public.${name}`}::regclass
-        and not ix.indisprimary
-        and not exists (select 1 from pg_constraint c where c.conindid = ix.indexrelid)
-    `,
-  );
-  const indexes = indexRows
-    .map(
-      (row) =>
-        `${row.is_unique ? "unique " : ""}${row.name}(${row.columns.map((column) => column ?? "(expression)").join(",")})`,
-    )
-    .sort();
-  return { name, columns, primaryKey, foreignKeys, uniques, indexes, checks };
+  const checks = Object.keys(checksInDdl(ddl)).sort();
+  return { name, columns, primaryKey, foreignKeys, indexes, checks };
 }
 
-const declaredEnums: PgEnum<[string, ...string[]]>[] = enumsIn(barrel);
-
-interface EnumRow {
-  label: string;
-}
-
-describe("the drizzle enum declarations match the database the core migrations build", () => {
-  it("declares at least one enum", () => {
-    expect(declaredEnums.length).toBeGreaterThan(0);
+describe("every closed vocabulary a column declares reaches the database", () => {
+  it("declares at least one", () => {
+    expect(declaredVocabulary.length).toBeGreaterThan(0);
   });
 
-  it.each(declaredEnums.map((declared, index) => [declared.enumName, index] as const))(
-    "%s",
-    async (_name, index) => {
-      const { enums } = await reload();
-      expect(enums).toHaveLength(declaredEnums.length);
-      const declared = enums[index];
-      // Labels in declaration order, which is the order PostgreSQL stores and sorts them in. A
-      // label that differs, is missing, or has moved is a value the application can write and the
-      // database refuses, or the other way round.
-      const labels = await rows<EnumRow>(
-        suite.db,
-        sql`
-          select e.enumlabel as label
-          from pg_enum e
-          join pg_type t on t.oid = e.enumtypid
-          where t.typname = ${declared.enumName}
-          order by e.enumsortorder
-        `,
-      );
-      expect(labels.map((row) => row.label)).toEqual([...declared.enumValues]);
-    },
-  );
+  it.each(
+    declaredVocabulary.map(
+      ({ table, column }, index) => [`${table}.${column.name}`, index] as const,
+    ),
+  )("%s", async (_name, index) => {
+    const vocabulary = vocabularyColumns(await reload());
+    expect(vocabulary).toHaveLength(declaredVocabulary.length);
+    const { table, column } = vocabulary[index]!;
+    const ddl = ddlOf(suite.db, "table", table);
+    expect(ddl).toBeDefined();
+    // The values IN ORDER, because `enumCheck` renders them in the order the declaration lists
+    // them: a value dropped, added, changed or moved changes this text. Asked of the built
+    // constraints as a set rather than by name, because what matters is that SOME constraint
+    // holds this column to these values, not which one.
+    //
+    // The case this block exists for, and the control that says the table comparison below cannot
+    // reach it: a vocabulary column carrying NO constraint — a new `enumText` column whose
+    // `enumCheck` was never written, then migrated. Measured 2026-09-22 by removing
+    // `locations_order_flow_ck` from the declaration AND from `drizzle/0000_baseline.sql`
+    // together: the `locations` table case PASSED, because "declared none, built none" agrees,
+    // and only this case failed. On PostgreSQL the column's TYPE carried the vocabulary and no
+    // such hole existed.
+    expect(Object.values(checksInDdl(ddl!))).toContain(
+      render(`the vocabulary on ${table}.${column.name}`, enumCheck(column)),
+    );
+  });
 });
 
 describe("the drizzle schema matches the database the core migrations build", () => {
-  it("declares every table the core migrations build", async () => {
+  it("declares every table the core migrations build", () => {
     // An inventory, not a count. A count only says how many declarations there are, so a table
     // dropped from the schema barrel takes its own case away with it and the suite goes green with
     // fewer cases than before — which is how a missing table would arrive.
-    const built = await rows<{ name: string }>(
-      suite.db,
+    const built = suite.db.all<{ name: string }>(
+      // `glob` rather than `like`: LIKE treats `_` as a wildcard, and every name here is full of
+      // them. `sqlite_*` is the engine's own bookkeeping, `__drizzle_migrations*` the per-package
+      // journals.
       sql`
-        select tablename as name
-        from pg_tables
-        where schemaname = 'public' and tablename not like '\_\_drizzle\_migrations%'
+        select name from sqlite_master
+        where type = 'table'
+          and name not glob 'sqlite_*'
+          and name not glob '__drizzle_migrations*'
       `,
     );
     expect(declared.map((table) => getTableConfig(table).name).sort()).toEqual(
@@ -549,30 +456,48 @@ describe("the drizzle schema matches the database the core migrations build", ()
   it.each(declared.map((table, index) => [getTableConfig(table).name, index] as const))(
     "%s",
     async (_name, index) => {
-      const { tables } = await reload();
+      const tables = await reload();
       expect(tables).toHaveLength(declared.length);
       // Every column spells its database name out. Left empty, drizzle derives the name from the
       // property key instead, which reads as a declared name while declaring none — and a derived
       // name would move if the `casing` option ever changed.
-      const derived = getTableConfig(tables[index]).columns.filter((column) => column.keyAsName);
-      expect(derived.map((column) => column.name)).toEqual([]);
-      const shape = fromDeclaration(tables[index]);
-      await expect(fromDatabase(suite.db, shape.name)).resolves.toEqual(shape);
+      const config = getTableConfig(tables[index]!);
+      expect(
+        config.columns.filter((column) => column.keyAsName).map((column) => column.name),
+      ).toEqual([]);
+      const shape = fromDeclaration(tables[index]!);
+      expect(fromDatabase(suite.db, shape.name)).toEqual(shape);
       // The shape above compares check constraints by NAME and indexes by name and columns. This
       // compares what each declared one SAYS: a permitted value dropped from a list, a bound
       // moved, a comparison flipped, or an index given a filter that leaves out rows the migration
       // indexes — none of which move a name.
-      const declaredHere = await declaredOnACopy(suite.db, tables[index]);
-      const builtChecks = await checkExpressionsIn(suite.db, "public", shape.name);
-      expect(declaredHere.checks).toEqual(
+      const builtChecks = checksInDdl(ddlOf(suite.db, "table", shape.name)!);
+      expect(
         Object.fromEntries(
-          Object.keys(declaredHere.checks).map((name) => [name, builtChecks[name]]),
+          config.checks.map((check) => [
+            check.name,
+            render(`the check ${check.name}`, check.value),
+          ]),
         ),
+      ).toEqual(
+        Object.fromEntries(config.checks.map((check) => [check.name, builtChecks[check.name]])),
       );
-      const builtPredicates = await indexPredicatesIn(suite.db, "public", shape.name);
-      expect(declaredHere.indexPredicates).toEqual(
+      const declaredFilters = config.indexes.filter(
+        (declaredIndex) => declaredIndex.config.where !== undefined,
+      );
+      expect(
         Object.fromEntries(
-          Object.keys(declaredHere.indexPredicates).map((name) => [name, builtPredicates[name]]),
+          declaredFilters.map((declaredIndex) => [
+            declaredIndex.config.name,
+            render(`the filter on index ${declaredIndex.config.name}`, declaredIndex.config.where!),
+          ]),
+        ),
+      ).toEqual(
+        Object.fromEntries(
+          declaredFilters.map((declaredIndex) => [
+            declaredIndex.config.name,
+            indexFilterInDdl(ddlOf(suite.db, "index", declaredIndex.config.name) ?? ""),
+          ]),
         ),
       );
     },

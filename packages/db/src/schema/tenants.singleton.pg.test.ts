@@ -79,11 +79,30 @@ describe("tenants is one row, keyed 1", () => {
   // 2026-09-22 on Node v26.7.0 against the migrated schema, reading the thrown `errcode` and the
   // surviving rows (`[{"id":1}]`).
   //
-  // The default is therefore INERT on this engine, and that is a fact about the schema rather than
-  // about this suite: any caller that inserts a taxpayer row without stating `id` — a plain
+  // WHAT IS AND IS NOT INERT, measured the same day with four one-table `node:sqlite` probes, each
+  // seeded with row 1 and then sent the same id-omitting insert:
+  //  - a NON-key `integer DEFAULT 1 NOT NULL` column omitted from an insert is given 1. So a
+  //    column DEFAULT is not inert on this engine in general — this is the control that stops the
+  //    finding being read as "SQLite ignores defaults";
+  //  - `id INTEGER PRIMARY KEY DEFAULT 1` — refused 275, `CHECK constraint failed`, id = 2. The
+  //    rowid alias wins;
+  //  - the same columns with `PRIMARY KEY(id)` written as a table constraint — also 275. Moving
+  //    the key off the column does not stop it being a rowid alias;
+  //  - the same table declared `WITHOUT ROWID` — refused 1555, `UNIQUE constraint failed: c.id`.
+  //    The default IS applied there, which is the assertion below.
+  //
+  // So the property is expressible on this engine and this schema does not express it. What stands
+  // in the way is the toolchain rather than the engine: neither drizzle-orm 0.45.2 nor drizzle-kit
+  // 0.31.10 knows the clause at all (`grep -rl "WITHOUT ROWID"` over both installed packages
+  // matches no file), so `WITHOUT ROWID` here would be a hand-written statement that a regenerate
+  // would drop. That is a schema decision, not this suite's, which is why the case is left red.
+  //
+  // The default is therefore INERT for this column, and that is a fact about the schema rather
+  // than about this suite: any caller that inserts a taxpayer row without stating `id` — a plain
   // `db.insert(tenants).values({ country, taxId, legalName })` included, since `.default(1)` makes
-  // Drizzle omit the column — is now refused where PostgreSQL accepted it.
-  // `packages/db/src/testing/seed.ts` states `id: 1` and is unaffected.
+  // Drizzle omit the column — is now refused where PostgreSQL accepted it. No caller does:
+  // `packages/provisioning/src/venue-apply.ts` is the only product writer of this table and states
+  // `id: 1`, as does `packages/db/src/testing/seed.ts`.
   it("defaults id to 1, so a row that omits it meets the singleton rather than a NOT NULL error", async () => {
     // The two answers are deliberately different. Without the column default this insert fails on
     // NOT NULL — nothing supplied id. With the default it collides on the primary key, refusing a

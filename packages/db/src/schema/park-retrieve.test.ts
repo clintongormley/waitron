@@ -4,7 +4,10 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
+import { refusalOn } from "../constraint-target.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
@@ -104,14 +107,21 @@ describe("park & retrieve schema", () => {
 
   it("rejects two sales sharing a working_order_id (the sale idempotency key)", async () => {
     // Two sales that both try to file against one parked order — the double-submit the
-    // UNIQUE(working_order_id) prevents. Distinct invoice numbers so the collision is on
-    // sales_working_order_id_key, not on sales_series_invoice_number_key.
+    // UNIQUE(working_order_id) prevents. Distinct invoice numbers so the collision is on the
+    // working_order_id index, not on the (series_id, invoice_number) one.
+    //
+    // That "not on the other index" half used to rest on the distinct invoice numbers alone: a
+    // SQLSTATE of `23505` was the same string for either index. The refusal here names the key —
+    // measured on this case, errcode 2067 with `UNIQUE constraint failed: sales.working_order_id`
+    // — so the assertion now pins it rather than arranging for it.
     const wo = await openOrder(suite.db, 10);
     await suite.db.execute(insertSaleSql({ invoiceNumber: 100, workingOrderId: wo }));
     const error = await captureError(() =>
       suite.db.execute(insertSaleSql({ invoiceNumber: 101, workingOrderId: wo })),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "sales", columns: ["working_order_id"] }),
+    ).toBe(true);
   });
 
   it("accepts a draft line with a real product and rejects one pointing at a missing product", async () => {
@@ -134,16 +144,22 @@ describe("park & retrieve schema", () => {
             from working_order_lines where working_order_id = ${wo} and line_no = 1`,
     );
     expect(stored.rows).toEqual([{ quantity: "1000", vat_rate: "1000" }]);
-    // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
+    // Negative: a product_id with no products row is refused. The BEFORE triggers
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
     // reaches the (product_id) → products FK, which is what rejects it.
+    //
+    // A foreign-key refusal names no table and no column on this engine: measured on this case the
+    // whole message is `FOREIGN KEY constraint failed` (errcode 787), so the refusal itself cannot
+    // say WHICH key. The positive control above carries that half: it is the same insert with a
+    // real `product_id` and is accepted. The line number differs too, because (working_order_id,
+    // line_no) is a key and two lines cannot share one — no other value does.
     const error = await captureError(() =>
       suite.db.execute(
         sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${randomUUID()}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A},
            1000, 100, 110, 1000, 100)`,
       ),
     );
-    expect(pgErrorCode(error)).toBe("23503");
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("points a draft line's product_id at the products primary key", async () => {

@@ -4,7 +4,10 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { refusalOn, triggerRaised } from "../constraint-target.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -225,8 +228,18 @@ describe("sale_substitutions — the N:1 link", () => {
     const error = await captureError(() =>
       insertSubstitution(db, { substitutionSaleId: secondF3, substitutedSaleId: ticket1 }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
-    expect(pgErrorMessage(error)).toMatch(/sale_substitutions_substituted_key/);
+    // The index's NAME (`sale_substitutions_substituted_key`, 0000_baseline.sql) is no longer in
+    // the refusal: this engine names the table and the key column instead — measured
+    // `UNIQUE constraint failed: sale_substitutions.substituted_sale_id`. That pair IS the index's
+    // identity here, and the class rules out a NOT NULL on the same column. The control in the
+    // other direction is the fan-out case above: a second link with a DIFFERENT substituted ticket
+    // is accepted, so the index discriminates on the ticket rather than refusing any second row.
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "sale_substitutions",
+        columns: ["substituted_sale_id"],
+      }),
+    ).toBe(true);
   });
 
   it("rejects a link to a ticket that does not exist", async () => {
@@ -236,7 +249,12 @@ describe("sale_substitutions — the N:1 link", () => {
         substitutedSaleId: "99999999-9999-4999-8999-999999999999",
       }),
     );
-    expect(pgErrorCode(error)).toBe("23503");
+    // Class only, and nothing narrower is available: a foreign-key refusal here is the whole
+    // message `FOREIGN KEY constraint failed` and names no table or column (measured on this case;
+    // `../constraint-target.ts` records the same gap). The old `23503` named no particular key
+    // either, so this pins what the case always pinned — that the link with the absent parent is
+    // the statement refused, while the link to a real ticket in the case above is accepted.
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("rejects a link whose substitution sale does not exist", async () => {
@@ -246,7 +264,7 @@ describe("sale_substitutions — the N:1 link", () => {
         substitutedSaleId: ticket1,
       }),
     );
-    expect(pgErrorCode(error)).toBe("23503");
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -270,22 +288,29 @@ describe("sale_substitutions — immutability", () => {
   });
 
   it("stops the owner too, via the trigger backstop", async () => {
-    // The grants stop the application; the trigger stops the owner. Asserted on SQLSTATE WT001
-    // (the shared reject_mutation()), not on wording. PROVEN BY DELETION (manual, recorded in this
-    // task's report): with the sale_substitutions_enforce_immutability trigger removed from 0014,
-    // this owner UPDATE succeeds.
+    // The trigger stops the owner. `triggerRaised` is the predicate rather than a result code
+    // alone, because this engine reports a trigger's own RAISE(ABORT) and an `ON DELETE RESTRICT`
+    // refusal under the SAME code (1811, `../sql-state.ts`) — and `sale_substitutions` holds two
+    // RESTRICT foreign keys, so a code-only assertion here would accept the wrong refusal. The
+    // text is the whole identity and `packages/store/src/append-only.ts` chooses it.
+    //
+    // WHAT THE OLD ASSERTION HELD AND THIS ONE CANNOT: the refused STATEMENT KIND. The PostgreSQL
+    // guard raised `... : UPDATE is not permitted`, so the message itself said which statement had
+    // been stopped; the trigger text here is the same sentence for both. What still separates them
+    // is that each statement is issued on its own below and each must be refused, and that the two
+    // per-event triggers are pinned by name in the schema-shape case at the top of this file. The
+    // PROOF BY DELETION recorded here previously was taken against the PostgreSQL trigger in
+    // migration 0014, which no longer exists — it does not carry to these triggers and is not
+    // restated as if it did.
     const update = await captureError(() =>
       db.execute(sql`update sale_substitutions set substituted_sale_id = substitution_sale_id`),
     );
-    expect(pgErrorCode(update)).toBe("WT001");
-    expect(pgErrorMessage(update)).toMatch(
-      /sale_substitutions is append-only: UPDATE is not permitted/,
-    );
+    expect(triggerRaised(update, "sale_substitutions is append-only")).toBe(true);
 
     const remove = await captureError(() =>
       db.execute(sql`delete from sale_substitutions where id = ${linkId}`),
     );
-    expect(pgErrorCode(remove)).toBe("WT001");
+    expect(triggerRaised(remove, "sale_substitutions is append-only")).toBe(true);
   });
 
   // A CASE WAS DELETED HERE: "stops the owner truncating the table, via the statement trigger".
@@ -350,14 +375,16 @@ describe("sales — counterparty columns", () => {
 
   it("refuses to update a recipient column, via the trigger backstop", async () => {
     // The counterparty columns inherit sales' table-wide immutability with no new DDL — the same
-    // receipt corrects_sale_id/fiscal_state rely on. Owner path, asserted on WT001.
+    // receipt corrects_sale_id/fiscal_state rely on. Owner path, asserted on the trigger's own
+    // RAISE(ABORT) text for the reason the sale_substitutions case above states: the result code
+    // alone cannot tell this guard from a RESTRICT refusal. The insert two lines up is the control
+    // — the table takes a new row and refuses only the rewrite.
     const id = await insertSale(db, {
       counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const error = await captureError(() =>
       db.execute(sql`update sales set counterparty_tax_id = 'B00000001' where id = ${id}`),
     );
-    expect(pgErrorCode(error)).toBe("WT001");
-    expect(pgErrorMessage(error)).toMatch(/sales is append-only: UPDATE is not permitted/);
+    expect(triggerRaised(error, "sales is append-only")).toBe(true);
   });
 });

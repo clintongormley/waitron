@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
+import { refusalOn } from "../constraint-target.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { nodes } from "./nodes.js";
@@ -62,14 +65,20 @@ describe("nodes schema", () => {
     expect(found.map((r) => r.name)).toEqual(["Node A1"]);
   });
 
-  it("rejects a duplicate id with 23505", async () => {
+  it("rejects a duplicate id with a uniqueness violation", async () => {
     // `id` is the primary key, and it is what the foreign keys from the fiscal and commercial
     // tables point at (see the definition test below).
+    //
+    // The refusal names the key rather than carrying a SQLSTATE: measured on this case, it arrives
+    // as errcode 1555 with `UNIQUE constraint failed: nodes.id`. `UNIQUE_VIOLATION` covers 1555
+    // (primary key) as well as 2067 (any other unique index), which is what keeps this the same
+    // question the `23505` assertion asked, and `refusalOn` adds the half that SQLSTATE could not
+    // express — that the collision was on `nodes.id` and not on some sibling index of this table.
     await db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N" });
     const error = await captureError(() =>
       db.insert(nodes).values({ id: NODE_A1, locationId: LOCATION_A, name: "N again" }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(refusalOn(error, UNIQUE_VIOLATION, { table: "nodes", columns: ["id"] })).toBe(true);
   });
 
   it("is what the fiscal and commercial node foreign keys point at, by its id", async () => {
@@ -109,12 +118,24 @@ describe("nodes schema", () => {
     // framing the schema never had and no longer could, since there is one
     // taxpayer per database. What the plain `location_id -> locations.id` FK
     // actually guarantees is referential existence, so that is what is asserted:
-    // a location that does not exist is rejected with 23503
-    // (foreign_key_violation).
+    // a location that does not exist is rejected.
+    //
+    // WHAT THIS CASE LOST, and what replaces it. A foreign-key refusal on this engine names no
+    // table and no column — measured on this case, the whole message is
+    // `FOREIGN KEY constraint failed` (errcode 787) — so the class is all the refusal itself can
+    // say, and nothing in it distinguishes `location_id` from any other key on the row. The
+    // positive control below is what closes that gap: the same insert with a real location is
+    // accepted, and `location_id` is the only value the two calls set differently, so the refusal
+    // cannot be coming from anything else this case supplies.
+    const accepted = await db
+      .insert(nodes)
+      .values({ locationId: LOCATION_A, name: "Orphan" })
+      .returning({ id: nodes.id });
+    expect(accepted).toHaveLength(1);
     const error = await captureError(() =>
       db.insert(nodes).values({ locationId: LOCATION_MISSING, name: "Orphan" }),
     );
-    expect(pgErrorCode(error)).toBe("23503");
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   describe("tenants fiscal identity is country + tax_id", () => {

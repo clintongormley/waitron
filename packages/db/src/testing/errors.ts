@@ -60,8 +60,15 @@ export function pgErrorMessage(error: unknown): string {
  * Throws if it SUCCEEDS. `try { await fn() } catch {}` in a test body is the
  * classic vacuous rejection assertion: it passes whether the operation was
  * blocked or sailed through.
+ *
+ * `fn` may return a value rather than a promise, because this engine is
+ * synchronous: `db.execute` hands back a `RawResult`, so `() => db.execute(...)`
+ * is not thenable and a refusal arrives as a synchronous throw inside the
+ * `try` below. `await` on a non-promise is the identity, so both shapes are
+ * captured by the same body. Same widening, and for the same reason, as
+ * `withTransaction`'s in `../tenancy.ts`.
  */
-export async function captureError(fn: () => Promise<unknown>): Promise<unknown> {
+export async function captureError(fn: () => Promise<unknown> | unknown): Promise<unknown> {
   try {
     await fn();
   } catch (error) {

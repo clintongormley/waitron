@@ -3,6 +3,9 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { refusalOn } from "../constraint-target.js";
+import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -79,17 +82,27 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a duplicate code on the same node", async () => {
-    // Not `.rejects.toThrow(/pattern/)`: drizzle-orm@0.45.2 wraps every failed
-    // query in a DrizzleQueryError whose own `.message` is
-    // `Failed query: <sql>` — the real Postgres text lives on `.cause`
-    // (see tenancy.test.ts's `rejectsWithCauseMatching` for the same finding).
-    // `toThrow` only reads `.message`, so it would pass against any rejection
-    // at all, not specifically this one.
+    // Not `.rejects.toThrow(/pattern/)`: drizzle wraps every failed query in a DrizzleQueryError
+    // whose own `.message` is `Failed query: <sql>`, and the driver's error — its result code and
+    // its text alike — is on `.cause`. `toThrow` only reads `.message`, so it would pass against
+    // any rejection at all. `refusalOn` walks the cause chain and reads both off ONE layer.
+    //
+    // It names the key rather than matching words: the refusal arrives as
+    // `UNIQUE constraint failed: invoice_series.node_id, invoice_series.code` (measured on this
+    // case), which is `invoice_series_node_code_key` — the (node_id, code) unique index in
+    // 0000_baseline.sql — and no longer carries the constraint's NAME. Column ORDER is part of the
+    // identity `refusalOn` checks. The control in the other direction is the case below: the same
+    // code on a different node is accepted, so the index keys on the pair, not on the code alone.
     await db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" });
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "invoice_series",
+        columns: ["node_id", "code"],
+      }),
+    ).toBe(true);
   });
 
   it("permits the same code on two different nodes", async () => {
@@ -104,8 +117,9 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a purpose outside the permitted set", async () => {
-    // Same wrapper issue as the duplicate-code test above: match the
-    // unwrapped Postgres message, not the DrizzleQueryError's own.
+    // Same wrapper issue as the duplicate-code test above: read the driver's message off the
+    // cause, not the DrizzleQueryError's own. A CHECK refusal names the constraint and nothing
+    // else — no table, no column (`../constraint-target.ts`) — so the name IS the assertion here.
     const error = await captureError(() =>
       db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
@@ -165,11 +179,17 @@ describe("invoice_series schema", () => {
       sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, ${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
-    // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces.
+    // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces. The refusal
+    // names the column it is about — `NOT NULL constraint failed: invoice_series.node_id`,
+    // measured on this case — so the assertion pins the class AND that column, where the old
+    // pattern pinned the column through PostgreSQL's wording. The class is what separates it from
+    // a unique index on the same column, which would name exactly the same table and column.
     const error = await captureError(() =>
       db.execute(sql`insert into invoice_series (id, code) values (${randomUUID()}, 'FM')`),
     );
-    expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"|not-null/i);
+    expect(
+      refusalOn(error, NOT_NULL_VIOLATION, { table: "invoice_series", columns: ["node_id"] }),
+    ).toBe(true);
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
@@ -177,12 +197,17 @@ describe("invoice_series schema", () => {
     // no `nodes` row is refused. `id` is supplied for the reason the case above records — without
     // it this insert was refused `NOT NULL constraint failed: invoice_series.id` and never reached
     // the foreign key.
+    //
+    // Class only, and nothing narrower exists to assert: this engine's foreign-key refusal is the
+    // whole message `FOREIGN KEY constraint failed` and names neither table nor column (measured
+    // on this case). The control in the other direction is the case above, which inserts a series
+    // with a real node id and reads it back.
     const error = await captureError(() =>
       db.execute(
         sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, '99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
-    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("has no unique constraint on node_id alone", async () => {

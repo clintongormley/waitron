@@ -16,10 +16,13 @@
 // still checked, and what still fails if it breaks: that the column EXISTS, that it is nullable or
 // NOT NULL (`pragma_table_info`'s `notnull`, 1 or 0, replacing `is_nullable`'s 'NO'/'YES'), and —
 // in the `descriptions` case — that a column is ABSENT.
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { CHECK_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { catalogues } from "./catalogue.js";
@@ -45,6 +48,13 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
  */
 type ColumnRow = { name: string; notnull: number };
 
+/**
+ * Fixture timestamp for the raw inserts below, which reach no `$defaultFn` generator. Written in
+ * the shape a `ts` column actually stores — `toISOString()`'s output (`./columns.ts`) — so the
+ * fixture is a row the write path could have produced.
+ */
+const AT = "2026-07-20T19:20:30.000Z";
+
 /** `pragma_table_info` for `table`, the replacement for a scan of `information_schema.columns`. */
 async function columnsOf(db: Database, table: string): Promise<ColumnRow[]> {
   return rows<ColumnRow>(db, sql`select name, "notnull" from pragma_table_info(${table})`);
@@ -60,30 +70,39 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
     // Seed the real FK parent FIRST so the two INSERTs below reach the CHECK constraints instead of
     // tripping products' catalogue_id foreign key. The previous version of this test inserted
-    // gen_random_uuid() for the key, so it threw 23503 (FK violation) whether or not the CHECKs
+    // gen_random_uuid() for the key, so it threw an FK violation whether or not the CHECKs
     // existed — and it never exercised an invalid vat_class at all. (F1, whole-branch review.)
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })
       .returning({ id: catalogues.id });
 
+    // `id`, `created_at` and `updated_at` are named explicitly for the same reason the parent row
+    // is seeded first: a statement that never reaches the CHECK cannot test it. All three are
+    // `$defaultFn` JavaScript generators rather than SQL DEFAULTs (`./catalogue.ts`), which a raw
+    // insert never reaches — measured on this case, omitting them refuses with
+    // `NOT NULL constraint failed: products.id`, and then `products.created_at`, with neither CHECK
+    // consulted. Raw SQL and not drizzle, because the values under test are ones the column's
+    // TypeScript type rejects.
+    const insertProduct = (pricingUnit: string, vatClass: string): ReturnType<typeof sql> =>
+      sql`insert into products (id, catalogue_id, name, pricing_unit, unit_price, vat_class, created_at, updated_at) values (${randomUUID()}, ${catalogue.id}, 'Fixture', ${pricingUnit}, 100, ${vatClass}, ${AT}, ${AT})`;
+
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
-    const pricingError = await captureError(() =>
-      db.execute(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'bogus', 100, 'general')`,
-      ),
-    );
-    expect(pgErrorCode(pricingError)).toBe("23514");
-    expect(pgErrorMessage(pricingError)).toMatch(/products_pricing_unit_ck/);
+    const pricingError = await captureError(() => db.execute(insertProduct("bogus", "general")));
+    expect(isPgError(pricingError, CHECK_VIOLATION)).toBe(true);
+    // A CHECK refusal reports the constraint's NAME and no key (`../constraint-target.ts`), so the
+    // name is what says WHICH of the two fired — the half of this case the class alone cannot
+    // carry. Measured here: errcode 275, `CHECK constraint failed: products_pricing_unit_ck`.
+    expect(pgErrorMessage(pricingError)).toBe("CHECK constraint failed: products_pricing_unit_ck");
 
     // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
-    const vatError = await captureError(() =>
-      db.execute(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'each', 100, 'bogus')`,
-      ),
-    );
-    expect(pgErrorCode(vatError)).toBe("23514");
-    expect(pgErrorMessage(vatError)).toMatch(/products_vat_class_ck/);
+    const vatError = await captureError(() => db.execute(insertProduct("each", "bogus")));
+    expect(isPgError(vatError, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");
+
+    // The control in the other direction: the same statement with both values valid is accepted, so
+    // the two refusals above are the CHECKs biting and not the insert being malformed.
+    await db.execute(insertProduct("each", "general"));
   });
 
   it("has a snapshot category column on both line tables and catalogue_id on locations", async () => {
