@@ -44,8 +44,9 @@ export interface ProvisionRequest {
 }
 
 export interface ProvisionDeps {
-  /** The OWNER connection to the target database (`config.adminDatabaseUrl`) — the admin that
-   * owns the tables, which `applyVenue` needs and which `stampDeployment` writes the singleton with. */
+  /** The handle on the venue store the box opened (`config.venueDir`), which `applyVenue` needs and
+   * which `stampDeployment` writes the singleton with. It was a second connection under an owner
+   * role until the storage switch; there is one handle and no role now. */
   ownerDb: Database;
   /** The desired module set — the fiscal slot ALREADY resolved to exactly one member by the caller's
    * `venueModuleConfig` (the territory is authoritative, §4). Three duties: a non-fiscal `provision-only`
@@ -54,9 +55,9 @@ export interface ProvisionDeps {
    * disabled module's seed cannot run, and it is what `provisionVenue` persists to `<stateDir>/modules.json`
    * so the trading boot reads a set whose fiscal slot resolves. */
   readonly moduleConfig: ModuleConfig;
-  /** The name of the target database `ownerDb` writes — echoed by `provisioning.foreign_tenant`
-   * when a foreign tenant is refused (operator-typed configuration, never a secret). Boot derives
-   * it from `config.migrationsDatabaseUrl`. */
+  /** The name boot gives the database `ownerDb` writes — echoed by `provisioning.foreign_tenant`
+   * when a foreign tenant is refused (operator-typed configuration, never a secret). It was parsed
+   * out of a connection string until the storage switch; boot derives it from the venue directory now. */
   readonly database: string;
   /** The box's state directory. `provisionVenue` writes the resolved `moduleConfig` to
    * `<stateDir>/modules.json` after `applyVenue` commits, so the next (trading) boot's fiscal slot

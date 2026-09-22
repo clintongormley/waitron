@@ -49,7 +49,7 @@ export interface PrintConfig {
   locationId: string;
 }
 
-/** How a printer is reached — the `print_transport` pgEnum; the union lives in `@waitron/print-agent`. */
+/** How a printer is reached — the `print_transport` column; the union lives in `@waitron/print-agent`. */
 export type { PrintTransport } from "@waitron/print-agent";
 
 /**

@@ -95,7 +95,8 @@ const PERMISSION_FOR: Record<JoinRequestKind, Permission> = {
 const MISSING_ROW_PERMISSION: Permission = "device.manage";
 
 /** The screen for the `?kind=` query the pending list is asked in terms of. A kind is a value domain
- * the route is the authority for (the column is a pgEnum, so an unknown value would `22P02` a 500),
+ * the route is the authority for (the column admits a closed set, so an unknown value is refused by
+ * its check constraint and reaches the caller as an opaque 500),
  * and it is required rather than defaulted: "which surface's queue am I looking at" is never an
  * assumption to make on the admin's behalf. */
 function requireKind(value: string | undefined): JoinRequestKind {

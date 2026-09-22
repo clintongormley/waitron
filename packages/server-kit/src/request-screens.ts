@@ -88,7 +88,7 @@ export function requireNullableString(v: unknown, field: string): string | null 
  * Screen a body field as one of a fixed set of enum string members, narrowing it to the caller's
  * union. Any other value (absent, wrong-typed, or a valid-looking-but-unknown string) is refused as
  * `management.request_invalid` naming the field, never a downstream 22P02 enum 500. The `allowed`
- * members are passed IN by the caller (a drizzle pgEnum's `enumValues`) so this screen stays free of
+ * members are passed IN by the caller (a checked text column's `enumValues`) so this screen stays free of
  * any domain-package dependency while both schedule surfaces validate through ONE implementation; `T`
  * is inferred from `allowed`, so the return type narrows to that enum union at the call site.
  */

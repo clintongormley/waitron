@@ -139,7 +139,7 @@ const PURCHASE_VAT_KIND_NAMES: NameTable = {
   capital: { en: "Capital goods", es: "Bien de inversión" },
 };
 
-// The three printer transports (@waitron/printing PrintTransport / the `print_transport` pgEnum), shown
+// The three printer transports (@waitron/printing PrintTransport / the `print_transport` column), shown
 // on the Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables
 // above. "USB" / "TCP" stay as-is in both columns (they are the wire/protocol names).
 const PRINT_TRANSPORT_NAMES: NameTable = {
@@ -149,7 +149,7 @@ const PRINT_TRANSPORT_NAMES: NameTable = {
   cloud_poll: { en: "Cloud poll", es: "Sondeo en la nube" },
 };
 
-// The four print-job statuses (@waitron/printing PrintJobStatus / the `print_job_status` pgEnum), shown
+// The four print-job statuses (@waitron/printing PrintJobStatus / the `print_job_status` column), shown
 // on the Impresoras screen's recent-jobs list. Raw string-keyed LOCAL copy, same bundle-decoupling
 // reason as the tables above.
 const PRINT_JOB_STATUS_NAMES: NameTable = {
@@ -159,7 +159,7 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
   failed: { en: "Failed", es: "Fallido" },
 };
 
-// The three receipt print modes (the `receipt_print_mode` pgEnum), the per-location toggle on the
+// The three receipt print modes (the `receipt_print_mode` column), the per-location toggle on the
 // Impresoras screen. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
 const PRINT_MODE_NAMES: NameTable = {
   auto: { en: "Automatic", es: "Automático" },
@@ -167,7 +167,7 @@ const PRINT_MODE_NAMES: NameTable = {
   never: { en: "Never", es: "Nunca" },
 };
 
-// The two cash-drawer-open policies (the `drawer_open_policy` pgEnum), the per-location toggle on the
+// The two cash-drawer-open policies (the `drawer_open_policy` column), the per-location toggle on the
 // Impresoras screen. `gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is
 // held by supervisor/manager/admin — (the SECURE default); `open` = any operator may. Raw string-keyed
 // LOCAL copy, same bundle-decoupling reason as above.

@@ -25,9 +25,11 @@ import { persons } from "@waitron/identity";
  * GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado` rendering, if ever
  * needed, belongs to packages/workforce-es.
  *
- * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` precedent: the
- * three values are settled, and one declaration yields both the TypeScript union and the DB
- * constraint.
+ * A closed vocabulary rather than free text, matching @waitron/identity's
+ * `personStatus`/`personRole` precedent: the three values are settled, and one declaration yields
+ * both the TypeScript union and the constraint. It was a `pgEnum` until the storage switch; on this
+ * engine `enumType` is a text column and the named `check()` beside it is what refuses a fourth
+ * value.
  */
 export const rosterVersionStatus = enumType(["draft", "published", "superseded"]);
 

@@ -16,7 +16,7 @@ import type { TillConfig } from "./till-config.js";
 // counter till's register is created here because nothing else in the flow knows to.
 
 /** The kind of device an enrolment produces — re-exported from `@waitron/layouts`, which owns the
- * type now that the `device_kind` pgEnum is gone (a device's kind is DERIVED from its profile's form
+ * type now that the `device_kind` vocabulary is gone (a device's kind is DERIVED from its profile's form
  * factor via {@link kindOfFormFactor}). Three kinds are wired end-to-end (join, accept, session,
  * firewall): a `kds_station` (an always-on kitchen screen, station-bound), a `handheld` (a roving,
  * station-less waiter phone that takes/fires tableside orders and settles sales at the table for cash

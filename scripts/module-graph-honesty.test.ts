@@ -45,17 +45,16 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   nobody and its FK edge dropped — silently, because a dropped edge looks exactly like an honest
  *   descriptor. `drizzle-kit`'s generated SQL uses backticks, so nothing in the tree does this
  *   today; a migration that starts to is outside this guard.
- * - THE TRIGGER DETECTOR HAS NO TREE ANCHOR. `grep -Ein 'create (constraint )?trigger'` over every
- *   `packages/<pkg>/drizzle/*.sql` matches nothing (2026-09-21): the SQLite regeneration replaced
- *   every hand-written custom migration with one generated baseline per set, and those custom
- *   migrations were where the append-only triggers lived. The plan puts append-only enforcement in
- *   runtime code instead (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step
- *   group 6), which this scan would not read either. So the detector's ONLY controls are the
- *   crafted-SQL unit tests below. It is kept because `CREATE TRIGGER … ON <table>` is live SQLite
- *   syntax (accepted by sqlite3 3.51, and the trigger fires) and every package still carries a
- *   `db:generate:custom` script, so a hand-written migration could install one tomorrow — but until
- *   one does, a dialect drift in the trigger regex alone would NOT be caught by the tree anchor
- *   below the way an FK drift is. The `CREATE CONSTRAINT TRIGGER` spelling it also accepts is
+ * - THE TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN, and this entry said it did not until 2026-09-23.
+ *   The claim was taken on 2026-09-21, when the SQLite regeneration had just replaced every
+ *   hand-written custom migration with a generated baseline; two hand-written sets have landed since.
+ *   `grep -Ein 'create (constraint )?trigger'` over every `packages/<pkg>/drizzle/*.sql` now matches
+ *   `packages/db/drizzle/0001_behavioural_triggers.sql` and
+ *   `packages/media/drizzle/0001_image_references.sql`, and media's triggers sit ON tables core and
+ *   catalogue create — real cross-set edges, which is why this guard passes only because media
+ *   DECLARES both in its `requires`. What the scan still cannot see is append-only enforcement,
+ *   which is runtime code (`packages/store/src/append-only.ts`). The `CREATE CONSTRAINT TRIGGER`
+ *   spelling it also accepts is
  *   PostgreSQL-only: sqlite3 3.51 answers `near "CONSTRAINT": syntax error`, so those two controls
  *   pin a spelling this engine cannot run.
  * - A SQLITE TRIGGER'S BODY IS NOT READ. On PostgreSQL a trigger reached another module through

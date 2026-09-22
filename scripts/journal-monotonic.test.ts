@@ -16,20 +16,20 @@ import { describe, expect, it } from "vitest";
  * (lines 653-655) and applies a migration only when
  * `!lastDbMigration || Number(lastDbMigration[2]) < migration.folderMillis` (line 660).
  * `SQLiteAsyncDialect.migrate` carries the same two statements at lines 690-692 and 696.
- * `pg-core/dialect.js:56-62` is the same shape, re-read the same day, and it is still the code that
- * RUNS: `packages/db/src/migrate.ts` dispatches to drizzle's node-postgres and pglite migrators. So
- * the SQLite citation describes the dialect these journals were generated for, and the Postgres one
- * describes the migrator reading them today.
+ * The SQLite dialect is the one that RUNS: `packages/db/src/migrate.ts` imports
+ * `drizzle-orm/better-sqlite3/migrator`, and the PostgreSQL migrators it used to dispatch to went
+ * with the storage switch. A `pg-core/dialect.js` citation stood here until 2026-09-23 and is gone
+ * with them.
  *
- * WHAT THIS GUARD CHECKS TODAY, AND WHAT IT DOES NOT. Every set in the manifest is a single
- * regenerated SQLite baseline — one journal entry each, and `packages/fiscal-none` has none at all. A
- * one-entry journal can never be out of order, so the per-set cases below hold BY CONSTRUCTION: they
+ * WHAT THIS GUARD CHECKS TODAY, AND WHAT IT DOES NOT. Nearly every set is a single regenerated
+ * SQLite baseline — `packages/db` and `packages/media` carry two entries each, `packages/fiscal-none`
+ * none at all, and every other set exactly one (counted 2026-09-23 over the journals on disk). A
+ * one-entry journal can never be out of order, so those sets' cases below hold BY CONSTRUCTION: they
  * are not evidence that any `when` value in the tree is right, and a reader must not take them as
  * such. What is really exercised today is `outOfOrder` itself, pinned by the synthetic negative
- * control, and the anti-vacuity anchor: every set's journal is on disk, and they yield entries
- * BETWEEN them — a total rather than one per set, which is the strongest honest form of that floor
- * while every set carries exactly one entry. The tree-scanning half becomes a real check again the
- * moment any set gains a SECOND migration — the first `drizzle-kit generate` after this baseline —
+ * control, the two sets that do carry a second entry, and the anti-vacuity anchor: every set's
+ * journal is on disk, and they yield more entries BETWEEN them than sets. The tree-scanning half
+ * becomes a real check for a given set the moment it gains a SECOND migration —
  * and it is in place for that push rather than written after it.
  *
  * Root project, same reasoning as scripts/enum-add-value-safety.test.ts: it reads the whole tree, so

@@ -11,7 +11,7 @@ import { isUnset } from "./env-value.js";
 
 /**
  * The per-venue pay-timing / service mode (design §3), the union of the `order_flow` enum's values —
- * derived from `@waitron/db`'s `orderFlow` pgEnum so the two can never drift (add a mode to the enum
+ * derived from `@waitron/db`'s `orderFlow` vocabulary so the two can never drift (add a mode to it
  * and this widens with it). `prepay` pays + issues at ORDER (open → settled, no placed state);
  * `invoice_first` issues a deferred invoice at PLACE and settles it at COLLECT (open → placed →
  * settled); `ticket_then_pay` files no fiscal doc at PLACE and files + settles at COLLECT

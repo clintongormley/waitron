@@ -296,7 +296,7 @@ export async function setProductStation(
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
  *  ALSO offers a whole-ticket "bump all". The per-line ticket-item state is always the source of truth;
- *  this flag governs only the display convenience. Mirrors `locations.bump_mode`'s pgEnum
+ *  this flag governs only the display convenience. Mirrors `locations.bump_mode`'s vocabulary
  *  (`packages/db/src/schema/tenants.ts`), spelled as a literal union here because `@waitron/db`'s
  *  enumerated exports do NOT publish the `bumpMode` enum object (CLAUDE.md §3). */
 export type BumpMode = "line" | "ticket";
@@ -320,7 +320,7 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
 /** The KDS-2/3 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
  *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
  *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
- *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` pgEnum (which backs
+ *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` vocabulary (which backs
  *  `locations.fire_control`, `packages/db/src/schema/tenants.ts`) so the two can never drift — add a mode
  *  to the enum and this widens with it, exactly as the sibling {@link OrderFlow}/`TicketState` server types
  *  derive from `orderFlow`/`ticketState`. The RUNTIME `fire-control` route validator derives its valid set

@@ -914,13 +914,13 @@ export interface PurchaseInvoicePatch {
 // every shape above does). These are the CONTRACT the Impresoras screen builds on; if the server
 // shapes change these follow, and a mismatch surfaces as a runtime shape error a view test catches.
 
-/** How a printer is reached — the `print_transport` pgEnum (schema/printers.ts). `usb`/`bluetooth`
+/** How a printer is reached — the `print_transport` column (schema/printers.ts). `usb`/`bluetooth`
  * printers are keyed by a stable `localKey` (USB serial / Bluetooth MAC); `network_tcp` by host+port;
  * `cloud_poll` self-polls. No transport stores a serving agent — which box serves a printer is derived
  * at run time from the devices it can currently see (central printer provisioning §3). */
 export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 
-/** A printer's kitchen-ticket grouping — the `print_ticket_scope` pgEnum (Slice B). */
+/** A printer's kitchen-ticket grouping — the `print_ticket_scope` column (Slice B). */
 export type PrintTicketScope = "station" | "order";
 
 /** A printer's layout settings — mirrors `@waitron/printing`'s `PaperWidth`, `Resolution`, `CharacterSet`. */
@@ -928,7 +928,7 @@ export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
 export type PrintCharacterSet = CharacterSet;
 
-/** One outbox job's lifecycle state — the `print_job_status` pgEnum (schema/print-jobs.ts). */
+/** One outbox job's lifecycle state — the `print_job_status` column (schema/print-jobs.ts). */
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
 
 /** One `GET /management-api/print-agents` row — the management view of an enrolled print agent, newest
@@ -1094,12 +1094,12 @@ export interface StationPrinter {
 // the Impresoras screen's receipt-printer picker + print-mode toggle + drawer-policy toggle build on; a
 // mismatch surfaces as a runtime shape error a view test catches.
 
-/** The venue's per-location receipt print mode — the `receipt_print_mode` pgEnum
+/** The venue's per-location receipt print mode — the `receipt_print_mode` column
  * (`auto` = auto-print on sale; `on_request` = only reprint; `never`). Mirrors the server enum; the
  * server re-validates against the real enum on the PATCH. */
 export type ReceiptPrintMode = "auto" | "on_request" | "never";
 
-/** The venue's per-location cash-drawer-open policy — the `drawer_open_policy` pgEnum
+/** The venue's per-location cash-drawer-open policy — the `drawer_open_policy` column
  * (`gated` = a supervisor must authorize an out-of-sale drawer open — `cash.drawer` is held by
  * supervisor/manager/admin — the SECURE default; `open` = any operator may). Mirrors the server enum;
  * the server re-validates against the real enum on the PATCH. */

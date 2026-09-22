@@ -71,7 +71,8 @@ export const incidents = table(
     uniqueIndex("incidents_open_dedup")
       .on(t.tillId, t.code, sql`case when ${t.saleId} is null then '' else ${t.saleId} end`)
       .where(sql`${t.acknowledgedAt} is null`),
-    // A CHECK rather than a pgEnum, matching invoice_series.purpose's own precedent: `severity`
+    // A CHECK written here rather than a declared vocabulary, matching invoice_series.purpose's
+    // own precedent: `severity`
     // is a small, closed vocabulary and a CHECK is a one-line migration to widen, where an enum
     // needs ALTER TYPE.
     check("incidents_severity_ck", sql`${t.severity} in ('warning', 'error')`),

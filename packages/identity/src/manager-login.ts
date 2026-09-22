@@ -32,7 +32,7 @@ const PERSON_LOGIN_COLUMNS = {
   totpSecret: persons.totpSecret,
 };
 // The base SELECT both entry points run (each appends its own WHERE). Extracted so `PersonLoginRow` is
-// INFERRED from the query rather than hand-declared: that keeps `status` as its pgEnum literal union
+// INFERRED from the query rather than hand-declared: that keeps `status` as the column's literal union
 // (`"pending" | "active" | "suspended"`), so `completeManagerLogin`'s active-status gate is checked
 // against the real values — a typo would not compile — rather than a widened `string`. This is the
 // infer-the-row-shape-from-the-query idiom the codebase already uses for such column sets.

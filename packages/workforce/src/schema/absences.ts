@@ -9,9 +9,10 @@ import { persons } from "@waitron/identity";
  * rendering of these labels (`holiday`→`vacaciones`, `sick_leave`→`baja`, `leave`→`permiso`) belongs to
  * packages/workforce-es, over this English enum; it is a later slice's job and is not built here.
  *
- * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` and
- * roster_versions' `rosterVersionStatus` precedent: the four kinds are settled, and one declaration
- * yields both the TypeScript union and the DB constraint.
+ * A closed vocabulary rather than free text, matching @waitron/identity's
+ * `personStatus`/`personRole` and roster_versions' `rosterVersionStatus` precedent: the four kinds
+ * are settled, and one declaration yields both the TypeScript union and the constraint — a text
+ * column and a named `check()` since the storage switch.
  */
 export const absenceKind = enumType(["holiday", "sick_leave", "leave", "unpaid"]);
 
