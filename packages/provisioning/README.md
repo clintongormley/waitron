@@ -32,7 +32,7 @@ and neither surviving command migrates anything.
 | Command   | What it needs                                 | How often           |
 | --------- | --------------------------------------------- | ------------------- |
 | `keyring` | nothing at all — no venue directory, no files | once per deployment |
-| `venue`   | a migrated, stamped venue directory           | once per venue      |
+| `venue`   | a migrated venue directory                    | once per venue      |
 
 `venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
@@ -87,15 +87,35 @@ connection string, no cluster, no role and no grant: the directory IS the databa
 path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
 box's own setting is what stands its venue up), then from a prompt.
 
-The directory must already be **migrated and stamped**. Neither is this command's job: boot migrates
-(`apps/server/src/boot.ts` → `applyMigrations`) and whichever path stood the box up does the
-stamping (`provisionVenue`, `apps/server/src/provision.ts`). A venue against an unstamped directory
-is refused (`provisioning.database_unstamped`), because one database per environment is a fiscal
-invariant a stamp cannot take back. That refusal is also what a mistyped path meets: opening a
-virgin directory SUCCEEDS — it is created — so the stamp read, not the open, is where a wrong path
-is caught. Run against the built bundle on 2026-09-22: a virgin `/tmp/f1-virgin` gave
-`provisioning.database_unstamped {"database":"/tmp/f1-virgin"}`, and a migrated, stamped directory
-minted the venue and its SIF.
+The directory must already be **migrated** — boot does that (`apps/server/src/boot.ts` →
+`applyMigrations`), and nothing here does. A directory nothing has migrated is refused
+(`provisioning.database_unmigrated`), which is also what a mistyped path meets: opening a virgin
+directory SUCCEEDS — it is created — so a read, not the open, is where a wrong path is caught.
+
+**It STAMPS a migrated directory that carries no environment stamp**, from `WAITRON_ENV`: unset
+means `preproduction`, `dev` means `preproduction`, and `production` has to be typed out in full
+(CLAUDE.md §5 — a production invoice number is never reused, so the default that a mistake cannot
+take back has to be the harmless one). Anything else is refused
+(`provisioning.invalid_environment`), never rounded to the nearer of the two. This is what lets an
+automated deployment stand a venue up with no browser and no setup wizard, which was the only path
+that stamped before.
+
+The stamp goes through `stampDeployment` (`@waitron/db`) — the same primitive the setup wizard's
+handler calls in the same position (`provisionVenue`, `apps/server/src/provision.ts`) — so a
+directory already stamped for the **other** environment is refused with `deployment.already_stamped`
+and nothing is minted, and a directory already stamped for THIS one passes through untouched. It is
+written after the confirmation prompt, never before: a stamp is permanent, so an operator who
+declines leaves the directory exactly as it was found.
+
+Run against the built bundle on 2026-09-22, each case against its own directory: a virgin one gave
+`provisioning.database_unmigrated`; a migrated, unstamped one printed
+`stamp this venue directory preproduction — permanent, from WAITRON_ENV`, minted the venue and its
+SIF, and read back `"preproduction"`; the same with `WAITRON_ENV=production` read back
+`"production"`; one stamped `production` under an unset `WAITRON_ENV` gave
+`deployment.already_stamped {"stamped":"production","requested":"preproduction"}`, left the stamp at
+`production` and left `tenants` empty; `WAITRON_ENV=prod` gave
+`provisioning.invalid_environment {"variable":"WAITRON_ENV","value":"prod"}` without opening
+anything; and declining the prompt left the stamp `null`.
 
 The admin person is seeded with two login secrets, both **required** and both read from an
 environment variable or an echo-off prompt, **never** from `argv`: a till **PIN** (`WAITRON_ADMIN_PIN`, for the counter POS) and a dashboard **password**
@@ -180,17 +200,19 @@ appear nowhere — not in plaintext, not as a hash.
 
 Every refusal is a structured code and its params on stderr — never a raw driver message.
 
-| Code                                 | What happened                                                                                                   | What to do                                                                                                                                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt. Refused rather than defaulted — see "Secrets" above for where an empty one would have written.                                                        |
-| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                            | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                               |
-| `provisioning.database_unstamped`    | The venue directory carries no environment stamp — including one with no schema at all                          | Boot the box against that directory first: boot migrates it, and the path that stands the box up stamps it. This is also what a mistyped path gives, because a virgin directory opens fine.                  |
-| `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle. |
-| `provisioning.foreign_tenant`        | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                   |
-| `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                      |
-| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                       |
-| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                             |
-| `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                                                         | Give them different codes; they are two separate series.                                                                                                                                                     |
+| Code                                 | What happened                                                                                                   | What to do                                                                                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt. Refused rather than defaulted — see "Secrets" above for where an empty one would have written.                                                         |
+| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                            | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                                |
+| `provisioning.database_unmigrated`   | Nothing has migrated the venue directory — its venue file holds no `deployment` table                           | Boot the box against that directory first: boot migrates it. This is also what a mistyped path gives, because a virgin directory opens fine.                                                                  |
+| `provisioning.invalid_environment`   | `WAITRON_ENV` is not `production`, `preproduction` or `dev`                                                     | Type one of those, or leave it unset for `preproduction`. `Production` and a space-padded ` production` are refused, never rounded.                                                                           |
+| `deployment.already_stamped`         | The venue directory is stamped for the OTHER environment (`@waitron/db`'s code, not this package's)             | Stop. One database per environment is a fiscal invariant; a pre-production database that took production numbering leaves a permanent hole in the series. Point at the right directory, or fix `WAITRON_ENV`. |
+| `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle.  |
+| `provisioning.foreign_tenant`        | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                    |
+| `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                       |
+| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                        |
+| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                              |
+| `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                                                         | Give them different codes; they are two separate series.                                                                                                                                                      |
 
 Waitron is not in production (CLAUDE.md §3, "no backwards-compatibility or data-migration code until
 Waitron is in production"), which is the carve-out under which a code has twice been DELETED rather
@@ -200,7 +222,11 @@ into the fiscal module as `sif.id_sistema_invalid`, and the instance-path deleti
 `membership_grant_failed` and `grant_ineffective` along with the only code that threw them. The
 venue command's own repointing dropped two more the same way — `provisioning.admin_uri_missing` and
 `admin_uri_not_a_url`, which described a connection string this tool no longer takes, replaced by
-`provisioning.venue_dir_missing`. The never-rename rule stands for the day a venue is live.
+`provisioning.venue_dir_missing`. Taking over the stamping dropped a fourth,
+`provisioning.database_unstamped`: an unstamped directory is what this command now STAMPS, so
+nothing was left to refuse under that name, and the case it really caught — a directory nothing had
+migrated — is `provisioning.database_unmigrated`, which says so. The never-rename rule stands for
+the day a venue is live.
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a database's own words one level down
@@ -219,8 +245,9 @@ that DO carry one were measured against the real opener and are in the table abo
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across, so pre-production sales would leave a permanent hole
-  in the production series. `venue` reads the venue directory's stamp and refuses an unstamped one
-  rather than stamping it itself.
+  in the production series. `venue` stamps a directory that carries no stamp, from `WAITRON_ENV`,
+  and refuses one stamped for the other environment — the refusal is `stampDeployment`'s own, not a
+  second copy of the rule written here.
 - **One taxpayer per database.** `venue` reads the stored `(country, tax_id)` before it applies and
   refuses a second, different one (`provisioning.foreign_tenant`), with a narrower refusal inside
   the transaction for a taxpayer committed between that read and the write.

@@ -9,6 +9,7 @@ import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import type { DeploymentEnvironment, VenueDatabase } from "@waitron/db";
 import { verifyPassword, verifyPin } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
 import type { VenueAction } from "./venue-plan.js";
@@ -110,6 +111,8 @@ interface Harness {
   applyVenue: ReturnType<typeof vi.fn>;
   writeModuleConfig: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
+  readDeploymentTable: ReturnType<typeof vi.fn>;
+  stampEnvironment: ReturnType<typeof vi.fn>;
   readTenants: ReturnType<typeof vi.fn>;
   openVenue: ReturnType<typeof vi.fn>;
   closes: () => number;
@@ -124,6 +127,8 @@ function harness(
     writeModuleConfig?: CliDeps["writeModuleConfig"];
     modules?: readonly WaitronModule[];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
+    readDeploymentTable?: () => Promise<boolean>;
+    stampEnvironment?: CliDeps["stampEnvironment"];
     readTenants?: () => Promise<{ country: string; taxId: string }[]>;
     openVenue?: (directory: string) => Promise<VenueDatabase>;
   } = {},
@@ -151,6 +156,14 @@ function harness(
   const readEnvironment = vi.fn(
     options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
   );
+  // Migrated by default: the `deployment` table is there, which is what tells an unstamped
+  // directory `venue` may stamp from a virgin one it must refuse.
+  const readDeploymentTable = vi.fn(options.readDeploymentTable ?? (async () => true));
+  // A RECORDER, not a second copy of `stampDeployment`'s rule. What this file checks is WHETHER
+  // `venue` stamps, WITH what, and in what order relative to the prompt and the apply. Whether the
+  // real primitive writes, no-ops or refuses is proven against a real migrated venue database in
+  // `cli.stamp.test.ts`, which injects `stampDeployment` itself.
+  const stampEnvironment = vi.fn(options.stampEnvironment ?? (async () => {}));
   // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
   // exercising the refusal supply an existing identity.
   const readTenants = vi.fn(options.readTenants ?? (async () => []));
@@ -164,6 +177,8 @@ function harness(
     applyVenue,
     writeModuleConfig,
     readEnvironment,
+    readDeploymentTable,
+    stampEnvironment,
     readTenants,
     openVenue,
     deps: {
@@ -186,6 +201,8 @@ function harness(
       modules: options.modules ?? MODULES,
       writeModuleConfig: writeModuleConfig as unknown as CliDeps["writeModuleConfig"],
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
+      readDeploymentTable: readDeploymentTable as unknown as CliDeps["readDeploymentTable"],
+      stampEnvironment: stampEnvironment as unknown as CliDeps["stampEnvironment"],
       readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
@@ -627,20 +644,102 @@ describe("runCli venue", () => {
     expect(h.openVenue).not.toHaveBeenCalled();
   });
 
-  it("refuses an unstamped database before applying", async () => {
+  it("stamps a MIGRATED directory that carries no stamp, then applies", async () => {
+    // The gap this closes: an automated deployment has no setup wizard, and the wizard's handler was
+    // the only path that stamped. `WAITRON_ENV` is unset here, so the derivation's one irreversible
+    // default decides — preproduction (CLAUDE.md §5).
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => null });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.stampEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("preproduction");
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+    // The plan the operator confirms names the stamp, because a stamp cannot be taken back.
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
+    expect(h.lines.join("\n")).toContain(
+      "stamp this venue directory preproduction — permanent, from WAITRON_ENV",
+    );
+  });
+
+  it("stamps production when WAITRON_ENV is production", async () => {
+    const h = harness({
+      env: { ...VENUE_ENV, WAITRON_ENV: "production" },
+      readEnvironment: async () => null,
+    });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("production");
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (production):`);
+  });
+
+  it("stamps AFTER the operator confirms, never before", async () => {
+    // Declining must leave the directory exactly as it was found, and a stamp is permanent. No
+    // `--yes`, and the prompt is answered `n`.
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => null, answers: ["n"] });
+    expect(await runCli(VENUE_ARGS, h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain("Nothing was applied.");
+    expect(h.stampEnvironment).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("hands the stamp the value WAITRON_ENV resolved to even when the directory is stamped", async () => {
+    // The stamp call is unconditional, exactly as the wizard's handler makes it: the primitive
+    // itself decides between no-op and refusal, so this file never compares two environments.
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => "production" });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("preproduction");
+    // The header shows what is STAMPED, not what was requested — it must not announce a value the
+    // stamp is about to refuse.
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (production):`);
+    expect(h.lines.join("\n")).not.toContain("stamp this venue directory");
+    // A stamp is itself proof the table is there, so the probe is skipped.
+    expect(h.readDeploymentTable).not.toHaveBeenCalled();
+  });
+
+  it("propagates the stamp's own refusal, applying nothing", async () => {
+    const h = harness({
+      env: VENUE_ENV,
+      readEnvironment: async () => "production",
+      stampEnvironment: async () => {
+        throw new AppError("deployment.already_stamped", {
+          stamped: "production",
+          requested: "preproduction",
+        });
+      },
+    });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'deployment.already_stamped {"stamped":"production","requested":"preproduction"}',
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a venue directory nothing has migrated, before stamping", async () => {
+    // No stamp AND no `deployment` table. Opening a virgin directory SUCCEEDS — the store creates
+    // it — so this, not a failed open, is what a mistyped path meets.
     const h = harness({
       env: VENUE_ENV,
       readEnvironment: async () => null,
+      readDeploymentTable: async () => false,
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain(
-      `provisioning.database_unstamped {"database":"${VENUE_DIR}"}`,
+      `provisioning.database_unmigrated {"database":"${VENUE_DIR}"}`,
     );
-    // The stamp was read — that is how the emptiness was learnt — and nothing was applied.
-    expect(h.readEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.stampEnvironment).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a WAITRON_ENV that is neither environment, before opening the directory", async () => {
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_ENV: "prod" } });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'provisioning.invalid_environment {"variable":"WAITRON_ENV","value":"prod"}',
+    );
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {

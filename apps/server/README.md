@@ -188,22 +188,20 @@ already-migrated grants above already give `waitron_migrator`: `to_regclass` (ch
 covered by the blanket `grant select on all tables in schema public` — there is no separate grant to
 add for this table.
 
-**What actually writes the stamp.** `waitron-provision instance` does, as the last action of its
-plan: it calls the programmatic `stampDeployment` (`@waitron/db`).
-`packages/provisioning/src/instance-apply.pg.test.ts` asserts the stamp is present after a real run
-against a container, so this is an automated provisioning path that runs it against a real database.
-Nothing else writes it in an automated path — in particular `waitron-provision venue` **refuses** a
-database that carries no stamp (`provisioning.database_unstamped`) rather than stamping one itself,
-because stamping is `instance`'s job and one database per environment is a fiscal invariant. (The
-retired `apps/server/sql/bootstrap-tenant.sql` used to write the stamp too, via an
-`insert into deployment (id, environment) values (1, :'environment') on conflict (id) do nothing`; it
-was removed on 2026-08-04.)
+**What actually writes the stamp.** Two paths do, and both call the same programmatic
+`stampDeployment` (`@waitron/db`) rather than writing the row themselves. The browser setup wizard's
+provision handler does it (`provisionVenue`, `apps/server/src/provision.ts`), from the demo/live
+choice the operator made. `waitron-provision venue` does it for a directory that carries no stamp,
+from `WAITRON_ENV` — unset means `preproduction` and `production` has to be typed out in full — which
+is what lets an automated deployment stand a venue up with no browser. Neither can move a stamp that
+is already there: `stampDeployment` refuses a different value with `deployment.already_stamped`, and
+both let it propagate. (`waitron-provision instance`, which used to be the only stamping path, was
+deleted with the PostgreSQL deployment model. So was the retired
+`apps/server/sql/bootstrap-tenant.sql`, removed on 2026-08-04, which wrote the row by hand.)
 
-Concretely, a database is stamped if and only if someone ran `waitron-provision instance` (or called
-`stampDeployment` by hand). Every database that predates this feature, and every database provisioned
-without doing so — including any set up before this note was written — has never been stamped: it
-reads `deployment` as `null` and **boots normally, with this check inert**, exactly as if the check
-did not exist. Only a database stamped for the OTHER environment refuses.
+A database nobody has stamped reads `deployment` as `null` and **boots normally, with this check
+inert**, exactly as if the check did not exist. Only a database stamped for the OTHER environment
+refuses.
 
 ## Provisioning a venue
 
@@ -212,9 +210,10 @@ location, a till, a node, and a standard plus a rectificative invoice series —
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
-It runs **against a database `instance` has already migrated and stamped**. A venue cannot be filed
-against an unstamped database — it is refused with `provisioning.database_unstamped`, because one
-database per environment is a fiscal invariant and stamping is `instance`'s job. It connects to that
+It runs **against a directory something has already migrated**, and stamps that directory itself
+when it carries no stamp (see "What actually writes the stamp" above). A directory nothing has
+migrated is refused with `provisioning.database_unmigrated`, and one stamped for the other
+environment with `deployment.already_stamped` — one database per environment is a fiscal invariant. It connects to that
 target database as the **owner-admin** (the role that created the tables when it ran `instance`) over
 `WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
 role and no grant to widen: `applyVenue` inserts as the table owner in one transaction. A database

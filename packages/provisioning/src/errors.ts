@@ -95,22 +95,45 @@ declare module "@waitron/shared" {
      * header describes. `value` IS echoed, the same format-check family as
      * `provisioning.invalid_identifier` above: an operator's typo, never a secret. */
     "provisioning.invalid_country": { value: string };
-    /** A venue was requested against a venue directory with no environment stamp. `venue` reads the
-     * stamp with `readDeploymentEnvironment` (`packages/db`) BEFORE it applies anything; a `null`
-     * result means it was never stamped — and that includes a directory with no schema at all,
-     * because that reader asks `sqlite_master` first and answers `null` when the `deployment` table
-     * is absent. So this is also what a VIRGIN directory gives: opening one succeeds (it is
-     * created), which makes this, not a failed open, the refusal a mistyped path meets.
+    /** `WAITRON_ENV` holds something that is not `production`, `preproduction` or `dev`. It is the
+     * variable `venue` derives a venue directory's environment stamp from (`environment.ts`'s
+     * `resolveEnvironment`), and that stamp is permanent, so an approximation of the word is
+     * refused rather than rounded to the nearer of the two: `Production` and ` production` both land
+     * here. UNSET is not a refusal — it means `preproduction` (CLAUDE.md §5).
      *
-     * Refused here rather than stamped — stamping belongs to whichever path stood the box up
-     * (`provisionVenue`, `apps/server/src/provision.ts`), and one database per environment is a
-     * fiscal invariant a stamp cannot take back.
+     * Refused in the CLI before the venue directory is opened, so a bad variable costs no open and
+     * writes nothing.
+     *
+     * `provisioning.*` and not `server.*`: `server.*` is reserved for facts about the SERVER
+     * process, and this is a refusal of an input to standing a venue up — the activity the header
+     * describes. `apps/server`'s own `deploymentEnvironment` refuses the same values under
+     * `server.config_invalid`, which is right for the server and wrong here.
+     *
+     * `value` IS echoed, the same format-check family as `provisioning.invalid_country` above: it
+     * is the operator's own deployment configuration, a word rather than a secret, and a refusal
+     * that withheld it could not be acted on. */
+    "provisioning.invalid_environment": { variable: string; value: string };
+    /** A venue was requested against a venue directory nothing has migrated — its venue file holds
+     * no `deployment` table, which is the table `venue` would stamp and one of the first the core
+     * migration set creates.
+     *
+     * This is what a MISTYPED PATH meets, and it is why the check exists: opening a virgin
+     * directory SUCCEEDS — the store creates it — so the open is not where a wrong path is caught.
+     * Without it the run reaches a query against a table that does not exist yet — the taxpayer
+     * read first, the stamp's own insert behind it (`no such table: deployment`,
+     * `code: "ERR_SQLITE_ERROR"`, errcode 1, measured on Node v26.7.0 by calling `stampDeployment`
+     * against a virgin directory) — and the operator meets `unexpected failure (Error)` instead:
+     * measured, by deleting this block, rebuilding the bundle and running the same command against
+     * a virgin directory.
+     *
+     * An unstamped but MIGRATED directory is not this: `venue` stamps that one itself, from
+     * `WAITRON_ENV`, so that a scripted cloud deployment can stand a venue up with no browser.
      *
      * `provisioning.*`: a refusal of standing a venue up, the same activity the header describes.
      * `database` is the venue DIRECTORY — operator-typed configuration, never a secret. The param
      * keeps the name the whole family uses; `apps/server`'s boot made the same choice when the
      * directory became the database (`ownerDatabaseName = config.venueDir`). */
-    "provisioning.database_unstamped": { database: string };
+    "provisioning.database_unmigrated": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
      * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the keys it knows —
      * the taxpayer row's `id` and each series `(node_id, code)` — with `ON CONFLICT DO NOTHING`, so
@@ -242,7 +265,7 @@ declare module "@waitron/shared" {
      * `code: "ENOTDIR"` from the `mkdir`, and a directory whose `venue.db` is not a database gives
      * `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN directory is
      * neither — it is created and opened — so a mistyped path lands on
-     * `provisioning.database_unstamped` instead. `cli.ts`'s `withVenueState` carries the same
+     * `provisioning.database_unmigrated` instead. `cli.ts`'s `withVenueState` carries the same
      * receipt at the site that acts on it.
      *
      * Raised ONLY when the failure carries a string `code`. Anything else is a bug, not a fact

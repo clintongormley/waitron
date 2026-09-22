@@ -1,8 +1,10 @@
 import { parseArgs } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import {
+  deploymentTableExists,
   isUniqueViolation,
   readDeploymentEnvironment,
+  stampDeployment,
   type Database,
   type DeploymentEnvironment,
   type VenueDatabase,
@@ -15,6 +17,7 @@ import {
   normalizeAndValidateEmail,
 } from "@waitron/identity";
 import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
+import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
@@ -54,9 +57,20 @@ export interface CliDeps {
    * it to write `<WAITRON_STATE_DIR>/modules.json` when that env var is set): absent, `venue` still
    * selects the fiscal module for the plan/apply but writes no file. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
-  /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
-   * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
+  /** Reads a target database's deployment stamp. Injected so the stamping paths are reachable
+   * without a live directory; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
+  /** Whether the target's `deployment` table exists at all — what tells a MIGRATED directory
+   * carrying no stamp (which `venue` stamps) from one nothing has migrated (which it refuses),
+   * since `readEnvironment` answers `null` for both. Injected for the same reason. */
+  readDeploymentTable: typeof deploymentTableExists;
+  /** Writes the target's deployment stamp. The SAME primitive the browser setup wizard's handler
+   * calls in the same position (`provisionVenue`, `apps/server/src/provision.ts`), so the two
+   * stamping paths agree by construction rather than by two people typing the same rule: it is
+   * idempotent for the value already there, refuses a DIFFERENT one with
+   * `deployment.already_stamped`, and writes only when there is none. Injected for the same reason
+   * as the reads. */
+  stampEnvironment: typeof stampDeployment;
   /** Reads the fiscal identity of every tenant already in the target database. Injected like
    * `readEnvironment` so the foreign-tenant refusal is reachable without a container; the real one
    * (`readTenantIdentities`, `./tenant-guard.js`) needs the target connection. */
@@ -102,6 +116,11 @@ const USAGE = [
   "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
   "asked for. There is no connection string and no database name: one directory is the",
   "database.",
+  "",
+  "A directory that carries no environment stamp is STAMPED from WAITRON_ENV — unset",
+  "means preproduction, and production has to be typed out in full. A directory already",
+  "stamped for the OTHER environment is refused, never re-stamped. Nothing here migrates:",
+  "a directory nothing has migrated is refused too.",
   "",
   "The admin PIN and dashboard password (venue) are NOT options either, for the same reason: a",
   "login secret must not reach argv, so each is read from WAITRON_ADMIN_PIN /",
@@ -361,23 +380,33 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
     // codes. Kept BEFORE the venue directory is opened on purpose — see this function's header.
     const actions = planVenue(request, modules);
+    // The environment this run would stamp an UNSTAMPED directory for, derived from `WAITRON_ENV`
+    // (`environment.ts`, CLAUDE.md §5: unset means preproduction, production is typed out in full).
+    // Pure, so it is resolved here with the rest of the validation: a misspelled variable costs no
+    // open and writes nothing.
+    const requested = resolveEnvironment(deps.env);
 
     return await withVenueState(venueDir, deps, async (target) => {
       let environment: DeploymentEnvironment | null;
+      let migrated: boolean;
       try {
-        // The STATE READ: a venue file that opened and then could not be read — a corrupt or
+        // The STATE READS: a venue file that opened and then could not be read — a corrupt or
         // truncated one. Classified via `asUnreadable`, like the open in `withVenueState`; the venue
         // APPLY below keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never
-        // dressed as a read one. Only this stamp read is wrapped, NOT `applyVenue`.
+        // dressed as a read one. Only these reads are wrapped, NOT `applyVenue` and NOT the stamp.
         environment = await deps.readEnvironment(target);
+        // Asked only when there is no stamp, because a stamp is itself proof the table is there.
+        migrated = environment !== null || (await deps.readDeploymentTable(target));
       } catch (error) {
         throw asUnreadable(error, venueDir);
       }
-      if (environment === null) {
-        // A venue cannot be filed against a database with no environment stamp — stamping is
-        // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
-        // stamped here.
-        throw new AppError("provisioning.database_unstamped", { database: venueDir });
+      if (!migrated) {
+        // No stamp AND no `deployment` table: nothing has migrated this directory. This is the
+        // commonest wrong-path mistake, because opening a virgin directory SUCCEEDS — the store
+        // creates it. Refused here rather than left to the first query that meets a table which is
+        // not there (the taxpayer read below, then the stamp's own insert): with this block deleted
+        // and the bundle rebuilt, that run printed `unexpected failure (Error)`.
+        throw new AppError("provisioning.database_unmigrated", { database: venueDir });
       }
 
       // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
@@ -398,9 +427,17 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       }
 
       // The DIRECTORY, so the operator confirming this sees the mistake the summary otherwise hides:
-      // a venue stood up somewhere the server never opens.
-      deps.io.stdout(`Plan for a venue in ${venueDir} (${environment}):`);
+      // a venue stood up somewhere the server never opens. The environment is the one ALREADY
+      // stamped when there is one, so the header never announces a value the stamp below is about
+      // to refuse.
+      deps.io.stdout(`Plan for a venue in ${venueDir} (${environment ?? requested}):`);
       deps.io.stdout("");
+      if (environment === null) {
+        // An unstamped directory is about to be stamped, and a stamp cannot be taken back (§5), so
+        // the irreversible write is in the list the operator is confirming rather than implied by
+        // the header.
+        deps.io.stdout(`  stamp this venue directory ${requested} — permanent, from WAITRON_ENV`);
+      }
       for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
       deps.io.stdout("");
 
@@ -411,6 +448,19 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
           return 1;
         }
       }
+
+      // The stamp, in the position the browser setup wizard's handler puts it — the last thing
+      // before the mint (`provisionVenue` step 3, `apps/server/src/provision.ts`) — and through the
+      // same primitive, so the two paths that stamp cannot disagree. It writes ONLY when there is
+      // no stamp; a directory already stamped for this environment passes through untouched, and one
+      // stamped for the OTHER environment is refused here with `deployment.already_stamped`, which
+      // propagates exactly as it does out of the wizard. That refusal is the fiscal invariant: a
+      // pre-production database promoted to production leaves a permanent hole in the invoice series
+      // (CLAUDE.md §5), and no re-stamp can take it back.
+      //
+      // AFTER the confirmation prompt, unlike the wizard, which has none. Stamping is permanent, so
+      // an operator who answers anything but `y` must leave the directory exactly as it was found.
+      await deps.stampEnvironment(target, requested);
 
       try {
         const result = await deps.applyVenue(actions, { db: target, modules });
@@ -449,8 +499,11 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
  * The OPEN is classified: a failure carrying an error `code` — the engine's or the filesystem's —
  * becomes `provisioning.state_unreadable` naming the directory (via `asUnreadable`), while a failure
  * with no code (a bug) is rethrown untouched.
- * The other classified read, the deployment-stamp read (`deps.readEnvironment`), is wrapped the same
- * way in `venue()`'s body, so open and state read carry the same contract.
+ * The other classified reads, the deployment-stamp read (`deps.readEnvironment`) and the
+ * `deployment`-table probe beside it (`deps.readDeploymentTable`), are wrapped the same way in
+ * `venue()`'s body, so open and state reads carry the same contract. The STAMP is not: a refused
+ * stamp is `deployment.already_stamped`, a verdict about environments rather than about whether the
+ * directory could be read.
  *
  * What is deliberately NOT classified is the venue APPLY: `applyVenue`'s own failures keep their
  * mapping in `venue()` (a unique violation → `provisioning.venue_conflict`, anything else rethrown).
@@ -486,7 +539,7 @@ async function withVenueState(
  * running through a regular file gives `code: "ENOTDIR"`, and a directory whose `venue.db` is not a
  * database gives `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN
  * directory is not a failure at all: it is created and opened, so the commonest wrong-path mistake
- * reaches `provisioning.database_unstamped` rather than this.
+ * reaches `provisioning.database_unmigrated` rather than this.
  *
  * Returns the error to throw rather than throwing it, so each call site reads as `throw
  * asUnreadable(...)` and TypeScript still sees the path as terminating.

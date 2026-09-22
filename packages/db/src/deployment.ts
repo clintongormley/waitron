@@ -33,8 +33,14 @@ export type DeploymentEnvironment = "production" | "preproduction";
  *
  * {@link readMirrorConfig} and {@link readNodeMembership} probe their own tables the same way and
  * point here for the reason.
+ *
+ * Exported because one caller outside this file needs the two halves of {@link
+ * readDeploymentEnvironment}'s `null` told apart: `waitron-provision venue` STAMPS a migrated
+ * directory that carries no row, and must refuse one whose schema was never created at all, where
+ * the insert would be met by `no such table: deployment`. Every other caller must keep treating the
+ * two as one thing — see the `null` paragraph below.
  */
-async function deploymentTableExists(db: Database): Promise<boolean> {
+export async function deploymentTableExists(db: Database): Promise<boolean> {
   const present = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name = ${"deployment"}`,
   );

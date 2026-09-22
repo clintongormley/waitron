@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { ALL_MODULES } from "@waitron/composition";
-import { openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
+import {
+  deploymentTableExists,
+  openVenueDatabase,
+  readDeploymentEnvironment,
+  stampDeployment,
+} from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
@@ -49,6 +54,10 @@ async function main(): Promise<number> {
       // match `apps/server/src/module-config.ts`'s `writeModuleConfig`.
       writeModuleConfig: writeModuleConfigTo(process.env.WAITRON_STATE_DIR),
       readEnvironment: readDeploymentEnvironment,
+      readDeploymentTable: deploymentTableExists,
+      // The same primitive the browser setup wizard's handler stamps with — not a second rule
+      // written here (`provisionVenue`, `apps/server/src/provision.ts`).
+      stampEnvironment: stampDeployment,
       readTenants: readTenantIdentities,
     });
   } catch (error) {
