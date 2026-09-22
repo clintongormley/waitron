@@ -600,17 +600,19 @@ container or browser test** — most of these rules exist because a test passed 
   test can take, which is the SUM of its waits plus its untimed work, not the largest one. **Under
   `packages/` and `apps/` the bound usually comes from the package's `vitest.config.ts`, not the
   file** — and an `expect.poll` or `vi.waitFor` is a wait like any other. Guard:
-  `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways its comments state —
-  it reads TEXT, cannot tell code from strings, checks only the largest SINGLE wait, and declines
-  wherever a bound or a config cannot be resolved rather than risk failing a correct file. Receipt:
+  `scripts/spawn-timeout-budget.test.ts`, which scans `scripts/` ALONE — **the rule holds under
+  `packages/` and `apps/` and nothing checks it there**, so the trap returns unguarded the day a
+  suite under either root waits longer than its budget. Weaker than its name over the half it does
+  cover, too: it reads TEXT, cannot tell code from strings, checks only the largest SINGLE wait, and
+  declines wherever a bound cannot be resolved rather than risk failing a correct file. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
   Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
   duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
   broken test. Cut the WAIT, not the retrying (`WAITRON_SH_HEALTH_DELAY`) — which reduces the
   exposure rather than removing it, since the probes' own cost stays. **`scripts/spawn-timeout-budget.test.ts`
-  does not cover this** — it reads the SUITE's declared waits, never the child's, so nothing guards
-  the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
+  does not cover this** — it reads a `scripts/` suite's own declared waits, never the child's, so
+  nothing guards the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only where the stubs are a large share of

@@ -305,50 +305,33 @@ ceiling by under half a second. Nothing in that suite touches Docker: `docker` i
 Raising the bound widens the tolerance; it does not make a suite unfailable. A review deliberately
 built a case that ran 31708ms and it failed against the new 30000ms bound, correctly.
 
-Guard: `scripts/spawn-timeout-budget.test.ts`, over `scripts/`, `packages/` and `apps/` alike. The
-two halves are different shapes and it is worth knowing which you are in. Under `scripts/` the waits
-are `spawnSync` timeouts and the bound is set in the file. Under `packages/` and `apps/` **nothing
-spawns at all** — every wait is an `expect.poll` or a `vi.waitFor` — and a file almost never sets its
-own bound, so the guard resolves one from the package's `vitest.config.ts`. That lookup is not a
-refinement: without it the check invents a failure for every package suite that relies on its config,
-which was 11 files when it was measured.
+Guard: `scripts/spawn-timeout-budget.test.ts`, over `scripts/` ALONE. It reads each root guard
+suite's own text for two numbers — the largest `timeout:` option the file declares, and the largest
+per-test bound it sets, file-wide with `vi.setConfig({ testTimeout })` or on one case with
+`it(name, fn, ms)` — and fails the suite when the bound cannot clear the wait. Every `timeout:`
+option counts as a wait, not only `spawnSync`'s: `expect.poll` and `vi.waitFor` are bounded by the
+same clock.
 
-Resolving that bound is most of the work, and four traps in it each have a case in the guard's own
-detector block, because each one was got wrong first.
+**Nothing under `packages/` or `apps/` is scanned, and that is a hole with no guard in it.** That
+half was retired on 2026-09-22 together with the real-PostgreSQL test harness, which owned every long
+wait those two roots declared. With the harness gone, `grep -rnE "timeout: *[0-9_]+" packages apps
+--include="*.test.ts"` answers nowhere at all, so the half's two non-vacuity cases — which exist to
+refuse a scan that has judged no file — went red having nothing left to judge, and were deleted with
+the machinery that fed them. **The rule is unchanged under both roots**: a suite there whose test
+outlasts its per-test timeout still fails healthy runs, and nothing automated will say so. If you are
+writing one, two things the retired half used to work out for you: a file under `packages/` or
+`apps/` almost never sets its own bound, so the number that governs it comes from the package's
+`vitest.config.ts` (and a `testTimeout` sitting beside `projects` is INERT for a project that does not
+set `extends: true`); and a browser project's default bound is 15s, not 5s — Vitest resolves
+`testTimeout ??= browser.enabled ? 15e3 : 5e3`.
 
-**The default is not always 5000.** Vitest resolves `testTimeout ??= browser.enabled ? 15e3 : 5e3`,
-so a browser project's default is three times larger. Reading 5000 for one would accuse a correct
-browser suite the first time it waited between five and fifteen seconds — latent across four packages
-here until it was fixed.
-
-**A `testTimeout` beside `projects` is INERT** for a project run unless that project sets
-`extends: true`, so taking it reports a bound a browser project does not have
-(`packages/media/vitest.config.ts` has exactly that shape). With `extends: true` the opposite holds
-and the project does inherit it — `apps/dashboard/vitest.config.ts` has that one. Both directions
-need modelling; handling only the first silently mis-resolves the second.
-
-**A package can hold a SECOND config** for suites its main one excludes, keyed by a filename suffix:
-`vitest.preprod.config.ts` runs `*.preprod.test.ts`. There are 48 main package configs here and three
-suffixed ones, so the suffix picks the config.
-
-**Brace lists are not optional.** Vitest's own `configDefaults.exclude` carries
-`**/.{idea,git,…}/**`, so a matcher that rejects `{}` cannot read the `exclude` of any project that
-spreads it — which silently left 60 real files unresolved, plus 142 more in an app whose project sets
-no `include` at all. A project with no `include` uses Vitest's default one, which matches every test
-file.
-
-Where it still cannot resolve a bound — two matching projects disagreeing, an `include` glob it does
-not model, a config that throws on import — it declines. Of the files that declare a wait of five
-seconds or more, 13 are compared and none decline today; the guard asserts a floor on that count, so
-a break in the lookup cannot leave it silently checking nothing.
-
-It is weaker than its name in three ways its own header states: it reads TEXT, so a timeout from an env var or built in a helper is invisible; it
+It is weaker than its name in three ways its own header states: it reads TEXT, so a timeout from an
+env var or built in a helper is invisible; it
 works per FILE, taking the largest bound anywhere; and it compares that bound against the largest
 SINGLE wait, which the paragraph above shows is necessary and not sufficient. It also cannot tell
 code from strings, so a number inside a fixture string counts as though it were code — the guard is
 its own example, since `budgets()` run over it reports numbers taken from its own test fixtures while
-the suite performs no wait at all. It is the `docs/backlog.md` B9 entry that records why this scope was widened. It counts every `timeout:` option as a wait, not only `spawnSync`'s —
-`expect.poll` and `vi.waitFor` are bounded by the same clock.
+the suite performs no wait at all.
 
 The one design choice worth knowing before trusting it in a gate: **a bound it cannot evaluate makes
 it decline to judge the file, not accuse it.** A guard that fails a correct file stops every push, so
