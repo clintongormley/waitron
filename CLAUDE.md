@@ -205,9 +205,12 @@ hook, or how tests are scheduled:
   SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
   what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
-- **Only the `core` migration set has an upgrade test; every module set is still migrated from a
-  VIRGIN database only**, so a green gate is no evidence that a module set can upgrade a box. Cost: a
-  bricked box, an hour of guesswork, and a wipe that destroyed the evidence.
+- **No migration set has an upgrade test; every set is migrated from a VIRGIN database only**, so a
+  green gate is no evidence that any set can upgrade a box. The one that covered `core` was deleted
+  with the PostgreSQL harness, its subject being a rule about changing an enum type that this engine
+  has no statement for; what it proved, and that nothing replaced it, is in
+  [ci-and-gates.md](docs/developers/ci-and-gates.md). Cost: a bricked box, an hour of guesswork, and
+  a wipe that destroyed the evidence.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the

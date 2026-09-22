@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendOnly,
+  appendOnlyTablesIn,
   classify,
   tablesForPublication,
   type ClassifiedTable,
@@ -55,5 +56,31 @@ describe("tablesForPublication", () => {
   it("never returns a local table, for either class", () => {
     expect(tablesForPublication(set, "ledger")).not.toContain("deployment");
     expect(tablesForPublication(set, "state")).not.toContain("deployment");
+  });
+});
+
+describe("appendOnlyTablesIn", () => {
+  const set: ClassifiedTable[] = [
+    appendOnly("sale_voids", "ledger", "what happened"),
+    classify("payments", "ledger", "a card payment's progress is updated"),
+    appendOnly("order_amendments", "state", "hash-chained"),
+    classify("deployment", "local", "this node's own record"),
+  ];
+
+  it("returns the names of the marked tables and nothing else", () => {
+    // Both classes and both markers are present above, because the marker is orthogonal to the
+    // class in both directions: a `ledger` table that is NOT append-only and a `state` table that
+    // IS. A filter written on the class instead would get both of those wrong.
+    expect(appendOnlyTablesIn(set)).toEqual(["sale_voids", "order_amendments"]);
+  });
+
+  it("keeps declaration order", () => {
+    // `installAppendOnlyTriggers` is handed this list, and the migration descriptors compared by
+    // `scripts/append-only-migration-sets.test.ts` are compared as sequences.
+    expect(appendOnlyTablesIn([...set].reverse())).toEqual(["order_amendments", "sale_voids"]);
+  });
+
+  it("returns nothing for a set that marks nothing", () => {
+    expect(appendOnlyTablesIn([classify("tenants", "state", "r")])).toEqual([]);
   });
 });
