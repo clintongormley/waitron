@@ -60,8 +60,8 @@ const LOCK_WAIT_MS = 120_000;
  *
  * **It also installs the append-only triggers**, set by set, from each set's `appendOnlyTables`. This
  * is where they go because it is the one place that knows a set's tables now exist: boot, the cold
- * restore, `rejoin-command`, `waitron-provision instance` and `dev-setup` all migrate through here,
- * so none of them can forget. What a caller that hands over no `appendOnlyTables` gets is a migrated
+ * restore, `rejoin-command`, `dev-setup` and `dev-onboard` all migrate through here, so none of them
+ * can forget. What a caller that hands over no `appendOnlyTables` gets is a migrated
  * database with no triggers on it, which is the hedge `VenueMigrationOptions` states.
  */
 export async function applyMigrations(

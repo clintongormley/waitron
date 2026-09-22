@@ -45,8 +45,8 @@ const suffix = "is append-only";
  * Running it again over a database that already carries the triggers is a no-op, so it sits on the
  * boot path rather than in a one-shot install: `packages/migrations/src/apply.ts` calls it after
  * each set migrates, which is the one place that knows a set's tables now exist, and every
- * migrating path in the product — boot, the cold restore, `rejoin-command`,
- * `waitron-provision instance`, `dev-setup` — goes through it.
+ * migrating path in the product — boot, the cold restore, `rejoin-command`, `dev-setup` and
+ * `dev-onboard` — goes through it.
  */
 export function installAppendOnlyTriggers(
   target: StatementTarget,

@@ -43,7 +43,7 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
  * `INSERT … ON CONFLICT DO UPDATE` — need a conflicting key, which is per-table, so they are proven
  * once against the trigger pair in `packages/store/src/append-only.test.ts` instead. It also goes
  * through the DESCRIPTOR path (`orderedMigrationSets`); the manifest-JSON path that
- * `rejoin-command`, `dev-setup` and `waitron-provision instance` take is pinned equal to it by
+ * `rejoin-command`, `dev-setup` and `dev-onboard` take is pinned equal to it by
  * `packages/composition/src/composition.test.ts` and driven end to end by
  * `packages/migrations/src/apply-append-only.test.ts`.
  */

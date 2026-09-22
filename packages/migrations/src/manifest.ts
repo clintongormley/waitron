@@ -48,8 +48,8 @@ export interface MigrationSet extends MigrationSetSource {
    *
    * Two producers fill it and both have to, because the product reaches `applyMigrations` two ways:
    * `orderedMigrationSets` derives it from the descriptor's `classification` seat, and the manifest
-   * JSON repeats it for the callers that have no descriptors to hand (`waitron-provision instance`,
-   * `rejoin-command`, `dev-setup`). `composition.test.ts`'s `toEqual` of those two is what keeps
+   * JSON repeats it for the callers that have no descriptors to hand (`rejoin-command`, `dev-setup`,
+   * `dev-onboard`). `composition.test.ts`'s `toEqual` of those two is what keeps
    * them in step.
    *
    * **Required, so a hand-built set has to state it**, and an empty list is a set that says it owns
