@@ -11,35 +11,41 @@
 // but never called: `recordSale` never contacts AEAT (that is `drain`'s job, run later by
 // `apps/server` itself), so the stub below throws if it is ever reached at all.
 //
+// The venue is a DIRECTORY of two SQLite files, not a connection string. Which directory is not an
+// argument: it comes from `WAITRON_VENUE_DIR`, else `venue` under `WAITRON_STATE_DIR`, else the
+// bundle's own default state root — the same three steps, through the same resolver, that the
+// server beside it uses to pick the directory it serves (`scripts/venue-dir.ts`). A sale recorded
+// into a directory nothing on the box serves is a chain nobody drains.
+//
 // Usage — build first, exactly like `dist/server.js`; this repo's `.js`-suffixed relative
 // imports (this file's own included) resolve through esbuild's bundler, not through plain
 // `node <file>.ts`, which cannot follow a `./record-sale.js` specifier back to the sibling
 // `record-sale.ts` it actually names (confirmed empirically — see this task's own report):
 //   pnpm --filter @waitron/server build
-//   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
+//   WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/record-one-sale.js \
 //     <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
 // `baseAmount` is the line's tax-EXCLUSIVE amount (quantity is always 1 — this script records one
 // line, never a basket). `vatRate` is a percentage literal, e.g. "10.00" meaning 10%. `tipAmount`
-// defaults to "0.00". The connection string is read ONLY from `DATABASE_URL`, never accepted as
-// an argument — a script that took one would put it in shell history and process listings
-// alongside the sale's own amounts.
+// defaults to "0.00".
 //
 // `WAITRON_ENV` is REQUIRED here, unlike every other caller of `deploymentEnvironment`
 // (`apps/server` itself defaults it to `preproduction`, deliberately the safe reading of "not
-// set"). This script cannot accept that default: it stamps `entorno` onto a row that
-// `registros_facturacion`'s `REVOKE ALL` and `BEFORE UPDATE OR DELETE` trigger make permanently
-// unwritable the instant it is inserted, and a wrong stamp does not just mislabel that one row —
-// `drain` refuses it AND every successor on its chain, every pass, forever, until a human either
-// runs superuser DDL or abandons the chain entirely via `registerSif`. A safe default is the right
-// answer when being wrong costs a retry; it is the wrong answer when being wrong costs a chain.
+// set"). This script cannot accept that default: it stamps `entorno` onto an append-only fiscal
+// record (CLAUDE.md §5), and a wrong stamp does not just mislabel that one row — `claimBatch`
+// refuses it AND every successor on its chain, every pass, until a human abandons the chain via
+// `registerSif` (`packages/fiscal-verifactu/src/drain.ts:577`). A safe default is the right answer
+// when being wrong costs a retry; it is the wrong answer when being wrong costs a chain.
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPostgresDb, withTransaction } from "@waitron/db";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { deploymentEnvironment } from "../src/config.js";
+import { resolveScriptVenueDir } from "./venue-dir.js";
 import {
   addDecimal,
   decimal,
@@ -56,7 +62,7 @@ const LOCALE = "es-ES";
 function usageError(message: string): never {
   console.error(`record-one-sale: ${message}`);
   console.error(
-    "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
+    "usage: WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/record-one-sale.js " +
       "<tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
@@ -93,35 +99,42 @@ function systemClock(): TrustedClock {
   };
 }
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  if (args.length !== 6 && args.length !== 7) {
-    usageError(`expected 6 or 7 arguments, got ${args.length}`);
-  }
-  const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
+/** The seven positional arguments, as the operator typed them: branded and parsed inside. */
+export interface RecordOneSaleArgs {
+  tillId: string;
+  nodeId: string;
+  seriesId: string;
+  description: string;
+  /** The line's tax-EXCLUSIVE amount, as a decimal literal. */
+  baseAmount: string;
+  /** A percentage literal — "10.00" means 10%. */
+  vatRate: string;
+  /** Optional; absent means "0.00". */
+  tipAmount?: string;
+}
 
-  const databaseUrl = process.env.DATABASE_URL;
-  if (databaseUrl === undefined || databaseUrl === "") {
-    usageError("DATABASE_URL must be set in the environment");
-  }
+/** Exactly what `recordSale` returns — restating its shape here would be a second claim about it. */
+export type RecordOneSaleResult = Awaited<ReturnType<typeof recordSale>>;
 
-  // No default accepted here — see this file's header comment. `deploymentEnvironment` below
-  // would happily default an unset/empty value to `"preproduction"`, which is exactly the
-  // failure mode this guard exists to refuse: a shell that forgot `WAITRON_ENV` while pointed at
-  // a PRODUCTION `DATABASE_URL` would otherwise stamp an unrecoverable `preproduction` `entorno`
-  // onto a real chain with no error at all.
-  const rawEnv = process.env.WAITRON_ENV;
-  if (rawEnv === undefined || rawEnv === "") {
-    usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
-  }
+/**
+ * Open the venue directory `env` names, record one sale into it through the real Veri*Factu
+ * backend, and close both files. Exported so a test can run the whole path — the argv shim below
+ * adds nothing but the arity check, the `WAITRON_ENV` guard and stdout.
+ *
+ * `store.venue` is the handle, not `store.node`: `sales`, `tenders` and `registros_facturacion` are
+ * all classified `ledger`, so they live in the venue file.
+ */
+export async function recordOneSale(
+  args: RecordOneSaleArgs,
+  env: NodeJS.ProcessEnv,
+): Promise<RecordOneSaleResult> {
+  const till = brandTillId(args.tillId);
+  const node = brandNodeId(args.nodeId);
+  const series = brandSeriesId(args.seriesId);
 
-  const till = brandTillId(tillArg);
-  const node = brandNodeId(nodeArg);
-  const series = brandSeriesId(seriesArg);
-
-  const baseAmount = decimal(baseAmountArg);
-  const vatRate = decimal(vatRateArg);
-  const tipAmount = decimal(tipArg ?? "0.00");
+  const baseAmount = decimal(args.baseAmount);
+  const vatRate = decimal(args.vatRate);
+  const tipAmount = decimal(args.tipAmount ?? "0.00");
 
   // The same `percentOf` (multiply, then divide by 100, rounded to money scale) that `recordSale`
   // applies internally when it derives the VAT breakdown from `lines`. Using the identical function
@@ -130,12 +143,13 @@ async function main(): Promise<void> {
   // be wrong.
   const tax = percentOf(baseAmount, vatRate);
   const total = addDecimal(baseAmount, tax);
-  // The single tender's whole charge: total plus the tip, which now rides ON the tender
-  // (`tenders.tip_amount`) rather than on the sale — `amount_charged` was dropped from `sales` in
-  // migration 0012. This is the coverage identity settleSale enforces: sum(amount) = total + tip.
+  // The single tender's whole charge: total plus the tip, which rides ON the tender
+  // (`tenders.tip_amount`) rather than on the sale. This is the coverage identity settleSale
+  // enforces: sum(amount) = total + tip.
   const tenderAmount = addDecimal(total, tipAmount);
 
-  const db = await createPostgresDb(databaseUrl);
+  const store = await openVenueDatabase(await resolveScriptVenueDir(env));
+  const db = store.venue;
   try {
     const clock = systemClock();
     const backend = new VerifactuBackend({
@@ -149,12 +163,12 @@ async function main(): Promise<void> {
       // is irreversible", because production numbering can never be reused. Assigned here to
       // `environment`, it decides only which QR validation host `verificationUrl` names — this
       // script never contacts AEAT — but that URL is the one thing it prints for a human to act on.
-      environment: deploymentEnvironment(process.env),
-      // Which environment this script is generating the registro FOR — the fact `drain` (Task 6)
+      environment: deploymentEnvironment(env),
+      // Which environment this script is generating the registro FOR — the fact `drain`
       // will refuse to submit if it disagrees with the host it eventually runs on. Same resolver,
       // same host config, different field: this one is never read for the QR host and is stored on
       // the row itself, never hashed (`entorno`, ./schema/registros.ts).
-      deploymentEnvironment: deploymentEnvironment(process.env),
+      deploymentEnvironment: deploymentEnvironment(env),
       // Never invoked by `recordSale` (see this file's header comment) — a rejection here would
       // only ever surface a bug in this script or in the backend, not a real AEAT contact.
       resolveClient: () =>
@@ -176,8 +190,8 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
-          name: description,
-          descriptions: { [LOCALE]: description },
+          name: args.description,
+          descriptions: { [LOCALE]: args.description },
           quantity: "1",
           unitPrice: baseAmount,
           vatRate,
@@ -196,21 +210,61 @@ async function main(): Promise<void> {
       clock,
     };
 
-    const result = await withTransaction(db, (tx) => recordSale(tx, backend, input));
-
-    console.log(`saleId: ${result.saleId}`);
-    console.log(`fiscalRecordId: ${result.fiscal.recordId}`);
-    console.log(`fiscalState: ${result.fiscal.state}`);
-    if (result.fiscal.verificationUrl !== undefined) {
-      console.log(`verificationUrl: ${result.fiscal.verificationUrl}`);
-    }
+    return await withTransaction(db, (tx) => recordSale(tx, backend, input));
   } finally {
-    await db.close();
+    // Two open SQLite files; leaking them keeps the process alive after `main` returns.
+    await store.close();
   }
 }
 
-main().catch((error: unknown) => {
-  console.error("record-one-sale: failed");
-  console.error(error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.length !== 6 && args.length !== 7) {
+    usageError(`expected 6 or 7 arguments, got ${args.length}`);
+  }
+  const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
+
+  // No default accepted here — see this file's header comment. `deploymentEnvironment` below
+  // would happily default an unset/empty value to `"preproduction"`, which is exactly the
+  // failure mode this guard exists to refuse: a shell that forgot `WAITRON_ENV` while pointed at
+  // a PRODUCTION venue directory would otherwise stamp an unrecoverable `preproduction` `entorno`
+  // onto a real chain with no error at all.
+  const rawEnv = process.env.WAITRON_ENV;
+  if (rawEnv === undefined || rawEnv === "") {
+    usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
+  }
+
+  const result = await recordOneSale(
+    {
+      tillId: tillArg,
+      nodeId: nodeArg,
+      seriesId: seriesArg,
+      description,
+      baseAmount: baseAmountArg,
+      vatRate: vatRateArg,
+      tipAmount: tipArg,
+    },
+    process.env,
+  );
+
+  console.log(`saleId: ${result.saleId}`);
+  console.log(`fiscalRecordId: ${result.fiscal.recordId}`);
+  console.log(`fiscalState: ${result.fiscal.state}`);
+  if (result.fiscal.verificationUrl !== undefined) {
+    console.log(`verificationUrl: ${result.fiscal.verificationUrl}`);
+  }
+}
+
+// Run only when invoked directly, never when imported by a test — `recordOneSale` above writes an
+// append-only fiscal record and consumes an invoice number (CLAUDE.md §5), so an import that ran it
+// would be destructive and unrepairable.
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
+  main().catch((error: unknown) => {
+    console.error("record-one-sale: failed");
+    console.error(error);
+    process.exit(1);
+  });
+}

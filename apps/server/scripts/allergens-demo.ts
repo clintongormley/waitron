@@ -1,8 +1,8 @@
 // Self-contained, human-checkable demonstration of the allergens seam: EU 1169/2011 Annex II
 // declarations authored on catalogue products and read back for the till, end-to-end and
 // headless. Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather
-// than `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs
-// neither a real backend nor a proof of the non-superuser grants used by catalogue-demo.
+// than on the real-database demo it sat beside — this demo never writes a fiscal record, so it
+// needs neither a real backend nor a proof of the grants a fiscal write once had to clear.
 // `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables and the
 // `products.allergens` jsonb column, which is everything read here.
 //

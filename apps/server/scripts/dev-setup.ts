@@ -1,7 +1,7 @@
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue DIRECTORY and
 // persist its identity to `apps/server/.env`, so `pnpm dev` boots the server against a real,
-// migrated, seeded venue. A trimmed `till-demo.ts` that stops after provisioning + seeding and
-// writes the ids down, plus a reuse guard that never re-provisions a live dev venue.
+// migrated, seeded venue. It provisions, seeds, writes the ids down, and carries a reuse guard that
+// never re-provisions a live dev venue.
 //
 // The generated `.env` carries `WAITRON_ENV=dev` (SP-C), so `pnpm dev` boots with the dev per-tab
 // device switcher ON (`config.devMode`, Task 1). This does NOT touch the fiscal side: `dev` is a
@@ -309,7 +309,7 @@ async function provisionVenue(
   );
 
   // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
-  // ordinary sale's series (the same index `till-demo.ts` reads).
+  // ordinary sale's series.
   const ids = {
     tillId: venue.tillId,
     nodeId: venue.nodeId,

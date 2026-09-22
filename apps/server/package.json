@@ -30,13 +30,9 @@
     "lint": "eslint .",
     "demo:daily-close": "tsx scripts/daily-close-demo.ts",
     "demo:daily-close-z": "tsx scripts/daily-close-z-demo.ts",
-    "demo:catalogue": "tsx scripts/catalogue-demo.ts",
     "demo:modelo-303": "tsx scripts/modelo-303-demo.ts",
     "demo:allergens": "tsx scripts/allergens-demo.ts",
-    "demo:recipes": "tsx scripts/recipes-demo.ts",
-    "demo:till": "tsx scripts/till-demo.ts",
-    "demo:park-retrieve": "tsx scripts/park-retrieve-demo.ts",
-    "demo:card": "tsx scripts/integrated-card-demo.ts"
+    "demo:recipes": "tsx scripts/recipes-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

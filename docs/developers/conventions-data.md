@@ -489,6 +489,11 @@ type in `apps/till` (`src/api/client.ts`, `src/state/working-order.ts`) and
 did not look. `till-demo.ts` is in this branch for the cast, not for that sweep: it never named the
 column type (`git grep -n numeric HEAD~1 -- apps/server/scripts/till-demo.ts` returns nothing).
 
+> **2026-09-22:** `till-demo.ts` was deleted, with `catalogue-demo.ts`, `integrated-card-demo.ts`
+> and `park-retrieve-demo.ts`, when the storage swap left them reading a connection string that no
+> longer exists. The paragraph above records what the 2026-09-20 sweep found; the file it names is
+> gone.
+
 **The migration rounds, and that is deliberate.** `ALTER COLUMN ... SET DATA TYPE bigint` casts an
 existing decimal by rounding, so a development database that held rows ends up holding whole
 euros. No data-migration code is allowed before production, so the generated migration was left
@@ -589,7 +594,9 @@ quantity. Measured on PostgreSQL 18.6 against populated old-type tables, 2026-09
   un-migrated. WHICH boxes have such a row: `dev:setup`'s own seed writes only whole quantities
   (`grep -o 'quantity: *"[0-9.]*"' apps/server/scripts/demo-seed/*.ts` returns `"1"` and `"2"`
   only), but `demo:till`, `demo:park-retrieve` and `demo:catalogue` all write `0.200`, `0.250` or
-  `0.320`, and so does anyone who rings up a weighed item.
+  `0.320`, and so does anyone who rings up a weighed item. (Those three commands were deleted on
+  2026-09-22 with the storage swap; a box they had already written a small quantity into is still
+  in the state this paragraph describes.)
 - **Without such a row it succeeds quietly and every value is wrong.** A quantity of `1.500`
   becomes `2`, which reads back as 0.002 units; a rate of `21.00` becomes `21`, which reads back
   as 0.21%. Both sit inside the rebuilt CHECK constraints, so nothing refuses them.

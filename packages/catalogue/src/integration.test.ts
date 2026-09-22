@@ -34,8 +34,9 @@ import { seedVenue } from "../test/fixtures.js";
  *
  * This suite proves the DATA FLOW across three packages. A `FakeFiscalBackend` stands in for the
  * regime backend, exactly as `packages/core`'s own
- * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by the runnable demo
- * (`apps/server/scripts/catalogue-demo.ts`) and by `packages/fiscal-verifactu`'s e2e suite.
+ * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by
+ * `packages/fiscal-verifactu`'s e2e suite (the runnable `catalogue-demo.ts` that used to be the
+ * other half of that sentence was deleted on 2026-09-22 with the storage swap).
  */
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],

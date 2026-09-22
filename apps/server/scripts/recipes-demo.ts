@@ -3,9 +3,9 @@
 // derived floor unions with the product's own manual overlay (add-only), and a single unreviewed
 // ingredient forces the whole product PENDING — end-to-end and headless.
 //
-// Modelled on `allergens-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather than
-// `catalogue-demo.ts` (real Postgres): this demo never writes a fiscal record, so it needs
-// neither a real backend nor a proof of the non-superuser grants used by catalogue-demo.
+// Modelled on `allergens-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather than on the
+// real-database demo it sat beside: this demo never writes a fiscal record, so it needs neither a
+// real backend nor a proof of the grants a fiscal write once had to clear.
 // `CORE_MIGRATIONS` alone suffices — it creates the catalogue tables, the `products.allergens`
 // published column plus its `manual_allergens`/`recipe_derivation` overlays, and (0038/0039) the
 // `ingredients` and `recipe_lines` tables read and written here.
