@@ -390,7 +390,31 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
   });
 
-  it("refuses a default menu the zone does not allow, checked at commit", async () => {
+  /**
+   * WHERE "CHECKED AT COMMIT" WENT. This key was declared `DEFERRABLE INITIALLY DEFERRED` on
+   * PostgreSQL, so a transaction could name a menu as a zone's default and add it to that zone's
+   * allowed set in either order. sqlite-core has no deferrable option and the key's own declaration
+   * carries no deferral (`./schema/service.js` records the same thing at the key), so on this engine
+   * the check lands at the STATEMENT — measured, and the second block below is that measurement.
+   *
+   * The guarantee did not disappear; it moved from the KEY to the TRANSACTION.
+   * `pragma defer_foreign_keys = on` moves every key's check in the open transaction to `commit`,
+   * and both places in this repository that write a table cycle in an order no per-statement check
+   * can satisfy already issue it: `apps/server/src/configuration-transfer.ts`, which empties and
+   * refills THIS cycle — `zone_menus.zone_id` points at `zone_service_policies`, whose
+   * `(zone_id, default_menu_id)` points back at `zone_menus` — and the test reset in
+   * `packages/db/src/testing/venue-db.ts`. So the third block below drives the original ordering
+   * through the mechanism that now carries it.
+   *
+   * NOT asserted here, deliberately, and reported as a finding rather than fixed: under that pragma
+   * a violation surfaces at `commit`, and the transaction is then left OPEN. Measured on this
+   * fixture — the refused write stayed readable afterwards and the next `begin immediate` failed
+   * with `cannot start a transaction within a transaction`. `node-sqlite-adapter.ts` in
+   * `packages/store` issues its `commit` outside the body's `try`, so the rollback path is never
+   * reached. A case asserting the commit-time refusal would therefore wedge this file's remaining
+   * cases; the fix belongs in `packages/store`, outside this package.
+   */
+  it("refuses a default menu the zone does not allow, at the statement or at commit", async () => {
     const v = await venue();
     await db.execute(sql`
       insert into zone_service_policies (location_id, zone_id, department_id)
@@ -399,7 +423,34 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
       "zone_service_policies_default_allowed_fk",
     );
+
+    // Reversed order, no pragma: refused where PostgreSQL's deferral accepted it. This is the loss
+    // the block comment states, driven rather than described.
+    const eager = await captureError(() =>
+      db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
+        );
+        await tx.execute(
+          sql`insert into zone_menus (zone_id, menu_id) values (${v.zoneId}, ${v.menuId})`,
+        );
+      }),
+    );
+    expect(isPgError(eager, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(eager)).toContain("FOREIGN KEY constraint failed");
+    // The statement-level refusal rolls its transaction back, so neither row survives it.
+    expect(
+      (
+        await db.execute(
+          sql`select default_menu_id from zone_service_policies where zone_id = ${v.zoneId}`,
+        )
+      ).rows,
+    ).toEqual([{ default_menu_id: null }]);
+
+    // The same reversed order under the pragma: accepted, and the state it leaves is what the
+    // deferred key used to leave.
     await db.transaction(async (tx) => {
+      await tx.execute(sql`pragma defer_foreign_keys = on`);
       await tx.execute(
         sql`update zone_service_policies set default_menu_id = ${v.menuId} where zone_id = ${v.zoneId}`,
       );
@@ -411,5 +462,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       sql`select default_menu_id from zone_service_policies where zone_id = ${v.zoneId}`,
     );
     expect(policy.rows).toEqual([{ default_menu_id: v.menuId }]);
+    // The pragma holds only until that transaction ends: it is off again here.
+    expect((await db.execute(sql`pragma defer_foreign_keys`)).rows).toEqual([
+      { defer_foreign_keys: 0 },
+    ]);
   });
 });

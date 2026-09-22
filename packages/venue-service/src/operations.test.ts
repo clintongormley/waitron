@@ -936,7 +936,22 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  it("matches a product id however the caller spells it, keyed by the caller's spelling", async () => {
+  /**
+   * WHAT THIS CASE LOST. It used to pass a THIRD spelling, `{` + the 32 digits with no hyphens +
+   * `}`, and expect it to resolve to the same product and be folded into the first spelling. That
+   * spelling was accepted because PostgreSQL's uuid INPUT PARSER accepted it, and no parser accepts
+   * it now — the id column is plain `text` and the bytes are compared as they arrive. So the
+   * braced form is no longer a spelling of this id at all, and the case pins what it does instead:
+   * `shared.invalid_id`, refused by `normaliseUuid` before any query runs.
+   *
+   * Nothing was weakened to get there. The surviving half is CASE, which is the half that was
+   * actually broken: before `storedUuid` was taken through to SQL, the upper-cased id below was
+   * refused `route.subject_not_found` because the bind value never matched the stored row. Both
+   * halves of the old case's subject are still checked — an id still resolves however it is cased,
+   * and two spellings of one product still collapse to the first — with two cased spellings
+   * standing where the cased and braced pair stood.
+   */
+  it("matches a product id however the caller CASES it, keyed by the caller's spelling", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const grill = await insertStation(tx, cfg.locationId, "Grill");
@@ -946,12 +961,23 @@ describe("resolvePreparationRoutes", () => {
       await createPreparationRoute(tx, cfg, { productId: routed.id, target: station(grill) });
       const upper = routed.id.toUpperCase();
       const braced = `{${routed.id.replaceAll("-", "")}}`;
+      expect(upper).not.toBe(routed.id);
 
       await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper])).resolves.toEqual(
         new Map([[upper, station(grill)]]),
       );
-      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, braced])).resolves.toEqual(
+      // Two spellings of one product: the map carries the FIRST one the caller used, once.
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, routed.id])).resolves.toEqual(
         new Map([[upper, station(grill)]]),
+      );
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [routed.id, upper])).resolves.toEqual(
+        new Map([[routed.id, station(grill)]]),
+      );
+      await expect(rejection(resolvePreparationRoutes(tx, cfg, zoneId, [braced]))).resolves.toEqual(
+        {
+          code: "shared.invalid_id",
+          params: { kind: "ProductId", value: braced },
+        },
       );
       await expect(
         rejection(resolvePreparationRoutes(tx, cfg, zoneId, [unrouted.id.toUpperCase()])),
