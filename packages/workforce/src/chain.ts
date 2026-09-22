@@ -1,7 +1,7 @@
 // Side-effect: registers this package's `attendance.append_contention` code on the shared
 // ErrorParams registry (declaration merging). See ./errors.ts and ./errors.reachability.test.ts.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { isUniqueViolation, type Database, type Transaction } from "@waitron/db";
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
@@ -127,21 +127,17 @@ export async function readChainHead(tx: Transaction, key: ChainKey): Promise<Cha
  * Floors an ISO-8601 instant to whole-second granularity, preserving the instant (epoch ms), and
  * returns it as a UTC `…Z` string. `Date.prototype.toISOString` always emits milliseconds, so the
  * fractional second is present but ZERO (`…00.000Z`, never a truncated `…00Z`) — the truncation
- * removes any sub-second VALUE, not the field. That zero fractional second is immaterial downstream:
- * `Date.parse` (the hash's `EventAtMs`) and the second-precision read-back (`to_char(… 'HH24:MI:SS')`)
- * both collapse `…00.000Z` and a bare `…00Z` to the identical instant, and the DB CHECK
- * `date_trunc('second', event_at) = event_at` treats `…00.000Z` as a whole second.
+ * removes any sub-second VALUE, not the field.
  *
- * The chain hashes `event_at` as the absolute instant (chain-hash.ts's `EventAtMs`), but every
- * read-back projects it at SECOND precision (`to_char(… 'HH24:MI:SS')`, clocking.ts / the chain
- * test read-backs). Truncating here, at the single write choke point, is what keeps the stored
- * column, the committed hash and the read-back one identical representation — so a millisecond-
- * precision trusted clock cannot make a genuine, untouched row recompute to a different hash (a
- * false `hash_mismatch`). Mirrors the fiscal precedent: verifactu/src/format.ts's `formatDateTime`
- * always emits whole seconds, the single canonical form for both the hashed literal and its
- * reconstruction. `Math.floor` matches Postgres `date_trunc('second', …)` for the (always positive)
- * instants the working-time record captures, and the DB CHECK `time_entries_event_at_second_ck`
- * backstops it.
+ * The chain hashes `event_at` as the absolute instant (chain-hash.ts's `EventAtMs`). Truncating
+ * here, at the single write choke point, is what keeps the stored column, the committed hash and
+ * every read-back one identical representation — so a millisecond-precision trusted clock cannot
+ * make a genuine, untouched row recompute to a different hash (a false `hash_mismatch`). It also
+ * gives the column ONE spelling, which is what a text timestamp needs for `<`/`order by` on it to
+ * be a time ordering (`packages/printing/src/runtime.ts` records the four spellings measured).
+ * Mirrors the fiscal precedent: verifactu/src/format.ts's `formatDateTime` always emits whole
+ * seconds, the single canonical form for both the hashed literal and its reconstruction. The DB
+ * CHECK `time_entries_event_at_second_ck` backstops it.
  */
 function truncateToWholeSecond(eventAt: string): string {
   return new Date(Math.floor(Date.parse(eventAt) / 1000) * 1000).toISOString();
@@ -280,9 +276,9 @@ export async function appendToChain(
 /**
  * Reads one (node, location) chain's rows as `VerifiableEntry`s, ordered by chain position —
  * the seam a test (and later a status page) verifies against the database rather than hand-rolling
- * the select. `event_at` and `recorded_at` are read through `to_char(… 'HH24:MI:SS"Z"')` so
- * `computeEntryHash` reproduces the stored hash under node-postgres (the Date-vs-string trap the
- * other reads document). Scoped to the full key, never a bare id (CLAUDE.md §3). Accepts a
+ * the select. `event_at` and `recorded_at` are text columns, read back as the strings
+ * `attemptAppend` wrote, which is what `computeEntryHash` hashed. Scoped to the full key, never a
+ * bare id (CLAUDE.md §3). Accepts a
  * `Database` or a `Transaction` — it is a pure read and needs neither the head lock nor the caller's
  * transaction, so a status page can call it on a pool directly.
  */
@@ -297,8 +293,8 @@ export async function readChain(
       locationId: timeEntries.locationId,
       nodeId: timeEntries.nodeId,
       entryKind: timeEntries.entryKind,
-      eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-      recordedAt: sql<string>`to_char(${timeEntries.recordedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+      eventAt: timeEntries.eventAt,
+      recordedAt: timeEntries.recordedAt,
       eventOffsetMinutes: timeEntries.eventOffsetMinutes,
       recordedByPersonId: timeEntries.recordedByPersonId,
       capturedByTillId: timeEntries.capturedByTillId,

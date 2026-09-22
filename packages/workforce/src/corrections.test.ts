@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, newId, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -84,12 +84,17 @@ async function insertApprovedCorrection(row: {
   recordedAt: string;
   sequenceNo: number;
 }): Promise<void> {
+  // `id` comes from the table's `$defaultFn` generator, which drizzle runs for a builder insert and
+  // never for raw SQL, and the generated DDL declares no SQL default for it — without it the
+  // statement is refused `NOT NULL constraint failed: time_entries.id`. The insert stays raw
+  // because what it is building is a row the chain append path would never write: a SECOND node's
+  // correction of one target.
   await suite.db.execute(sql`
     insert into time_entries (
-      person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
       correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry)
-    values (${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
+    values (${newId()}, ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
       ${row.actorId}, ${row.recordedAt}, ${row.correctsEntryId}, 'cross-node merge', 'approved',
       ${row.actorId}, ${"A".repeat(64)}, ${"B".repeat(64)}, ${row.sequenceNo}, false)`);
 }
@@ -178,12 +183,12 @@ describe("approveCorrection", () => {
     // Reprojected: the corrected 18:00 end makes it a 9h day.
     expect(await workedMinutes(personId)).toBe(540);
     // History retained: the original 17:00 out row is STILL there, unmodified — nothing was updated
-    // or deleted, the correction is a separate append. Normalised to UTC (the raw column reads back
-    // in the session zone) so the stored instant, not its display offset, is what is asserted.
+    // or deleted, the correction is a separate append. `event_at` is a text column read back as the
+    // stored string, and `time_entries_event_at_second_ck` admits exactly one spelling of a whole
+    // second, so the expected value carries the zero fractional second `appendToChain` writes.
     const original = await suite.db.execute<{ at: string }>(sql`
-      select to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at
-      from time_entries where id = ${outEntryId}`);
-    expect(original.rows[0]!.at).toBe("2026-01-05T17:00:00Z");
+      select event_at as at from time_entries where id = ${outEntryId}`);
+    expect(original.rows[0]!.at).toBe("2026-01-05T17:00:00.000Z");
   });
 
   it("refuses approval by a non-supervisor with correction.not_permitted", async () => {
@@ -255,7 +260,7 @@ describe("approveCorrection", () => {
     expect(code).toBe("correction.not_pending");
     // Exactly ONE approved correction row exists — the refused approval appended nothing.
     const approved = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from time_entries
+      select count(*) as n from time_entries
       where person_id = ${personId} and entry_kind = 'correction'
         and correction_status = 'approved'`);
     expect(approved.rows[0]!.n).toBe(1);
@@ -285,8 +290,10 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
       correctsEntryId: outEntryId,
       personId,
       actorId: actor,
-      eventAt: "2026-01-05T18:00:00Z",
-      recordedAt: "2026-01-05T10:05:00Z",
+      // The canonical whole-second spelling `appendToChain` writes: this helper inserts RAW, so
+      // nothing truncates for it and `time_entries_event_at_second_ck` admits no other form.
+      eventAt: "2026-01-05T18:00:00.000Z",
+      recordedAt: "2026-01-05T10:05:00.000Z",
       sequenceNo: 5,
     });
     await insertApprovedCorrection({
@@ -294,8 +301,8 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
       correctsEntryId: outEntryId,
       personId,
       actorId: actor,
-      eventAt: "2026-01-05T18:30:00Z",
-      recordedAt: "2026-01-05T10:06:00Z",
+      eventAt: "2026-01-05T18:30:00.000Z",
+      recordedAt: "2026-01-05T10:06:00.000Z",
       sequenceNo: 2,
     });
     // 09:00 → corrected 18:30 = 9.5h.

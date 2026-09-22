@@ -20,8 +20,13 @@ import { describe, expect, it } from "vitest";
  * - It scans a HAND-WRITTEN list of directories ({@link ROOTS}), not the workspace. It started as
  *   this package alone; `packages/reporting` joined it when that package was converted, because
  *   nothing had refused the twenty-odd PostgreSQL-only statements it carried and the ten report
- *   routes answered 500 to the first person who opened them. Every directory not on that list is
- *   out of scope, which today is most of the tree.
+ *   routes answered 500 to the first person who opened them. `packages/workforce/src` joined it for
+ *   the same reason — seventeen workforce routes and twelve schedule routes were answering 500.
+ *   Every directory not on that list is out of scope, which today is most of the tree.
+ * - `packages/workforce/test` is deliberately NOT a root, and that is a hole rather than a
+ *   judgement: it holds no `sql` template today, so adding it would fail this file's own
+ *   "every root yields templates" control. A residual statement written into that directory
+ *   tomorrow is seen by nothing.
  * - One file is excluded BY NAME ({@link UNSWEPT}) and still carries residue. It is not a false
  *   positive; it is debt this guard is recording rather than hiding.
  * - Its list of PostgreSQL-only constructs is hand-written, and it grew as the sweep met more of
@@ -54,18 +59,34 @@ const ROOTS: readonly string[] = [
   HERE,
   join(REPO, "packages/reporting/src"),
   join(REPO, "packages/reporting/test"),
+  join(REPO, "packages/workforce/src"),
 ];
 
 /**
  * Files that still carry PostgreSQL-only SQL, and the reason each is left alone.
  *
- * `packages/reporting/src/record-daily-close.pg.test.ts` is one of the two suites in that package
- * that ask for the real-PostgreSQL harness this branch removed; it does not COLLECT, and its own
- * header records that its raw SQL is deliberately not converted, as a later step's work. Converting
- * its `count(*)::int` here would contradict that decision, and leaving it unnamed would fail this
- * guard. Naming it keeps the debt visible: the entry goes when that suite is converted or deleted.
+ * Every one is a suite that asks for the real-PostgreSQL harness this branch removed, by calling
+ * `useTemplateDb`. None of them COLLECTS: the helper throws `useTemplateDb: no shared container in
+ * scope`, so their statements never reach an engine, and 145 files across the workspace are in the
+ * same position — 145 files, counted by grepping for `useTemplateDb` under every package and app
+ * source tree on 2026-09-22 (the glob is not written out here: a star-slash inside a block comment
+ * closes it, which is the same hazard CLAUDE.md records for the English-only scan, and here it broke
+ * the parser). Converting their SQL here would contradict a decision each one's own header records;
+ * leaving them unnamed would fail this guard. Naming them keeps the debt visible, and each entry
+ * goes when its suite is converted or deleted.
+ *
+ * The three `packages/workforce` entries carry a second reason on top: each opens
+ * `RED ON THIS BRANCH, AND NOT BY OVERSIGHT`, because the row lock it was written to prove has been
+ * deleted from the source tree-wide. Their residue is the `for update` clause itself.
  */
-const UNSWEPT: readonly string[] = ["packages/reporting/src/record-daily-close.pg.test.ts"];
+const UNSWEPT: readonly string[] = [
+  "packages/reporting/src/record-daily-close.pg.test.ts",
+  "apps/server/src/move-merge.pg.test.ts",
+  "apps/server/src/working-order.pg.test.ts",
+  "packages/workforce/src/chain.concurrency.test.ts",
+  "packages/workforce/src/clocking.concurrency.test.ts",
+  "packages/workforce/src/scheduling.concurrency.test.ts",
+];
 
 /** PostgreSQL-only spellings, each with what SQLite answers when one reaches the engine. */
 const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] = [
@@ -87,6 +108,22 @@ const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] 
     pattern:
       /\b(?:to_jsonb|jsonb_populate_record|json_agg|jsonb_agg|json_build_object|bool_or|bool_and|string_agg|lateral|information_schema)\b/,
   },
+  // `near "at": syntax error`. A timestamp column is TEXT here and carries no zone to convert, so
+  // there is nothing for this clause to do; a read hands back the stored string.
+  { name: "at time zone — SQLite has no zone conversion", pattern: /\bat\s+time\s+zone\b/ },
+  // `no such function: to_char`. Its one use in this repository was normalising a `timestamptz` to a
+  // UTC ISO string for a driver that returned a Date, which this engine never does.
+  //
+  // These two are on the list because of what they COST: `packages/workforce/src/chain.ts` carried
+  // two `to_char(<column> at time zone 'UTC', …)` templates and NOTHING ELSE from this list — no
+  // cast, no clock, no interval — so running the five patterns above it reported zero offenders
+  // while the statement was refused at prepare. Measured 2026-09-22 against that file at
+  // `git show 77e0aa190:packages/workforce/src/chain.ts`.
+  { name: "to_char() — SQLite has no such function", pattern: /\bto_char\s*\(/ },
+  // Row locks are gone tree-wide: one write transaction runs on the venue file at a time. SQLite
+  // refuses the clause at prepare (`near "for": syntax error`), and the compiler cannot see it
+  // inside a template, which is the reason it is worth a pattern.
+  { name: "for update — SQLite has no row locks", pattern: /\bfor\s+update\b/ },
 ];
 
 /**

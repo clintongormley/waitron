@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import {
+  CHECK_VIOLATION,
+  CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
+  UNIQUE_VIOLATION,
+  captureError,
+  isPgError,
+  newId,
+  nowIso,
+  pgErrorMessage,
+} from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -30,14 +40,23 @@ const suite = useVenueDb({
 
 const PIN = hashPin("1234");
 
+/** The two values every raw insert below has to supply itself: `id` and `created_at` come from the
+ * table's `$defaultFn` generators, which drizzle runs for a BUILDER insert and never for raw SQL,
+ * and the generated DDL declares neither with a SQL DEFAULT — without them the statement is refused
+ * `NOT NULL constraint failed: <table>.id`. Every insert here stays raw deliberately: what it is
+ * proving is the constraint or DEFAULT the MIGRATION declares, not the values drizzle would send. */
+function rowIdentity() {
+  return sql`${newId()}, ${nowIso()}`;
+}
+
 // persons is created by the IDENTITY migration set (relocated out of workforce), which this suite
 // layers under WORKFORCE because employments/time_entries FK it. These integration checks prove the
 // combined [core, identity, workforce] stack lands persons correctly under workforce.
 describe("persons, from the identity migration set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
-      insert into persons (display_name, pin_hash)
-      values ('Ana', ${PIN})`);
+      insert into persons (id, created_at, display_name, pin_hash)
+      values (${rowIdentity()}, 'Ana', ${PIN})`);
     const rows = await suite.db.execute<{ role: string; status: string }>(sql`
       select role, status from persons where display_name = 'Ana'`);
     expect(rows.rows[0]).toEqual({ role: "staff", status: "active" });
@@ -46,11 +65,11 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("accepts every person_role value", async () => {
     for (const role of ["staff", "supervisor", "manager", "admin"]) {
       await suite.db.execute(sql`
-        insert into persons (display_name, pin_hash, role)
-        values (${`role-${role}`}, ${PIN}, ${role})`);
+        insert into persons (id, created_at, display_name, pin_hash, role)
+        values (${rowIdentity()}, ${`role-${role}`}, ${PIN}, ${role})`);
     }
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from persons
+      select count(*) as n from persons
       where role in ('staff','supervisor','manager','admin')`);
     expect(rows.rows[0]!.n).toBeGreaterThanOrEqual(4);
   });
@@ -58,38 +77,44 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects a role outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('Bad role', ${PIN}, 'ceo')`),
+        insert into persons (id, created_at, display_name, pin_hash, role)
+        values (${rowIdentity()}, 'Bad role', ${PIN}, 'ceo')`),
     );
-    expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
+    // The refusal the PostgreSQL enum TYPE performed on its own is now a named CHECK constraint on
+    // a plain text column (`enumCheck`, packages/db/src/schema/columns.ts), so the class is a check
+    // violation rather than the old `22P02`. The constraint NAME is asserted too: the class alone
+    // is also satisfied by any of the eleven other checks on this table.
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/persons_role_ck/);
   });
 
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (display_name, pin_hash, status)
-        values ('Bad status', ${PIN}, 'fired')`),
+        insert into persons (id, created_at, display_name, pin_hash, status)
+        values (${rowIdentity()}, 'Bad status', ${PIN}, 'fired')`),
     );
-    expect(pgErrorCode(error)).toBe("22P02");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/persons_status_ck/);
   });
 
   it("rejects an empty display_name", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (display_name, pin_hash)
-        values ('', ${PIN})`),
+        insert into persons (id, created_at, display_name, pin_hash)
+        values (${rowIdentity()}, '', ${PIN})`),
     );
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/persons_display_name_ck/);
   });
 
   it("rejects an empty pin_hash", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (display_name, pin_hash)
-        values ('No pin', '')`),
+        insert into persons (id, created_at, display_name, pin_hash)
+        values (${rowIdentity()}, 'No pin', '')`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/persons_pin_hash_ck/);
   });
 });
@@ -107,15 +132,22 @@ describe("the D1a time & attendance tables", () => {
   }
 
   it("rejects an entry_kind outside the enum", async () => {
-    const { personId, locationId } = await seedPersonAndLocation();
+    const { personId, locationId, nodeId } = await seedPersonAndLocation();
+    // Valid genesis chain columns, like the offset case below: the enum's refusal is now a CHECK
+    // constraint rather than a value-coercion error, and a check runs AFTER the NOT NULL columns
+    // are read — so a row missing `node_id`/`recorded_at`/the Slice-4 columns would be refused on
+    // the wrong constraint and the case would pass without ever reaching `entry_kind`.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id
-        ) values (${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'lunch',
+          '2026-01-05T09:00:00.000Z', 0, ${personId}, '2026-01-05T09:00:00.000Z',
+          ${"A".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/time_entries_entry_kind_ck/);
   });
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
@@ -126,12 +158,12 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 900,
-          ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true)`),
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 900,
+          ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/time_entries_event_offset_ck/);
   });
 
@@ -140,10 +172,10 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
-          person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
-        ) values (${personId}, -1, 'full_time', '2026-01-01', 1500)`),
+          id, created_at, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
+        ) values (${rowIdentity()}, ${personId}, -1, 'full_time', '2026-01-01', 1500)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
   });
 
@@ -152,11 +184,11 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into employments (
-          person_id, contracted_minutes_per_week, contract_type,
+          id, created_at, person_id, contracted_minutes_per_week, contract_type,
           start_date, end_date, pay_rate
-        ) values (${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', 1500)`),
+        ) values (${rowIdentity()}, ${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', 1500)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);
   });
 });
@@ -174,13 +206,16 @@ describe("the D1b correction columns", () => {
     // Genesis chain columns (node_id, recorded_at + the Slice-4 columns, all NOT NULL) so this base
     // event is a valid position-1 entry; the D1b tests below append their (deliberately malformed)
     // correction at position 2 of the SAME (node, location), so the chain columns never collide on
-    // time_entries_chain_position_uq.
+    // time_entries_chain_position_uq. The instants carry `.000Z` because
+    // `time_entries_event_at_second_ck` admits exactly that spelling of a whole second — a raw
+    // insert writing `…09:00:00Z` is refused on THAT constraint, before reaching the one the case
+    // is about.
     const rows = await suite.db.execute<{ id: string }>(sql`
       insert into time_entries (
-        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
-        ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true
+      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
+        ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true
       ) returning id`);
     return { personId, locationId, nodeId, entryId: rows.rows[0]!.id };
   }
@@ -191,14 +226,14 @@ describe("the D1b correction columns", () => {
     const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
       insert into time_entries (
-        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
         correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-      ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
-        ${personId}, '2026-01-05T18:00:00Z', ${entryId}, 'forgot to clock out', 'approved', ${personId},
+      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+        ${personId}, '2026-01-05T18:00:00.000Z', ${entryId}, 'forgot to clock out', 'approved', ${personId},
         ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from time_entries
+      select count(*) as n from time_entries
       where entry_kind = 'correction' and corrects_entry_id = ${entryId}`);
     expect(rows.rows[0]!.n).toBe(1);
   });
@@ -212,13 +247,13 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
-          ${personId}, '2026-01-05T18:00:00Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+          ${personId}, '2026-01-05T18:00:00.000Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
   });
 
@@ -231,13 +266,13 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, correction_status, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
-          ${personId}, '2026-01-05T09:00:00Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
+          ${personId}, '2026-01-05T09:00:00.000Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
   });
 
@@ -248,14 +283,14 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
           correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
-          ${personId}, '2026-01-05T18:00:00Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+          ${personId}, '2026-01-05T18:00:00.000Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -278,10 +313,10 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (location_id, period_start, period_end)
-        values (${locationId}, '2026-03-08', '2026-03-02')`),
+        insert into roster_versions (id, created_at, location_id, period_start, period_end)
+        values (${rowIdentity()}, ${locationId}, '2026-03-08', '2026-03-02')`),
     );
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/roster_versions_period_ck/);
   });
 
@@ -292,10 +327,10 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (location_id, period_start, period_end, status)
-        values (${locationId}, '2026-03-02', '2026-03-08', 'published')`),
+        insert into roster_versions (id, created_at, location_id, period_start, period_end, status)
+        values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', 'published')`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
@@ -303,10 +338,10 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     const { locationId } = await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (location_id, period_start, period_end, published_at)
-        values (${locationId}, '2026-03-02', '2026-03-08', now())`),
+        insert into roster_versions (id, created_at, location_id, period_start, period_end, published_at)
+        values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', ${nowIso()})`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
@@ -317,15 +352,22 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     // CREATE UNIQUE INDEX and the second insert succeeds (two published rows coexist).
     const { locationId } = await seedPersonAndLocation();
     await suite.db.execute(sql`
-      insert into roster_versions (location_id, period_start, period_end, status, published_at)
-      values (${locationId}, '2026-05-04', '2026-05-10', 'published', now())`);
+      insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
+      values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`);
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (location_id, period_start, period_end, status, published_at)
-        values (${locationId}, '2026-05-04', '2026-05-10', 'published', now())`),
+        insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
+        values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`),
     );
-    expect(pgErrorCode(error)).toBe("23505"); // unique_violation
-    expect(pgErrorMessage(error)).toMatch(/roster_versions_published_period_uq/);
+    expect(isPgError(error, UNIQUE_VIOLATION)).toBe(true);
+    // SQLite names the index's COLUMNS, never the index: the message is
+    // `UNIQUE constraint failed: roster_versions.location_id, roster_versions.period_start,
+    // roster_versions.period_end`. That is what discriminates here, so it is what is asserted —
+    // `roster_versions_published_period_uq` is the only unique index on this table, and it is the
+    // only one over those three columns.
+    expect(pgErrorMessage(error)).toMatch(
+      /UNIQUE constraint failed: roster_versions\.location_id, roster_versions\.period_start, roster_versions\.period_end/,
+    );
   });
 
   it("allows two DRAFT versions for the same period — the published-only index is partial", async () => {
@@ -344,7 +386,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
       periodEnd: "2026-05-17",
     });
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from roster_versions
+      select count(*) as n from roster_versions
       where location_id = ${locationId}
         and period_start = '2026-05-11' and period_end = '2026-05-17'`);
     expect(rows.rows[0]!.n).toBe(2);
@@ -368,7 +410,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         endsAt: "2026-03-03T09:00:00Z",
       }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/shifts_interval_ck/);
   });
 
@@ -381,7 +423,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         startsOffsetMinutes: 900,
       }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/shifts_starts_offset_ck/);
   });
 });
@@ -410,7 +452,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         endsOn: "2026-03-05",
       }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/absences_range_ck/);
   });
 
@@ -419,13 +461,16 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertAbsence(suite.db, { personId, kind: "sabbatical" }),
     );
-    expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
+    // The enum TYPE's refusal is a named CHECK constraint here (`enumCheck`); see the persons-role
+    // case above for the class change.
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/absences_absence_kind_ck/);
   });
 
   it("rejects an availability weekday outside 0–6", async () => {
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() => insertAvailability(suite.db, { personId, weekday: 7 }));
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/availability_weekday_ck/);
   });
 
@@ -438,7 +483,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         availableToMinute: 600,
       }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/availability_window_ck/);
   });
 
@@ -451,7 +496,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         effectiveTo: "2026-01-01",
       }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/availability_effective_ck/);
   });
 
@@ -460,7 +505,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertShiftTemplate(suite.db, { locationId, label: "" }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/shift_templates_label_ck/);
   });
 
@@ -469,7 +514,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertShiftTemplate(suite.db, { locationId, weekday: -1 }),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);
   });
 
@@ -492,7 +537,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
 
     await suite.db.execute(sql`delete from shifts where id = ${fromShiftId}`);
     const after = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from shift_swaps where id = ${swapId}`,
+      sql`select count(*) as n from shift_swaps where id = ${swapId}`,
     );
     expect(after.rows[0]!.n).toBe(0);
   });
@@ -507,7 +552,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         toPersonId: toPerson,
       }),
     );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -524,48 +569,87 @@ describe("the workforce set carries no tenant column", () => {
     "shift_swaps",
   ];
 
+  /**
+   * One table's columns, as the engine's own catalogue reports them.
+   *
+   * `pragma table_info` replaces `information_schema.columns`, which SQLite does not have. `pk` is
+   * 0 for an ordinary column and the column's 1-based position in the primary key otherwise, which
+   * is what makes a composite key readable in declaration order. The table name is written into
+   * the statement rather than bound: `pragma table_info(?)` is refused at prepare time with
+   * `near "?": syntax error` (measured, and recorded on `packages/db/src/deployment.ts`), and the
+   * names here are this file's own constants, never input.
+   */
+  async function columnsOf(table: string) {
+    return (
+      await suite.db.execute<{ name: string; pk: number }>(
+        sql`pragma table_info(${sql.raw(`'${table}'`)})`,
+      )
+    ).rows;
+  }
+
   it("has no tenant_id column on any of its tables", async () => {
-    const rows = await suite.db.execute<{ table_name: string }>(sql`
-      select table_name from information_schema.columns
-      where table_schema = 'public' and column_name = 'tenant_id'
-        and table_name in (${sql.join(
-          TABLES.map((t) => sql`${t}`),
-          sql`, `,
-        )})`);
-    expect(rows.rows).toEqual([]);
+    const found: string[] = [];
+    for (const table of TABLES)
+      for (const column of await columnsOf(table))
+        if (column.name === "tenant_id") found.push(`${table}.${column.name}`);
+    expect(found).toEqual([]);
   });
 
   it("keys the working-time chain head by (node_id, location_id) alone", async () => {
-    const rows = await suite.db.execute<{ column_name: string }>(sql`
-      select a.attname as column_name
-      from pg_constraint c
-      join lateral unnest(c.conkey) with ordinality as k(attnum, ord) on true
-      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
-      where c.conrelid = 'workforce_chains'::regclass and c.contype = 'p'
-      order by k.ord`);
-    expect(rows.rows.map((r) => r.column_name)).toEqual(["node_id", "location_id"]);
+    const key = (await columnsOf("workforce_chains"))
+      .filter((column) => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map((column) => column.name);
+    expect(key).toEqual(["node_id", "location_id"]);
   });
 
+  /**
+   * The indexes, read off `sqlite_master` and `pragma index_info` in place of `pg_indexes`.
+   *
+   * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
+   * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration, so those are not
+   * the migration's own indexes and are skipped. The partial index's WHERE clause is not reported
+   * by `pragma index_info`, so it is read out of the stored `CREATE INDEX` text — which is the only
+   * place SQLite keeps it.
+   */
   it("rebuilds the multi-column keys on their remaining columns", async () => {
-    const rows = await suite.db.execute<{ indexname: string; indexdef: string }>(sql`
-      select indexname, indexdef from pg_indexes
-      where schemaname = 'public' and tablename in (${sql.join(
-        TABLES.map((t) => sql`${t}`),
-        sql`, `,
-      )})`);
-    const defs = Object.fromEntries(rows.rows.map((r) => [r.indexname, r.indexdef]));
-    expect(defs["time_entries_chain_position_uq"]).toContain("(node_id, location_id, sequence_no)");
-    expect(defs["roster_versions_published_period_uq"]).toContain(
-      "(location_id, period_start, period_end) WHERE (status = 'published'",
+    const indexes: Record<string, { columns: string; sql: string }> = {};
+    for (const table of TABLES) {
+      const rows = (
+        await suite.db.execute<{ name: string; sql: string | null }>(
+          sql`select name, sql from sqlite_master where type = 'index' and tbl_name = ${table}`,
+        )
+      ).rows;
+      for (const row of rows) {
+        if (row.sql === null) continue;
+        const columns = (
+          await suite.db.execute<{ name: string }>(
+            sql`pragma index_info(${sql.raw(`'${row.name}'`)})`,
+          )
+        ).rows;
+        indexes[row.name] = {
+          columns: columns.map((column) => column.name).join(", "),
+          sql: row.sql,
+        };
+      }
+    }
+    expect(indexes["time_entries_chain_position_uq"]!.columns).toBe(
+      "node_id, location_id, sequence_no",
     );
-    expect(defs["absences_person_idx"]).toContain("(person_id, starts_on)");
-    expect(defs["availability_person_idx"]).toContain("(person_id)");
-    expect(defs["employments_person_idx"]).toContain("(person_id)");
-    expect(defs["roster_versions_location_idx"]).toContain("(location_id)");
-    expect(defs["shifts_person_starts_idx"]).toContain("(person_id, starts_at)");
-    expect(defs["shift_templates_location_idx"]).toContain("(location_id)");
-    expect(defs["shift_swaps_from_shift_idx"]).toContain("(from_shift_id)");
-    expect(defs["time_entries_person_event_idx"]).toContain("(person_id, event_at)");
-    expect(Object.keys(defs).filter((name) => name.includes("tenant"))).toEqual([]);
+    expect(indexes["roster_versions_published_period_uq"]!.columns).toBe(
+      "location_id, period_start, period_end",
+    );
+    expect(indexes["roster_versions_published_period_uq"]!.sql).toContain(
+      `WHERE "roster_versions"."status" = 'published'`,
+    );
+    expect(indexes["absences_person_idx"]!.columns).toBe("person_id, starts_on");
+    expect(indexes["availability_person_idx"]!.columns).toBe("person_id");
+    expect(indexes["employments_person_idx"]!.columns).toBe("person_id");
+    expect(indexes["roster_versions_location_idx"]!.columns).toBe("location_id");
+    expect(indexes["shifts_person_starts_idx"]!.columns).toBe("person_id, starts_at");
+    expect(indexes["shift_templates_location_idx"]!.columns).toBe("location_id");
+    expect(indexes["shift_swaps_from_shift_idx"]!.columns).toBe("from_shift_id");
+    expect(indexes["time_entries_person_event_idx"]!.columns).toBe("person_id, event_at");
+    expect(Object.keys(indexes).filter((name) => name.includes("tenant"))).toEqual([]);
   });
 });

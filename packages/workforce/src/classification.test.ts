@@ -9,7 +9,10 @@ function tablesInDrizzle(): string[] {
   const names: string[] = [];
   for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
     const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z0-9_]+)"?/gi)) {
+    // Either quoting: drizzle-kit writes a SQLite identifier in backticks where it wrote a
+    // PostgreSQL one in double quotes, and a name may arrive unquoted. Both are accepted so the
+    // guard reads the generated SQL rather than one dialect's punctuation.
+    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
       names.push(m[1]!);
     }
   }

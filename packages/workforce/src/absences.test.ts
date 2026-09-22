@@ -114,7 +114,7 @@ describe("createAbsence", () => {
       }),
     );
     const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from absences where id = ${id}`,
+      sql`select count(*) as n from absences where id = ${id}`,
     );
     expect(rows.rows[0]!.n).toBe(1);
   });
@@ -156,7 +156,7 @@ describe("createAbsence", () => {
       }),
     );
     const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from absences where id = ${id}`,
+      sql`select count(*) as n from absences where id = ${id}`,
     );
     expect(rows.rows[0]!.n).toBe(1);
   });
@@ -181,7 +181,7 @@ describe("createAbsence", () => {
       }),
     );
     const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from absences where id = ${id}`,
+      sql`select count(*) as n from absences where id = ${id}`,
     );
     expect(rows.rows[0]!.n).toBe(1);
   });

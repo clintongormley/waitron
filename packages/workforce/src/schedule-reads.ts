@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { AbsenceKind, AbsenceStatus } from "./schema/absences.js";
 import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
+import { shiftLocalDate } from "./shift-local-date.js";
 
 /**
  * The STAFF-FACING read side of the swap/absence request path — one person's OWN schedule views, the
@@ -24,7 +25,7 @@ export interface ListShiftsForPersonInput {
 export interface PersonShiftRow {
   id: string;
   locationId: string;
-  /** UTC ISO instant (to_char-normalised, the getRoster/planned-vs-actual pattern). */
+  /** UTC ISO instant — `starts_at` is a text column, read back as the stored string. */
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -44,7 +45,7 @@ export interface PersonSwapRow {
   toPersonId: string;
   toShiftId: string | null;
   status: ShiftSwapStatus;
-  /** UTC ISO instant (to_char-normalised). */
+  /** UTC ISO instant — `created_at` is a text column, read back as the stored string. */
   createdAt: string;
   /** `requested_by_me` when the requester is the `requested_by_person`, else `offered_to_me`. */
   direction: SwapDirection;
@@ -55,7 +56,7 @@ export interface PersonAbsenceRow {
   id: string;
   personId: string;
   kind: AbsenceKind;
-  /** YYYY-MM-DD, inclusive (::text cast, the getRoster date pattern). */
+  /** YYYY-MM-DD, inclusive — the stored text, read back unchanged. */
   startsOn: string;
   endsOn: string;
   status: AbsenceStatus;
@@ -65,8 +66,8 @@ export interface PersonAbsenceRow {
 
 /**
  * The requester's shifts whose LOCAL wall date falls in the half-open window `[from, to)`, ordered by
- * `starts_at`. The window compares `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, the
- * same offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
+ * `starts_at`. The window compares `date(starts_at, starts_offset_minutes || ' minutes')`, the same
+ * offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
  * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. The
  * matching index is `shifts_person_starts_idx` on `(person_id, starts_at)`.
  */
@@ -84,15 +85,12 @@ export async function listShiftsForPerson(
     role: string | null;
     roster_version_id: string | null;
   }>(sql`
-    select id, location_id,
-      to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
-      starts_offset_minutes,
-      to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+    select id, location_id, starts_at, starts_offset_minutes, ends_at,
       ends_offset_minutes, role, roster_version_id
     from shifts
     where person_id = ${input.personId}
-      and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date >= ${input.from}::date
-      and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date < ${input.to}::date
+      and ${shiftLocalDate} >= ${input.from}
+      and ${shiftLocalDate} < ${input.to}
     order by starts_at`);
   return rows.map((r) => ({
     id: r.id,
@@ -128,8 +126,7 @@ export async function listSwapsForPerson(
     created_at: string;
     direction: SwapDirection;
   }>(sql`
-    select id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status,
-      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+    select id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at,
       case when requested_by_person_id = ${input.personId} then 'requested_by_me' else 'offered_to_me' end as direction
     from shift_swaps
     where (requested_by_person_id = ${input.personId} or to_person_id = ${input.personId})
@@ -165,8 +162,7 @@ export async function listAbsencesForPerson(
     note: string | null;
     created_at: string;
   }>(sql`
-    select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
-      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
+    select id, person_id, absence_kind, starts_on, ends_on, status, note, created_at
     from absences
     where person_id = ${input.personId}
     order by starts_on desc`);

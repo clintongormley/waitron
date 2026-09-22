@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { nowIso, type Transaction } from "@waitron/db";
+import { newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { AbsenceKind, AbsenceStatus } from "./schema/absences.js";
 // Side-effect: registers this package's absence.* codes so `new AppError(...)` below type-checks
@@ -65,11 +65,16 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
       personId: input.personId,
     });
   }
+  // `id` and `created_at` are supplied by hand: both are `$defaultFn` generators declared on the
+  // column (`schema/absences.ts`), which drizzle runs for a builder insert and not for raw SQL, and
+  // the generated DDL carries no SQL default for either — without them the statement is refused
+  // `NOT NULL constraint failed: absences.id`. `newId`/`nowIso` are the same two generators the
+  // column declares, so a row written here and one written through the table are the same shape.
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into absences (person_id, absence_kind, starts_on, ends_on, note)
+    insert into absences (id, person_id, absence_kind, starts_on, ends_on, note, created_at)
     values (
-      ${input.personId}, ${input.kind},
-      ${input.startsOn}, ${input.endsOn}, ${input.note}
+      ${newId()}, ${input.personId}, ${input.kind},
+      ${input.startsOn}, ${input.endsOn}, ${input.note}, ${nowIso()}
     )
     returning id`);
   return rows[0]!.id;
@@ -107,7 +112,7 @@ export interface PendingAbsenceRow {
   id: string;
   personId: string;
   kind: AbsenceKind;
-  /** YYYY-MM-DD, inclusive (::text cast, the getRoster date pattern). */
+  /** YYYY-MM-DD, inclusive — the stored text, read back unchanged. */
   startsOn: string;
   endsOn: string;
   /** Always `requested` for this query. */
@@ -131,8 +136,7 @@ export async function listPendingAbsences(tx: Transaction): Promise<PendingAbsen
     note: string | null;
     created_at: string;
   }>(sql`
-    select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
-      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
+    select id, person_id, absence_kind, starts_on, ends_on, status, note, created_at
     from absences
     where status = 'requested'
     order by absences.created_at`);

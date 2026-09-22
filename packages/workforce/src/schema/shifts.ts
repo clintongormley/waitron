@@ -15,8 +15,8 @@ import { rosterVersions } from "./roster-versions.js";
  *
  * `starts_at`/`ends_at` are the absolute instants; `starts_offset_minutes`/`ends_offset_minutes` are
  * the wall offsets that ride alongside — the same `time_entries.event_at`/`event_offset_minutes`
- * pattern, so the LOCAL wall date is recovered as `(starts_at at time zone 'UTC' + offset)` (what
- * `publishRoster` matches against a roster version's period).
+ * pattern, so the LOCAL wall date is recovered by `shiftLocalDate` (../shift-local-date.ts), which
+ * is what `publishRoster` matches against a roster version's period.
  *
  * `roster_version_id` is null while the shift is an unpublished draft and is set on publish
  * (`publishRoster` attaches every in-period draft shift at the version's location). Deleting the
@@ -66,6 +66,9 @@ export const shifts = table(
     check("shifts_starts_offset_ck", sql`${t.startsOffsetMinutes} between -840 and 840`),
     check("shifts_ends_offset_ck", sql`${t.endsOffsetMinutes} between -840 and 840`),
     // A shift ends after it starts — a zero- or negative-length planned interval is malformed.
+    // WEAKER THAN IT READS on this engine: both columns are TEXT, so this compares SPELLINGS, and
+    // a pair whose two endpoints are spelled differently is judged wrongly in BOTH directions. The
+    // measurement and the fix are recorded once, on `assertShiftInterval` in ../clocking.ts.
     check("shifts_interval_ck", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );

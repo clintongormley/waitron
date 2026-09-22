@@ -195,10 +195,11 @@ export const timeEntries = table(
           or (not ${t.isFirstEntry} and ${t.prevEntryHash} is not null)`,
     ),
     // Defence-in-depth for the Slice-4 hash chain: `event_at` must carry NO sub-second component.
-    // The chain hashes `event_at` as the absolute instant (chain-hash.ts), but every read-back
-    // projects it at SECOND precision (`to_char(… 'HH24:MI:SS')`), so a stored fractional second
-    // would recompute to a different hash and read as tampered — a false `hash_mismatch` on genuine
-    // data. `appendToChain` truncates to whole seconds at the write choke point (../chain.ts); this
+    // The chain hashes `event_at` as the absolute instant (chain-hash.ts) after truncating it to a
+    // whole second, so a row whose stored value kept a fractional second would carry one spelling in
+    // the column and another in the hash, and recompute as tampered — a false `hash_mismatch` on
+    // genuine data. This CHECK is also what gives the column ONE spelling, which is what `<` and
+    // `order by` on a text timestamp need to be a time ordering. `appendToChain` truncates to whole seconds at the write choke point (../chain.ts); this
     // CHECK backstops any writer that bypasses it (the escape-or-validate ethos, CLAUDE.md §3).
     //
     // Replaced 2026-09-21, when the engine changed: this was
@@ -220,9 +221,8 @@ export const timeEntries = table(
       "time_entries_event_at_second_ck",
       sql`${t.eventAt} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].000Z'`,
     ),
-    // Same whole-second defence for `recorded_at`: it is hashed as the instant and read back at second
-    // precision (`to_char(… 'HH24:MI:SS')`), so a stored sub-second component would recompute to a
-    // different hash. `appendToChain` truncates at the write choke point; this CHECK backstops it,
+    // Same whole-second defence for `recorded_at`: it is hashed as the instant, so a stored
+    // sub-second component would leave one spelling in the column and another in the hash. `appendToChain` truncates at the write choke point; this CHECK backstops it,
     // mirroring `time_entries_event_at_second_ck`.
     // Same rewrite, and the same two differences from what it replaced, as
     // time_entries_event_at_second_ck above — the measurement is stated once there. `recorded_at`

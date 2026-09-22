@@ -1,8 +1,12 @@
 import {
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  pgErrorCode,
+  isPgError,
+  newId,
+  nowIso,
   pgErrorMessage,
   refusalOn,
 } from "@waitron/db";
@@ -71,8 +75,12 @@ function clockEvent(): TimeEntryAppend {
 
 /** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
 async function seedTill(location: string): Promise<string> {
+  // `id` and `created_at` come from the table's `$defaultFn` generators, which drizzle runs for a
+  // builder insert and never for raw SQL; the generated DDL declares no SQL default for either, so
+  // without them the statement is refused `NOT NULL constraint failed: tills.id`.
   const { rows } = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location}, 'Till 1')
+    insert into tills (id, location_id, name, created_at)
+    values (${newId()}, ${location}, 'Till 1', ${nowIso()})
     returning id`);
   return rows[0]!.id;
 }
@@ -166,11 +174,14 @@ describe("appendToChain", () => {
 
   it("stamps recorded_at as a whole second from the injected clock", async () => {
     // recorded_at is the injected clock, truncated to a whole second and fed to BOTH the hash and the
-    // stored column — so the chain re-verifies even from a millisecond-precision clock.
+    // stored column — so the chain re-verifies even from a millisecond-precision clock. The read-back
+    // is the stored text, and the truncation writes `toISOString()`, so the fractional field is
+    // present and zero: `.678` is gone, `.000` is what a whole second is spelled as here, and
+    // `time_entries_recorded_at_second_ck` admits no other form.
     const clock = () => new Date(Date.parse("2026-09-07T08:00:05.678Z"));
     await pg.db.transaction((tx) => appendToChain(tx, key(), clockEvent(), clock));
     const [row] = await readChain(pg.db, key());
-    expect(row?.recordedAt).toBe("2026-09-07T08:00:05Z");
+    expect(row?.recordedAt).toBe("2026-09-07T08:00:05.000Z");
     expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
   });
 
@@ -184,9 +195,9 @@ describe("appendToChain", () => {
   });
 
   it("re-verifies an event_at that carries a sub-second fraction", async () => {
-    // The trusted clock is millisecond-precision, but every read-back projects event_at at SECOND
-    // precision (`to_char(… 'HH24:MI:SS')`). Hashing the fractional instant at insert while the
-    // read-back recomputes over the truncated one is a spurious hash_mismatch on genuine, untouched
+    // The trusted clock is millisecond-precision, but the column stores whole seconds and
+    // `time_entries_event_at_second_ck` refuses anything else. Hashing the fractional instant at
+    // insert while the read-back recomputes over the truncated one is a spurious hash_mismatch on genuine, untouched
     // data — a false tamper alarm on ~999/1000 of real timestamps. Truncating to whole seconds ONCE
     // at the write choke point makes the stored column, the committed hash and the read-back one
     // identical representation, so the chain re-verifies.
@@ -201,12 +212,17 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
-          ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+          '2026-01-05T09:00:00.123Z', 0,
+          ${personId}, '2026-01-05T09:00:00.000Z', ${"0".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    // This engine reports every refusal under one `code`, so the CLASS comes off `errcode` and the
+    // constraint's NAME off the message — a check's message is `CHECK constraint failed: <name>`.
+    // Both are needed: the class alone is also satisfied by any of the six other checks this row
+    // passes through.
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toContain("time_entries_event_at_second_ck");
   });
 
@@ -215,12 +231,13 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+          '2026-01-05T09:00:00.000Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
   });
 
@@ -291,10 +308,11 @@ describe("appendToChain", () => {
     // where the same note is recorded.
     await pg.db.execute(sql`
       insert into time_entries (
-        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
-        ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
+      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+        '2026-01-05T08:00:00.000Z', 0,
+        ${personId}, '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db
       .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
@@ -305,11 +323,16 @@ describe("appendToChain", () => {
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
-    // Stubbing tx.transaction is the only deterministic way to reach exhaustion: PGlite cannot
-    // generate three real CONCURRENT collisions. appendToChain touches only tx.transaction on this
-    // path, so the stub is exactly that one method.
+    // Stubbing tx.transaction is the only deterministic way to reach exhaustion: one write
+    // transaction runs on the venue file at a time, so three real CONCURRENT collisions cannot be
+    // generated. appendToChain touches only tx.transaction on this path, so the stub is exactly
+    // that one method. The forged rejection carries `errcode`, which is where `node:sqlite` puts
+    // the discriminating value and where `isUniqueViolation` reads it (`packages/db/src/sql-state.ts`);
+    // 2067 is a unique index. A stub carrying the old `code: "23505"` is not a collision to this
+    // predicate and the retry would never run — which is what the control below rests on.
     const alwaysCollides = {
-      transaction: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+      transaction: () =>
+        Promise.reject(Object.assign(new Error("dup"), { errcode: UNIQUE_VIOLATION[0] })),
     } as never;
     const error = await appendToChain(alwaysCollides, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,
@@ -320,14 +343,16 @@ describe("appendToChain", () => {
   });
 
   it("does not retry an error that is not a chain collision", async () => {
+    // The control in the other direction: a refusal of a DIFFERENT class is re-thrown untouched.
     const alwaysFk = {
-      transaction: () => Promise.reject(Object.assign(new Error("fk"), { code: "23503" })),
+      transaction: () =>
+        Promise.reject(Object.assign(new Error("fk"), { errcode: FOREIGN_KEY_VIOLATION[0] })),
     } as never;
     const error = await appendToChain(alwaysFk, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(error).toMatchObject({ code: "23503" });
+    expect(error).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
   });
 });
 
@@ -409,7 +434,7 @@ describe("readChainHead", () => {
       lastRecordedAt: null,
     });
     const { rows } = await pg.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from workforce_chains
+      select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
@@ -422,7 +447,7 @@ describe("readChainHead", () => {
     expect(head.lastEntryHash).not.toBeNull();
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await pg.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from workforce_chains
+      select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });

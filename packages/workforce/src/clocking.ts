@@ -1,5 +1,5 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
+import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -20,6 +20,7 @@ import {
   type RosterBreach,
 } from "./roster-validation.js";
 import { comparePlannedVsActual, type PlannedVsActual } from "./planned-vs-actual.js";
+import { shiftLocalDate } from "./shift-local-date.js";
 import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
@@ -333,10 +334,9 @@ export class WorkforceBackend {
    * re-admits ONLY the SUPERSEDED row (its `rv.id` still matches); the DRAFT stays out for want of any
    * `rv.id`. Each guard is therefore necessary — one catches the DRAFT exclusion, the other the
    * SUPERSEDED — even though the OUTER mutation happens to re-admit both. The
-   * `starts_at + starts_offset_minutes` → local
-   * date expression is offset-aware (offset 0 in this slice, so local = UTC) and matches
-   * publishRoster's shift-attach; `to_char` normalises the instants to UTC ISO so the pure comparator's
-   * `Date.parse` sees a string under either driver. */
+   * The local-date expression is `shiftLocalDate` (shift-local-date.ts), offset-aware (offset 0 in
+   * this slice, so local = UTC) and shared with publishRoster's shift-attach; the instants are read
+   * back as the stored text, which is what the pure comparator's `Date.parse` takes. */
   private async plannedShiftsInPeriod(
     tx: Transaction,
     locationId: string,
@@ -350,17 +350,14 @@ export class WorkforceBackend {
       ends_at: string;
       ends_offset_minutes: number;
     }>(sql`
-      select s.id, s.person_id,
-        to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
-        s.starts_offset_minutes,
-        to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
-        s.ends_offset_minutes
-      from shifts s
+      select shifts.id, shifts.person_id, shifts.starts_at, shifts.starts_offset_minutes,
+        shifts.ends_at, shifts.ends_offset_minutes
+      from shifts
       join roster_versions rv
-        on rv.id = s.roster_version_id and rv.status = 'published'
-      where s.location_id = ${locationId}
-        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date >= ${period.start}::date
-        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date < ${period.end}::date`);
+        on rv.id = shifts.roster_version_id and rv.status = 'published'
+      where shifts.location_id = ${locationId}
+        and ${shiftLocalDate} >= ${period.start}
+        and ${shiftLocalDate} < ${period.end}`);
     return rows.map((r) => ({
       shiftId: r.id,
       personId: r.person_id,
@@ -390,8 +387,8 @@ export class WorkforceBackend {
         locationId: timeEntries.locationId,
         nodeId: timeEntries.nodeId,
         entryKind: timeEntries.entryKind,
-        eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-        recordedAt: sql<string>`to_char(${timeEntries.recordedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        eventAt: timeEntries.eventAt,
+        recordedAt: timeEntries.recordedAt,
         offsetMinutes: timeEntries.eventOffsetMinutes,
         sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
@@ -487,7 +484,8 @@ export class WorkforceBackend {
    * Monday first (`weekStartOf`, the same helper the guardrail buckets use), so a non-Monday caller
    * cannot open a mid-week roster and two different days of one calendar week map to the same
    * period_start — closing the mid-week + duplicate-draft hole structurally. `period_end` is derived
-   * in SQL as the inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript.
+   * in SQL as the inclusive Sunday (`date(period, '+6 days')`), so no date value round-trips through
+   * TypeScript.
    * Throws `roster.draft_exists` when a draft for this (location, week) already exists — the
    * published-uniqueness index does not cover drafts, so this check-then-insert is the guard.
    * Slice-1 single-author screen: a concurrent double-create could still fork two drafts (no draft
@@ -505,9 +503,13 @@ export class WorkforceBackend {
         locationId: input.locationId,
       });
     }
+    // `id` and `created_at` are supplied by hand: both are `$defaultFn` generators declared on the
+    // column (`schema/roster-versions.ts`), which drizzle runs for a builder insert and not for raw
+    // SQL, and the generated DDL carries no SQL default for either — without them the statement is
+    // refused `NOT NULL constraint failed: roster_versions.id`.
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into roster_versions (location_id, period_start, period_end)
-      values (${input.locationId}, ${period}, ${period}::date + 6)
+      insert into roster_versions (id, location_id, period_start, period_end, created_at)
+      values (${newId()}, ${input.locationId}, ${period}, date(${period}, '+6 days'), ${nowIso()})
       returning id`);
     return rows[0]!.id;
   }
@@ -525,12 +527,10 @@ export class WorkforceBackend {
   ): Promise<RosterSnapshot> {
     const period = weekStartOf(input.period);
     // Prefer the DRAFT (what is being edited); fall back to the current PUBLISHED version for the week.
-    // `period_start/end::text`: node-postgres parses a `date` column into a JS Date, PGlite into a
-    // string — the same driver divergence `attachedShifts` handles with `to_char`. The `::text` cast
-    // pins both to a 'YYYY-MM-DD' string, so the row (and its JSON to the browser) is stable.
+    // Every column here is text on this engine, so the row (and its JSON to the browser) carries the
+    // stored strings — 'YYYY-MM-DD' for the two period bounds, a UTC ISO instant for `published_at`.
     const { rows } = await tx.execute<RosterVersionDbRow>(sql`
-      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
-        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+      select id, location_id, period_start, period_end, status, published_at,
         published_by_person_id
       from roster_versions
       where location_id = ${input.locationId}
@@ -549,8 +549,7 @@ export class WorkforceBackend {
    */
   async getRosterVersion(tx: Transaction, input: { versionId: string }): Promise<RosterVersionRow> {
     const { rows } = await tx.execute<RosterVersionDbRow>(sql`
-      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
-        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+      select id, location_id, period_start, period_end, status, published_at,
         published_by_person_id
       from roster_versions
       where id = ${input.versionId}
@@ -567,10 +566,7 @@ export class WorkforceBackend {
   /** The shifts attached to a version, mapped to `ShiftRow`s ordered by start instant. */
   private async shiftsForVersion(tx: Transaction, versionId: string): Promise<ShiftRow[]> {
     const { rows } = await tx.execute<ShiftDbRow>(sql`
-      select id, person_id, location_id,
-        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
-        starts_offset_minutes,
-        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+      select id, person_id, location_id, starts_at, starts_offset_minutes, ends_at,
         ends_offset_minutes, role, roster_version_id
       from shifts
       where roster_version_id = ${versionId}
@@ -593,12 +589,16 @@ export class WorkforceBackend {
         rosterVersionId: input.versionId,
       });
     }
+    // `id` and `created_at` are supplied by hand: both are `$defaultFn` generators declared on the
+    // column (`schema/shifts.ts`), which drizzle runs for a builder insert and not for raw SQL, and
+    // the generated DDL carries no SQL default for either — without them the statement is refused
+    // `NOT NULL constraint failed: shifts.id`.
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into shifts (person_id, location_id, starts_at, starts_offset_minutes,
-        ends_at, ends_offset_minutes, role, roster_version_id)
-      values (${input.personId}, ${input.locationId},
+      insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
+        ends_at, ends_offset_minutes, role, roster_version_id, created_at)
+      values (${newId()}, ${input.personId}, ${input.locationId},
         ${input.startsAt}, ${input.startsOffsetMinutes}, ${input.endsAt}, ${input.endsOffsetMinutes},
-        ${input.role}, ${input.versionId})
+        ${input.role}, ${input.versionId}, ${nowIso()})
       returning id`);
     return rows[0]!.id;
   }
@@ -636,10 +636,7 @@ export class WorkforceBackend {
    * (an unattached draft shift) is editable — there is no published version to protect. */
   private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
     const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
-      select s.id, s.person_id, s.location_id,
-        to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
-        s.starts_offset_minutes,
-        to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+      select s.id, s.person_id, s.location_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
         s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
       from shifts s
       left join roster_versions rv on rv.id = s.roster_version_id
@@ -710,17 +707,19 @@ export class WorkforceBackend {
       throw error;
     }
     // UPDATE ... FROM reads location_id/period_start/period_end straight off the version row, so no
-    // date value round-trips through TypeScript. `starts_offset_minutes * interval '1 minute'` turns
-    // the wall offset into the shift of the absolute instant onto local wall time before ::date.
+    // date value round-trips through TypeScript. The shift's local wall date is `shiftLocalDate`
+    // (shift-local-date.ts), the one home of that expression. The update target is named `shifts`
+    // rather than aliased: SQLite refuses a bare alias here (`update shifts s set …` is
+    // `near "s": syntax error`, measured on SQLite 3.53.4), and `shiftLocalDate` renders its columns
+    // table-qualified.
     await tx.execute(sql`
-      update shifts s
+      update shifts
       set roster_version_id = rv.id
       from roster_versions rv
       where rv.id = ${input.versionId}
-        and s.location_id = rv.location_id
-        and s.roster_version_id is null
-        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
-            between rv.period_start and rv.period_end`);
+        and shifts.location_id = rv.location_id
+        and shifts.roster_version_id is null
+        and ${shiftLocalDate} between rv.period_start and rv.period_end`);
     // Advisory guardrails: only when the caller supplied a ruleset (the workforce-es resolver's
     // output). Validate exactly the shifts now attached to this version, then return the breaches —
     // publishing has already committed above, so a breach never blocks it.
@@ -729,8 +728,7 @@ export class WorkforceBackend {
   }
 
   /** The shifts attached to a published version, as neutral `PlannedShift`s for `validateRoster`.
-   * `event_at` is normalised to a UTC ISO instant so the pure engine's `Date.parse` sees a string
-   * under either driver (node-postgres returns a Date, PGlite a string). */
+   * The instants are the stored text, which is what the pure engine's `Date.parse` takes. */
   private async attachedShifts(tx: Transaction, versionId: string): Promise<PlannedShift[]> {
     const { rows } = await tx.execute<{
       id: string;
@@ -740,11 +738,7 @@ export class WorkforceBackend {
       ends_at: string;
       ends_offset_minutes: number;
     }>(sql`
-      select id, person_id,
-        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
-        starts_offset_minutes,
-        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
-        ends_offset_minutes
+      select id, person_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes
       from shifts
       where roster_version_id = ${versionId}`);
     return rows.map((r) => ({
@@ -809,8 +803,10 @@ export class WorkforceBackend {
         and prior.status = 'published'
         and prior.id <> ${versionId}`);
     if (rows.length === 0) return;
+    // `as prior`, not a bare `prior`: SQLite refuses the alias without the keyword
+    // (`near "prior": syntax error`, measured on SQLite 3.53.4).
     await tx.execute(sql`
-      update roster_versions prior
+      update roster_versions as prior
       set status = 'superseded'
       from roster_versions target
       where target.id = ${versionId}
@@ -895,8 +891,7 @@ export class WorkforceBackend {
       event_offset_minutes: number;
       correction_reason: string;
     }>(sql`
-      select person_id, location_id, corrects_entry_id,
-        to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
+      select person_id, location_id, corrects_entry_id, event_at,
         event_offset_minutes, correction_reason
       from time_entries
       where id = ${correctionId} and entry_kind = 'correction'
@@ -1014,8 +1009,8 @@ export class WorkforceBackend {
         locationId: timeEntries.locationId,
         nodeId: timeEntries.nodeId,
         entryKind: timeEntries.entryKind,
-        eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-        recordedAt: sql<string>`to_char(${timeEntries.recordedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        eventAt: timeEntries.eventAt,
+        recordedAt: timeEntries.recordedAt,
         offsetMinutes: timeEntries.eventOffsetMinutes,
         sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
@@ -1058,6 +1053,23 @@ function shiftDay(date: string, deltaDays: number): string {
  *   - ends not strictly after starts (`reason: "ends_not_after_starts"`) — exactly equal is invalid too.
  * The engine verb is a public `@waitron/workforce` API and must honour this contract itself, even
  * though the HTTP route also screens the inputs (`requireTimestamp`).
+ *
+ * THIS GUARD IS NOW THE ONLY REAL INTERVAL CHECK, and the loss is worth stating rather than
+ * discovering. `starts_at`/`ends_at` are TEXT columns, so `shifts_interval_ck` (`ends_at >
+ * starts_at`) compares SPELLINGS, and nothing normalises the spelling on the way in: `addShift`
+ * stores the caller's string verbatim, and `requireTimestamp`
+ * (`apps/server/src/workforce-api.ts`) accepts anything `Date.parse` accepts — a `+02:00` offset
+ * included. Measured on SQLite 3.53.4 (Node v26.7.0), four inserts against this exact constraint,
+ * with a control in each direction: a pair spelled `10:00:00.000Z` → `11:00:00.000+02:00` is an
+ * interval that ENDS BEFORE it starts and the constraint ACCEPTS it, while `10:00:00.000+02:00` →
+ * `09:00:00.000Z` is a valid one-hour shift and the constraint REFUSES it; the same two instant
+ * pairs written in one spelling are refused and accepted correctly. `Date.parse` here compares
+ * INSTANTS, so the first case never reaches the database — but the second reaches it and comes
+ * back as a raw `CHECK constraint failed`, not a structured `shift.invalid`. The same
+ * mixed-spelling exposure applies to `order by starts_at` and to `shifts_person_starts_idx`.
+ * Normalising both endpoints at this choke point, the way `attemptAppend` (./chain.ts) does for
+ * `event_at`, is the fix; it is a behaviour change to a public read (a caller's `+02:00` would come
+ * back as `Z`) and is left for the decision that takes it.
  */
 function assertShiftInterval(startsAt: string, endsAt: string): void {
   const startMs = Date.parse(startsAt);
@@ -1082,7 +1094,7 @@ type RosterVersionDbRow = {
   published_by_person_id: string | null;
 };
 
-/** The raw `shifts` shape the read verbs return — instants normalised to UTC ISO by `to_char`. A
+/** The raw `shifts` shape the read verbs return — the instants are the stored text. A
  * `type` object literal (not an `interface`) so it satisfies `tx.execute`'s `Record<string, unknown>`
  * constraint via TypeScript's implicit index signature, matching this file's inline row types. */
 type ShiftDbRow = {

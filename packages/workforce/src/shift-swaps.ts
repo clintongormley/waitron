@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { nowIso, type Transaction } from "@waitron/db";
+import { newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 // Side-effect: registers this package's swap.*/shift.* codes so `new AppError(...)` below type-checks
@@ -62,12 +62,16 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
       });
     }
   }
+  // `id` and `created_at` are supplied by hand: both are `$defaultFn` generators declared on the
+  // column (`schema/shift-swaps.ts`), which drizzle runs for a builder insert and not for raw SQL,
+  // and the generated DDL carries no SQL default for either — without them the statement is refused
+  // `NOT NULL constraint failed: shift_swaps.id`.
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into shift_swaps (
-      requested_by_person_id, from_shift_id, to_person_id, to_shift_id
+      id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, created_at
     ) values (
-      ${input.requestedByPersonId}, ${input.fromShiftId},
-      ${input.toPersonId}, ${input.toShiftId}
+      ${newId()}, ${input.requestedByPersonId}, ${input.fromShiftId},
+      ${input.toPersonId}, ${input.toShiftId}, ${nowIso()}
     )
     returning id`);
   return rows[0]!.id;
@@ -171,8 +175,7 @@ export interface PendingSwapRow {
   toShiftId: string | null;
   /** Always `accepted` for this query, typed to the enum. */
   status: ShiftSwapStatus;
-  /** UTC ISO instant (to_char-normalised, the getRoster pattern — node-postgres returns a Date, PGlite
-   * a string; the cast pins both to a stable string). */
+  /** UTC ISO instant — `created_at` is a text column, read back as the stored string. */
   createdAt: string;
 }
 
@@ -191,8 +194,7 @@ export async function listPendingSwaps(tx: Transaction): Promise<PendingSwapRow[
     status: ShiftSwapStatus;
     created_at: string;
   }>(sql`
-    select id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status,
-      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
+    select id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at
     from shift_swaps
     where status = 'accepted'
     order by shift_swaps.created_at`);

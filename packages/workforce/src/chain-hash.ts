@@ -27,12 +27,11 @@ export interface EntryHashInput {
   /** The trusted event instant, an ISO-8601 timestamptz string, ALREADY TRUNCATED to whole seconds
    * by chain.ts's `attemptAppend` before it reaches here. Hashed as the INSTANT (epoch ms), not the
    * string, so a change of offset representation that preserves the instant does not change the
-   * digest. The read-back projects `event_at` at SECOND precision (`to_char(… 'HH24:MI:SS')` in
-   * clocking.ts and the chain-test read-backs), so the recompute matches the stored hash ONLY at
-   * whole-second granularity: a sub-second component would be hashed here but dropped on read-back,
-   * recomputing a different digest — a false `hash_mismatch`. The whole-second truncation at the
-   * single write choke point, backstopped by the `time_entries_event_at_second_ck` CHECK, is what
-   * keeps the stored column, the committed hash and the read-back one identical representation. */
+   * digest. `event_at` is a text column read back as the stored string, and
+   * `time_entries_event_at_second_ck` refuses any spelling but whole seconds written
+   * `YYYY-MM-DDTHH:MM:SS.000Z` — so the value hashed here and the value a recompute reads are the
+   * same bytes. The whole-second truncation at the single write choke point (chain.ts's
+   * `attemptAppend`), backstopped by that CHECK, is what holds it. */
   eventAt: string;
   /** The recording node's clock at append, an ISO-8601 timestamptz string, ALREADY TRUNCATED to
    * whole seconds by chain.ts's `attemptAppend`. Hashed as the INSTANT (epoch ms) immediately after

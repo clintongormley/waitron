@@ -495,7 +495,7 @@ describe("updateShift / removeShift", () => {
       }),
     );
     const row = await suite.db.execute<{ ends_at: string; role: string | null }>(sql`
-      select to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at, role
+      select ends_at, role
       from shifts where id = ${shiftId}`);
     expect(row.rows[0]!.ends_at).toBe("2026-09-07T15:00:00Z");
     expect(row.rows[0]!.role).toBe("kitchen");
