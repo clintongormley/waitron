@@ -4780,6 +4780,20 @@ PostgreSQL.** `catalogue-demo.ts`, `integrated-card-demo.ts`, `park-retrieve-dem
 demo-only gap. **Step:** convert the three shipped ones at least, following `dev-setup.ts`;
 `questions.md` carries the options and the recommended default (convert all seven).
 
+**GAP NINE IS DONE — 2026-09-22, owner decision (b).** The three SHIPPED scripts take a venue
+directory, resolved by `scripts/venue-dir.ts` through the same `resolveConfigDir` + `isUnset` pair
+`config.ts` builds `config.venueDir` from, and each has a suite that RUNS it against a real
+migrated, provisioned directory (`register-till.test.ts`, `record-one-sale.test.ts`,
+`settle-invoice-first.test.ts`). The four demos — `catalogue-demo.ts`, `integrated-card-demo.ts`,
+`park-retrieve-demo.ts`, `till-demo.ts` — were DELETED with their `demo:*` package scripts, and the
+prose naming them was swept (`apps/till/README.md`, `docs/developers/conventions-data.md`,
+`docs/backlog.md`, `packages/catalogue/src/integration.test.ts`, two sibling demo headers).
+
+**What gap nine does NOT cover.** Five `apps/server/scripts` entry points still call the removed
+`createPgliteDb` and do not typecheck: `allergens-demo.ts`, `daily-close-demo.ts`,
+`daily-close-z-demo.ts`, `modelo-303-demo.ts`, `recipes-demo.ts`. They are tsx-run demos, nothing
+builds them into `dist/`, and no step owns them yet.
+
 **A SEVENTH GAP — found 2026-09-22. No step converts the tree's remaining ROW LOCKS.**
 `grep -n 'row lock\|\.for("update")'` over this file returns nothing. Two sites have been
 converted so far, each with its own commit and each reasoned from the write queue rather than
@@ -4928,6 +4942,82 @@ start on step 27's harness. Their statements were not run. `mirror-session.ts`'s
 them is correct: `chain-height.ts:19` (a node-postgres probe of `now()::timestamptz`) and
 `workforce-api.ts:83` (a `::timestamptz` column). Sweeping prose across this app is its own piece,
 and step group 8's documentation step is where it belongs.
+
+**THE ELEVENTH GAP'S TEST HALF IS DONE — 2026-09-22.** Eighty-six `.test.ts` files, 287 statements.
+`postgres-sql-residue.test.ts` now scans the test files too (its own file excepted — it plants a
+residual statement on purpose), so the rule has a guard rather than a sweep. Measured against a
+baseline taken before the work started: `apps/server` 450 failing names → 109, **382 red→green and
+zero green→red**. The 41 names that appear in the failing set and were not there before were all
+SKIPPED at baseline, because their suite died at collection; none was passing.
+
+**The two faults the guard cannot see were the larger half of the work**, and every seat met them
+independently. They are recorded in the guard's own header as hedges:
+
+- A raw `insert` leaning on a column default that is a JavaScript `$defaultFn` generator here. A raw
+  insert reaches none of them, so the row is refused NOT NULL at run time.
+- A raw `select` of a `json` or boolean column skips drizzle's read mapping, so it answers the
+  stored TEXT, or `0`/`1`.
+
+**A TWELFTH GAP — found 2026-09-22. `packages/reporting` was never converted.** Twenty
+PostgreSQL-only constructs across nine files: `counts.ts`, `input-vat.ts`, `overdue-orders.ts`,
+`period.ts`, `top-sellers.ts`, `vat-return.ts`, `business-day.ts`, `cash-up.ts`, `vat-summary.ts`.
+`vat-return.ts:41` carries `((s.issued_at at time zone 'UTC') + make_interval(mins => …))::date`;
+`overdue-orders.ts:56` `floor(extract(epoch from (now() - queued_at)) / 60)::int`;
+`business-day.ts:124` a bare ``sql`now()` ``. This is what 500s the ten report routes that now run.
+
+**A THIRTEENTH GAP — found 2026-09-22. `packages/workforce` was never converted.** `clocking.ts`
+(five sites), `schedule-reads.ts` (`to_char(starts_at at time zone 'UTC', …)`,
+`+ starts_offset_minutes * interval '1 minute'`, `::date`), `absences.ts`. Measured against a real
+migrated venue: `near "at": syntax error` for shifts and swaps, `unrecognized token: ":"` for
+absences. This is what 500s the seventeen workforce routes and the twelve schedule/me routes that
+now run.
+
+**Both of those are invisible to every guard in the tree**, because `postgres-sql-residue.test.ts`
+says in its own header that it scans `apps/server` only. Whatever step converts them should widen
+the guard to the package it converts, or the same thing happens again.
+
+**A FOURTEENTH GAP — found 2026-09-22. `waitron-break-glass` cannot be BUILT.**
+`apps/server/src/bin-break-glass.ts` imports the removed `createPostgresDb`, so
+`pnpm --filter @waitron/server build` exits 1 at its sixth esbuild and four bundles are never
+produced: `bin-break-glass.js`, `bin-restore.js`, `bin-rejoin.js` and `node-entry.js`. It is a
+shipped command (`waitron.commands`). The three scripts gap nine converted are emitted BEFORE it,
+which is the only reason they build at all.
+
+**Four more findings from the same sweep, each one a decision rather than a translation.** None is
+taken here.
+
+- **`isZoneFkViolation` can never return true on this engine**, so `POST /api/tables` with an
+  unknown zone answers 500 instead of 404 `zone.not_found`, and `createTable`/`updateTable` leak the
+  driver's error. SQLite's foreign-key message is the bare `FOREIGN KEY constraint failed` and names
+  no table or column, which `packages/db/src/constraint-target.ts:36-45` already records — so
+  `refusalOn`'s `sameTarget` is comparing against `undefined`. A foreign-key refusal has to be
+  identified some other way. Three cases in `tables.test.ts` and one in `till-api.tables.test.ts`
+  are left red.
+- **Five negative controls no longer bite.** They provoke a non-unique database error with a
+  `displayOrder` too big for PostgreSQL's `int4`; SQLite's INTEGER is 64-bit and stores it, so the
+  write succeeds and nothing is thrown. Re-arming them needs a different provocation — and
+  `isZoneFkViolation`'s own unit test builds a `23503` error object, which is stale by construction.
+- **A boolean expression read raw answers `1`, not `true`.** There is no established idiom on this
+  branch and none was invented: `packages/identity/src/login.test.ts:121` is the identical statement
+  in the already-converted `packages/` half and is red today for the same reason.
+- **`pgErrorCode` / `pgErrorMessage` (`packages/db/src/testing/errors.ts`) still read a SQLSTATE**
+  no driver here produces. `packages/db/src/unique-violation.ts:12` records that renaming them is
+  its own sweep; the behavioural half is what matters.
+
+**Three more places PostgreSQL survives outside `apps/server`, found while the above was being
+measured:** `packages/db/src/change-feed.ts` installs a whole PL/pgSQL function (refused at prepare,
+`near "or": syntax error`, and it is the sole cause of `live-api.test.ts`'s remaining red case);
+`packages/media/src/configuration-transfer.ts:31-34` requires the bytea hex wire format
+(`/^\\x(?:[a-fA-F0-9]{2})+$/`) where this driver hands back a `Uint8Array`, so every configuration
+transfer carrying an image throws `image.invalid_metadata`; and
+`packages/provisioning/src/venue-apply.e2e.test.ts:176-178` carries three `::int` casts in the
+test's own SQL — which means the one failing provisioning test is NOT waiting on step 27's harness,
+as had been assumed.
+
+**One documentation file is retired and nobody owns it yet:**
+`packages/db/src/immutability.sql.md` still documents the PostgreSQL recipe — `REVOKE UPDATE,
+DELETE, TRUNCATE … FROM app_user`, `ENABLE ALWAYS`, SQLSTATE `WT001` — none of which exists here.
+Step group 8's documentation step.
 
 **AN EIGHTH GAP — found 2026-09-22. The regeneration dropped every BEHAVIOURAL trigger, and only
 the append-only ones came back.** Step 13 regenerated each migration set from the TypeScript schema,
