@@ -9,8 +9,11 @@
  * `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). So the
  * grant half of every case below is no longer checked by anything, here or elsewhere.
  *
- * What survives is the binding RULE, which is what the seven case names describe, and that is
- * application logic in `resolveDeviceBinding` rather than anything the database enforces.
+ * What survives is the binding RULE, which is what the seven case names describe:
+ * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
+ * shape through `device_binding_rule_insert` / `_update`, created by
+ * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
+ * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.pg.test.ts`.
  *
  * ## The disposition document expected a seventh case to be RED here, and it is not
  *
@@ -141,12 +144,9 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // case turns on is that exactly ONE new till exists, named after the device, and the device
     // points at it with a NULL station.
     //
-    // The old comment here also claimed a `till_id` left NULL would be caught by a binding-rule
-    // trigger. **Nothing catches it now**: `device_binding_rule_insert` and `_update` are named in
-    // `packages/db/src/schema/devices.ts:12` but no migration creates them — zero hits for either
-    // name across `packages/db/drizzle/*.sql`, 2026-09-22 — which is the branch ledger's own first
-    // deliberately-red finding. So these assertions are the only thing standing between a wrong
-    // binding and a green suite.
+    // A `till_id` left NULL would also be refused by `device_binding_rule_insert`
+    // (`packages/db/drizzle/0001_behavioural_triggers.sql`, its non-kds arm); what these assertions
+    // add is WHICH register — the one this branch mints, named after the device.
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
     const before = await tillCount();

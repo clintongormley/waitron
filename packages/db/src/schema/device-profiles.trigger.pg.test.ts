@@ -17,9 +17,10 @@
 // `packages/catalogue/test/fixtures.ts`'s `racePair` is the shape that asks the question on this
 // engine, and nothing here uses it.
 //
-// SECOND LOSS: the binding-rule triggers the concurrency case leaned on (`device_binding_rule_*`)
-// are not in the SQLite migration set at all. See `packages/db/src/schema/devices.trigger.pg.test.ts`,
-// which is red for that reason.
+// The binding-rule triggers that case leaned on are themselves intact: `device_binding_rule_insert`
+// and `_update`, in the same `packages/db/drizzle/0001_behavioural_triggers.sql`, covered by
+// `packages/db/src/schema/devices.trigger.pg.test.ts`. It is the LOCK they took, and the race that
+// observed it, that this suite no longer has.
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";

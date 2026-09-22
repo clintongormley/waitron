@@ -80,9 +80,9 @@ export function bindingFkField(error: unknown): "deviceProfileId" | "receiptPrin
 }
 
 /** The UNIQUE index that makes a duplicate register name at one venue unrepresentable, as the table
- * and columns a refusal on it names: `tills_tenant_location_name_key`, re-created over
- * `(location_id, name)` — no longer the tenant column its name still carries — at migration `0034`
- * line 144, in `packages/db/drizzle/`. {@link createRegister} keys its 23505 translation on this
+ * and columns a refusal on it names: `tills_tenant_location_name_key`, over
+ * `(location_id, name)` — no longer the tenant column its name still carries — at
+ * `packages/db/drizzle/0000_baseline.sql:49`. {@link createRegister} keys its 23505 translation on this
  * target so an unrelated unique violation is rethrown raw, not mislabelled. */
 const TILL_NAME_UNIQUE: ConstraintTarget = { table: "tills", columns: ["location_id", "name"] };
 
@@ -157,7 +157,8 @@ export async function resolveDeviceBinding(
 
   // The station/register binding this device carries, derived from its profile's form factor — the
   // one column NON-NULL for a kds device is `station_id`, for every other form factor `till_id`, and
-  // `device_binding_rule_insert / _update` (migration 0004) is the DB backstop that refuses any other shape.
+  // `device_binding_rule_insert / _update` (`packages/db/drizzle/0001_behavioural_triggers.sql`) is
+  // the DB backstop that refuses any other shape.
   let stationId: string | null = null;
   let tillId: string | null = null;
   switch (kindOfFormFactor(profile.formFactor)) {

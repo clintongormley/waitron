@@ -1041,7 +1041,8 @@ declare module "@waitron/shared" {
      * on the sale routes (the guard lives in `device-session.ts`) and the roster-login guard in
      * `till-api.ts`; both are `till-api.ts` routes. What actually trips it is a NON-sale-capable binding
      * on a till-only path, in practice a `kds_station`: every sale-capable form factor holds a non-null
-     * `till_id` by the `device_binding_rule` trigger (migration 0004, whose non-kds arm RAISEs on a null
+     * `till_id` by the `device_binding_rule_insert` / `_update` triggers
+     * (`packages/db/drizzle/0001_behavioural_triggers.sql`, whose non-kds arm refuses a null
      * `till_id`), so the sale-capable case the code's NAME suggests is unrepresentable. A SETUP
      * precondition surfaced before any fiscal write, not a per-sale block (CLAUDE.md §5).
      *
@@ -1077,8 +1078,8 @@ declare module "@waitron/shared" {
      * already used by another register at the same venue. `resolveDeviceBinding` names the register after
      * the device and reject-not-suffixes the clash (the admin renames the device), so two
      * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
-     * unique index (migration 0006) is the guard, and this is its 23505 translated to a clean domain
-     * code rather than a raw 500.
+     * unique index (`packages/db/drizzle/0000_baseline.sql:49`) is the guard, and this is its 23505
+     * translated to a clean domain code rather than a raw 500.
      *
      * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
      * colliding name is the operator's own input), the same no-param shape `device.station_required`
