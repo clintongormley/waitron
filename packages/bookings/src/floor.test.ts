@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
+import { asAppUser, DEFAULT_TIME_ZONE, newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -31,8 +31,21 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   // The annotator derives venue-local "today"/"now" from this column (design §2b/§4); default the schema
   // default (Europe/Madrid) unless a test pins one.
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
+  // Two things this raw statement supplies that the PostgreSQL one did not. `id` comes from a
+  // JavaScript `$defaultFn` generator now (`newId`, `packages/db/src/schema/columns.ts:270`) and
+  // the DDL declares no SQL DEFAULT for it, so a raw insert that omits it is refused
+  // `NOT NULL constraint failed: locations.id` (the idiom is
+  // `packages/workforce/src/migrations.test.ts:43-50`). And `invoice_locales` is one TEXT column
+  // holding a JSON array (`labelList`, `packages/db/src/schema/columns.ts:255`) where it used to be
+  // `text[]`; the `array['es-ES']` literal it replaces was refused at PREPARE, which killed every
+  // case in this file in setup — running the suite before the change printed
+  // `Error: near "['es-ES']": syntax error` from `packages/store/src/node-sqlite-adapter.ts:64`.
+  // The JSON text is what the column's own CHECK counts with `json_array_length`
+  // (`packages/db/src/schema/tenants.ts:197`).
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description, time_zone) values ('Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
+    insert into locations (id, name, invoice_locales, operation_description, time_zone)
+    values (${newId()}, 'Barra', '["es-ES"]', 'Venta en establecimiento', ${timeZone})
+    returning id`);
   return {
     locationId: brandLocationId(loc.rows[0]!.id),
   };
@@ -40,8 +53,16 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 
 /** Insert an ACTIVE dining table for the venue and return its id. */
 async function makeTable(v: Venue, label: string): Promise<string> {
+  // `id` and `created_at` are `$defaultFn` generators here too — see `setupVenue`. `active` is 1
+  // rather than the JavaScript `true` this replaces: `flag` is an INTEGER column now and
+  // `node:sqlite` refuses to bind a boolean at all. Measured on node v26.7.0 —
+  // `db.prepare("insert into t (id, active) values (?, ?)").run("a", true)` against
+  // `create table t (id text primary key, active integer not null)` throws
+  // `TypeError: Provided value cannot be bound to SQLite parameter 2`.
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label, active) values (${v.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (id, created_at, location_id, label, active)
+    values (${newId()}, ${nowIso()}, ${v.locationId}, ${label}, 1)
+    returning id`);
   return row.rows[0]!.id;
 }
 
@@ -60,11 +81,15 @@ async function insertBooking(
   const location = fields.locationId ?? v.locationId;
   await withTransaction(db, async (tx) => {
     await asAppUser(tx);
+    // `id` and `created_at` supplied for the same reason as in `setupVenue`: both are `$defaultFn`
+    // generators on `bookings` (`./schema/bookings.ts:50` and `:72`), which drizzle runs for a
+    // BUILDER insert and never for raw SQL.
     await tx.execute(sql`
       insert into bookings
-        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
+        (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
+         contact_name, created_by, status)
       values
-        (${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
+        (${newId()}, ${nowIso()}, ${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
          2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   });
 }

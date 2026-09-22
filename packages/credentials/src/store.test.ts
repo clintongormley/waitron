@@ -35,7 +35,13 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
-  await suite.db.execute(sql`truncate tenant_credentials`);
+  // `delete`, not TRUNCATE: this engine has no TRUNCATE at all, and the statement did not even
+  // reach execution — running this suite before the change printed `Error: near "truncate": syntax
+  // error` from `packages/store/src/node-sqlite-adapter.ts:64`, which killed every case in the
+  // file in its `beforeEach`. `tenant_credentials` is classified `local` (`./classification.ts`),
+  // so it carries no append-only trigger to refuse the delete — the same reasoning as
+  // `packages/fiscal-verifactu/src/acks.test.ts:123`.
+  await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
 /**
@@ -117,9 +123,16 @@ describe("putCredential and getCredential", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
-    const rows = await suite.db.execute<{ blob: string }>(sql`
-      select encode(ciphertext, 'escape') as blob from tenant_credentials`);
-    expect(rows.rows[0]!.blob).not.toContain("sk_test_x");
+    // `encode(ciphertext, 'escape')` is a PostgreSQL function this engine does not have
+    // (`no such function: encode`, measured on node v26.7.0), and it is not needed: `binary` is a
+    // BLOB column and a raw select of it hands back the bytes as a `Uint8Array` (same measurement,
+    // `r.b.constructor.name === "Uint8Array"`). The decode moves to the READ, as in
+    // `packages/fiscal-verifactu/src/reconcile.test.ts`'s `incidentsFor`. `latin1` is what makes
+    // this the same search the SQL did: it maps every byte to one character, so any ASCII run
+    // present in the ciphertext appears verbatim in the string being searched.
+    const rows = await suite.db.execute<{ blob: Uint8Array }>(sql`
+      select ciphertext as blob from tenant_credentials`);
+    expect(Buffer.from(rows.rows[0]!.blob).toString("latin1")).not.toContain("sk_test_x");
   });
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
@@ -215,8 +228,11 @@ describe("putCredential and getCredential", () => {
         }),
       );
       expect(hasCode(error, "credentials.invalid_payload")).toBe(true);
+      // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number,
+      // and this engine returns one already — measured on node v26.7.0, `select count(*) as n`
+      // over a one-row table gives `{ n: 1 }` with `typeof n === "number"`.
       const rows = await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from tenant_credentials`);
+        select count(*) as n from tenant_credentials`);
       return rows.rows[0]!.n;
     });
     expect(n).toBe(0);

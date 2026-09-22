@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -51,12 +51,58 @@ interface Venue {
   createdBy: string;
 }
 
+/**
+ * Inserts one location and returns its id.
+ *
+ * Two things this raw statement supplies that the PostgreSQL one did not.
+ *
+ * `id` comes from a JavaScript `$defaultFn` generator now (`newId`,
+ * `packages/db/src/schema/columns.ts:270`) and the generated DDL declares no SQL DEFAULT for it, so
+ * a raw insert that omits it is refused `NOT NULL constraint failed: locations.id` — the same
+ * reason `packages/workforce/src/migrations.test.ts:43-50` supplies its own.
+ *
+ * `invoice_locales` is one TEXT column holding a JSON array (`labelList`,
+ * `packages/db/src/schema/columns.ts:255`) where it used to be `text[]`. The `array['es-ES']`
+ * literal this replaces was refused at PREPARE, so every case in the file died in setup: running
+ * this suite before the change printed `Error: near "['es-ES']": syntax error` from
+ * `packages/store/src/node-sqlite-adapter.ts:64`. The JSON text `'["es-ES"]'` is what the column's
+ * own CHECK counts with `json_array_length` (`packages/db/src/schema/tenants.ts:197`).
+ */
+async function insertLocation(name: string): Promise<string> {
+  const loc = await db.execute<{ id: string }>(sql`
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${newId()}, ${name}, '["es-ES"]', 'Venta en establecimiento')
+    returning id`);
+  return loc.rows[0]!.id;
+}
+
+/**
+ * Inserts one dining table and returns its id.
+ *
+ * `id` and `created_at` are `$defaultFn` generators here too (`newId` / `nowIso`), so both are
+ * supplied — see {@link insertLocation}. `active` is passed as 1 or 0 rather than a JavaScript
+ * boolean: `flag` is an INTEGER column now and `node:sqlite` refuses to bind a boolean at all.
+ * Measured on node v26.7.0 — `db.prepare("insert into t (id, active) values (?, ?)").run("a", true)`
+ * against a `create table t (id text primary key, active integer not null)` throws
+ * `TypeError: Provided value cannot be bound to SQLite parameter 2`. What says 1 MEANS true is the
+ * `flag` column's read mapping, which every assertion below reads the row back through.
+ */
+async function insertDiningTable(
+  locationId: string,
+  label: string,
+  active = true,
+): Promise<string> {
+  const row = await db.execute<{ id: string }>(sql`
+    insert into dining_tables (id, created_at, location_id, label, active)
+    values (${newId()}, ${nowIso()}, ${locationId}, ${label}, ${active ? 1 : 0})
+    returning id`);
+  return row.rows[0]!.id;
+}
+
 /** Stand up a fresh tenant + location and a `BookingConfig` scoped to them. Each test gets its own. */
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
+  const locationId = await insertLocation("Barra");
   return {
     cfg: { locationId: brandLocationId(locationId) },
     createdBy: randomUUID(),
@@ -65,9 +111,7 @@ async function setupVenue(): Promise<Venue> {
 
 /** Insert an ACTIVE dining table for the venue and return its id (for the optional table-link path). */
 async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
-  const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, '12', ${active}) returning id`);
-  return row.rows[0]!.id;
+  return insertDiningTable(cfg.locationId, "12", active);
 }
 
 /**
@@ -77,12 +121,8 @@ async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
  * not be assigned a table in location B).
  */
 async function makeTableInOtherLocation(): Promise<string> {
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const otherLocationId = loc.rows[0]!.id;
-  const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label, active) values (${otherLocationId}, 'B-1', true) returning id`);
-  return row.rows[0]!.id;
+  const otherLocationId = await insertLocation("Terraza");
+  return insertDiningTable(otherLocationId, "B-1");
 }
 
 /** Run `fn` as `app_user`, exactly as production routes do. */
@@ -140,8 +180,15 @@ describe("createBooking + listBookings", () => {
       }),
     );
 
-    // Postgres `time` round-trips as HH:MM:SS, so the stored values are "13:30:00"/"20:00:00"; the
-    // point of the assertion is the booking_time ORDERING (13:30 before 20:00), not the seconds.
+    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. The point of the assertion is the
+    // booking_time ORDERING (13:30 before 20:00), not the seconds — but the values it names are
+    // PostgreSQL's. `booking_time` was a `time`, which normalised `20:00` to `20:00:00` on the way
+    // back out; `timeOfDay` is plain `text` on this engine
+    // (`packages/db/src/schema/columns.ts`), so what comes back is the `20:00` that was written.
+    // Changing the expected values is a change to what this case ASSERTS, not a translation of
+    // PostgreSQL-only SQL, so it is left for the owner to decide. The same value appears in
+    // `./routes.test.ts`'s happy path and in `./schema/bookings.test.ts`'s column round-trip, both
+    // already annotated this way.
     const listed = await scoped(cfg, (tx) => listBookings(tx, cfg, { date: "2026-08-20" }));
     expect(listed.map((b) => b.bookingTime)).toEqual(["13:30:00", "20:00:00"]);
 
@@ -448,9 +495,7 @@ describe("getBooking", () => {
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
 async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
-  const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
-  return row.rows[0]!.id;
+  return insertDiningTable(cfg.locationId, label);
 }
 
 // `seatBooking` opens a real TS-1 tab through `core.openTab` — the boundary the module reaches core's
@@ -465,11 +510,14 @@ describe("seatBooking", () => {
     createdBy: string;
   }> {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
+    const locationId = await insertLocation("Barra");
+    // `tills.id` and `tills.created_at` are `$defaultFn` generators too — see `insertLocation`.
+    // `created_at` here is a `ts` column (read back as a Date), which stores the same ISO string
+    // `nowIso` produces (`packages/db/src/schema/columns.ts:263-272`).
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+      insert into tills (id, created_at, location_id, name)
+      values (${newId()}, ${nowIso()}, ${locationId}, 'Caja 1')
+      returning id`);
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
       cfg: { locationId: brandLocationId(locationId) },
@@ -592,9 +640,11 @@ describe("seatBooking", () => {
     });
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "cancelled", tabId: null });
-    const tabs = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from working_orders`,
-    );
+    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to something the driver
+    // handed back as a number, and this engine returns a plain JavaScript number already —
+    // measured on node v26.7.0, `select count(*) as n` over a one-row table gives `{ n: 1 }` with
+    // `typeof n === "number"`.
+    const tabs = await db.execute<{ n: number }>(sql`select count(*) as n from working_orders`);
     expect(tabs.rows[0]!.n).toBe(0);
   });
 
