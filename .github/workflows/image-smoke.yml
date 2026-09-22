@@ -32,7 +32,7 @@ jobs:
       COMPOSE_FILE: deploy/compose.yml
       COMPOSE_PROJECT_NAME: waitron-ci
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Written before anything can fail, because the teardown step runs `if: always()` and compose
       # refuses to interpolate this file — required, no default — even to tear a stack down.
@@ -62,7 +62,7 @@ jobs:
 
       # The default builder uses the `docker` driver, which does not serve the `cache-to: type=gha`
       # export below.
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Loaded into the runner's daemon so `docker compose` can run it — this job never pushes. That
       # is ci.yml's `publish`, which therefore builds a second time on its own runner: it is gated on
@@ -70,7 +70,7 @@ jobs:
       # which must not publish. Its build is the same single platform, so these are the layers it
       # looks for in the shared GHA cache scope.
       - name: Build the image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -84,7 +84,7 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Build the print-agent image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/Dockerfile
