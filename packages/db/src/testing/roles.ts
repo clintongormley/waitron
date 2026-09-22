@@ -14,10 +14,12 @@ import type { Transaction } from "../client.js";
  * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` removes them, package by
  * package, and deletes this function last.
  *
- * The parameter stays so every call site still compiles; nothing reads it, and the lint rule
- * that would otherwise refuse an unread parameter is turned off for that one line rather than
- * for the file. No underscore prefix: this configuration has no `argsIgnorePattern`, so `_tx`
- * is refused in exactly the same words (measured).
+ * The parameter stays so every call site still compiles, and it takes BOTH treatments because
+ * the two checkers disagree about it. TypeScript's `noUnusedParameters` is silent only on a
+ * name beginning with an underscore; this ESLint configuration sets no `argsIgnorePattern`, so
+ * it refuses `_tx` in the same words it refuses `tx` and needs the one-line disable instead.
+ * Either alone leaves a real error: with `tx` and the disable, `tsc --noEmit` reports
+ * `roles.ts(23,33): error TS6133` in every package that reaches this file (measured 2026-09-22).
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function asAppUser(tx: Transaction): Promise<void> {}
+export async function asAppUser(_tx: Transaction): Promise<void> {}
