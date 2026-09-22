@@ -426,14 +426,27 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
- * can also be used to decide whether more work remains after a chunk. */
+/**
+ * How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
+ * can also be used to decide whether more work remains after a chunk.
+ *
+ * The count comes back as a plain JavaScript number, so nothing converts it. This used to read
+ * `count(*)::text` and wrap the result in `Number(...)`, because the PostgreSQL driver handed a
+ * `count` over as a BigInt. SQLite parses no `::` cast — it reads the first colon as the start of a
+ * bind parameter and refuses the whole statement at prepare time with `unrecognized token: ":"`,
+ * which is where every drain pass stopped: this is the second statement `drainDue` runs. Measured
+ * 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement minus the cast as
+ * the control: the cast threw, the control returned `[{ count: 3 }]`, and `typeof` on that value
+ * read `number`. Measured again on an empty selection, where the row is `{ count: 0 }` and `typeof`
+ * still reads `number` — so a zero count is a row carrying 0, never a missing row, and `rows[0]!`
+ * is sound. `proximo_intento_en` is compared as TEXT, the same treatment as `workIsDue` above.
+ */
 async function countDue(tx: Transaction, now: Date): Promise<number> {
-  const rows = await tx.execute<{ count: string }>(sql`
-    select count(*)::text as count from envios
+  const rows = await tx.execute<{ count: number }>(sql`
+    select count(*) as count from envios
     where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
-  return Number(rows.rows[0]!.count);
+  return rows.rows[0]!.count;
 }
 
 /** Upserts the one flow-control row: when the next envío may go, and the `t` that produced that

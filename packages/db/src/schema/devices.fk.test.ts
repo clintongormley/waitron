@@ -4,6 +4,10 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
+import { deviceProfiles } from "./device-profiles.js";
+import { devices } from "./devices.js";
+import { printers } from "./printers.js";
+import { locations, tenants, tills } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "11111111-0000-4000-8000-0000000000a1";
@@ -21,28 +25,51 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
+  // Drizzle rather than raw SQL for every fixture row, for two things the raw statements relied on
+  // PostgreSQL for. `array['es']` is refused at prepare here — `near "['es']": syntax error` (node
+  // v26.7.0, `node:sqlite`) — because SQLite has no array literal, and `invoice_locales` is now a
+  // JSON array in a TEXT column. And four of these tables carry `$defaultFn` timestamps, which are
+  // JavaScript generators rather than SQL DEFAULTs: before this change the suite died in
+  // `beforeAll` with `NOT NULL constraint failed: tenants.created_at` and all four cases reported
+  // `skipped` (measured on this suite). Going through drizzle calls the generators and encodes the
+  // locale list.
   beforeAll(async () => {
     admin = suite.db;
-    await admin.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name) values
-        (1, 'ES', 'B00000000', 'Fixture Tenant A')
-      on conflict (id) do nothing`);
-    await admin.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
-      on conflict (id) do nothing`);
-    await admin.execute(sql`
-      insert into tills (id, location_id, name) values (${TILL_A}, ${LOCATION_A}, 'Till A')
-      on conflict (id) do nothing`);
+    await admin
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" })
+      .onConflictDoNothing({ target: tenants.id });
+    await admin
+      .insert(locations)
+      .values({
+        id: LOCATION_A,
+        name: "Loc A",
+        invoiceLocales: ["es"],
+        operationDescription: "Hostelería",
+      })
+      .onConflictDoNothing({ target: locations.id });
+    await admin
+      .insert(tills)
+      .values({ id: TILL_A, locationId: LOCATION_A, name: "Till A" })
+      .onConflictDoNothing({ target: tills.id });
     // cloud_poll printers: the transport CHECK (printers_transport_fields_ck) needs poll_id for that
     // transport and nothing else, so this is the seed that avoids an agent FK.
-    await admin.execute(sql`
-      insert into printers (id, location_id, name, transport, poll_id) values (${PRINTER_A}, ${LOCATION_A}, 'Printer A', 'cloud_poll', 'poll-a')
-      on conflict (id) do nothing`);
+    await admin
+      .insert(printers)
+      .values({
+        id: PRINTER_A,
+        locationId: LOCATION_A,
+        name: "Printer A",
+        transport: "cloud_poll",
+        pollId: "poll-a",
+      })
+      .onConflictDoNothing({ target: printers.id });
     // One `till`-form-factor device_profiles row — the (device_profile_id) foreign-key
     // target, and the form factor whose binding rule requires a register (a till).
-    await admin.execute(sql`
-      insert into device_profiles (id, name, form_factor) values (${PROFILE_A}, 'Profile A', 'till')
-      on conflict (id) do nothing`);
+    await admin
+      .insert(deviceProfiles)
+      .values({ id: PROFILE_A, name: "Profile A", formFactor: "till" })
+      .onConflictDoNothing({ target: deviceProfiles.id });
   });
 
   afterEach(async () => {
@@ -51,47 +78,83 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
   });
 
   it("accepts real bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
-    const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id, receipt_printer_id, has_cash_drawer) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
-                  ${TILL_A}, ${PRINTER_A}, true) returning id`,
-    );
-    expect(bound.rows).toHaveLength(1);
+    // Drizzle for the inserts, for the reason the `beforeAll` records — and for the
+    // `has_cash_drawer` read below, which a raw statement would hand back as the stored 0 rather
+    // than the `false` this case asserts on: it is a `flag(...)` column, stored as INTEGER, and
+    // only drizzle's read mapping turns it back into a boolean.
+    const bound = await admin
+      .insert(devices)
+      .values({
+        locationId: LOCATION_A,
+        deviceProfileId: PROFILE_A,
+        stationId: null,
+        label: "Bound till",
+        tokenHash: TOKEN_HASH,
+        tillId: TILL_A,
+        receiptPrinterId: PRINTER_A,
+        hasCashDrawer: true,
+      })
+      .returning({ id: devices.id });
+    expect(bound).toHaveLength(1);
 
-    // A real till (required by the binding rule) with a NULL receipt_printer_id — MATCH SIMPLE skips
-    // the printer FK check on a NULL, and the hardware default applies (has_cash_drawer
-    // false).
-    const [row] = (
-      await admin.execute<{ has_cash_drawer: boolean }>(
-        sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Unbound printer', ${TOKEN_HASH}, ${TILL_A})
-            returning has_cash_drawer`,
-      )
-    ).rows;
-    expect(row!.has_cash_drawer).toBe(false);
+    // A real till (required by the binding rule) with a NULL receipt_printer_id — a foreign key does
+    // not check a NULL, and the hardware default applies (has_cash_drawer false).
+    const [row] = await admin
+      .insert(devices)
+      .values({
+        locationId: LOCATION_A,
+        deviceProfileId: PROFILE_A,
+        stationId: null,
+        label: "Unbound printer",
+        tokenHash: TOKEN_HASH,
+        tillId: TILL_A,
+      })
+      .returning({ hasCashDrawer: devices.hasCashDrawer });
+    expect(row!.hasCashDrawer).toBe(false);
   });
 
   it("has no card_provider / card_reader_id column (dropped in Task 13)", async () => {
     // The per-device card columns were write-and-display only; the reader default now lives in
     // `device_card_readers` and the pay path routes through the provider pool. The migration DROPs both.
-    const { rows } = await admin.execute<{ column_name: string }>(sql`
-      select column_name from information_schema.columns
-       where table_name = 'devices' and column_name in ('card_provider', 'card_reader_id')`);
+    // `information_schema.columns` does not exist on this engine — run as written this statement
+    // died with `no such table: information_schema.columns`. `pragma_table_info` is the
+    // replacement, following `packages/payments/src/migrations.test.ts`. The case's subject is
+    // unchanged: it asserts the two columns are ABSENT.
+    const { rows } = await admin.execute<{ name: string }>(sql`
+      select name from pragma_table_info('devices')
+       where name in ('card_provider', 'card_reader_id')`);
     expect(rows).toEqual([]);
   });
 
   it("accepts a real device_profile_id", async () => {
-    const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Profile-bound', ${TOKEN_HASH}, ${TILL_A}) returning id`,
-    );
-    expect(bound.rows).toHaveLength(1);
+    const bound = await admin
+      .insert(devices)
+      .values({
+        locationId: LOCATION_A,
+        deviceProfileId: PROFILE_A,
+        stationId: null,
+        label: "Profile-bound",
+        tokenHash: TOKEN_HASH,
+        tillId: TILL_A,
+      })
+      .returning({ id: devices.id });
+    expect(bound).toHaveLength(1);
   });
 
   it("refuses to delete a device_profile a device references (ON DELETE RESTRICT)", async () => {
     // Bind a device to a fresh profile, then try to hard-delete that profile: RESTRICT blocks it.
     const profileC = "11111111-0000-4000-8000-0000000000c4";
-    await admin.execute(sql`
-      insert into device_profiles (id, name, form_factor) values (${profileC}, 'Profile C', 'till')`);
-    await admin.execute(sql`
-      insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${profileC}, ${null}, 'Restrict device', ${TOKEN_HASH}, ${TILL_A})`);
+    await admin
+      .insert(deviceProfiles)
+      .values({ id: profileC, name: "Profile C", formFactor: "till" });
+    await admin.insert(devices).values({
+      locationId: LOCATION_A,
+      deviceProfileId: profileC,
+      stationId: null,
+      label: "Restrict device",
+      tokenHash: TOKEN_HASH,
+      tillId: TILL_A,
+    });
     const e = await captureError(() =>
       admin.execute(sql`delete from device_profiles where id = ${profileC}`),
     );

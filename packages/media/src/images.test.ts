@@ -25,6 +25,24 @@ const suite = useVenueDb({
 });
 const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 
+// WHAT THE STORAGE SWITCH TOOK OUT OF THIS FILE.
+//
+// ONE CASE IS GONE. "maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages on
+// simple tokens" held that `media_text_config(language)` returned a real text-search configuration
+// for each of thirty languages, that the set it could return was exactly PostgreSQL's bundled list,
+// and that `no`, `nb` and `nn` all resolved to the same one. It asked `pg_ts_config` — a PostgreSQL
+// catalogue — about a stored SQL function, and neither survives: `grep -rn "media_text_config"
+// packages/media` finds no definition, and `packages/media/drizzle/*.sql` creates no function at
+// all. Nothing holds the property now, and nothing needs to: there is no language-to-dictionary
+// mapping left to get wrong, because there are no dictionaries. Recover the case with
+// `git show origin/main:packages/media/src/images.test.ts` if the engine ever regains them.
+//
+// THREE CASES ARE LEFT FAILING ON PURPOSE, and are not this conversion's to touch: the
+// "matches 'ca'/'eu' word forms" pair and the stemming assertions inside "ranks name words above
+// alt words". `packages/media/src/images.ts`'s `searchTokens` records the decision — SQLite has no
+// stemmer, so a plural in the text is no longer found by its singular, and the suites asserting it
+// were left red rather than narrowed.
+
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
     await withTransaction(suite.db, async (tx) => {
@@ -535,24 +553,6 @@ it.each([
     });
   },
 );
-
-it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages on simple tokens", async () => {
-  const mapped = await suite.db.execute<{ name: string }>(sql`
-    select distinct cfgname::text as name from pg_ts_config
-    where oid in (select public.media_text_config(language) from unnest(array[
-      'ar','hy','eu','ca','da','nl','en','et','fi','fr','de','el','hi','hu','id','ga','it',
-      'lt','ne','no','pt','ro','ru','sr','es','sv','ta','tr','yi','ja'
-    ]) language) order by name
-  `);
-  const bundled = await suite.db.execute<{ name: string }>(
-    sql`select cfgname::text as name from pg_ts_config where cfgnamespace = 'pg_catalog'::regnamespace order by name`,
-  );
-  expect(mapped.rows).toEqual(bundled.rows);
-  const norwegian = await suite.db.execute<{ same: boolean }>(
-    sql`select public.media_text_config('no') = public.media_text_config('nb') and public.media_text_config('no') = public.media_text_config('nn') as same`,
-  );
-  expect(norwegian.rows).toEqual([{ same: true }]);
-});
 
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");

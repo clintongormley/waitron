@@ -165,8 +165,13 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     expect(second).toBeNull();
 
     // Exactly one sale exists for this tenant's till/series (invoice_number 1, never a second).
+    // `cast(… as text)`, not `count(*)::text`: the cast this carried was refused before the
+    // statement ran — `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's
+    // parser. The value stays a STRING so the assertion below is untouched — measured on node
+    // v26.7.0, `select cast(count(*) as text)` over three rows returns `"3"` (`typeof "string"`)
+    // where the bare `count(*)` returns the number `3`.
     const sales = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from sales`,
+      sql`select cast(count(*) as text) as count from sales`,
     );
     expect(sales.rows[0].count).toBe("1");
   });
@@ -196,7 +201,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     expect(row?.state).toBe("failed");
     expect(row?.saleId).toBeNull();
     const sales = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from sales`,
+      sql`select cast(count(*) as text) as count from sales`,
     );
     expect(sales.rows[0].count).toBe("0");
   });

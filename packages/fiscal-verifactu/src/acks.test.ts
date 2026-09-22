@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { withTransaction } from "@waitron/db";
@@ -34,12 +34,12 @@ const CLOCK_INSTANT = new Date("2026-03-01T13:05:00+01:00");
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 // Real per-test isolation (deliberately NOT drain.test.ts's shared-and-accumulating convention):
-// acks/envios/incidents carry no append-only trigger, so truncating them before each test leaves
-// only THIS test's freshly-seeded rows. registros_facturacion is append-only and left behind —
-// harmless, since nothing here reaches a registro except through its own envios/acks row.
-beforeEach(async () => {
-  await pg.db.execute(sql`truncate table acks, incidents, envios cascade`);
-});
+// every case must see only its own freshly-seeded rows. `useVenueDb` empties every data table
+// between tests, dropping and recreating the append-only triggers around the delete
+// (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/`applyReset`), which is what supplies
+// that isolation now — the `truncate table acks, incidents, envios cascade` this file used to run
+// here reached the engine as `near "truncate": syntax error` (measured 2026-09-22, the failure
+// every case in this file opened with), because SQLite has no TRUNCATE at all.
 
 // The drainer/reconcile deps a `VerifactuBackend` used to assemble internally — built here directly
 // now that the runtime pass lives on the standalone `drain`/`reconcile` functions, not on the
@@ -120,7 +120,10 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null `,
       ),
     );
-    await pg.db.execute(sql`truncate table acks`);
+    // `delete`, not TRUNCATE: SQLite has none (`near "truncate": syntax error`), and `acks` carries
+    // no append-only trigger to refuse the delete (`classification.ts` classifies it `ledger` via
+    // `classify`, not `appendOnly`).
+    await pg.db.execute(sql`delete from acks`);
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
@@ -182,7 +185,10 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null `),
     );
-    await pg.db.execute(sql`truncate table acks`);
+    // `delete`, not TRUNCATE: SQLite has none (`near "truncate": syntax error`), and `acks` carries
+    // no append-only trigger to refuse the delete (`classification.ts` classifies it `ledger` via
+    // `classify`, not `appendOnly`).
+    await pg.db.execute(sql`delete from acks`);
 
     const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.lostAck).toHaveLength(1); // corrected on the first pass
@@ -196,6 +202,39 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const acks = await acksFor();
     expect(acks).toHaveLength(1);
     expect(acks[0]!.state).toBe("accepted");
+  });
+});
+
+describe("acks — submitted_at, both arms of the coalesce", () => {
+  // Reaches `writeAck` directly rather than through the drainer, so that the one statement on the
+  // ack path that had to change for the storage switch is pinned by a case of its own: its
+  // `coalesce(e.enviado_en, …)` fallback used to carry a `::timestamptz` cast, which SQLite refuses
+  // at prepare time (`unrecognized token: ":"`). Both arms are exercised, because a test that only
+  // ever hit the column arm would pass whatever the fallback did.
+  it("takes the envío's own enviado_en when it has one, and the passed instant when it does not", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
+    const [claimed, neverClaimed] = seeded.registroIds;
+    const claimedAt = new Date("2026-07-21T00:01:00Z");
+    const fallback = new Date("2026-07-22T09:30:00Z");
+
+    // One row was claimed before its response arrived; the other never was — the lost-ack shape
+    // reconcile corrects, where `enviado_en` is null and the column is still NOT NULL.
+    await pg.db.execute(sql`
+      update envios set estado = 'aceptado', enviado_en = ${claimedAt.toISOString()}
+      where registro_id = ${claimed}
+    `);
+    await pg.db.execute(sql`
+      update envios set estado = 'aceptado', enviado_en = null where registro_id = ${neverClaimed}
+    `);
+
+    await withTransaction(pg.db, async (tx) => {
+      await writeAck(tx, claimed!, fallback);
+      await writeAck(tx, neverClaimed!, fallback);
+    });
+
+    const acks = new Map((await acksFor()).map((a) => [a.registro_id, a]));
+    expect(new Date(acks.get(claimed!)!.submitted_at).getTime()).toBe(claimedAt.getTime());
+    expect(new Date(acks.get(neverClaimed!)!.submitted_at).getTime()).toBe(fallback.getTime());
   });
 });
 

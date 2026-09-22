@@ -35,8 +35,12 @@ describe("restoreFiscal", () => {
     expect(after.id).not.toBe(before.id);
     expect(after.numeroInstalacion).toBeGreaterThanOrEqual(installationFloor(NOW));
     expect(await withTransaction(suite.db, (tx) => esPrimerRegistro(tx, till.nodeId))).toBe(true);
+    // `count(*)::int` was casting away the BigInt the PostgreSQL driver returned. Measured on
+    // node v26.7.0 against `node:sqlite`: `select count(*) as n` comes back as a JavaScript
+    // `number` (`typeof` is `"number"`), so nothing needs casting — and the `::` the cast needed
+    // reaches this engine as `unrecognized token: ":"`, the failure this file opened with.
     const { rows: ledger } = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from registros_facturacion where node_id = ${till.nodeId}`,
+      sql`select count(*) as n from registros_facturacion where node_id = ${till.nodeId}`,
     );
     expect(ledger[0]?.n).toBe(1);
     expect(outcome.series?.map((s) => s.code)).toEqual([`GA-${after.numeroInstalacion}`]); // seedTill's `GA` standard series

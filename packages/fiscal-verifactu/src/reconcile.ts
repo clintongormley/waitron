@@ -13,6 +13,7 @@ import type {
   VerifactuClient,
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
+import { toAeatDate } from "./registro-row.js";
 
 export interface ReconcileDeps {
   db: Database;
@@ -36,8 +37,9 @@ export interface ReconcileDeps {
  * against AEAT's view and (b) build a reconcile incident if it diverges. `id` is
  * `registros_facturacion.id` — the value the drainer sends as `RefExterna` and therefore the key
  * AEAT's own view echoes back, so `id` is what a mismatch's `recordId` and the authority map are
- * both keyed by. `fecha_expedicion_factura` is projected in AEAT's own `DD-MM-YYYY` form so the
- * incident's identity triple reads exactly as the authority holds it (see `errors.ts`).
+ * both keyed by. `fecha_expedicion_factura` holds AEAT's own `DD-MM-YYYY` form — NOT the
+ * `YYYY-MM-DD` the column stores — so the incident's identity triple reads exactly as the
+ * authority holds it (see `errors.ts`). `rowsForPeriod` is what puts it in that form.
  *
  * A `type` alias, not an `interface`: `tx.execute<T>` constrains `T` to `Record<string, unknown>`,
  * which an object-literal type alias satisfies but a mergeable `interface` does not — the same
@@ -165,12 +167,14 @@ export async function reconcile(
   deps: ReconcileDeps,
   period: { year: string; month: string },
 ): Promise<ReconcileResult> {
-  // Normalized BEFORE any use: `to_char(fecha_expedicion_factura, 'MM')` always yields a
-  // zero-padded 2-digit month, so an unpadded caller-supplied `period.month` (e.g. "7") would
-  // otherwise match nothing in `rowsForPeriod`'s SQL comparison and silently return a false-clean
-  // `checked: 0` instead of auditing the period — a Copilot review finding. Every downstream use
-  // (the SQL filter, the AEAT `Ejercicio`/`Periodo` filter, and the echoed result) reads this
-  // normalized value, never the raw `period` argument.
+  // Normalized BEFORE any use: the stored `fecha_expedicion_factura` always carries a zero-padded
+  // 2-digit month, so an unpadded caller-supplied `period.month` (e.g. "7") would otherwise match
+  // nothing in `rowsForPeriod`'s SQL comparison and silently return a false-clean `checked: 0`
+  // instead of auditing the period — a Copilot review finding. Every downstream use (the SQL
+  // filter, the AEAT `Ejercicio`/`Periodo` filter, and the echoed result) reads this normalized
+  // value, never the raw `period` argument. Measured 2026-09-22: the prefix `2026-7` selected no
+  // row where `2026-07` selected one. `rowsForPeriod`'s own comment carries that measurement, and
+  // what makes every stored month two digits.
   const normalizedPeriod = {
     year: String(period.year).padStart(4, "0"),
     month: String(period.month).padStart(2, "0"),
@@ -281,8 +285,47 @@ export async function reconcile(
   return result;
 }
 
-/** Our envios for the expedition month, joined to their registros.
- * Records carry no FechaOperacion, so the period filter uses fecha_expedicion_factura. */
+/**
+ * Our envios for the expedition month, joined to their registros.
+ * Records carry no FechaOperacion, so the period filter uses fecha_expedicion_factura.
+ *
+ * Three `to_char(r.fecha_expedicion_factura, …)` calls stood here — `'YYYY'` and `'MM'` in the
+ * filter, `'DD-MM-YYYY'` in the projection. SQLite defines no such function: the statement was
+ * refused `no such function: to_char` (measured 2026-09-22 on Node v26.7.0 against `node:sqlite`,
+ * and the failure 19 of this file's 26 red cases opened with), so the monthly audit against AEAT
+ * could not run at all on the engine the box now runs.
+ *
+ * Both halves are now plain text work on the stored `YYYY-MM-DD` string, which is the treatment
+ * `drain.ts`'s `workIsDue`/`countDue`/`claimBatch` settled on for this engine's ISO-8601 columns —
+ * no engine date parsing anywhere near a value AEAT will judge.
+ *
+ *   - THE FILTER compares the string's first seven characters against one bound `YYYY-MM`. That
+ *     works because the stored month is always two digits: the column's only writer is
+ *     `toIsoDate` (./registro-row.ts), which reorders the digits of AEAT's fixed-width
+ *     `DD-MM-YYYY` and pads nothing itself. So the zero-padding `to_char(…, 'MM')` used to
+ *     guarantee on the QUERY side is now a property of the stored VALUE, and `reconcile`'s
+ *     normalization of the caller's `period.month` is still exactly as necessary — see its own
+ *     comment.
+ *   - THE PROJECTION is `toAeatDate` (./registro-row.ts), the same `YYYY-MM-DD` → `DD-MM-YYYY`
+ *     flip `drain.ts`'s `routeB` calls for the same reason: it is the exact inverse of the
+ *     transform that wrote the column, so an incident's `IDFactura` triple reads as the digits
+ *     AEAT itself received rather than as something an engine's date renderer produced.
+ *
+ * Measured the same day, on rows stored `2026-12-31`, `2027-01-01`, `2026-07-05` and `2026-01-09`,
+ * with a control in the other direction for each: prefix `2026-12` selected only the December row
+ * and prefix `2027-01` only the January one, so the year boundary separates them; prefix `2026-01`
+ * selected the January-2026 row and NOT the January-2027 one; prefix `2026-07` selected the
+ * single-digit-month row, while `2026-7` selected nothing at all, which is the padding property
+ * above failing loudly rather than quietly. The control that says the filter can miss: prefix
+ * `2025-12` selected nothing, against a table that held a December row.
+ *
+ * Guard: `reconcile.period.test.ts`, which seeds each row's own expedition date — every helper in
+ * `../test/drain-fixtures.ts` stamps one shared month, so a suite built on those cannot tell one
+ * month's filter from another's. Both halves were proven by deletion, 2026-09-22: narrowing the
+ * filter to `substr(…, 6, 2) = month` left the December/January case red on `expected 1 to be +0`,
+ * and dropping the `toAeatDate` map left the incident case red on
+ * `expected '2026-07-05' to be '05-07-2026'`.
+ */
 async function rowsForPeriod(
   tx: Transaction,
   period: { year: string; month: string },
@@ -292,13 +335,16 @@ async function rowsForPeriod(
       r.id, r.till_id, r.sale_id,
       e.estado, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
-      to_char(r.fecha_expedicion_factura, 'DD-MM-YYYY') as fecha_expedicion_factura
+      r.fecha_expedicion_factura
     from envios e
     join registros_facturacion r on r.id = e.registro_id
-    where to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}
-      and to_char(r.fecha_expedicion_factura, 'MM') = ${period.month}
+    where substr(r.fecha_expedicion_factura, 1, 7) = ${`${period.year}-${period.month}`}
   `);
-  return rows;
+  // The query hands the column back in its stored `YYYY-MM-DD` form; `PeriodRow` holds AEAT's.
+  return rows.map((row) => ({
+    ...row,
+    fecha_expedicion_factura: toAeatDate(row.fecha_expedicion_factura),
+  }));
 }
 
 /** The obligado emisor for the consulta cabecera — read off any period row (all share one NIF:

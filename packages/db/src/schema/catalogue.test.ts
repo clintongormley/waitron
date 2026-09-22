@@ -1,3 +1,21 @@
+// WHAT THE COLUMN-SHAPE CASES BELOW LOST, because every loss is something that used to be checked
+// and now cannot be.
+//
+// They read PostgreSQL's `information_schema.columns`, which does not exist on this engine — run
+// as written, each one dies with `no such table: information_schema.columns` (measured on this
+// suite, node v26.7.0). The replacement is `pragma_table_info`, following
+// `packages/payments/src/migrations.test.ts`, and one fact did not survive the move: the column
+// TYPE no longer separates a `jsonb` column from a plain `text` one. Dumped from this package's
+// own migrated database, `pragma_table_info('products')` gives `type` `TEXT` for `name`,
+// `customer_name`, `allergens`, `image` and all three `diet*` columns alike, and the statement
+// `sqlite_master` holds for the table declares every one of them `text` too — so neither the
+// catalogue nor the DDL text can tell them apart. `packages/db/src/schema/columns.ts` says the
+// same thing from the other end: a json column is `text(name, { mode: "json" })`.
+//
+// So `data_type: "jsonb"` and `data_type: "text"` are gone from the assertions below. What is
+// still checked, and what still fails if it breaks: that the column EXISTS, that it is nullable or
+// NOT NULL (`pragma_table_info`'s `notnull`, 1 or 0, replacing `is_nullable`'s 'NO'/'YES'), and —
+// in the `descriptions` case — that a column is ABSENT.
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -18,6 +36,18 @@ afterEach(async () => {
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
   return Array.isArray(result) ? result : result.rows;
+}
+
+/**
+ * One row of `pragma_table_info`, the two columns these cases read. `notnull` is 1 for a NOT NULL
+ * column and 0 otherwise. A `type` rather than an `interface` so it satisfies `db.execute`'s
+ * `Record<string, unknown>` row constraint, as `packages/payments/src/migrations.test.ts` does.
+ */
+type ColumnRow = { name: string; notnull: number };
+
+/** `pragma_table_info` for `table`, the replacement for a scan of `information_schema.columns`. */
+async function columnsOf(db: Database, table: string): Promise<ColumnRow[]> {
+  return rows<ColumnRow>(db, sql`select name, "notnull" from pragma_table_info(${table})`);
 }
 
 describe("catalogue — menu, taxonomy and priced items", () => {
@@ -57,50 +87,41 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   });
 
   it("has a snapshot category column on both line tables and catalogue_id on locations", async () => {
-    const cols = await rows<{ table_name: string; column_name: string }>(
-      db,
-      sql`select table_name, column_name from information_schema.columns
-          where (table_name in ('sale_lines','working_order_lines') and column_name = 'category')
-             or (table_name = 'locations' and column_name = 'catalogue_id')`,
-    );
-    expect(cols).toHaveLength(3);
+    // `pragma_table_info` takes ONE table, so the single cross-table scan becomes three reads and
+    // the "three rows came back" count becomes three named presence checks — which says more, not
+    // less: the old count of 3 would also have been satisfied by the wrong three rows.
+    const present = async (table: string, column: string) =>
+      (await columnsOf(db, table)).some((c) => c.name === column);
+    expect(await present("sale_lines", "category")).toBe(true);
+    expect(await present("working_order_lines", "category")).toBe(true);
+    expect(await present("locations", "catalogue_id")).toBe(true);
   });
 
   it("products carries a plain-text name and a nullable customer_name jsonb, and no descriptions", async () => {
-    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
-      db,
-      sql`select column_name, data_type, is_nullable from information_schema.columns
-          where table_name = 'products'
-            and column_name in ('name','customer_name','descriptions')
-          order by column_name`,
-    );
+    const cols = (await columnsOf(db, "products"))
+      .filter((c) => ["name", "customer_name", "descriptions"].includes(c.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // A two-entry list, so `descriptions` being ABSENT is still what the assertion turns on — the
+    // half of this case that the type loss does not touch.
     expect(cols).toEqual([
-      { column_name: "customer_name", data_type: "jsonb", is_nullable: "YES" },
-      { column_name: "name", data_type: "text", is_nullable: "NO" },
+      { name: "customer_name", notnull: 0 },
+      { name: "name", notnull: 1 },
     ]);
   });
 
   it("products carries a nullable allergens jsonb column", async () => {
-    const [col] = await rows<{ data_type: string; is_nullable: string }>(
-      db,
-      sql`select data_type, is_nullable from information_schema.columns
-          where table_name = 'products' and column_name = 'allergens'`,
-    );
-    expect(col).toMatchObject({ data_type: "jsonb", is_nullable: "YES" });
+    const col = (await columnsOf(db, "products")).find((c) => c.name === "allergens");
+    expect(col).toEqual({ name: "allergens", notnull: 0 });
   });
 
   it("products carries the three nullable diet jsonb columns", async () => {
-    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
-      db,
-      sql`select column_name, data_type, is_nullable from information_schema.columns
-          where table_name = 'products'
-            and column_name in ('diet_derivation','diet_override','diet')
-          order by column_name`,
-    );
+    const cols = (await columnsOf(db, "products"))
+      .filter((c) => ["diet_derivation", "diet_override", "diet"].includes(c.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
     expect(cols).toEqual([
-      { column_name: "diet", data_type: "jsonb", is_nullable: "YES" },
-      { column_name: "diet_derivation", data_type: "jsonb", is_nullable: "YES" },
-      { column_name: "diet_override", data_type: "jsonb", is_nullable: "YES" },
+      { name: "diet", notnull: 0 },
+      { name: "diet_derivation", notnull: 0 },
+      { name: "diet_override", notnull: 0 },
     ]);
   });
 
@@ -108,11 +129,7 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // The image column is a path REFERENCE (a content-addressed filename), never bytes — nullable
     // because a product legitimately has no photo (distinct from allergens' null, which is a
     // PENDING state that the code reads; image null just means "no picture").
-    const [col] = await rows<{ data_type: string; is_nullable: string }>(
-      db,
-      sql`select data_type, is_nullable from information_schema.columns
-          where table_name = 'products' and column_name = 'image'`,
-    );
-    expect(col).toMatchObject({ data_type: "text", is_nullable: "YES" });
+    const col = (await columnsOf(db, "products")).find((c) => c.name === "image");
+    expect(col).toEqual({ name: "image", notnull: 0 });
   });
 });

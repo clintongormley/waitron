@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -19,9 +20,43 @@ import type { Seeded } from "../test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
+// One `delete from` per table in place of `truncate incidents, payment_refunds, payments cascade`,
+// which this engine answers with `near "truncate": syntax error` — and which took every test in
+// this file down with it. SQLite has no TRUNCATE and no CASCADE. Three calls rather than one
+// because `node:sqlite` prepares a single statement at a time, and child before parent because
+// deleting `payments` while a `payment_refunds` row still points at it is refused with
+// `FOREIGN KEY constraint failed` (errcode 787, measured on a two-table probe, node v26.7.0).
+// Reordering them does NOT redden this suite, which was checked rather than assumed: `useVenueDb`
+// empties every table after each test, so no child row survives into this hook for the foreign key
+// to catch. The order is what keeps the hook correct if that ever stops being true.
 beforeEach(async () => {
-  await pg.db.execute(sql`truncate incidents, payment_refunds, payments cascade`);
+  await pg.db.execute(sql`delete from incidents`);
+  await pg.db.execute(sql`delete from payment_refunds`);
+  await pg.db.execute(sql`delete from payments`);
 });
+
+/**
+ * Decodes the `params` of the rows a raw `select … params … from incidents` returned, leaving every
+ * other selected column alone.
+ *
+ * `incidents.params` is a json column (`packages/db/src/schema/incidents.ts`), and a raw `select`
+ * skips the read mapping that column declares, so the value arrives as the stored TEXT — measured,
+ * every assertion below read `'{"count":1,"payments":[…]'` where it wanted an object. The
+ * PostgreSQL version needed no counterpart because `jsonb` decoded in the driver. The parse itself
+ * is what this package's own `./reconcile.concurrency.test.ts` already does to the same column;
+ * this wraps it so each call site keeps the `{ rows: [{ params }] }` shape its assertions are
+ * written against, and no assertion moved.
+ */
+function parseParams<T, R extends { params: string } = { params: string }>(result: {
+  rows: R[];
+}): { rows: (Omit<R, "params"> & { params: T })[] } {
+  return {
+    rows: result.rows.map(({ params, ...rest }) => ({
+      ...rest,
+      params: JSON.parse(params) as T,
+    })),
+  };
+}
 
 const PROVIDER = "fake";
 const NOW = new Date("2026-07-25T12:00:00Z");
@@ -92,13 +127,24 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
       sql`select location_id from tills where id = ${seeded.tillId}`,
     )
   ).rows;
+  // `id` and the timestamps are named here because nothing fills them any more. They were
+  // PostgreSQL column defaults (`defaultRandom()`, `defaultNow()`); the column vocabulary now
+  // generates both in JavaScript through drizzle's `$defaultFn`
+  // (`packages/db/src/schema/columns.ts`), which is not a SQL DEFAULT — so a raw insert like these
+  // three gets nothing, and the generated tables carry no default clause
+  // (`packages/db/drizzle/0000_baseline.sql`). Measured: without them this helper was refused with
+  // `NOT NULL constraint failed: tills.id`.
+  const stamp = new Date().toISOString();
   const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
+    insert into tills (id, location_id, name, created_at)
+    values (${randomUUID()}, ${till.location_id}, 'Till 2', ${stamp}) returning id`);
   const tillId = till2.rows[0].id;
   const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
+    insert into nodes (id, location_id, name, created_at)
+    values (${randomUUID()}, ${till.location_id}, 'Node 2', ${stamp}) returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
+    insert into working_orders (id, till_id, order_number, opened_at)
+    values (${randomUUID()}, ${tillId}, 1, ${stamp}) returning id`);
   return {
     tillId,
     nodeId: node2.rows[0].id,
@@ -156,9 +202,14 @@ describe("reconcilePayments", () => {
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(1);
-    const { rows } = await pg.db.execute<{
-      params: { count: number; payments: { paymentRef: string; settledAt: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_unsettled'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; settledAt: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_unsettled'`,
+      ),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].params.count).toBe(2);
     // settledAt is normalised to ISO-8601, not the raw Postgres `mode: "string"` format
@@ -180,8 +231,13 @@ describe("reconcilePayments", () => {
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
     expect(result.incidentsRaised).toBe(2);
-    const { rows } = await pg.db.execute<{ till_id: string; params: { count: number } }>(
-      sql`select till_id, params from incidents where code = 'payment.reconcile_unsettled' order by till_id`,
+    // Both type arguments, unlike every other call: TypeScript stops INFERRING `R` the moment any
+    // type argument is written by hand, so supplying only the params payload leaves `R` on its
+    // default and `till_id` off the row.
+    const { rows } = parseParams<{ count: number }, { till_id: string; params: string }>(
+      await pg.db.execute<{ till_id: string; params: string }>(
+        sql`select till_id, params from incidents where code = 'payment.reconcile_unsettled' order by till_id`,
+      ),
     );
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.till_id).sort()).toEqual([seeded.tillId, second.tillId].sort());
@@ -216,12 +272,14 @@ describe("reconcilePayments", () => {
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_drift"]);
     // The declared params shape, asserted whole: a human resolving this incident needs BOTH
     // figures, and the pair is the entire content of the finding.
-    const { rows } = await pg.db.execute<{
-      params: {
-        count: number;
-        payments: { paymentRef: string; captured: string; settled: string }[];
-      };
-    }>(sql`select params from incidents where code = 'payment.reconcile_drift'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; captured: string; settled: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_drift'`,
+      ),
+    );
     expect(rows[0].params).toEqual({
       count: 1,
       payments: [{ paymentRef: "p1", captured: "10.00", settled: "9.00" }],
@@ -250,12 +308,14 @@ describe("reconcilePayments", () => {
     // The declared params shape, asserted whole: this incident names a settlement the processor
     // confirmed for a payment we never locally marked captured — the working order is the only
     // thing pointing a human back at what was actually paid for.
-    const { rows } = await pg.db.execute<{
-      params: {
-        count: number;
-        payments: { paymentRef: string; amount: string; workingOrderId: string }[];
-      };
-    }>(sql`select params from incidents where code = 'payment.reconcile_lost_settlement'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; amount: string; workingOrderId: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_lost_settlement'`,
+      ),
+    );
     expect(rows[0].params).toEqual({
       count: 1,
       payments: [{ paymentRef: "p-init", amount: "10.00", workingOrderId: seeded.workingOrderId }],
@@ -294,17 +354,19 @@ describe("reconcilePayments", () => {
     // The declared params shape, asserted whole: this incident names money we hold NO row for, so
     // every processor reference, the amount, the settlement time and the hinted payment_ref are all
     // a human has to go on.
-    const { rows } = await pg.db.execute<{
-      params: {
-        count: number;
-        settlements: {
-          references: string[];
-          amount: string;
-          settledAt: string;
-          paymentRef: string;
-        }[];
-      };
-    }>(sql`select params from incidents where code = 'payment.reconcile_missing_local'`);
+    const { rows } = parseParams<{
+      count: number;
+      settlements: {
+        references: string[];
+        amount: string;
+        settledAt: string;
+        paymentRef: string;
+      }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_missing_local'`,
+      ),
+    );
     expect(rows[0].params).toEqual({
       count: 1,
       settlements: [
@@ -390,11 +452,17 @@ async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
 }
 
 /** Sets a seeded working order's status. `settled` also needs `settled_at` (the biconditional
- * CHECK `working_orders_settled_at_ck`); `abandoned` must leave it null. */
+ * CHECK `working_orders_settled_at_ck`); `abandoned` must leave it null.
+ *
+ * The clock is read in JavaScript and bound, where this used to interpolate a `now()` fragment:
+ * that call is answered here with `no such function: now`. `working_orders.settled_at` is a `tsString` column
+ * (`packages/db/src/schema/orders.ts`), which stores exactly what `toISOString` produced, so the
+ * bound string is the shape every other writer writes. Only the CHECK's null-vs-not-null half
+ * matters to these tests; the instant itself is never read back. */
 async function setOrderStatus(seeded: Seeded, status: "settled" | "abandoned"): Promise<void> {
   await pg.db.execute(sql`
     update working_orders
-    set status = ${status}, settled_at = ${status === "settled" ? sql`now()` : null}
+    set status = ${status}, settled_at = ${status === "settled" ? new Date().toISOString() : null}
     where id = ${seeded.workingOrderId}`);
 }
 
@@ -420,18 +488,20 @@ describe("orphan remediation", () => {
     // when it is not, which gate stopped it — so the whole params shape is asserted here and each
     // other reason is asserted in its own test below. Hardcoding any single value must fail one of
     // them.
-    const incident = await pg.db.execute<{
-      params: {
-        count: number;
-        payments: {
-          paymentRef: string;
-          amount: string;
-          workingOrderId: string;
-          workingOrderStatus: string;
-          remediation: string;
-        }[];
-      };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const incident = parseParams<{
+      count: number;
+      payments: {
+        paymentRef: string;
+        amount: string;
+        workingOrderId: string;
+        workingOrderStatus: string;
+        remediation: string;
+      }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(incident.rows[0].params).toEqual({
       count: 1,
       payments: [
@@ -483,9 +553,13 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
-    const incident = await pg.db.execute<{
-      params: { payments: { workingOrderStatus: string; remediation: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const incident = parseParams<{
+      payments: { workingOrderStatus: string; remediation: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(incident.rows[0].params.payments).toEqual([
       {
         paymentRef: "p1",
@@ -518,9 +592,11 @@ describe("orphan remediation", () => {
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
-    const incident = await pg.db.execute<{
-      params: { payments: { remediation: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const incident = parseParams<{ payments: { remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(incident.rows[0].params.payments[0].remediation).toBe("stateNotCaptured");
     const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
@@ -564,9 +640,14 @@ describe("orphan remediation", () => {
       "payment.reconcile_orphan",
       "payment.reconcile_remediation_failed",
     ]);
-    const { rows } = await pg.db.execute<{
-      params: { count: number; payments: { paymentRef: string; amount: string; reason: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; amount: string; reason: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
+      ),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].params).toEqual({
       count: 1,
@@ -606,9 +687,14 @@ describe("orphan remediation", () => {
     expect(result.remediationFailures).toEqual([{ paymentRef: "p1", reason: "unknown" }]);
     // One orphan aggregate (both p1 and p2) + one remediation-failed aggregate (p1 only).
     expect(result.incidentsRaised).toBe(2);
-    const { rows } = await pg.db.execute<{
-      params: { count: number; payments: { paymentRef: string; amount: string; reason: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; amount: string; reason: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
+      ),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].params).toEqual({
       count: 1,
@@ -639,9 +725,14 @@ describe("orphan remediation", () => {
     // Both orphans share a null sale_id and the same till: without aggregation, the second
     // `payment.reconcile_remediation_failed` insert would collide on the open-incident dedup key
     // (till, code, sale_id) and be silently dropped.
-    const { rows } = await pg.db.execute<{
-      params: { count: number; payments: { paymentRef: string; amount: string; reason: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`);
+    const { rows } = parseParams<{
+      count: number;
+      payments: { paymentRef: string; amount: string; reason: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_remediation_failed'`,
+      ),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].params.count).toBe(2);
     expect(rows[0].params.payments.map((p) => p.paymentRef).sort()).toEqual(["p1", "p2"]);
@@ -703,7 +794,7 @@ describe("orphan remediation", () => {
     // with what is under test: the open-incident dedup index is partial on `acknowledged_at IS
     // NULL`, so while the first stays open the second sweep's insert is deduplicated away.
     await pg.db.execute(sql`
-      update incidents set acknowledged_at = now()
+      update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
 
     const second = recordingReverse();
@@ -715,11 +806,11 @@ describe("orphan remediation", () => {
     expect(result.orphan).toHaveLength(1);
     expect(result.remediated).toBe(0);
     expect(second.calls).toEqual([]);
-    const incident = await pg.db.execute<{
-      params: { payments: { remediation: string }[] };
-    }>(sql`
+    const incident = parseParams<{ payments: { remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(sql`
       select params from incidents
-      where code = 'payment.reconcile_orphan' and acknowledged_at is null`);
+      where code = 'payment.reconcile_orphan' and acknowledged_at is null`),
+    );
     expect(incident.rows).toHaveLength(1);
     expect(incident.rows[0].params.payments[0].remediation).toBe("alreadyClaimed");
   });
@@ -741,7 +832,7 @@ describe("orphan remediation", () => {
     // dedupe away the second sweep's insert and this assertion would read the FIRST incident
     // (`claimed`) instead of the second sweep's.
     await pg.db.execute(sql`
-      update incidents set acknowledged_at = now()
+      update incidents set acknowledged_at = ${new Date().toISOString()}
       where code = 'payment.reconcile_orphan'`);
 
     // The second sweep's report now drifts the amount for the already-claimed row.
@@ -755,11 +846,11 @@ describe("orphan remediation", () => {
     expect(result.drift).toHaveLength(1);
     expect(result.remediated).toBe(0);
     expect(second.calls).toEqual([]);
-    const incident = await pg.db.execute<{
-      params: { payments: { remediation: string }[] };
-    }>(sql`
+    const incident = parseParams<{ payments: { remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(sql`
       select params from incidents
-      where code = 'payment.reconcile_orphan' and acknowledged_at is null`);
+      where code = 'payment.reconcile_orphan' and acknowledged_at is null`),
+    );
     expect(incident.rows).toHaveLength(1);
     expect(incident.rows[0].params.payments[0].remediation).toBe("alreadyClaimed");
   });
@@ -797,15 +888,21 @@ describe("orphan remediation", () => {
       "payment.reconcile_drift",
       "payment.reconcile_orphan",
     ]);
-    const orphan = await pg.db.execute<{
-      params: { payments: { remediation: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const orphan = parseParams<{ payments: { remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(orphan.rows[0].params.payments[0].remediation).toBe("amountDrifted");
     // The drift incident still carries BOTH figures — the human settling the difference reads them
     // from here, which is what makes reporting-instead-of-reversing actionable.
-    const drift = await pg.db.execute<{
-      params: { payments: { paymentRef: string; captured: string; settled: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_drift'`);
+    const drift = parseParams<{
+      payments: { paymentRef: string; captured: string; settled: string }[];
+    }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_drift'`,
+      ),
+    );
     expect(drift.rows[0].params.payments).toEqual([
       { paymentRef: "p1", captured: "10.00", settled: "12.50" },
     ]);
@@ -878,9 +975,11 @@ describe("orphan remediation", () => {
     );
     expect(result.drift).toHaveLength(1);
     expect(reverse.calls).toEqual([]);
-    const orphan = await pg.db.execute<{
-      params: { payments: { remediation: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const orphan = parseParams<{ payments: { remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(orphan.rows[0].params.payments[0].remediation).toBe("workingOrderNotAbandoned");
   });
 
@@ -910,9 +1009,11 @@ describe("orphan remediation", () => {
     expect(reverse.calls).toEqual(["p1"]);
     // One aggregate orphan incident, both reasons present — the only coverage anywhere of two
     // different `remediation` values coexisting in the same aggregate.
-    const orphan = await pg.db.execute<{
-      params: { payments: { paymentRef: string; remediation: string }[] };
-    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    const orphan = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
+      await pg.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
     expect(orphan.rows).toHaveLength(1);
     expect(
       orphan.rows[0].params.payments

@@ -133,8 +133,13 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       }),
     ).rejects.toBe(boom);
 
+    // `cast(… as text)`, not `count(*)::text`: the cast this carried was refused before the
+    // statement ran — `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's
+    // parser. The value stays a STRING so the assertion below is untouched — measured on node
+    // v26.7.0, `select cast(count(*) as text)` over three rows returns `"3"` (`typeof "string"`)
+    // where the bare `count(*)` returns the number `3`.
     const rows = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from payments where working_order_id = ${s.workingOrderId}`,
+      sql`select cast(count(*) as text) as count from payments where working_order_id = ${s.workingOrderId}`,
     );
     expect(rows.rows[0].count).toBe("0");
   });

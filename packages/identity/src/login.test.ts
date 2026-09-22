@@ -80,8 +80,12 @@ describe("loginWithPin", () => {
     expect(code).toBe("pin.invalid");
 
     // The rejected login opened no row — nothing to close later.
+    // No cast on the count. The `::int` this carried was refused before the statement ran —
+    // `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's parser. It was
+    // there to turn the PostgreSQL driver's BigInt into a number; measured on node v26.7.0, this
+    // driver hands `select count(*)` back as a JavaScript number already (`3`, `typeof "number"`).
     const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from sessions where person_id = ${personId}`,
+      sql`select count(*) as n from sessions where person_id = ${personId}`,
     );
     expect(rows.rows[0]!.n).toBe(0);
   });

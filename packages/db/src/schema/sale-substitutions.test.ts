@@ -81,14 +81,18 @@ async function insertSale(
   const locales = opts.invoiceLocales ?? ["es", "ca"];
   const cp = opts.counterparty ?? null;
   invoiceCounter += 1;
-  const localesArray = sql`array[${sql.join(
-    locales.map((l) => sql`${l}`),
-    sql`, `,
-  )}]::text[]`;
+  // `invoice_locales` is a JSON array in a TEXT column now, so the locale list binds as one JSON
+  // string rather than being built as SQL. The `array[…]::text[]` expression this replaces is
+  // refused at prepare here — `near "['es','ca']": syntax error` for the literal form, and
+  // `unrecognized token: ":"` for the cast (node v26.7.0, `node:sqlite`).
+  const localesJson = JSON.stringify(locales);
   const [row] = await rows<{ id: string }>(
     db,
-    sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
-           100, '[]'::jsonb, ${locales[0]}, ${localesArray}, 'verifactu', 'recorded',
+    // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
+    // rather than a SQL DEFAULT, which a raw insert never reaches — and `'[]'::jsonb` has lost its
+    // cast for the same reason the locale list did.
+    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${randomUUID()}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
+           100, '[]', ${locales[0]}, ${localesJson}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,
   );
@@ -101,7 +105,8 @@ async function insertSubstitution(
 ): Promise<{ id: string }[]> {
   return rows<{ id: string }>(
     db,
-    sql`insert into sale_substitutions (substitution_sale_id, substituted_sale_id) values (${opts.substitutionSaleId}, ${opts.substitutedSaleId})
+    // `id` for the reason {@link insertSale} records: it is a `$defaultFn` generator here.
+    sql`insert into sale_substitutions (id, substitution_sale_id, substituted_sale_id) values (${randomUUID()}, ${opts.substitutionSaleId}, ${opts.substitutedSaleId})
          returning id`,
   );
 }
@@ -114,39 +119,60 @@ describe("sale_substitutions — schema shape", () => {
   });
 
   it("creates sale_substitutions as an append-only table", async () => {
-    const table = await rows<{ one: number }>(
+    // `information_schema.tables` and `pg_trigger` do not exist on this engine — run as written
+    // these statements died with `no such table: information_schema.tables` and, for the trigger
+    // read, `unrecognized token: ":"` from its `::regclass` cast (measured on this suite).
+    // `sqlite_master` answers both questions: it holds tables and triggers alike, with a
+    // `tbl_name` saying which table a trigger is on.
+    const table = await rows<{ name: string }>(
       db,
-      sql`select 1 as one from information_schema.tables where table_name = 'sale_substitutions'`,
+      sql`select name from sqlite_master where type = 'table' and name = 'sale_substitutions'`,
     );
     expect(table).toHaveLength(1);
 
-    const guards = await rows<{ tgname: string }>(
+    // WHAT THE GUARD LIST LOST, and it is not only a rename. The two names this case pinned were
+    // `sale_substitutions_enforce_immutability` and `sale_substitutions_block_truncate`. Read off
+    // this package's own migrated database, the triggers now on the table are
+    // `sale_substitutions_append_only_delete` and `sale_substitutions_append_only_update` — one
+    // per statement kind, because a SQLite trigger is declared for one of INSERT, UPDATE or
+    // DELETE rather than a list of them.
+    //
+    // The truncate guard has no successor and is not meant to have one: SQLite has no TRUNCATE
+    // statement at all, so there is nothing for a trigger to intercept. `truncate table
+    // sale_substitutions` is refused by the PARSER with `near "truncate": syntax error` (node
+    // v26.7.0, `node:sqlite`) — measured, not assumed. The suite's own TRUNCATE case went with it;
+    // the note on this describe block says so.
+    //
+    // The names are read off the table rather than filtered by a list, so a guard added or
+    // renamed shows up here as a changed list instead of passing unnoticed.
+    const guards = await rows<{ name: string }>(
       db,
-      sql`select tgname from pg_trigger
-            where tgrelid = 'sale_substitutions'::regclass
-              and tgname in ('sale_substitutions_enforce_immutability',
-                             'sale_substitutions_block_truncate')
-            order by tgname`,
+      sql`select name from sqlite_master
+            where type = 'trigger' and tbl_name = 'sale_substitutions' order by name`,
     );
-    expect(guards.map((g) => g.tgname)).toEqual([
-      "sale_substitutions_block_truncate",
-      "sale_substitutions_enforce_immutability",
+    expect(guards.map((g) => g.name)).toEqual([
+      "sale_substitutions_append_only_delete",
+      "sale_substitutions_append_only_update",
     ]);
   });
 
   it("adds the three nullable counterparty columns to sales", async () => {
-    const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
+    // `pragma_table_info` for `information_schema.columns`, which does not exist here. All three
+    // values carry across for these columns: the name, the declared type (`lower(type)` because
+    // the pragma answers in upper case), and `notnull` 0 for `is_nullable` 'YES'. Unlike the json
+    // columns in `catalogue.test.ts`, nothing is lost — these really are plain text columns on
+    // both engines.
+    const cols = await rows<{ name: string; type: string; notnull: number }>(
       db,
-      sql`select column_name, data_type, is_nullable from information_schema.columns
-            where table_name = 'sales'
-              and column_name in ('counterparty_tax_id', 'counterparty_legal_name',
-                                  'counterparty_country_code')
-            order by column_name`,
+      sql`select name, lower(type) as type, "notnull" from pragma_table_info('sales')
+            where name in ('counterparty_tax_id', 'counterparty_legal_name',
+                           'counterparty_country_code')
+            order by name`,
     );
     expect(cols).toEqual([
-      { column_name: "counterparty_country_code", data_type: "text", is_nullable: "YES" },
-      { column_name: "counterparty_legal_name", data_type: "text", is_nullable: "YES" },
-      { column_name: "counterparty_tax_id", data_type: "text", is_nullable: "YES" },
+      { name: "counterparty_country_code", type: "text", notnull: 0 },
+      { name: "counterparty_legal_name", type: "text", notnull: 0 },
+      { name: "counterparty_tax_id", type: "text", notnull: 0 },
     ]);
   });
 });
@@ -181,8 +207,10 @@ describe("sale_substitutions — the N:1 link", () => {
     await insertSubstitution(db, { substitutionSaleId: f3SaleId, substitutedSaleId: ticket2 });
     const linked = await rows<{ n: number }>(
       db,
-      sql`select count(*)::int as n from sale_substitutions
-            where substitution_sale_id = ${f3SaleId}::uuid`,
+      // `count(*)` without a cast: SQLite has no cast operator, and none is needed — measured on
+      // this engine, `select count(*) as n` hands back a JavaScript `number`.
+      sql`select count(*) as n from sale_substitutions
+            where substitution_sale_id = ${f3SaleId}`,
     );
     expect(linked[0].n).toBe(2);
   });
@@ -260,15 +288,24 @@ describe("sale_substitutions — immutability", () => {
     expect(pgErrorCode(remove)).toBe("WT001");
   });
 
-  it("stops the owner truncating the table, via the statement trigger", async () => {
-    // A row trigger does not fire on TRUNCATE. Nothing references sale_substitutions by a foreign
-    // key, so a bare TRUNCATE reaches the BEFORE TRUNCATE statement trigger directly.
-    const error = await captureError(() => db.execute(sql`truncate table sale_substitutions`));
-    expect(pgErrorCode(error)).toBe("WT001");
-    expect(pgErrorMessage(error)).toMatch(
-      /sale_substitutions is append-only: TRUNCATE is not permitted/,
-    );
-  });
+  // A CASE WAS DELETED HERE: "stops the owner truncating the table, via the statement trigger".
+  //
+  // What it held: that `truncate table sale_substitutions`, run as the owner, was refused by a
+  // BEFORE TRUNCATE statement trigger (`sale_substitutions_block_truncate`) with SQLSTATE WT001,
+  // because a row trigger does not fire on PostgreSQL's TRUNCATE and nothing referenced the table
+  // by a foreign key.
+  //
+  // Why it is gone rather than converted: this engine has no TRUNCATE statement, so there is no
+  // write for a trigger to intercept and no trigger. `truncate table sale_substitutions` is
+  // refused by the PARSER — `near "truncate": syntax error` (node v26.7.0, `node:sqlite`),
+  // measured against this package's migrated database. Kept and re-pointed at that message, the
+  // case would have read as a green immutability check while proving only that SQLite cannot
+  // parse a word.
+  //
+  // What still holds the property: nothing, and nothing needs to. The table cannot be emptied by a
+  // statement that does not exist. The DELETE half of the same protection is alive and is asserted
+  // by "stops the owner too, via the trigger backstop" just above, through
+  // `sale_substitutions_append_only_delete`.
 });
 
 describe("sales — counterparty columns", () => {
@@ -291,7 +328,7 @@ describe("sales — counterparty columns", () => {
     }>(
       db,
       sql`select counterparty_tax_id, counterparty_legal_name, counterparty_country_code
-            from sales where id = ${id}::uuid`,
+            from sales where id = ${id}`,
     );
     expect(row).toEqual({
       counterparty_tax_id: "B99999999",
@@ -305,7 +342,7 @@ describe("sales — counterparty columns", () => {
     const [row] = await db
       .select()
       .from(sales)
-      .where(sql`${sales.id} = ${id}::uuid`);
+      .where(sql`${sales.id} = ${id}`);
     expect(row.counterpartyTaxId).toBeNull();
     expect(row.counterpartyLegalName).toBeNull();
     expect(row.counterpartyCountryCode).toBeNull();
@@ -318,7 +355,7 @@ describe("sales — counterparty columns", () => {
       counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const error = await captureError(() =>
-      db.execute(sql`update sales set counterparty_tax_id = 'B00000001' where id = ${id}::uuid`),
+      db.execute(sql`update sales set counterparty_tax_id = 'B00000001' where id = ${id}`),
     );
     expect(pgErrorCode(error)).toBe("WT001");
     expect(pgErrorMessage(error)).toMatch(/sales is append-only: UPDATE is not permitted/);

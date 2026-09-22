@@ -73,18 +73,34 @@ describe("nodes schema", () => {
   });
 
   it("is what the fiscal and commercial node foreign keys point at, by its id", async () => {
-    // Read the definition back rather than trusting that an FK named for `nodes` has this shape.
-    const found = await rows<{ conname: string; def: string }>(
-      db,
-      sql`select conname, pg_get_constraintdef(oid) as def from pg_constraint
-           where conname in ('invoice_series_node_fk', 'sales_node_fk') order by conname`,
-    );
-    expect(found).toEqual([
-      { conname: "invoice_series_node_fk", def: "FOREIGN KEY (node_id) REFERENCES nodes(id)" },
-      {
-        conname: "sales_node_fk",
-        def: "FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE RESTRICT",
-      },
+    // Read the definition back rather than trusting that an FK pointing at `nodes` has this shape.
+    //
+    // WHAT THIS CASE LOST. It used to read `pg_get_constraintdef(oid)` out of `pg_constraint`,
+    // selecting the two rows BY CONSTRAINT NAME (`invoice_series_node_fk`, `sales_node_fk`) and
+    // comparing the rendered definition strings. `pg_constraint` is not a table on this engine —
+    // run as written this statement died with `no such table: pg_constraint` (measured on this
+    // suite).
+    //
+    // `pragma_foreign_key_list` is the replacement. It reports the referencing column, the
+    // referenced table and column, and the delete action — every part of the definition strings
+    // this case compared, including the difference between the two, which is that only the sale's
+    // key restricts the delete. It does NOT report a constraint NAME, because a SQLite foreign key
+    // has none: drizzle's generator emits a bare `FOREIGN KEY (…) REFERENCES …(…)` clause. So the
+    // name pin is gone and the shape pin stays, and each table's list is read separately because
+    // the pragma takes one table.
+    const nodeKeyOf = async (table: string) => {
+      const keys = await rows<{ from: string; table: string; to: string; on_delete: string }>(
+        db,
+        sql`select "from", "table", "to", on_delete from pragma_foreign_key_list(${table})
+             where "from" = 'node_id'`,
+      );
+      return keys;
+    };
+    expect(await nodeKeyOf("invoice_series")).toEqual([
+      { from: "node_id", table: "nodes", to: "id", on_delete: "NO ACTION" },
+    ]);
+    expect(await nodeKeyOf("sales")).toEqual([
+      { from: "node_id", table: "nodes", to: "id", on_delete: "RESTRICT" },
     ]);
   });
 
@@ -103,38 +119,52 @@ describe("nodes schema", () => {
 
   describe("tenants fiscal identity is country + tax_id", () => {
     it("has country and tax_id, not nif, and a (country, tax_id) unique index", async () => {
-      const cols = await db.execute<{ column_name: string }>(sql`
-        select column_name from information_schema.columns
-        where table_name = 'tenants' order by column_name`);
-      const names = cols.rows.map((r) => r.column_name);
+      // `information_schema.columns` and `pg_indexes` do not exist on this engine — run as written
+      // each of these statements died with `no such table: …` (measured on this suite).
+      // `pragma_table_info` and `pragma_index_list` are the replacements, following
+      // `packages/payments/src/migrations.test.ts`. Nothing is lost in either half: the pragma
+      // reports the same column NAMES, and it reports the index by the same NAME the migration
+      // created it under — `tenants_country_tax_id_key` is what `pragma_index_list('tenants')`
+      // returns on this package's own migrated database.
+      const cols = await db.execute<{ name: string }>(
+        sql`select name from pragma_table_info('tenants') order by name`,
+      );
+      const names = cols.rows.map((r) => r.name);
       expect(names).toContain("country");
       expect(names).toContain("tax_id");
       expect(names).not.toContain("nif");
 
-      const idx = await db.execute<{ indexname: string }>(sql`
-        select indexname from pg_indexes where tablename = 'tenants'`);
-      const indexes = idx.rows.map((r) => r.indexname);
+      const idx = await db.execute<{ name: string }>(
+        sql`select name from pragma_index_list('tenants')`,
+      );
+      const indexes = idx.rows.map((r) => r.name);
       expect(indexes).toContain("tenants_country_tax_id_key");
       expect(indexes).not.toContain("tenants_nif_key");
     });
   });
 
   it("locations carry fiscal_territory, an address, time_zone and day_cutover", async () => {
-    const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
-      select column_name, is_nullable from information_schema.columns where table_name = 'locations'`);
-    const byName = new Map(cols.rows.map((r) => [r.column_name, r.is_nullable]));
-    expect(byName.get("fiscal_territory")).toBe("NO");
-    expect(byName.get("time_zone")).toBe("NO");
-    expect(byName.get("day_cutover")).toBe("NO");
+    // `pragma_table_info` for `information_schema.columns`, which does not exist here. Its
+    // `notnull` is 1 for a NOT NULL column and 0 otherwise — the exact counterpart of
+    // `is_nullable`'s 'NO'/'YES', so the three NOT NULL assertions carry across unchanged.
+    const cols = await db.execute<{ name: string; notnull: number }>(
+      sql`select name, "notnull" from pragma_table_info('locations')`,
+    );
+    const byName = new Map(cols.rows.map((r) => [r.name, r.notnull]));
+    expect(byName.get("fiscal_territory")).toBe(1);
+    expect(byName.get("time_zone")).toBe(1);
+    expect(byName.get("day_cutover")).toBe(1);
     for (const a of ["address_line1", "address_line2", "postal_code", "city", "province"]) {
       expect(byName.has(a)).toBe(true);
     }
   });
 
   it("nodes record the resolved filing_module and tax_module", async () => {
-    const cols = await db.execute<{ column_name: string }>(sql`
-      select column_name from information_schema.columns where table_name = 'nodes'`);
-    const names = cols.rows.map((r) => r.column_name);
+    // `pragma_table_info` for `information_schema.columns`; the column names are the same.
+    const cols = await db.execute<{ name: string }>(
+      sql`select name from pragma_table_info('nodes')`,
+    );
+    const names = cols.rows.map((r) => r.name);
     expect(names).toContain("filing_module");
     expect(names).toContain("tax_module");
   });

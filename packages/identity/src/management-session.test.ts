@@ -24,15 +24,28 @@ const suite = useVenueDb({
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
+/**
+ * An instant `minutes` before now, as the exact string the column stores.
+ *
+ * The two ageing updates below used to read `now() - interval '10 minutes'`. Both halves are gone
+ * from this engine, each run on its own against a `node:sqlite` in-memory database (node v26.7.0):
+ * `update t set c = now()` answers `no such function: now`, and any statement carrying the interval
+ * literal answers `near "'10 minutes'": syntax error` — there is no interval type, and the parse
+ * stops there before the missing function is ever reached. So the subtraction happens on a
+ * JavaScript `Date` and the result binds as an ordinary parameter. `last_seen_at` is a
+ * `tsString` column (`packages/identity/src/schema/management-sessions.ts`), which holds exactly
+ * what `toISOString` produced, so a bound ISO string is the same shape the writer wrote.
+ */
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+const agedTo = (at: string, sessionId: string) =>
+  sql`update management_sessions set last_seen_at = ${at} where id = ${sessionId}`;
+
 describe("management session lifecycle", () => {
   it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
-    await run((tx) =>
-      tx.execute(
-        sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id}`,
-      ),
-    );
+    await run((tx) => tx.execute(agedTo(minutesAgo(10), session.id)));
     const before = await run((tx) => resolveManagementSession(tx, session.id, { touch: false }));
     const passive = await withPassiveManagementRead(() =>
       run((tx) => resolveManagementSession(tx, session.id)),
@@ -99,11 +112,7 @@ describe("management session lifecycle", () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     // Age last_seen_at beyond the timeout via a raw SQL update — deterministic, no clock injection.
-    await run((tx) =>
-      tx.execute(
-        sql`update management_sessions set last_seen_at = now() - interval '2 days' where id = ${session.id}`,
-      ),
-    );
+    await run((tx) => tx.execute(agedTo(minutesAgo(2 * 24 * 60), session.id)));
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
     expect(code).toBe("management_session.expired");
   });

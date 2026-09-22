@@ -5,6 +5,7 @@ import type { NodeId } from "@waitron/shared";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { readMembershipTrustSet, setNodePublicKey } from "./node-identity.js";
+import { locations } from "./schema/tenants.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -16,10 +17,23 @@ import { useVenueDb } from "./testing/venue-db.js";
 
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as seedNode's own suite does.
+// Drizzle rather than raw SQL, for two things the raw insert relied on PostgreSQL for. Run against
+// this engine the old statement is refused at prepare with `near "['es']": syntax error` (node
+// v26.7.0, `node:sqlite`) — there is no array literal and no `::text[]` cast. And `locations.id` is
+// `id("id").primaryKey().$defaultFn(newId)`, a JavaScript generator rather than a SQL DEFAULT, so a
+// raw insert that omits the column reaches nothing to fill it. Both are handled by going through
+// drizzle, which encodes `invoiceLocales` as the JSON text the column now holds and calls the
+// generator; `seedNode` in `./testing/seed.ts` is built the same way.
 async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
-  return brandLocationId(loc.rows[0]!.id);
+  const [row] = await db
+    .insert(locations)
+    .values({
+      name: "Test location",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+    })
+    .returning({ id: locations.id });
+  return brandLocationId(row!.id);
 }
 
 describe("membership trust-set accessors", () => {

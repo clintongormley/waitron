@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -119,11 +120,15 @@ describe("invoice_series schema", () => {
     // deliberate edit here. (A Spanish column NAME in this package's schema source is the tree
     // guard's job, scripts/english-only.test.ts; fiscal's own terms are fiscal's to declare, not
     // this package's.)
-    const cols = await rows<{ column_name: string }>(
+    // `pragma_table_info` for `information_schema.columns`, which does not exist on this engine —
+    // run as written this statement died with `no such table: information_schema.columns`
+    // (measured on this suite). The pragma reports the same column NAMES, so the exact pin below
+    // is unchanged and still catches any new column.
+    const cols = await rows<{ name: string }>(
       db,
-      sql`select column_name from information_schema.columns where table_name = 'invoice_series'`,
+      sql`select name from pragma_table_info('invoice_series')`,
     );
-    expect(cols.map((c) => c.column_name).sort()).toEqual([
+    expect(cols.map((c) => c.name).sort()).toEqual([
       "code",
       "id",
       "next_number",
@@ -138,32 +143,43 @@ describe("invoice_series schema", () => {
     // This supersedes Task 3's scaffolding assertion that the column was nullable. Raw SQL for the
     // inserts so a mis-migrated run fails on the real cause rather than a drizzle column-object error
     // — the same reason sales.test.ts's corrective-link tests use a raw insert.
+    //
+    // `id` is named explicitly in the raw inserts below because `invoice_series.id` is
+    // `$defaultFn(newId)` — a JavaScript generator rather than a SQL DEFAULT, which a raw insert
+    // never reaches. Without it the first insert was refused
+    // `NOT NULL constraint failed: invoice_series.id` and this case never got as far as the
+    // node_id refusal it is about (measured on this case). Supplying it keeps the insert raw,
+    // which is what the paragraph above asks for.
     const node = await seedNode(db, brandLocationId(LOCATION_A));
-    const meta = await rows<{ is_nullable: string }>(
+    // `pragma_table_info` for `information_schema.columns`. Its `notnull` is 1 for a NOT NULL
+    // column and 0 otherwise — the exact counterpart of `is_nullable`'s 'NO'/'YES', so the
+    // assertion carries across unchanged.
+    const meta = await rows<{ notnull: number }>(
       db,
-      sql`select is_nullable from information_schema.columns
-           where table_name = 'invoice_series' and column_name = 'node_id'`,
+      sql`select "notnull" from pragma_table_info('invoice_series') where name = 'node_id'`,
     );
-    expect(meta).toEqual([{ is_nullable: "NO" }]);
+    expect(meta).toEqual([{ notnull: 1 }]);
     // Accepts a valid node id.
     const withNode = await rows<{ node_id: string | null }>(
       db,
-      sql`insert into invoice_series (node_id, code) values (${node}, 'FN') returning node_id`,
+      sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, ${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
     // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces.
     const error = await captureError(() =>
-      db.execute(sql`insert into invoice_series (code) values ('FM')`),
+      db.execute(sql`insert into invoice_series (id, code) values (${randomUUID()}, 'FM')`),
     );
     expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"|not-null/i);
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     // The (node_id) FK guarantees referential existence too: a node id with
-    // no `nodes` row is refused.
+    // no `nodes` row is refused. `id` is supplied for the reason the case above records — without
+    // it this insert was refused `NOT NULL constraint failed: invoice_series.id` and never reached
+    // the foreign key.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into invoice_series (node_id, code) values ('99999999-9999-4999-8999-999999999999', 'FX')`,
+        sql`insert into invoice_series (id, node_id, code) values (${randomUUID()}, '99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
@@ -174,13 +190,25 @@ describe("invoice_series schema", () => {
     // one series per node, which is the thing N-series-from-day-one exists to
     // avoid (node-id rekey, 2026-08-03: the pair moved from till to node). It
     // reads as a harmless index, so only a test catches it.
-    const found = await rows<{ indexdef: string }>(
+    // `pg_indexes` does not exist on this engine — run as written this statement died with
+    // `no such table: pg_indexes`. The replacement reads the index list and then each index's own
+    // column list, rather than pattern-matching a `CREATE INDEX` string: `pragma_index_list` gives
+    // the name and a `unique` flag (1 or 0), and `pragma_index_info` gives the columns the index
+    // is on. That is what the old regex over `indexdef` was approximating, so the assertion below
+    // pins the same property and no longer depends on how the DDL happens to be spelt.
+    const indexes = await rows<{ name: string; unique: number }>(
       db,
-      sql`select indexdef from pg_indexes where tablename = 'invoice_series'`,
+      sql`select name, "unique" from pragma_index_list('invoice_series')`,
     );
-    const pairOnly = found.filter(
-      (i) => /UNIQUE/i.test(i.indexdef) && /\(node_id\)/.test(i.indexdef),
-    );
-    expect(pairOnly).toEqual([]);
+    const nodeIdAlone: string[] = [];
+    for (const index of indexes) {
+      if (index.unique !== 1) continue;
+      const columns = await rows<{ name: string }>(
+        db,
+        sql`select name from pragma_index_info(${index.name})`,
+      );
+      if (columns.length === 1 && columns[0]!.name === "node_id") nodeIdAlone.push(index.name);
+    }
+    expect(nodeIdAlone).toEqual([]);
   });
 });

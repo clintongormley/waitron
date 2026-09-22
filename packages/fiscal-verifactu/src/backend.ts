@@ -758,16 +758,26 @@ export class VerifactuBackend implements FiscalBackend {
    *
    * Opens its OWN `withTransaction` because it takes no caller
    * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
+   *
+   * The count comes back as a plain JavaScript number, so nothing converts it. This used to read
+   * `count(*)::text` and wrap the result in `Number(...)`, because the PostgreSQL driver handed a
+   * `count` over as a BigInt. SQLite parses no `::` cast — it reads the first colon as the start of
+   * a bind parameter and refuses the whole statement at prepare time with `unrecognized token:
+   * ":"`. Measured 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement
+   * minus the cast as the control: the cast threw, the control returned `[{ count: 3 }]`, and
+   * `typeof` on that value read `number`. Measured again on an empty selection, where the row is
+   * `{ count: 0 }` and `typeof` still reads `number` — so a zero count is a row carrying 0, never a
+   * missing row, and `rows[0]!` is sound.
    */
   async pendingCount(nodeId: NodeId): Promise<number> {
     return withTransaction(this.db, async (tx) => {
-      const rows = await tx.execute<{ count: string }>(sql`
-        select count(*)::text as count
+      const rows = await tx.execute<{ count: number }>(sql`
+        select count(*) as count
         from envios e
         join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${nodeId} and e.estado = 'pendiente'
       `);
-      return Number(rows.rows[0]!.count);
+      return rows.rows[0]!.count;
     });
   }
 

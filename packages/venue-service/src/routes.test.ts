@@ -1,13 +1,19 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS, createCatalogue, createCategory } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  floorZones,
+  kitchenStations,
+  locations,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
+  persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
@@ -47,29 +53,56 @@ interface Fixture {
 
 async function fixture(): Promise<Fixture> {
   await seedTenant(db);
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-  const scopedLocationId = locationId(location.rows[0]!.id);
-  const zone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (location_id, name) values (${scopedLocationId}, 'Terrace') returning id`);
-  const station = await db.execute<{ id: string }>(sql`
-    insert into kitchen_stations (location_id, name) values (${scopedLocationId}, 'Terrace bar') returning id`);
+  // These three go through the insert BUILDER rather than raw SQL, for two things the raw
+  // statements relied on PostgreSQL for. `array['en-GB']` is refused at prepare —
+  // `near "['en-GB']": syntax error` — because SQLite has no array literal and `invoice_locales` is
+  // now a JSON array in a TEXT column that `labelList` encodes. And each table's `id` and
+  // `created_at` are JavaScript `$defaultFn` generators rather than SQL DEFAULTs, which only the
+  // builder runs; measured on the same fixture, a raw insert is refused with
+  // `NOT NULL constraint failed: <table>.id`. Same shape as every converted fixture in the tree
+  // (`packages/identity/test/fixtures.ts`).
+  const [location] = await db
+    .insert(locations)
+    .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+    .returning({ id: locations.id });
+  const scopedLocationId = locationId(location!.id);
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ locationId: scopedLocationId, name: "Terrace" })
+    .returning({ id: floorZones.id });
+  const [station] = await db
+    .insert(kitchenStations)
+    .values({ locationId: scopedLocationId, name: "Terrace bar" })
+    .returning({ id: kitchenStations.id });
 
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
     async (tx) => {
       const menu = await createCatalogue(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: { en: "Cocktails" } });
-      const manager = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values (${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
-      const staff = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values (${`Staff ${scopedLocationId}`}, ${hashPin("1234")}, 'staff') returning id`);
+      // The builder for both, as for the venue rows above: `persons.id` and its timestamps are
+      // JavaScript `$defaultFn` generators rather than SQL DEFAULTs, so a raw insert is refused
+      // with `NOT NULL constraint failed: persons.id` — measured on this fixture.
+      const [manager] = await tx
+        .insert(persons)
+        .values({
+          displayName: `Manager ${scopedLocationId}`,
+          pinHash: hashPin("1234"),
+          role: "manager",
+        })
+        .returning({ id: persons.id });
+      const [staff] = await tx
+        .insert(persons)
+        .values({
+          displayName: `Staff ${scopedLocationId}`,
+          pinHash: hashPin("1234"),
+          role: "staff",
+        })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
-        personId: manager.rows[0]!.id,
+        personId: manager!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        personId: staff.rows[0]!.id,
+        personId: staff!.id,
       });
       return {
         menuId: menu.id,
@@ -94,8 +127,8 @@ async function fixture(): Promise<Fixture> {
     app,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
-    zoneId: zone.rows[0]!.id,
-    stationId: station.rows[0]!.id,
+    zoneId: zone!.id,
+    stationId: station!.id,
     menuId,
     categoryId,
   };
