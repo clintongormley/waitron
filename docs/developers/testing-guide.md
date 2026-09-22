@@ -3,72 +3,54 @@
 This file holds the evidence behind waitron's testing rules — the mechanism, the measurement, and
 the incident that paid for each one. The one-line rules themselves live in the repository root
 `CLAUDE.md`, section 4 ("Testing"), which points here. Read this before writing or debugging a
-test, especially one that touches real PostgreSQL or runs in browser mode.
+test, especially one that touches a venue database or runs in browser mode.
 
-**Choosing a target: PGlite versus real PostgreSQL**
+**Asking for a database**
 
-## Two targets.
+## There is one database target, and a helper opens it.
 
-**PGlite** (`createPgliteDb` + `runMigrations`) is hermetic and fast. Its connection arrives as a
-superuser, so a privilege test that never switches role runs as the owner and asserts nothing;
-triggers still fire. Every query serialises onto its single backend, so a contention test on PGlite
-is a **false pass**. **Real Postgres** via Testcontainers is required for concurrency, for triggers
-running as the deployment role, and for anything that depends on who CONNECTED rather than who the
-session made itself. A helper that ran a suite against both targets used to live beside them; it
-went with the PostgreSQL test harness on 2026-09-22. Pick the lighter target when the heavier one's
-justification does not apply, and say why in a comment.
+A suite that needs a database calls `useVenueDb` (`@waitron/db/testing/venue-db.js`). It makes a
+temporary directory, opens it with the product's own opener, applies in order the migration sets it
+is handed, and installs the append-only triggers those sets declare. There is nothing to choose
+between: PGlite, the Testcontainers PostgreSQL tier, the helper that ran a suite against both, and
+the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
 
-**Grants ARE enforced on PGlite once the session assumes the role.** This file and `CLAUDE.md` both
-used to say the opposite — "grants are not enforced" — which sends a reader to a Docker container
-they do not need. It is false. Corrected on the `onboarding` branch (2026-09-13) after running a
-probe directly against PGlite 0.5.4, with a control in the other direction:
+**What went with them, so nobody assumes it is still covered.** SQLite has no roles and no
+grants — one process opens one file, and what a caller may do is decided outside the database — so
+`asAppUser` (`packages/db/src/testing/roles.ts`) is an empty function today, kept only so the
+switch did not also have to edit its call sites. Every privilege assertion that depended on it is
+deleted, and each deletion is recorded in the header of the file it was deleted from:
+`packages/db/src/allocate-number.test.ts` (a column-scoped `grant update (next_number)` was what
+made allocation fail in production and pass in every test that skipped the role switch — nothing
+now states which privileges that allocation needed),
+`packages/fiscal-verifactu/src/inmutabilidad.test.ts` and `apps/server/src/payments-api.test.ts`.
 
-- The default connection reports `current_user = postgres`, `usesuper = true`. In that session, a
-  `delete` on a table it holds no `delete` grant for **succeeds**. That is the control: this is what
-  "grants are not enforced" would look like, and it is the only case where it is true.
-- In the same session after `set local role app_user`, `current_user` is `app_user`; a `select` the
-  role holds a grant for succeeds, and the `delete` it does not hold is **refused with SQLSTATE
-  42501, "permission denied for table"**.
-- Column-scoped grants are enforced too, which is the shape `packages/db/src/allocate-number.test.ts`
-  ("allocates as the app role") depends on: under `grant select, update (next_number)`, updating
-  `next_number` succeeds and updating an ungranted column in the same table is refused `42501`.
-- A privilege held only through group membership is honoured as well: a `select` granted to a group
-  the role is a member of succeeds.
-
-Two real limits remain, and they are why the rule above still exists. PGlite has one backend
-(`select count(*) from pg_stat_activity` returns 1), so nothing can contend. And a session that
-assumed the role with `set role` can leave it again — after `reset role`, `current_user` is back to
-`postgres` and the same `delete` succeeds — so PGlite can show that a grant is enforced, but not that
-code is CONFINED to a role the way a real connection as that role confines it.
-
-Note what this does NOT license. `asAppUser(tx)` is still mandatory in a grant assertion on either
-target (see the rule further down this file), and nothing here changes the concurrency rule.
+Contention is a separate question and has its own section further down, "A contention test proves
+the write queue serialises writers, not that a lock blocked".
 
 **Owning and cleaning up a database in a suite**
 
 ## Don't own a database in a suite — let a helper own it.
 
-`useVenueDb` (`@waitron/db/testing/venue-db.js`) and `useRealPostgres`
-(`@waitron/db/testing/lifecycle.js`) register their own hooks and return an accessor that throws
-before setup. Raw `beforeAll`/`afterAll` only when the suite
-legitimately builds its own resource, and then guarded (`if (db !== undefined) await db.close()`) —
+`useVenueDb` (`@waitron/db/testing/venue-db.js`) registers its own hooks and returns an accessor
+whose `db` throws if it is read before `beforeAll` has run. Raw `beforeAll`/`afterAll` only when
+the suite legitimately builds its own resource, and then guarded
+(`if (db !== undefined) await db.close()`) —
 enforced by `scripts/guarded-teardowns.test.ts`, whose header records why an ESLint rule was
 rejected. Suites sharing a database clean up in a `finally`, order-independent.
 
-## A PGlite suite asks for its database through one helper, and a guard enforces it.
+## The retired helper's name stays retired, and a guard enforces that.
 
-`useVenueDb` (`@waitron/db/testing/venue-db.js`) forwards to `usePgliteDb` unchanged — same options,
-same handle, same per-test reset — so the planned SQLite switch replaces one function body instead
-of every call site (plan `2026-09-16-sqlite-slice1-storage-swap.md`, tasks P2 and F1). The rule is
-in `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`: no `.ts` file under
-`packages/` or `apps/`, outside `packages/db/`, may NAME `usePgliteDb` — not call it, name it.
+The rule is in `CLAUDE.md` §4 and the guard is `scripts/venue-db-helper.test.ts`: no `.ts` file
+under `packages/` or `apps/` may NAME `usePgliteDb` — not call it, name it. Nothing defines that
+function any more, so all the guard holds today is that a reintroduced PGlite helper, or a comment
+pointing a reader at one, is reported rather than quietly accumulating. It says so in its own
+header, at some length, so nobody mistakes it for a check on how suites open databases. The
+whole-package exemption `packages/db` held while it defined both helpers is gone.
 
-**Why the name and not the call, which is the part worth carrying.** `useVenueDb`'s whole body is
-`return usePgliteDb(options)`, so a comment written before the conversion stays TRUE while pointing
-a reader at a function its own file can no longer call. The guard's first run against the converted
-tree reported seven such lines. Five were in a `vitest.config.ts`, explaining which timeout bounds
-the PGlite boot — a file no call-shaped grep over suites would ever have opened. That is why the
-check reads text rather than calls, and its header says so rather than leaving a reader to find out.
+**It forbids the NAME and not just the call**, and that is the part worth carrying: the dead
+pointers this sweep kept finding were in comments — seven stood when the guard was written, five
+of them in a `vitest.config.ts`, which no call-shaped grep over suites would ever have opened.
 
 Which files take the seam is a grep rather than a list here, because a list is stale by the next
 pull request. Run it from the workspace root; the paths it prints are relative to it, and the
@@ -76,28 +58,13 @@ pull request. Run it from the workspace root; the paths it prints are relative t
 
 ```bash
 grep -rlE "useVenueDb[(]" --include="*.ts" packages apps \
-  | grep -vE "^packages/db/src/testing/(lifecycle|venue-db)([.]test)?[.]ts$"
+  | grep -vE "^packages/db/src/testing/venue-db([.]test)?[.]ts$"
 ```
 
-That exclusion is about the OUTPUT of this one command, not about permission — and the difference is
-worth being exact about, because an earlier version of this page conflated the two. What it actually
-drops is `venue-db.ts` and `venue-db.test.ts`, the seam and its contract test, which take the seam
-without being anyone's conversion; `lifecycle.ts` and `lifecycle.test.ts` never appear in this
-command's output at all, and are in the expression only because one shared expression covering the
-four files that may name EITHER helper is simpler than two. Permission is wider than those four: the
-guard exempts `packages/db` whole, and six `.ts` files in it name the old helper today (seven files
-in all — its README is the seventh, and markdown is outside the guard's scope anyway). The one that
-matters is `packages/db/src/testing/lifecycle.test.ts:26`, which is `describe("usePgliteDb")` —
-converting it would delete the coverage for the function being wrapped. The command lists FILES, not
-packages and not call sites, and not every file it lists is a suite: some are shared fixtures under a
-package's `test/` directory.
-
-**`useVenueDb` is not the only door to a PGlite database, and the guard sees only this one.** Some
-suites call `createPgliteDb` themselves; `describeEachTarget`'s PGlite half is a third. Neither is a
-mechanical rename — `describeEachTarget` hands out a fresh cluster PER TEST where this helper hands
-out one database per SUITE with a truncate between tests, a different isolation contract argued for
-at length in `Target`'s own doc comment — so both are decided with the storage flip, in task F1,
-not here. The guard's header carries the commands that count them and the rest of its hedges.
+What that exclusion drops is `venue-db.ts` and `venue-db.test.ts`, the seam and its contract test,
+which take the seam without being anyone's conversion. Read the output for what it is: the command
+lists FILES, not packages and not call sites, and not every file it lists is a suite — some are
+shared fixtures under a package's `test/` directory.
 
 **The rule and the guard landed AFTER the last conversion (#473), deliberately.** A rule with standing
 violations needs a guard, and the guard could not pass while a single suite still called the old
@@ -106,21 +73,24 @@ and #416 added `scripts/column-vocabulary.test.ts` and the `CLAUDE.md` line toge
 
 **Containers and Docker**
 
-## A container port-binding timeout needs Docker state as well as database logs.
+## A container port-binding timeout needs Docker state as well as the container's own logs.
 
 Save `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
-failed test fixture. The reader-adoption gate found a healthy PostgreSQL container with a requested
-TCP binding but an empty published-port list; a focused rerun passed without explaining the first
-failure. Receipt: `docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`.
+failed test fixture. Measured on a PostgreSQL container in September 2026: the reader-adoption gate
+found a healthy container with a requested TCP binding but an empty published-port list, and a
+focused rerun passed without explaining the first failure. Receipt:
+`docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`. The only thing in this tree
+that starts a container now is `bench/sqlite-failover`, which exposes a port the same way, so that
+is where this still applies.
 
 ## Reuse a supplied test container before probing Docker again.
 
 A failing `docker info` command is not evidence that a container global setup already started is
-absent. Run 34507423350 failed `deployment.test.ts` at this redundant check;
-`harness.docker.test.ts` injects a CLI timeout to verify the shared-container path and retains the
-required-Docker failure without either signal.
+absent. Run 34507423350 failed `deployment.test.ts` at exactly that redundant check. The suites
+that held this lesson went with the PostgreSQL test harness on 2026-09-22, and nothing in this tree
+probes `docker info` today, so it is carried here without a prover.
 
-## Locate the unfinished package before diagnosing a silent shard as PostgreSQL contention.
+## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and
 every database file completed; two jobs ran for about six hours. A Vitest test timer does not
@@ -174,29 +144,34 @@ picomatch against the ABSOLUTE file path with `contains: true`, so any path with
 segment matches, wherever that segment sits. What normally keeps another package out is the
 external check — and in 4.1.11 that check is
 `roots.every((root) => !filename.startsWith(root))`, a bare string prefix with no trailing
-separator. So for `packages/sync`, a file at `packages/sync-enrolment/src/migration-tables.ts` is not
-judged external — its path starts with the `packages/sync` root — and the include then matches it on
-its `src/…/*.ts` segment, so it lands in `packages/sync`'s report.
+separator. So for a package whose directory were called `packages/sync`, a file at
+`packages/sync-enrolment/src/migration-tables.ts` would not be judged external — its path starts
+with the `packages/sync` root — and the include would then match it on its `src/…/*.ts` segment, so
+it would land in that package's report.
 
-`packages/sync` is the only package this reaches today, because it is the only one whose tests load
-source from a sibling whose directory name extends its own: its `src/index.ts` barrel re-exports
-`@waitron/sync-enrolment`, and `src/errors.test.ts` imports the barrel. The numbers: 114 statements
-at 81.57% with the sibling counted, 91 at 100% once `"**/sync-enrolment/**"` is in that package's
-`coverage.exclude`. Every other package's `coverage-summary.json` in the same run holds only its own
-files, and `packages/membership`, which imports `@waitron/shared` in its source, is the control —
-`shared` is not a prefix of `membership`, so its files never enter the report.
+**No pair in this tree is exposed today**, so the mechanism above is what to carry, not a reading.
+The worked example it was written from was a `packages/sync` whose barrel re-exported
+`@waitron/sync-enrolment` and whose own test imported that barrel, which pulled the sibling's files
+into `packages/sync`'s report until `"**/sync-enrolment/**"` went into that package's
+`coverage.exclude`. That package is not in this repository and is not on `origin/main` either
+(`git ls-tree origin/main packages/`, taken 2026-09-22, lists `sync-enrolment` and no `sync`), so
+the numbers that went with it are not repeatable here and are dropped rather than carried. What the
+example also had was a control in the other direction: `packages/membership` imports
+`@waitron/shared` in its source, `shared` is not a prefix of `membership`, and its files never
+entered the report.
 
 Vitest 5 fixes this: it matches the include against the path RELATIVE to the matching root and
-requires `${root}/`. The exclude line is what a 4.x tree needs; a later Vitest 5 upgrade can drop it
-and should re-measure rather than assume.
+requires `${root}/`. Until then a `coverage.exclude` naming the sibling is what a 4.x tree needs.
+No package carries such a line today, because no pair needs one; a later Vitest 5 upgrade should
+re-measure rather than assume.
 
 The pairs to watch when adding a package, since the hazard is a NAME prefix and not a dependency:
-`sync`/`sync-enrolment`, `country`/`country-es`/`country-gb`/`country-packs`,
+`country`/`country-es`/`country-gb`/`country-packs`,
 `fiscal`/`fiscal-verifactu`/`fiscal-none`, `payments`/`payments-stripe`/`payments-sumup`,
 `workforce`/`workforce-es` — every place under `packages/` where one package directory's name is a
-prefix of another's. Only a pair where the shorter package's own tests load the longer one's source
-is actually exposed. Under `apps/` there is no such pair: `dashboard`, `print-agent`, `server`,
-`setup` and `till`, none of them a prefix of another.
+prefix of another's, listed on 2026-09-22. Only a pair where the shorter package's own tests load
+the longer one's source is actually exposed. Under `apps/` there is no such pair: `dashboard`,
+`print-agent`, `server`, `setup` and `till`, none of them a prefix of another.
 
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
@@ -393,31 +368,36 @@ value that no longer arrives usually leaves the stub taking its default, which i
 that passes. Neutralise each variable in turn and confirm the cases that depend on it fail — done
 for both suites above, every variable accounted for.
 
-## Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.
+## A container given network aliases also joins the default bridge, and a second bridge can stall larger queries.
 
-Testcontainers 12's `withNetworkAliases()` also attaches the default bridge. On this Docker Desktop
-host that produced interfaces with MTUs 65535 and 1500: a 1,400-byte query passed, a 1,600-byte
-query stalled, and removing the unused bridge made queries up to 100 KB pass. Use
-the networked-PostgreSQL fixture, whose real-Docker guard checked one interface, name resolution
-and a large query — deleted with the rest of the PostgreSQL test harness on 2026-09-22, so this
-paragraph is the mechanism only. WireGuard peers use `node.networkHost`. Evidence:
+Measured on PostgreSQL containers on this Docker Desktop host: Testcontainers 12's
+`withNetworkAliases()` also attached the default bridge, which left the container with interfaces at
+MTU 65535 and MTU 1500 — a 1,400-byte query passed, a 1,600-byte query stalled, and removing the
+unused bridge made queries up to 100 KB pass. The remedy was one Docker network plus unique
+container names for DNS, and the fixture that applied it went with the rest of the PostgreSQL test
+harness on 2026-09-22. **No fixture in this tree calls `withNetworkAliases()` today**, so this is
+the mechanism with no live example; reach for it again if a networked fixture comes back. Evidence:
 `docs/superpowers/specs/2026-09-09-test-load-design.md`.
 
-## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally. A recurrent real-PG stall needs a retained log and a live database snapshot.
+## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the one container left.
 
-The #286 boot retry and cluster mutex did not eliminate the later migration stall; its PostgreSQL
-backend was waiting for client input, with no blocking backend. Reducing concurrency alone did not
-fix the dual-network defect above. Keep the boot bounds and the package/worker caps, but locate the
-stalled operation before assigning its cause to resource contention.
+That is `bench/sqlite-failover`, whose `startStore` opens a MinIO container
+(`bench/sqlite-failover/src/store.ts`). Ryuk hangs on this machine, so it has to be off; with it off
+an interrupted run leaks, which is the next section.
+
+**A recurrent stall needs a retained log and a live database snapshot.** This was recorded against
+the PostgreSQL test harness: the #286 boot retry and cluster mutex did not eliminate the later
+migration stall, whose backend was waiting for client input with no blocking backend, and reducing
+concurrency alone did not fix the dual-bridge defect above. What carries is the method: locate
+the stalled operation before assigning its cause to resource contention.
 
 ## With Ryuk off, INTERRUPTED runs leak containers
 
-(a clean vitest exit self-reaps via `globalTeardown`). The bloat (once: 173 volumes, 23 GB) starves
-PGlite `beforeAll`s and the `freePort` race, while an isolated re-run passes and proves nothing.
-Run `pnpm reap` before local database testing when needed. The command
-(`scripts/reap-testcontainers.mjs`) removes containers labelled
-`com.waitron.reapable` (stamped by `startPostgresContainer` in packages/db, which a test pins, and by
-`startStore` in bench/sqlite-failover, which nothing pins) AND older than 2 h —
+The bloat (once: 173 volumes, 23 GB) starved the `freePort` race in `apps/server`'s boot and
+end-to-end suites, while an isolated re-run passed and proved nothing. Run `pnpm reap` when that
+bites. The command (`scripts/reap-testcontainers.mjs`) removes containers labelled
+`com.waitron.reapable` — stamped by one helper today, `startStore` in
+`bench/sqlite-failover/src/store.ts`, which nothing pins — AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
 named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is gone
@@ -446,9 +426,10 @@ showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/
 
 ## A probe that needs a Unix SOCKET runs inside the container.
 
-Bind-mounting a `postgres` socket dir out of Docker Desktop's VM gives `ECONNREFUSED` on macOS (and
-a scratchpad path blows the 104-byte `sun_path` first). `apk add nodejs npm && npm i pg` in the
-container; parsing-only probes are fine on the host.
+Bind-mounting a socket directory out of Docker Desktop's VM gives `ECONNREFUSED` on macOS, and a
+scratchpad path blows the 104-byte `sun_path` limit before you get that far. Install what the probe
+needs inside the container and run it there; parsing-only probes are fine on the host. Measured
+against a PostgreSQL container, on a harness this tree no longer has.
 
 **The `SET PUBLICATION` trap — the suites that reproduced it are gone, logical replication is not**
 
@@ -589,9 +570,14 @@ has one too, but only in `packages/ui/src/a11y-helpers.ts` — so the `*.a11y.te
 the behavioural suites, which import `packages/ui/src/test-helpers.ts` instead, do not. Two of
 `packages/ui/src/components/wt-button.test.ts`'s hover tests end with the cursor still on the button,
 and those suites drive the real cursor a lot, so the same latent failure lives there, unpaid for so
-far. `packages/media` and `packages/venue-service` are a third shape: both register
-`parkPointerCommands` in their vitest config and neither ever calls `commands.parkPointer()`, so the
-command is available and nothing uses it.
+far. `packages/media` and `packages/venue-service` register `parkPointerCommands` in their vitest
+configs and DO get the reset, through `packages/ui`: their a11y suites
+(`packages/media/src/dashboard/image-library.a11y.test.ts` and
+`packages/venue-service/src/dashboard/venue-operations-screen.a11y.test.ts`) import
+`packages/ui/src/a11y-helpers.ts`, whose line 22 is `beforeEach(() => commands.parkPointer())`.
+Both vitest configs say so in a comment beside the registration. An earlier version of this
+paragraph said neither ever called it — that was wrong when it was written, and has nothing to do
+with the storage switch.
 
 ## Dispatch events when testing a `composedPath()` guard.
 
@@ -652,11 +638,13 @@ nothing else touched:
   of the one statement (keyed on `ctid`) — **5 passed**.
 - The same command against the version that shipped (keyed on the row's primary key) — **5 passed**
   again. The old proof does not hold for either.
-- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**, which
-  on the day was every case in that file; it has gained cases since, so read the run as a dated
-  reading and not as a description of the file. Only the FIRST failure is the control: it fails on
-  the 30-second test timeout, which is the waiting. Its holder is then still parked, so the per-test
-  reset blocks on that holder's row locks and takes the rest of the file down with it. Expect the
+- `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**,
+  read on 2026-09-21, which on the day was every case in that file. That suite was deleted on
+  2026-09-22 with the rest of the real-PostgreSQL tier; read it with
+  `git show origin/main:packages/db/src/job-claim.pg.test.ts`. Only the FIRST failure is the
+  control: it fails on the 30-second test timeout, which is the waiting. Its holder is then still
+  parked, so the per-test reset blocks on that holder's row locks and takes the rest of the file
+  down with it. Expect the
   control run to take minutes.
 
 So what the clause buys is that a claimer does not WAIT, and that was the property the
@@ -752,17 +740,16 @@ something an authority will judge, run the real check over it. Pointer:
 ## `toMatchObject` checks only the keys you list.
 
 A key you never list is never checked at all; `toEqual` is what put `memberOf` under a matcher for
-the first time. What it hid: `pg_roles.rolname` is `name`, so `array(select rolname …)` is
-`name[]`, which `node-postgres` hands back as the wire literal `"{app_user}"` through a field typed
-`string[]` — hence the `::text[]` casts in `instance-state.ts`. Work such a failure out case by
-case: `"{app_user_probe}".includes("app_user")` is the one shape where string and array disagree, a
-false positive that SKIPS a needed grant.
+the first time. **The worked example is historical** — it was taken on PostgreSQL, and the file it
+names left this tree with the storage switch (read it with
+`git show origin/main:packages/provisioning/src/instance-state.ts`). What the matcher hid there:
+`pg_roles.rolname` is `name`, so `array(select rolname …)` was `name[]`, which `node-postgres`
+handed back as the wire literal `"{app_user}"` through a field typed `string[]` — hence that
+file's `::text[]` casts. Work such a failure out case by case:
+`"{app_user_probe}".includes("app_user")` is the one shape where string and array disagree, a false
+positive that SKIPS a needed grant. No equivalent example has been found in the current tree.
 
 ---
-
-Adding a new real-PG test package: the shared-container pattern and its knobs (`useTemplateDb`,
-`cloneTemplate`, the worker limit, template-key naming) are in `docs/backlog.md` →
-_Reference_.
 
 ## Concurrent coverage runs must not share a package's report directory
 
@@ -820,25 +807,29 @@ this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` refere
 Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
 it — an `applyTo: "**"` instructions file would be picked up there.
 
-## A grant assertion must call `asAppUser(tx)` before the query under test
+## A grant assertion had to call `asAppUser(tx)` — retired with the grants themselves
 
-PGlite's connection arrives as a superuser, so a privilege test that never switches role passes
-green while asserting nothing — it runs as the owner. (Once it does switch, the grant is enforced —
-see "Two targets" above.) Every grant assertion must call
-`asAppUser(tx)` (`packages/db/src/testing/roles.ts` — `set local role app_user`) before the query
-under test; a grant test that skips this checks nothing about `app_user`'s reach regardless of what
-it asserts.
+**Historical.** On PGlite the connection arrived as a superuser, so a privilege test that never
+switched role ran as the owner and asserted nothing, however much it asserted; `asAppUser(tx)` ran
+`set local role app_user` and was what made such a test mean anything. SQLite has neither roles nor
+grants, so `asAppUser` (`packages/db/src/testing/roles.ts`) is an empty function today and there is
+no privilege for it to switch to. The shape is worth keeping even though its subject is gone: a
+test that asserts something is REFUSED has to put itself on the refused side first, or it proves
+nothing about the refusal.
 
 ## A contention test proves the write queue serialises writers, not that a lock blocked
 
 **This section replaces one that said PGlite cannot test lock contention and that chain-append
 concurrency must therefore run against real Postgres through Testcontainers.** Both halves of that
-advice retired with the engine: there is no PGlite, no Testcontainers, and no `FOR UPDATE`. The
-executable demonstration it pointed at — a suite named chain.pglite-cannot-test-contention.test.ts,
-beside the chain suites in `packages/fiscal-verifactu/src` and again in `packages/workforce/src`
-until the SQLite flip deleted both — existed
-to keep someone from dropping the Testcontainers dependency, and there is no such dependency to
-protect. It is named here without a backticked path deliberately: the pointer guard
+advice retired with the engine: there is no PGlite, no PostgreSQL container tier, and no
+`FOR UPDATE`. The executable demonstration it pointed at — a suite named
+chain.pglite-cannot-test-contention.test.ts, beside the chain suites in
+`packages/fiscal-verifactu/src` and again in `packages/workforce/src` until the SQLite flip deleted
+both — existed to keep someone from dropping those two packages' Testcontainers dependency, and
+neither package declares one now. (Testcontainers has not left the repository: `packages/db` and
+`bench/sqlite-failover` still declare it, and `bench/sqlite-failover` is the only one that imports
+it — from `grep -rn '"testcontainers"' over every package manifest, taken 2026-09-22.)
+That suite is named here without a backticked path deliberately: the pointer guard
 (`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and this one no longer
 does.
 
@@ -882,20 +873,29 @@ During the Categories review on 2026-09-13, deleting the duplicate-membership gu
 `categories.test.ts` green: the later unique-constraint failure also matched `toBeInstanceOf(Error)`.
 Keep rollback assertions, and assert the domain code that the API maps to its client response.
 
-Replacing the duplicate-set condition in `replaceProductCategories` with `false` and running
+**The mutation below was run on PostgreSQL and has NOT been re-run on this engine.** Replacing the
+duplicate-set condition in `replaceProductCategories` with `false` and running
 `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test -- src/categories.test.ts
--t 'validates replacement primaries and rolls back invalid saves'` fails: expected
+-t 'validates replacement primaries and rolls back invalid saves'` failed: expected
 `category.membership_invalid`, received a wrapped PostgreSQL `23505`, "duplicate key value violates
-unique constraint product_categories_tenant_id_product_id_category_id_pk". Re-verified 2026-09-13.
-That constraint is now `product_categories_product_id_category_id_pk` — the tenant column went on
-2026-09-14 — so a re-run prints the new name; nothing else about the measurement changes.
+unique constraint product_categories_tenant_id_product_id_category_id_pk" (2026-09-13; that
+constraint lost its tenant column on 2026-09-14, so the name was already stale before the engine
+changed). What SQLite raises in its place is not recorded here, because nobody has re-run it — and
+the command itself now carries a pointless `TESTCONTAINERS_RYUK_DISABLED`, since this package starts
+no container. None of that touches the rule: a constraint failure satisfies `toBeInstanceOf(Error)`
+whichever database raises it, so assert the domain code. The test named above still exists
+(`packages/catalogue/src/categories.test.ts`).
 Note the test name — an earlier version of this paragraph named a test that no longer exists, and
 because a `-t` filter matching nothing skips every test and still exits 0, following it produced a
 green run that looked like a passing control.
 
-The second guard in the same function family is the category identity row lock — the `for("update")`
-on the category row in `deleteCategory`. Removing it made the category-route race suite fail, but not
-where you would expect, and no longer on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
+**Historical, and the code is gone: `deleteCategory` takes no lock today.** The `for("update")` went
+with the storage switch, so the paragraph below is a PostgreSQL measurement and not a description of
+current behaviour. It is kept because it records what the lock was FOR.
+
+The second guard in the same function family WAS the category identity row lock — the
+`for("update")` on the category row in `deleteCategory`. Removing it made the category-route race
+suite fail, but not where you would expect, and no longer on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
 code on this path any more. What happens instead is that the delete still waits, because its final
 `delete from categories` collides with the KEY SHARE lock the concurrent route insert holds through
 its foreign key — it just waits too late. By then the earlier step that clears `preparation_routes`
