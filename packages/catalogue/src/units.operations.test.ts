@@ -210,28 +210,11 @@ describe("unit operations", () => {
   });
 
   it("rejects excess precision before anything downstream can round it", async () => {
-    // The rounding this guards against used to belong to the column, a `numeric(12, 3)`. The column
-    // counts whole thousandths now, so the rounding moved to `decimalToThousandths` — and the two
-    // agree, which is why the storage change did not move this boundary. The SQL cast stays as the
-    // control for the half it used to be: both readings round 1.2345 to three places the same way,
-    // half away from zero.
-    //
-    // **LEFT RED BY THE STORAGE SWITCH, deliberately.** `1.2345::numeric(12,3)::text` is not SQL
-    // this engine has, and the control does not translate: SQLite has no exact decimal type, so
-    // the nearest readings go through a double. Measured on node:sqlite (Node v26.7.0):
-    // `round(1.2345, 3)` is 1.234 and `printf('%.3f', 1.2345)` is "1.234", where PostgreSQL's
-    // numeric gave 1.235 and `decimalToThousandths` still gives 1235. Control in the other
-    // direction, so this is float representation and not "SQLite always rounds down":
-    // `round(1.2355, 3)` is 1.236. So the two readings this line exists to compare no longer AGREE,
-    // and rewriting the expected value would assert the opposite of what the line is for. The
-    // product path reaches no SQL rounding at all now — the column is an integer count of
-    // thousandths written by `decimalToThousandths` — so whether this control keeps a home is a
-    // decision, not a translation. The two assertions below are the case's own subject and are
-    // untouched.
-    const rounded = await suite.db.execute<{ value: string }>(
-      sql`select 1.2345::numeric(12,3)::text as value`,
-    );
-    expect(rounded.rows).toEqual([{ value: "1.235" }]);
+    // The database never rounds a quantity: the column holds a whole count of thousandths and
+    // `decimalToThousandths` owns the third place, so storage has no rounding of its own for this
+    // case to be checked against. A SQL-side control cannot exist here either — the engine has no
+    // exact decimal type, so `round(1.2345, 3)` is 1.234 and `cast(1.2345 as numeric(12,3))` keeps
+    // all four places (node:sqlite, Node v26.7.0; receipt in docs/developers/conventions-data.md).
     expect(decimalToThousandths(decimal("1.2345"))).toBe(1235);
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),

@@ -644,10 +644,34 @@ re-derive there — established by running it, not by reading the migration.
 
 **What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
 validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
-All of them work in decimal strings and all of them still do. `packages/catalogue`'s precision
-guard kept its `1.2345::numeric(12,3)` SQL probe as a control and now measures
-`decimalToThousandths` beside it: both round to `1.235`, so the rounding that guard defends against
-moved with the storage and did not change.
+All of them work in decimal strings and all of them still do.
+
+### The database never rounds a quantity — the converter owns the third place
+
+`packages/catalogue`'s precision guard — the `rejects excess precision before anything downstream
+can round it` case in `packages/catalogue/src/units.operations.test.ts` — used to hold a
+`select 1.2345::numeric(12,3)::text` probe beside `decimalToThousandths`, as a control that SQL and
+the converter rounded the same tie the same way, both to `1.235`. The storage switch retired the
+probe: this engine has no exact decimal type, so there is no value the line can be rewritten to
+that still says what it was there to say. Run on 2026-09-22:
+
+```
+node -e "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(':memory:'); const q = (s) => JSON.stringify(db.prepare('select ' + s + ' as v').get().v); console.log(q('round(1.2345, 3)'), q('cast(1.2345 as numeric(12,3))'), q(\"printf('%.3f', 1.2345)\"), q('round(1.2355, 3)'));"
+```
+
+On Node v26.7.0 that prints `1.234 1.2345 "1.234" 1.236`. So `round` takes the tie DOWN where
+PostgreSQL's `numeric` took it up; a cast's declared scale is ignored entirely, because SQLite's
+`numeric(12,3)` is a type name carrying NUMERIC affinity and no scale; and the fourth reading is
+the control in the other direction — `round(1.2355, 3)` going up says this is binary float
+representation rather than "SQLite always rounds down".
+
+The probe was deleted rather than rewritten, because a quantity column holds a whole count of
+thousandths and `decimalToThousandths` has already decided the third place before any value reaches
+storage. A test asking SQL to round a quantity asks about something no product path does. The
+converter's own rounding is still pinned, by the `rounds a fourth decimal place half away from
+zero` case in `packages/shared/src/scales.test.ts`. The case's other two assertions —
+`decimalToThousandths(decimal("1.2345"))` is `1235`, and `assertQuantityPrecision` throwing
+`quantity.invalid` — are its actual subject and are untouched.
 
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 

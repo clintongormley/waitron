@@ -441,6 +441,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `ALTER COLUMN ... SET DATA TYPE` keeps it and casts it, so a `rate <= 100` left alone refuses
   every rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core
   set only.
+- **The database never rounds a quantity — `decimalToThousandths` owns the third place.** The
+  column stores what the converter already decided, so no SQL rounding stands behind it and a test
+  asking storage to round is testing something no product path does. Cost: a
+  `1.2345::numeric(12,3)` cross-check in `packages/catalogue/src/units.operations.test.ts`, which
+  the storage switch left red with no reading it could be rewritten to — this engine has no exact
+  decimal type. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and a table that must never be corrected is declared with `appendOnly()` instead of
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
