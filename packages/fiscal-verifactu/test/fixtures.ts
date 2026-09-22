@@ -1,13 +1,45 @@
 import { sql } from "drizzle-orm";
-import type { Database, Transaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  sales,
+  tenants,
+  tills,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { registrosFacturacion } from "../src/schema/registros.js";
+import { registroSif } from "../src/schema/sif.js";
 import { registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
+
+/**
+ * Every row here is written through its TABLE DEFINITION rather than as raw SQL, so each column's
+ * own generator runs: `tenants.created_at`, `tills.created_at`, `nodes.created_at`,
+ * `registro_sif.registrado_en` and `registros_facturacion.creado_en` are `$defaultFn` values on
+ * this engine, and `locations.id` / `tills.id` / `nodes.id` / `invoice_series.id` / `sales.id` /
+ * `registros_facturacion.id` likewise. A raw statement reaches none of them — measured here as
+ * `NOT NULL constraint failed: tenants.created_at`. The table definition is also what encodes the
+ * JSON and list columns, whose `::jsonb` casts and `array[...]` constructors were PostgreSQL
+ * syntax this engine refuses. Same change, and the same reason, as
+ * `apps/server/src/testing/fiscal-fixtures.ts`.
+ *
+ * Every seeded VALUE is unchanged by that rewrite, with one spelling exception stated where it
+ * happens: `registros_facturacion.fecha_hora_huso_gen_registro` is a `ts` column, so the instant
+ * goes in as a `Date` and is stored in its UTC `toISOString()` form instead of the `+01:00`
+ * literal — the same instant, and the same one PostgreSQL's `timestamptz` stored. The offset
+ * itself is carried by `offset_minutos`, which is untouched.
+ */
+
+/** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
+const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 /**
  * Fixed ids for one venue's till/SIF-identity/sale, reused across `inmutabilidad.test.ts`'s
@@ -61,33 +93,47 @@ export const TENANT_B = {
  * The zero-total sale remains unsettled; settlement coverage is checked on settlement.
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
-  await db.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')
-    on conflict (id) do nothing
-  `);
-  await db.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
-  `);
-  await db.execute(sql`
-    insert into tills (id, location_id, name) values (${TENANT_A.tillId}, ${TENANT_A.locationId}, 'Caja 1')
-  `);
-  await db.execute(sql`
-    insert into nodes (id, location_id, name) values (${TENANT_A.nodeId}, ${TENANT_A.locationId}, 'Node 1')
-  `);
-  await db.execute(sql`
-    insert into invoice_series (id, node_id, code) values (${TENANT_A.seriesId}, ${TENANT_A.nodeId}, 'A')
-  `);
-  await db.execute(sql`
-    insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TENANT_A.saleId}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.seriesId}, 1,
-      '2026-07-20T19:20:30+01:00', 60,
-      0, '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )
-  `);
-  await db.execute(sql`
-    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${TENANT_A.sifId}, ${TENANT_A.nodeId}, '89890001K', 'WAITRON01', 1)
-  `);
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  await db.insert(locations).values({
+    id: TENANT_A.locationId,
+    name: "Local principal",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await db
+    .insert(tills)
+    .values({ id: TENANT_A.tillId, locationId: TENANT_A.locationId, name: "Caja 1" });
+  await db
+    .insert(nodes)
+    .values({ id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" });
+  await db
+    .insert(invoiceSeries)
+    .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
+  await db.insert(sales).values({
+    id: TENANT_A.saleId,
+    tillId: TENANT_A.tillId,
+    nodeId: TENANT_A.nodeId,
+    seriesId: TENANT_A.seriesId,
+    invoiceNumber: 1,
+    issuedAt: ISSUED_AT,
+    issuedOffsetMinutes: 60,
+    total: 0,
+    vatBreakdown: [],
+    locale: "es",
+    invoiceLocales: ["es"],
+    fiscalBackend: "verifactu",
+    fiscalState: "recorded",
+  });
+  await db.insert(registroSif).values({
+    id: TENANT_A.sifId,
+    nodeId: TENANT_A.nodeId,
+    nif: "89890001K",
+    idSistemaInformatico: "WAITRON01",
+    numeroInstalacion: 1,
+  });
 }
 
 /**
@@ -103,24 +149,28 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  * The tills are kept so the sale-ringing snapshot has a real till to reference.
  */
 export async function seedTenants(db: Database): Promise<void> {
-  await db.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')
-    on conflict (id) do nothing
-  `);
-  await db.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento'),
-      ( ${TENANT_B.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
-  `);
-  await db.execute(sql`
-    insert into tills (id, location_id, name) values (${TENANT_A.tillId}, ${TENANT_A.locationId}, 'Caja 1'),
-      ( ${TENANT_A.tillId2}, ${TENANT_A.locationId}, 'Caja 2'),
-      ( ${TENANT_B.tillId}, ${TENANT_B.locationId}, 'Caja 1')
-  `);
-  await db.execute(sql`
-    insert into nodes (id, location_id, name) values (${TENANT_A.nodeId}, ${TENANT_A.locationId}, 'Node 1'),
-      ( ${TENANT_A.nodeId2}, ${TENANT_A.locationId}, 'Node 2'),
-      ( ${TENANT_B.nodeId}, ${TENANT_B.locationId}, 'Node 1')
-  `);
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  await db.insert(locations).values(
+    [TENANT_A.locationId, TENANT_B.locationId].map((id) => ({
+      id,
+      name: "Local principal",
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    })),
+  );
+  await db.insert(tills).values([
+    { id: TENANT_A.tillId, locationId: TENANT_A.locationId, name: "Caja 1" },
+    { id: TENANT_A.tillId2, locationId: TENANT_A.locationId, name: "Caja 2" },
+    { id: TENANT_B.tillId, locationId: TENANT_B.locationId, name: "Caja 1" },
+  ]);
+  await db.insert(nodes).values([
+    { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
+    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
+    { id: TENANT_B.nodeId, locationId: TENANT_B.locationId, name: "Node 1" },
+  ]);
 }
 
 /**
@@ -157,34 +207,51 @@ export async function seedSoldRegistro(
   },
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
-  const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${params.nodeId}, ${"S" + String(params.secuencia)})
-    returning id
-  `);
-  const seriesId = series.rows[0]?.id;
-  const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
-      '2026-07-20T19:20:30+01:00', 60,
-      0, '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )
-    returning id
-  `);
-  const saleId = sale.rows[0]?.id;
-  const registro = await db.execute<{ id: string }>(sql`
-    insert into registros_facturacion (
-      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-      primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
-      ${params.nif}, ${"S" + String(params.secuencia) + "/1"}, '2026-07-20', 'Waitron SL',
-      true, '{}'::jsonb,
-      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${entorno}
-    )
-    returning id
-  `);
-  const registroId = registro.rows[0]?.id;
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
+    .returning({ id: invoiceSeries.id });
+  const seriesId = series!.id;
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      tillId: params.tillId,
+      nodeId: params.nodeId,
+      seriesId,
+      invoiceNumber: params.secuencia,
+      issuedAt: ISSUED_AT,
+      issuedOffsetMinutes: 60,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  const [registro] = await db
+    .insert(registrosFacturacion)
+    .values({
+      tillId: params.tillId,
+      nodeId: params.nodeId,
+      sifId: params.sifId,
+      saleId: sale!.id,
+      secuencia: params.secuencia,
+      tipoRegistro: "alta",
+      idEmisorFactura: params.nif,
+      numSerieFactura: `S${String(params.secuencia)}/1`,
+      fechaExpedicionFactura: "2026-07-20",
+      nombreRazonEmisor: "Waitron SL",
+      primerRegistro: true,
+      sistemaInformatico: {},
+      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+      offsetMinutos: 60,
+      tipoHuella: "01",
+      huella: params.huella,
+      entorno,
+    })
+    .returning({ id: registrosFacturacion.id });
+  const registroId = registro!.id;
   await db.execute(sql`
     update cadenas
     set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
@@ -212,25 +279,29 @@ function freshNif(): string {
 async function insertLocationTillSeries(
   tx: Transaction,
 ): Promise<{ tillId: TillId; nodeId: NodeId; seriesId: SeriesId }> {
-  const location = await tx.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento')
-    returning id
-  `);
-  const till = await tx.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Caja 1')
-    returning id
-  `);
-  const tillId = brandTillId(till.rows[0]!.id);
-  const node = await tx.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node 1')
-    returning id
-  `);
-  const nodeId = brandNodeId(node.rows[0]!.id);
-  const series = await tx.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${nodeId}, 'A')
-    returning id
-  `);
-  return { tillId, nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
+  const [location] = await tx
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [till] = await tx
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
+  const [node] = await tx
+    .insert(nodes)
+    .values({ locationId: location!.id, name: "Node 1" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
+  const [series] = await tx
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  return { tillId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
@@ -272,10 +343,15 @@ export async function seedTenantWithSif(
 ): Promise<SeededTillWithSif> {
   const nif = options.nif ?? freshNif();
   return db.transaction(async (tx) => {
-    await tx.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name)
-      select 1, 'ES', ${nif}, 'Waitron SL' where not exists (select 1 from tenants)
-    `);
+    // `onConflictDoNothing` on the primary key, where this statement used to be
+    // `... where not exists (select 1 from tenants)`. The two select the same rows here: `id` is
+    // pinned to 1 by `tenants_singleton_ck` (`packages/db/src/schema/tenants.ts`), so "the table
+    // is empty" and "no row holds id 1" cannot disagree. The target is named rather than left
+    // bare so a `tenants_country_tax_id_key` collision — a DIFFERENT cause — still raises.
+    await tx
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
+      .onConflictDoNothing({ target: tenants.id });
     const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx);
     await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });
     // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES

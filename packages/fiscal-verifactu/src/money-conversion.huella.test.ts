@@ -9,7 +9,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 
 /**
@@ -50,12 +50,12 @@ async function sell(overrides: Record<string, unknown> = {}) {
  * `./write-path.e2e.test.ts` and `./verify.ts` use, and not interchangeable with drizzle's
  * camelCase select shape. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 describe("the money conversion moves no byte of a fiscal record", () => {

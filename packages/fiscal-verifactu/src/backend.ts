@@ -36,7 +36,7 @@ import type {
 import { appendToChain } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
-import { fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
@@ -310,7 +310,7 @@ export class VerifactuBackend implements FiscalBackend {
    * change to that shared return shape.
    */
   private async qrPayloadFor(tx: Transaction, registroId: string): Promise<string> {
-    const { rows } = await tx.execute<RegistroRow>(sql`
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select * from registros_facturacion where id = ${registroId}
     `);
     const row = rows[0];
@@ -323,22 +323,26 @@ export class VerifactuBackend implements FiscalBackend {
     /* v8 ignore stop */
     // Safe cast: this method is only ever called with the id of a record THIS class just
     // inserted via the "alta" arm of `appendToChain`, never an anulación.
-    return buildQrPayload(fromRegistroRow(row) as RegistroAlta, this.environment);
+    return buildQrPayload(
+      fromRegistroRow(decodeRegistroRow<RegistroRow>(row)) as RegistroAlta,
+      this.environment,
+    );
   }
 
   /** Read the sale's original alta so a receipt repeats its filed issuer, QR and exact VAT amounts.
    * Later void records share the sale id but do not replace those original document facts. */
   async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
-    const { rows } = await tx.execute<RegistroRow>(sql`
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select *
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
     `);
-    const row = rows[0];
-    if (row === undefined) {
+    const raw = rows[0];
+    if (raw === undefined) {
       return undefined;
     }
+    const row = decodeRegistroRow<RegistroRow>(raw);
 
     // Rebuild the alta from its OWN stored columns and derive the QR from it — the identical derivation
     // `qrPayloadFor` performs (and `recordSale` used at filing time). The `as RegistroAlta` cast is

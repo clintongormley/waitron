@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
@@ -81,12 +81,12 @@ async function voidSale(saleId: SaleId, reason = "staff error") {
  * annuls it both carry it, per `packages/fiscal-verifactu/src/chain.ts`'s own `PendingRegistro`
  * shape (the anulación's `saleId` is the sale it annuls, not an identity of its own). */
 async function rawAnulacion(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawAnulacion: no anulación row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 describe("alta and anulación interleave in one chain", () => {

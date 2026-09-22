@@ -17,7 +17,7 @@ import type {
   RegistroAlta,
 } from "@waitron/verifactu";
 import { writeAck } from "./acks.js";
-import { fromRegistroRow, toAeatDate } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
@@ -557,7 +557,7 @@ async function claimBatch(
   // reasoning. The `of: "e"` that narrowed the lock is gone with the lock: it existed because
   // `app_user` may read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
   // over this join was refused `42501`.
-  const rows = await claimLockedRows<DueRow>(tx, {
+  const claimed = await claimLockedRows<Record<string, unknown>>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e
       join registros_facturacion r on r.id = e.registro_id
@@ -566,6 +566,10 @@ async function claimBatch(
       order by r.sif_id, r.secuencia
       limit ${maxPorEnvio}`,
   });
+  // `r.*` reaches no drizzle column mapper, so the registro's JSON columns arrive as text and
+  // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `e.intentos` is not this table's
+  // column and passes through untouched.
+  const rows = claimed.map((row) => decodeRegistroRow<DueRow>(row));
 
   const sendable: DueRow[] = [];
   for (const row of rows) {

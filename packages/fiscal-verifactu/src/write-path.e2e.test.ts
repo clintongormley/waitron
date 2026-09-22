@@ -12,7 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
@@ -69,12 +69,12 @@ async function sell(overrides: Record<string, unknown> = {}) {
  * why the two are not interchangeable: a `timestamptz` column renders differently through each
  * path). Mirrors `./verify.ts`'s and `./chain.test.ts`'s identical convention. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 describe("the write path against the real Veri*Factu backend", () => {

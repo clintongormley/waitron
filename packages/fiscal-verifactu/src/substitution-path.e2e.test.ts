@@ -5,7 +5,7 @@ import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { fromRegistroRow, toAeatDate } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -183,12 +183,12 @@ async function substitute(
  * need — an F3's registro is the only one carrying its OWN (substitution) sale id, so this is
  * unambiguous. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await suite.db.execute<RegistroRow>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 /** The same row read through the TABLE, so every column's own read mapping applies — the JSON

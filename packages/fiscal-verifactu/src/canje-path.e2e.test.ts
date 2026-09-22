@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
-import { fromRegistroRow, toRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow, toRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
@@ -99,26 +99,24 @@ async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
   return saleId;
 }
 
-/** One `select *` row in the raw snake_case `RegistroRow` shape `fromRegistroRow` reads — never
+/** One `select *` row in the snake_case `RegistroRow` shape `fromRegistroRow` reads — never
  * Drizzle's camelCase `.select()` (see `./registro-row.ts`'s own note on why the two differ).
  *
- * STILL RED ON THIS ENGINE, and deliberately not worked around here. A raw `select *` skips
- * drizzle's read mapping, so `facturas_sustituidas`, `destinatarios` and `desglose` come back as
- * the stored TEXT and `primer_registro` as `0`/`1`. `fromRegistroRow` spreads them as objects, so
- * the rebuilt record's `IDFacturaSustituida` is `undefined` and `serializeEnvio` throws
- * `Cannot read properties of undefined (reading 'map')` — measured by running this file,
- * 2026-09-22. That is the PRODUCT's read path, not this fixture's: `drain.ts:562`
- * (`select r.*, e.intentos from envios e ...`) and `verify.ts:55` read `RegistroRow` exactly this
- * way. Parsing the columns here would turn this case green while leaving the drainer broken —
- * which is the one thing this case exists to catch. It stays red until the `RegistroRow` raw-read
- * path is converted. */
+ * Through `decodeRegistroRow`, which is the whole point of reading the row this way: a raw select
+ * reaches no drizzle column mapper, so `facturas_sustituidas`, `destinatarios` and `desglose`
+ * arrive as the stored TEXT and `primer_registro` as `0`/`1`, and `fromRegistroRow` spreads them
+ * as objects. Hand-parsing the columns HERE would turn this case green while leaving the drainer
+ * broken, which is the one thing this case exists to catch — so it calls the same function the
+ * product's own raw reads call (`drain.ts`'s `select r.*, e.intentos from envios e ...`,
+ * `verify.ts`'s chain read, `backend.ts`'s two). Delete that call and this case fails with
+ * `Cannot read properties of undefined (reading 'map')` out of `serializeEnvio`. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await suite.db.execute<RegistroRow>(
+  const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 describe("the F3 canje drain path", () => {
