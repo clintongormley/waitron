@@ -12,6 +12,14 @@ import { describe, expect, it } from "vitest";
  * this guard names was found by running the code rather than by any check — thirteen `now()` calls
  * and twenty-four casts in `working-order.ts` alone.
  *
+ * WHY IT LIVES IN THE ROOT PROJECT. It reads three packages' trees, and CI is SCOPED: a pull request
+ * touching only `packages/reporting` never runs `apps/server`'s suite, so while this file sat in
+ * that package the guard would not have run for the very change it was widened for (CLAUDE.md §2 on
+ * the `changes` job, §4 on where a tree-reading guard belongs). Here the ungated `lint` job and the
+ * pre-push hook run it on every non-docs push. It plants a residual statement on purpose in its
+ * negative control below, and `scripts/` is not one of {@link ROOTS}, so it is out of its own scope
+ * structurally rather than by an exclusion.
+ *
  * WEAKER THAN ITS NAME, in ways worth stating because each is a statement it cannot see:
  *
  * - It reads TEXT. It finds the templates by scanning for the characters `sql` followed by a
@@ -43,9 +51,7 @@ import { describe, expect, it } from "vitest";
  *   and only a suite that RUNS finds them.
  */
 
-const HERE = fileURLToPath(new URL(".", import.meta.url));
-const SELF = fileURLToPath(import.meta.url);
-const REPO = fileURLToPath(new URL("../../../", import.meta.url));
+const REPO = fileURLToPath(new URL("../", import.meta.url));
 
 /**
  * The directories scanned, each one a source tree that has been swept.
@@ -56,7 +62,7 @@ const REPO = fileURLToPath(new URL("../../../", import.meta.url));
  * instead of `packages/reporting/src` reports hundreds of offenders, none of them this repository's.
  */
 const ROOTS: readonly string[] = [
-  HERE,
+  join(REPO, "apps/server/src"),
   join(REPO, "packages/reporting/src"),
   join(REPO, "packages/reporting/test"),
   join(REPO, "packages/workforce/src"),
@@ -140,7 +146,7 @@ function sourceFiles(dir: string): string[] {
     // `isFile()`, not a name test: a failed browser run leaves a DIRECTORY named `*.test.ts`
     // (CLAUDE.md §4), and `readFileSync` on one throws `EISDIR`.
     if (statSync(path).isDirectory()) out.push(...sourceFiles(path));
-    else if (entry.endsWith(".ts") && path !== SELF && !UNSWEPT.includes(relative(REPO, path))) {
+    else if (entry.endsWith(".ts") && !UNSWEPT.includes(relative(REPO, path))) {
       out.push(path);
     }
   }
