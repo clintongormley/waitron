@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import type { CapabilityFlag } from "@waitron/layouts";
+import { deviceProfiles } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
@@ -113,16 +113,16 @@ describe("applyVenue", () => {
       counter_zones: number;
     }>(sql`
       select
-        (select count(*) from tenants where id = 1)::int as tenants,
-        (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
-        (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
-        (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif,
+        (select count(*) from tenants where id = 1) as tenants,
+        (select count(*) from nodes where id = ${result.nodeId}) as nodes,
+        (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
+        (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null) as sif,
         (select count(*) from kitchen_stations
-           where location_id = ${result.locationId} and is_default and active)::int as default_stations,
+           where location_id = ${result.locationId} and is_default and active) as default_stations,
         (select count(*) from departments
-           where location_id = ${result.locationId} and is_default and active)::int as default_departments,
+           where location_id = ${result.locationId} and is_default and active) as default_departments,
         (select count(*) from zone_service_policies
-           where location_id = ${result.locationId} and is_counter_default)::int as counter_zones`);
+           where location_id = ${result.locationId} and is_counter_default) as counter_zones`);
     // The initial kitchen station gives configuration a valid preparation target before the venue
     // adds more specific category, product, and zone routes.
     expect(counts.rows[0]).toEqual({
@@ -255,19 +255,23 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
 
-    const profiles = await suite.db.execute<{
-      name: string;
-      canvas_id: string | null;
-      capabilities: CapabilityFlag[];
-      inactivity_timeout_seconds: number | null;
-    }>(sql`
-      select name, canvas_id, capabilities, inactivity_timeout_seconds from device_profiles
-       order by name`);
+    // Read through the table definition, not raw SQL: `capabilities` is a JSON column, and a raw
+    // read hands back the ENCODED text — `"[\"act-as-kds\"]"` where the assertion below wants the
+    // list. The selection is aliased to the column names so the expected rows are unchanged.
+    const profiles = await suite.db
+      .select({
+        name: deviceProfiles.name,
+        canvas_id: deviceProfiles.canvasId,
+        capabilities: deviceProfiles.capabilities,
+        inactivity_timeout_seconds: deviceProfiles.inactivityTimeoutSeconds,
+      })
+      .from(deviceProfiles)
+      .orderBy(deviceProfiles.name);
     // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the counter
     // till and handheld each carry 300 s, the kitchen display none. Proven by deletion: drop the
     // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the counter/handheld read
     // null.
-    expect(profiles.rows).toEqual([
+    expect(profiles).toEqual([
       {
         name: "Cocina",
         canvas_id: null,
@@ -297,7 +301,7 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
     const count = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from device_profiles `);
+      select count(*) as n from device_profiles `);
     expect(count.rows[0]?.n).toBe(3); // three, not six
   });
 
@@ -330,7 +334,7 @@ describe("applyVenue", () => {
     });
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
+      select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1); // exactly one tenant, not two
     expect(second.locationId).toBe(first.locationId);
     expect(second.tillId).toBe(first.tillId);
@@ -341,9 +345,9 @@ describe("applyVenue", () => {
       nodes: number;
     }>(sql`
       select
-        (select count(*) from locations )::int as locations,
-        (select count(*) from tills )::int as tills,
-        (select count(*) from nodes )::int as nodes`);
+        (select count(*) from locations ) as locations,
+        (select count(*) from tills ) as tills,
+        (select count(*) from nodes ) as nodes`);
     expect(venueRows.rows[0]).toEqual({ locations: 1, tills: 1, nodes: 1 });
   });
 
@@ -364,7 +368,7 @@ describe("applyVenue", () => {
     ).rejects.toMatchObject({ code: "provisioning.second_venue" });
 
     const locations = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from locations
+      select count(*) as n from locations
       `);
     expect(locations.rows[0]?.n).toBe(1);
   });
@@ -394,7 +398,7 @@ describe("applyVenue", () => {
     });
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenants
+      select count(*) as n from tenants
       where upper(country) = 'ES' and upper(tax_id) = 'B88888888'`);
     expect(tenants.rows[0]?.n).toBe(1); // the one taxpayer row, unchanged by the second run
   });
@@ -414,7 +418,7 @@ describe("applyVenue", () => {
     });
 
     const admins = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from persons
+      select count(*) as n from persons
       where role = 'admin'`);
     expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
   });
@@ -492,7 +496,7 @@ describe("applyVenue", () => {
     expect(result.seriesIds).toHaveLength(1); // the dropped series' id is not returned
 
     const series = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from invoice_series where node_id = ${result.nodeId}`);
+      select count(*) as n from invoice_series where node_id = ${result.nodeId}`);
     expect(series.rows[0]?.n).toBe(1); // only one series row exists
   });
 

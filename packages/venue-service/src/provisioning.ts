@@ -1,63 +1,108 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
+import { departments, zoneMenus, zoneServicePolicies } from "./schema/service.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the default department and counter zone",
     async run(tx, node) {
-      await tx.execute(sql`
-        insert into departments
-          (location_id, name, trading_name, default_service_mode, is_default)
-        select ${node.locationId}, 'Venue', 'Venue', 'prepay', true
-        where not exists (
-          select 1 from departments
-          where location_id = ${node.locationId}
-            and is_default)`);
-      const department = await tx.execute<{ id: string }>(sql`
-        select id from departments
-        where location_id = ${node.locationId}
-          and is_default
-        limit 1`);
-      const departmentId = department.rows[0]!.id;
+      // Every write here goes through a table definition rather than raw SQL, because `departments`
+      // and `floor_zones` generate `id` and `created_at` with `$defaultFn`, which only the insert
+      // BUILDER runs, and both columns are `text PRIMARY KEY NOT NULL` in the generated DDL — so a
+      // raw insert that omits the id is refused `NOT NULL constraint failed: departments.id`. The
+      // same refusal on `persons` was run directly on node:sqlite; see `packages/provisioning/
+      // src/venue-apply.ts`'s seed-admin case for the receipt.
+      //
+      // The department's `where not exists` became a read-then-insert. The two are equivalent
+      // because a seed runs inside `withTransaction`, which holds the file's write lock for its
+      // whole body (`packages/store/src/write-queue.ts:13-21`), so nothing can seed a second
+      // default department between the read and the write.
+      const existingDepartment = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(and(eq(departments.locationId, node.locationId), eq(departments.isDefault, true)))
+        .limit(1);
+      const departmentId =
+        existingDepartment[0]?.id ??
+        (
+          await tx
+            .insert(departments)
+            .values({
+              locationId: node.locationId,
+              name: "Venue",
+              tradingName: "Venue",
+              defaultServiceMode: "prepay",
+              isDefault: true,
+            })
+            .returning({ id: departments.id })
+        )[0]!.id;
 
-      const existing = await tx.execute<{ zone_id: string }>(sql`
-        select zone_id from zone_service_policies
-        where location_id = ${node.locationId}
-          and is_counter_default
-        limit 1`);
-      if (existing.rows.length === 0) {
-        const zone = await tx.execute<{ id: string }>(sql`
-          insert into floor_zones (location_id, name, display_order, active) values (${node.locationId}, 'Counter', 0, true)
-          on conflict (location_id, name)
-          do update set name = excluded.name
-          returning id`);
-        const zoneId = zone.rows[0]!.id;
-        await tx.execute(sql`
-          insert into zone_service_policies
-            (location_id, zone_id, department_id, service_mode, is_counter_default)
-          values (${node.locationId}, ${zoneId}, ${departmentId}, null, true)
-          on conflict (zone_id)
-          do update set is_counter_default = true`);
+      const existing = await tx
+        .select({ zoneId: zoneServicePolicies.zoneId })
+        .from(zoneServicePolicies)
+        .where(
+          and(
+            eq(zoneServicePolicies.locationId, node.locationId),
+            eq(zoneServicePolicies.isCounterDefault, true),
+          ),
+        )
+        .limit(1);
+      if (existing.length === 0) {
+        // The conflict clause updates the name to the value it already holds: the point is not the
+        // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
+        const zone = await tx
+          .insert(floorZones)
+          .values({ locationId: node.locationId, name: "Counter", displayOrder: 0, active: true })
+          .onConflictDoUpdate({
+            target: [floorZones.locationId, floorZones.name],
+            set: { name: sql`excluded.name` },
+          })
+          .returning({ id: floorZones.id });
+        await tx
+          .insert(zoneServicePolicies)
+          .values({
+            locationId: node.locationId,
+            zoneId: zone[0]!.id,
+            departmentId,
+            serviceMode: null,
+            isCounterDefault: true,
+          })
+          .onConflictDoUpdate({
+            target: zoneServicePolicies.zoneId,
+            set: { isCounterDefault: true },
+          });
       }
-      const policy = await tx.execute<{ zone_id: string }>(sql`
-        select zone_id from zone_service_policies
-        where location_id = ${node.locationId}
-          and is_counter_default
-        limit 1`);
-      const menu = await tx.execute<{ catalogue_id: string | null }>(sql`
-        select catalogue_id from locations
-        where id = ${node.locationId}`);
-      const zoneId = policy.rows[0]!.zone_id;
-      const menuId = menu.rows[0]!.catalogue_id;
+      const policy = await tx
+        .select({ zoneId: zoneServicePolicies.zoneId })
+        .from(zoneServicePolicies)
+        .where(
+          and(
+            eq(zoneServicePolicies.locationId, node.locationId),
+            eq(zoneServicePolicies.isCounterDefault, true),
+          ),
+        )
+        .limit(1);
+      const menu = await tx
+        .select({ catalogueId: locations.catalogueId })
+        .from(locations)
+        .where(eq(locations.id, node.locationId));
+      const zoneId = policy[0]!.zoneId;
+      const menuId = menu[0]!.catalogueId;
       if (menuId !== null) {
-        await tx.execute(sql`
-          insert into zone_menus (zone_id, menu_id, display_order)
-          values (${zoneId}, ${menuId}, 0)
-          on conflict (zone_id, menu_id) do nothing`);
-        await tx.execute(sql`
-          update zone_service_policies set default_menu_id = ${menuId}
-          where zone_id = ${zoneId}
-            and default_menu_id is null`);
+        await tx
+          .insert(zoneMenus)
+          .values({ zoneId, menuId, displayOrder: 0 })
+          .onConflictDoNothing({ target: [zoneMenus.zoneId, zoneMenus.menuId] });
+        await tx
+          .update(zoneServicePolicies)
+          .set({ defaultMenuId: menuId })
+          .where(
+            and(
+              eq(zoneServicePolicies.zoneId, zoneId),
+              sql`${zoneServicePolicies.defaultMenuId} is null`,
+            ),
+          );
       }
       return "default department and counter zone ready";
     },

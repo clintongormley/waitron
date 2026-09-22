@@ -1,7 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { startManagementSession } from "@waitron/identity";
+import { and, eq } from "drizzle-orm";
+import {
+  invoiceSeries,
+  kitchenStations,
+  locations,
+  nodes,
+  tenants,
+  tills,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { persons, startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -39,9 +49,9 @@ export interface VenueResult {
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
  * existing location, till, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Two plans that overlap are serialised on the taxpayer row —
- * the insert holds the loser back on a virgin database, the `for update` read-back holds it back
- * when the row is already there. See the ensure-tenant case for both measurements.
+ * refused; so is a different taxpayer. Two plans that overlap are serialised by the ENGINE, not by
+ * anything this function does: SQLite admits one writer per file and `withTransaction` holds that
+ * write lock for the whole plan. See the ensure-tenant case.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -67,58 +77,53 @@ export async function applyVenue(
           // then read back whatever is there and decide — the same identity is nothing to do, a
           // different identity is refused by name.
           //
-          // The write comes FIRST, because it is the only step here that two concurrent plans can be
-          // serialised on. `select … for update` cannot do it: a row that does not exist yet locks
-          // nothing, so both plans read zero rows, both insert, and the loser gets a raw `23505`
-          // instead of an answer. The insert waits on the winner's uncommitted row instead, and then
-          // does nothing.
+          // Nothing here arbitrates between two concurrent plans, because the engine does it: a
+          // write transaction opens with `begin immediate`, which takes the file's write lock up
+          // front, and SQLite admits one writer per file
+          // (`packages/store/src/write-queue.ts:13-21`). `withTransaction` runs the whole plan
+          // inside that lock, so a second plan does not start until this one has committed or
+          // rolled back. The `select … for update` that used to take the lock explicitly is gone —
+          // this engine refuses it outright with `near "for": syntax error`. Measured rather than
+          // argued: put it back on this read and `venue-apply.test.ts` plus `cli.test.ts` go from
+          // 1 failing case of 159 to 28, twenty-seven of them reporting that text.
           //
-          // `on conflict do nothing` names NO arbiter deliberately. An arbitered
-          // `on conflict (id) do nothing` absorbs only a clash on the key it names: two plans
-          // carrying the SAME country and tax id then clash on `tenants_country_tax_id_key` instead
-          // and the loser still dies. Both shapes were run against two live transactions on
-          // postgres:18-alpine; `venue-apply.race.pg.test.ts` is the standing case and reports
-          // `23505 / tenants_country_tax_id_key` for the same-identity race and
-          // `23505 / tenants_pkey` for the different-identity one if this is put back either way.
-          //
-          // The read-back is `for update`, and that is the lock the REST of the plan runs under.
-          // The insert alone serialises only the virgin-database case: the loser's insert waits on
-          // the winner's uncommitted row, and so on the winner's whole transaction. Against a
-          // taxpayer row that is already committed the insert conflicts with nothing, returns at
-          // once, and two plans then run every step below side by side — measured on
-          // postgres:18-alpine, that ends with one call rejected on `23505 /
-          // persons_tenant_email_uq`, because both read no admin at `seed-admin`'s `where not
-          // exists`. Taking the row lock here puts the second plan behind the first in both cases,
-          // so it reads what the first committed and reuses the venue. Standing case, both shapes:
-          // `venue-apply.race.pg.test.ts`.
+          // `on conflict do nothing` names NO arbiter deliberately, and what it absorbs is a
+          // RE-RUN rather than a race: a second `applyVenue` with the same plan clashes on the
+          // pinned primary key, and one carrying a different identity clashes there too, so the
+          // read-back below is what tells the two apart.
           //
           // Comparison is on the canonical values (trimmed, upper-cased — the same normalisation
           // `planVenue` applies before it builds the action), so `es`/`ES` and stray surrounding
           // space are the SAME taxpayer and the re-run stays idempotent.
-          await tx.execute(sql`
-            insert into tenants (id, country, tax_id, legal_name)
-            values (1, ${action.country}, ${action.taxId}, ${action.legalName})
-            on conflict do nothing`);
-          const stored = await tx.execute<{ country: string; tax_id: string }>(
-            sql`select country, tax_id from tenants where id = 1 for update`,
-          );
-          const row = stored.rows[0]!;
+          await tx
+            .insert(tenants)
+            .values({
+              id: 1,
+              country: action.country,
+              taxId: action.taxId,
+              legalName: action.legalName,
+            })
+            .onConflictDoNothing();
+          const stored = await tx
+            .select({ country: tenants.country, taxId: tenants.taxId })
+            .from(tenants)
+            .where(eq(tenants.id, 1));
+          const row = stored[0]!;
           const sameIdentity =
             row.country.trim().toUpperCase() === action.country.trim().toUpperCase() &&
-            row.tax_id.trim().toUpperCase() === action.taxId.trim().toUpperCase();
+            row.taxId.trim().toUpperCase() === action.taxId.trim().toUpperCase();
           if (!sameIdentity) {
             throw new AppError("provisioning.tenant_identity_mismatch", {});
           }
           break;
         }
-        case "seed-admin":
+        case "seed-admin": {
           // Seed the venue's admin ONCE. Like ensure-tenant's `on conflict do nothing`, this
           // makes a re-run a no-op — the admin belongs to the taxpayer, not to a venue, so an idempotent
           // same-venue re-run must not add a duplicate admin. A plain insert did exactly
-          // that. `insert … select … where not exists` seeds the admin only if the database has none
-          // yet (the role='admin' predicate). Raw SQL like
-          // every other insert — no @waitron/identity import; the `persons` table exists because the
-          // identity migrations run before a venue is applied. `pin_hash` (till) and `password_hash`
+          // that. A read for any `role='admin'` row, then an insert only when there is none, seeds
+          // the admin once; why it goes through the table definition is at the insert itself.
+          // `pin_hash` (till) and `password_hash`
           // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
           // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
           // actions from day one. `email` is the admin's required dashboard-login address, validated
@@ -131,13 +136,36 @@ export async function applyVenue(
           // default. A plan built by `planVenue` cannot carry a language the apps have no catalogue
           // for — it refuses one — but this applier runs whatever action list it is handed, and the
           // action's `locale` is a plain `string | null`, so a hand-built plan is not screened here.
-          await tx.execute(sql`
-            insert into persons (display_name, first_names, last_names, locale, pin_hash, password_hash, email, role)
-            select ${action.displayName}, ${action.firstNames}, ${action.lastNames},
-                   ${action.locale}, ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
-            where not exists (
-              select 1 from persons where role = 'admin')`);
+          //
+          // Read-then-insert, where this used to be one `insert … select … where not exists`. The
+          // two are equivalent here because the plan runs alone: `withTransaction` holds the file's
+          // write lock for its whole body (`packages/store/src/write-queue.ts:13-21`), so no second
+          // transaction can seed an admin between the read and the write. The insert goes through
+          // the table definition rather than raw SQL because `persons.id` and `persons.created_at`
+          // are `$defaultFn` generators that only the insert BUILDER runs. The generated DDL says
+          // `id text PRIMARY KEY NOT NULL` (`packages/identity/drizzle/0000_baseline.sql:46`), so a
+          // raw insert that omits it is refused `NOT NULL constraint failed: persons.id`, errcode
+          // 1299 — run on node:sqlite, Node v26.7.0, with the same insert supplying an id as the
+          // control, which succeeds.
+          const seededAdmin = await tx
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.role, "admin"))
+            .limit(1);
+          if (seededAdmin.length === 0) {
+            await tx.insert(persons).values({
+              displayName: action.displayName,
+              firstNames: action.firstNames,
+              lastNames: action.lastNames,
+              locale: action.locale,
+              pinHash: action.pinHash,
+              passwordHash: action.passwordHash,
+              email: action.email,
+              role: "admin",
+            });
+          }
           break;
+        }
         case "seed-device-profiles":
           // Non-fiscal. Seed the venue's starter device profiles under an admin management session —
           // the SAME store path the management dashboard uses (createDeviceProfile), so its
@@ -150,41 +178,45 @@ export async function applyVenue(
           await seedDeviceProfiles(tx, action.profiles);
           break;
         case "create-location": {
-          const existing = await tx.execute<{
-            id: string;
-            name: string;
-            invoice_locales: string[];
-            operation_description: string;
-            fiscal_territory: string;
-            address_line1: string;
-            address_line2: string | null;
-            postal_code: string;
-            city: string;
-            province: string;
-            time_zone: string;
-            day_cutover: string;
-          }>(sql`
-            select id, name, invoice_locales, operation_description, fiscal_territory,
-                   address_line1, address_line2, postal_code, city, province, time_zone,
-                   day_cutover::text
-            from locations order by id`);
-          if (existing.rows.length > 1) {
+          // `day_cutover` needed a `::text` cast on PostgreSQL, where it was a `time` and came back
+          // as one; the column is text on this engine and the cast is a syntax error
+          // (`unrecognized token: ":"`). `invoice_locales` needs the builder for a different
+          // reason: it is a JSON-encoded list now, so the raw read returned the string
+          // `["es-ES"]` where the comparison below wants the array.
+          const existing = await tx
+            .select({
+              id: locations.id,
+              name: locations.name,
+              invoiceLocales: locations.invoiceLocales,
+              operationDescription: locations.operationDescription,
+              fiscalTerritory: locations.fiscalTerritory,
+              addressLine1: locations.addressLine1,
+              addressLine2: locations.addressLine2,
+              postalCode: locations.postalCode,
+              city: locations.city,
+              province: locations.province,
+              timeZone: locations.timeZone,
+              dayCutover: locations.dayCutover,
+            })
+            .from(locations)
+            .orderBy(locations.id);
+          if (existing.length > 1) {
             throw new AppError("provisioning.second_venue", {});
           }
-          if (existing.rows.length === 1) {
-            const row = existing.rows[0]!;
+          if (existing.length === 1) {
+            const row = existing[0]!;
             const matches =
               row.name === action.name &&
-              JSON.stringify(row.invoice_locales) === JSON.stringify(action.invoiceLocales) &&
-              row.operation_description === action.operationDescription &&
-              row.fiscal_territory === action.fiscalTerritory &&
-              row.address_line1 === action.addressLine1 &&
-              row.address_line2 === action.addressLine2 &&
-              row.postal_code === action.postalCode &&
+              JSON.stringify(row.invoiceLocales) === JSON.stringify(action.invoiceLocales) &&
+              row.operationDescription === action.operationDescription &&
+              row.fiscalTerritory === action.fiscalTerritory &&
+              row.addressLine1 === action.addressLine1 &&
+              row.addressLine2 === action.addressLine2 &&
+              row.postalCode === action.postalCode &&
               row.city === action.city &&
               row.province === action.province &&
-              row.time_zone === action.timeZone &&
-              row.day_cutover === action.dayCutover;
+              row.timeZone === action.timeZone &&
+              row.dayCutover === action.dayCutover;
             if (!matches) {
               throw new AppError("provisioning.second_venue", {});
             }
@@ -193,24 +225,22 @@ export async function applyVenue(
             break;
           }
           locationId = randomUUID();
-          // `invoice_locales` is `text[]`. A JS array interpolated straight into a `sql` template
-          // (`${action.invoiceLocales}`, as the brief drafted) is expanded by Drizzle into a
-          // value LIST — `values (…, ($4), …)` binding `$4 = 'es-ES'` — which Postgres rejects
-          // with `22P02 malformed array literal` (observed in this task's first green run). Build
-          // the array literal explicitly instead, each element its OWN bound param
-          // (`array[$n, …]::text[]`), so nothing is string-concatenated.
-          const invoiceLocales = sql`array[${sql.join(
-            action.invoiceLocales.map((locale) => sql`${locale}`),
-            sql`, `,
-          )}]::text[]`;
-          await tx.execute(sql`
-            insert into locations
-              (id, name, invoice_locales, operation_description, fiscal_territory,
-               address_line1, address_line2, postal_code, city, province, time_zone, day_cutover)
-            values (${locationId}, ${action.name}, ${invoiceLocales},
-               ${action.operationDescription}, ${action.fiscalTerritory}, ${action.addressLine1},
-               ${action.addressLine2}, ${action.postalCode}, ${action.city}, ${action.province},
-               ${action.timeZone}, ${action.dayCutover})`);
+          // The hand-built `array[$n, …]::text[]` literal this used to carry belonged to a `text[]`
+          // column. `invoice_locales` is JSON text now, so the builder encodes the list.
+          await tx.insert(locations).values({
+            id: locationId,
+            name: action.name,
+            invoiceLocales: [...action.invoiceLocales],
+            operationDescription: action.operationDescription,
+            fiscalTerritory: action.fiscalTerritory,
+            addressLine1: action.addressLine1,
+            addressLine2: action.addressLine2,
+            postalCode: action.postalCode,
+            city: action.city,
+            province: action.province,
+            timeZone: action.timeZone,
+            dayCutover: action.dayCutover,
+          });
           // KDS-1: seed this location's DEFAULT kitchen station so a context-less legacy order has a
           // fallback. Service-context orders use explicit preparation routes instead. Spec §2a ("one
           // default") + §2b: a location with NO default station makes legacy firing a fail-loud
@@ -220,9 +250,13 @@ export async function applyVenue(
           // left with no ACTIVE default station — including one whose sole default was DEACTIVATED
           // (fireLines' fallback requires `is_default AND active`) — not a fresh venue, which always ships
           // this one.
-          await tx.execute(sql`
-            insert into kitchen_stations (location_id, name, display_order, is_default, active)
-            values (${locationId}, 'Cocina', 0, true, true)`);
+          await tx.insert(kitchenStations).values({
+            locationId,
+            name: "Cocina",
+            displayOrder: 0,
+            isDefault: true,
+            active: true,
+          });
           break;
         }
         case "create-till":
@@ -232,49 +266,55 @@ export async function applyVenue(
           // Error, NOT an operator-facing AppError code: this is a programming/plan bug, not input.
           if (locationId === "") throw new Error("applyVenue: create-till before create-location");
           if (reusingVenue) {
-            const existing = await tx.execute<{ id: string; name: string }>(sql`
-              select id, name from tills
-              where location_id = ${locationId}
-              order by id limit 1`);
-            if (existing.rows[0] === undefined || existing.rows[0].name !== action.name) {
+            const existing = await tx
+              .select({ id: tills.id, name: tills.name })
+              .from(tills)
+              .where(eq(tills.locationId, locationId))
+              .orderBy(tills.id)
+              .limit(1);
+            if (existing[0] === undefined || existing[0].name !== action.name) {
               throw new AppError("provisioning.second_venue", {});
             }
-            tillId = existing.rows[0].id;
+            tillId = existing[0].id;
             break;
           }
           tillId = randomUUID();
-          await tx.execute(sql`
-            insert into tills (id, location_id, name)
-            values (${tillId}, ${locationId}, ${action.name})`);
+          await tx.insert(tills).values({ id: tillId, locationId, name: action.name });
           break;
         case "create-node":
           // As create-till: create-node before create-location would insert an empty location_id.
           if (locationId === "") throw new Error("applyVenue: create-node before create-location");
           if (reusingVenue) {
-            const existing = await tx.execute<{
-              id: string;
-              name: string;
-              filing_module: string;
-              tax_module: string;
-            }>(sql`
-              select id, name, filing_module, tax_module from nodes
-              where location_id = ${locationId}
-              order by id limit 1`);
+            const existing = await tx
+              .select({
+                id: nodes.id,
+                name: nodes.name,
+                filingModule: nodes.filingModule,
+                taxModule: nodes.taxModule,
+              })
+              .from(nodes)
+              .where(eq(nodes.locationId, locationId))
+              .orderBy(nodes.id)
+              .limit(1);
             if (
-              existing.rows[0] === undefined ||
-              existing.rows[0].name !== action.name ||
-              existing.rows[0].filing_module !== action.filingModule ||
-              existing.rows[0].tax_module !== action.taxModule
+              existing[0] === undefined ||
+              existing[0].name !== action.name ||
+              existing[0].filingModule !== action.filingModule ||
+              existing[0].taxModule !== action.taxModule
             ) {
               throw new AppError("provisioning.second_venue", {});
             }
-            nodeId = existing.rows[0].id;
+            nodeId = existing[0].id;
             break;
           }
           nodeId = randomUUID();
-          await tx.execute(sql`
-            insert into nodes (id, location_id, name, filing_module, tax_module)
-            values (${nodeId}, ${locationId}, ${action.name}, ${action.filingModule}, ${action.taxModule})`);
+          await tx.insert(nodes).values({
+            id: nodeId,
+            locationId,
+            name: action.name,
+            filingModule: action.filingModule,
+            taxModule: action.taxModule,
+          });
           break;
         case "seed-module": {
           // A seed before create-node would run against an EMPTY node id; refuse it as a plan-integrity
@@ -298,28 +338,39 @@ export async function applyVenue(
           // create-series before create-node would insert an empty node_id.
           if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
           if (reusingVenue) {
-            const existing = await tx.execute<{ id: string }>(sql`
-              select id from invoice_series
-              where node_id = ${nodeId}
-                and code = ${action.code} and purpose = ${action.purpose}`);
-            if (existing.rows[0] === undefined) {
+            const existing = await tx
+              .select({ id: invoiceSeries.id })
+              .from(invoiceSeries)
+              .where(
+                and(
+                  eq(invoiceSeries.nodeId, nodeId),
+                  eq(invoiceSeries.code, action.code),
+                  eq(invoiceSeries.purpose, action.purpose),
+                ),
+              );
+            if (existing[0] === undefined) {
               throw new AppError("provisioning.second_venue", {});
             }
-            seriesIds.push(existing.rows[0].id);
+            seriesIds.push(existing[0].id);
             break;
           }
           const seriesId = randomUUID();
-          const inserted = await tx.execute<{ id: string }>(sql`
-            insert into invoice_series (id, node_id, code, purpose)
-            values (${seriesId}, ${nodeId}, ${action.code}, ${action.purpose})
-            on conflict (node_id, code) do nothing
-            returning id`);
+          const inserted = await tx
+            .insert(invoiceSeries)
+            .values({
+              id: seriesId,
+              nodeId,
+              code: action.code,
+              purpose: action.purpose,
+            })
+            .onConflictDoNothing({ target: [invoiceSeries.nodeId, invoiceSeries.code] })
+            .returning({ id: invoiceSeries.id });
           // Push ONLY when a row was actually inserted. `ON CONFLICT DO NOTHING` returns no rows on
           // a collision, and returning the un-inserted id would put a PHANTOM id in the result — a
           // row that does not exist. planVenue now rejects equal standard/rectificative codes
           // up front, so a valid plan never collides here; this keeps VenueResult honest even for a
           // hand-built plan that does (exercised by venue-apply.test.ts).
-          if (inserted.rows.length > 0) seriesIds.push(seriesId);
+          if (inserted.length > 0) seriesIds.push(seriesId);
           break;
         }
       }
@@ -366,11 +417,13 @@ async function seedDeviceProfiles(
 
   // The admin seed-admin created (role='admin') authors the profiles; a plan that reaches here without
   // one ran seed-device-profiles before seed-admin — a plan-integrity bug, refused like the ordering
-  // guards in the apply loop. Raw SQL, like the other lookups here (no @waitron/identity persons import).
-  const admin = await tx.execute<{ id: string }>(
-    sql`select id from persons where role = 'admin' limit 1`,
-  );
-  const personId = admin.rows[0]?.id;
+  // guards in the apply loop.
+  const admin = await tx
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.role, "admin"))
+    .limit(1);
+  const personId = admin[0]?.id;
   if (personId === undefined) {
     throw new Error("applyVenue: seed-device-profiles before seed-admin");
   }

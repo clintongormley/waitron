@@ -873,15 +873,31 @@ describe("runCli venue", () => {
   });
 
   it("maps a concurrent unique-violation from the apply to provisioning.venue_conflict", async () => {
+    // The crafted refusal carries the `errcode` + `message` pair `isUniqueViolation` reads
+    // (`packages/db/src/constraint-target.ts`'s `refusalCode`, `packages/db/src/sql-state.ts`'s
+    // `UNIQUE_VIOLATION`); the PostgreSQL SQLSTATE this used to carry is not a thing this engine
+    // reports. Both values are copied from a real refusal on this index shape, measured on
+    // node:sqlite / Node v26.7.0 — `persons_tenant_email_uq` is over `lower(email)`, and SQLite
+    // names the INDEX rather than the columns when the index is over an expression, which is why
+    // the message has that shape. A plain-column unique reads `UNIQUE constraint failed:
+    // <table>.<column>` instead; both were run, with a succeeding insert as the control.
     const h = harness({
       env: VENUE_ENV,
-      applyVenue: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+      applyVenue: () =>
+        Promise.reject(
+          Object.assign(new Error("UNIQUE constraint failed: index 'persons_tenant_email_uq'"), {
+            cause: {
+              errcode: 2067,
+              message: "UNIQUE constraint failed: index 'persons_tenant_email_uq'",
+            },
+          }),
+        ),
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('provisioning.venue_conflict {"database":"waitron_demo"}');
     // The driver's own message can quote the failing statement; it is never printed.
-    expect(h.lines.join("\n")).not.toContain("dup");
+    expect(h.lines.join("\n")).not.toContain("UNIQUE constraint failed");
     expect(h.closes()).toBe(1);
   });
 
