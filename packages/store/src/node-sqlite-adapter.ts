@@ -120,8 +120,36 @@ export function adaptNodeSqlite(db: DatabaseSync) {
         (...args: A): R => {
           const savepoint = db.isTransaction ? nextSavepoint() : undefined;
           db.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
+          /**
+           * Finish the transaction — and undo it if FINISHING is what fails.
+           *
+           * `commit` runs after the body has already succeeded, and it can still be refused: a
+           * foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT, so the
+           * refusal comes from this statement rather than from anything the body wrote. Measured on
+           * node v26.7.0: the transaction is then still OPEN, the refused rows read back on this
+           * connection, and the next `begin` is refused `cannot start a transaction within a
+           * transaction` — a failure surfacing in an unrelated caller. `rollback` at that point
+           * succeeds and undoes the work, which is what this does.
+           *
+           * Only the `commit` branch has been seen to fail this way: measured the same day, a
+           * `release <savepoint>` inside an open transaction is NOT refused for a deferred key,
+           * because the check belongs to the outer commit. The savepoint branch takes the same
+           * handling anyway rather than a claim that nothing else can refuse it.
+           *
+           * The compensating rollback must not replace the refusal the caller has to see, so its
+           * own failure is discarded and the original error is the one thrown.
+           */
           const keep = () => {
-            db.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
+            try {
+              db.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
+            } catch (error) {
+              try {
+                undo();
+              } catch {
+                // The refusal above is what the caller needs; this one would hide it.
+              }
+              throw error;
+            }
           };
           const undo = () => {
             if (savepoint === undefined) db.exec("rollback");

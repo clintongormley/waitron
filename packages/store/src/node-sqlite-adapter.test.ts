@@ -328,6 +328,76 @@ describe("the node:sqlite adapter", () => {
     expect(rowCount(raw)).toBe(0);
   });
 
+  /**
+   * A `commit` this engine REFUSES has to leave the connection the way a body that threw does.
+   *
+   * `commit` is the one statement in the wrapper that runs after the body has already succeeded,
+   * and it can still fail: a deferred foreign key is checked AT COMMIT, so the refusal arrives from
+   * `commit` itself rather than from any statement the body wrote. Two things must hold afterwards,
+   * and they fail differently — the work must be gone, and the connection must be usable again.
+   * A transaction left open is the worse half: every later read on that connection sees the
+   * uncommitted rows, and the next `begin` is refused `cannot start a transaction within a
+   * transaction`, so the failure surfaces somewhere that has nothing to do with the cause.
+   *
+   * `apps/server/src/configuration-transfer.ts` is the real caller: it empties and refills a
+   * foreign-key cycle under exactly this pragma.
+   */
+  const deferred = () => {
+    const raw = new DatabaseSync(":memory:");
+    raw.exec("create table parent (id integer primary key)");
+    raw.exec(
+      "create table child (id integer primary key, parent_id integer references parent(id))",
+    );
+    raw.exec("pragma foreign_keys = on");
+    return { raw, db: drizzleNodeSqlite(raw, { schema: { rows } }) };
+  };
+
+  it("undoes the work of a transaction whose COMMIT is refused", () => {
+    const { db, raw } = deferred();
+    expect(() =>
+      db.transaction((tx) => {
+        tx.execute(sql`pragma defer_foreign_keys = on`);
+        // Accepted here and refused at commit: that is what makes this the commit's failure and
+        // not a statement's. The control is the same insert with `defer_foreign_keys` left off,
+        // which is refused on this line instead — driven by the case below.
+        tx.execute(sql`insert into child (id, parent_id) values (1, 999)`);
+      }),
+    ).toThrow(/FOREIGN KEY constraint failed/);
+    expect((raw.prepare("select count(*) as n from child").get() as { n: number }).n).toBe(0);
+  });
+
+  it("leaves no transaction open on the connection after a refused COMMIT", () => {
+    const { db, raw } = deferred();
+    expect(() =>
+      db.transaction((tx) => {
+        tx.execute(sql`pragma defer_foreign_keys = on`);
+        tx.execute(sql`insert into child (id, parent_id) values (1, 999)`);
+      }),
+    ).toThrow(/FOREIGN KEY constraint failed/);
+    // Asked of the CONNECTION, not by starting another transaction — because starting one cannot
+    // tell the two answers apart. The wrapper opens a SAVEPOINT rather than a `begin` whenever the
+    // connection already has a transaction, so a second `db.transaction(...)` succeeds either way
+    // and quietly writes INTO the leaked one. Measured on node v26.7.0 (/tmp/f1-w5/probe-commit.mjs):
+    // with the transaction left open, `isTransaction` stays true, the refused row reads back, and a
+    // raw `begin immediate` is refused `cannot start a transaction within a transaction`.
+    expect(raw.isTransaction).toBe(false);
+  });
+
+  it("refuses the same insert at the STATEMENT when the key is not deferred", () => {
+    // The control for the two cases above: without the pragma the refusal comes from the insert,
+    // the body throws, and the wrapper's existing rollback path is what handles it. It is here so
+    // that "the commit failed" is a measured difference rather than an assumption about which
+    // statement raised.
+    const { db, raw } = deferred();
+    expect(() =>
+      db.transaction((tx) => {
+        tx.execute(sql`insert into child (id, parent_id) values (1, 999)`);
+        expect.unreachable("the insert should have been refused");
+      }),
+    ).toThrow(/FOREIGN KEY constraint failed/);
+    expect((raw.prepare("select count(*) as n from child").get() as { n: number }).n).toBe(0);
+  });
+
   it("closes the database it was handed", () => {
     const { raw } = open();
     adaptNodeSqlite(raw).close();
