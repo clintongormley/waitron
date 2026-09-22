@@ -5,13 +5,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   deviceProfiles,
+  saleLines,
   sales,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -59,31 +60,44 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
 
-// Real Postgres, not PGlite: this drives `POST /api/sales` and the `/api/working-orders` routes
-// through the HTTP surface to a GENUINE chained fiscal record written by the app role.
-// PGlite runs every connection as a superuser, which holds every privilege and so cannot prove the
-// deployment role is permitted to write `registros_facturacion` (CLAUDE.md §4). The 401-without-session guards,
-// the products list and the park/list/retrieve/update/abandon route LOGIC live in the hermetic
-// `till-api.test.ts`; what needs a container is the chained-write happy path AND the pay-idempotency
-// crux (a lost-response pay retry must REPLAY the ticket, filing no second chained record — spec §3),
-// which only a real fiscal write proves. Setup mirrors `till-sale.test.ts` (Task 3) — a provisioned
-// venue + a seeded catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
+// `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over the HTTP
+// surface to a GENUINE chained fiscal record. The 401-without-session guards, the products list and
+// the park/list/retrieve/update/abandon route LOGIC live in the hermetic `till-api.test.ts`; what
+// lives here is the chained-write happy path AND the pay-idempotency crux (a lost-response pay
+// retry must REPLAY the ticket, filing no second chained record — spec §3), which only a real
+// fiscal write proves. Setup mirrors `till-sale.test.ts` (Task 3) — a provisioned venue + a seeded
+// catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. Two subjects went with that harness and NOTHING here replaces either:
+//
+//   - The file's own header claimed the chained record was "written by the app role" and that
+//     PGlite's superuser connection could not establish the deployment role may write
+//     `registros_facturacion`. There are no database roles on this engine — one file, one handle —
+//     so `asAppUser(tx)` is inert (`packages/db/src/testing/roles.ts`) and every `asAppUser` call
+//     below is left for Task T1's sweep. Nothing in this file now says anything about privileges.
+//   - The `/api/pay` tests opened a SECOND connection as the non-superuser `rls_probe` role and
+//     handed it to `StripeTerminalProvider`, whose `payments`-ledger writes
+//     (`insertAttempting`/`captureAttempting`/`failAttempting`) run on its OWN `db` handle and
+//     never call `asAppUser` — so the role that handle carried was the role those writes ran as.
+//     That an ordinary application role may make that write is no longer observable anywhere; the
+//     adapter's own option doc already records the same loss for the suite that went with the
+//     PostgreSQL tier (`packages/payments-stripe/src/provider.ts:27-39`). The reader ROUTING these
+//     cases exist for — which reader a collect drives, and which id is stamped on
+//     `payments.reader_id` — is untouched: they now pass the suite's one handle.
+//
+//     The comment this replaces added that those three writes do not go through `withTransaction`.
+//     That is wrong and was left behind by a change: `collect` wraps each of them in
+//     `this.inTransaction`, which is `withTransaction(db, …)` — both its T1 and T2 steps in
+//     `packages/payments-stripe/src/provider.ts`. It also pointed at a "Present because…"
+//     doc comment on that class, which no longer exists — `grep -rn "Present because"
+//     packages/payments-stripe/src` returns nothing.
 const LOCALE = "es-ES";
 
-// A non-superuser LOGIN role that inherits `app_user`'s grants, for Task 7's `/api/pay` tests: the
-// `StripeTerminalProvider` this file wires in for those tests does NOT run its own writes through
-// `withTransaction` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
-// whatever role its `db` handle carries — see that class's own "Present because…" doc comment), so
-// `suite.admin` there would write the `payments` ledger as a superuser holding every privilege — the
-// same reasoning `till-sale-integrated.pg.test.ts`'s `integratedDeps` documents for its own
-// identically-named probe role (a different container, so no name collision).
-const PROBE_ROLE = "rls_probe";
-const PROBE_PASSWORD = "probe";
-
-// A clone of the full-manifest template; the provider connections below authenticate as the
-// cluster-wide `rls_probe` role the package globalSetup creates (shared with till-sale-integrated),
-// in place of the per-file `probeRole` this suite used before the shared container.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -116,9 +130,11 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF. A local counter, the same shape
-// `till-sale.test.ts`'s `nextNif` uses for the same reason.
+// Tenants no longer accumulate: the per-test reset empties every data table
+// (`packages/db/src/testing/venue-db.ts`), and `tenants` holds ONE row anyway
+// (`tenants_singleton_ck CHECK(id = 1)`, `packages/db/drizzle/0000_baseline.sql:35`) — so a second
+// venue in one database would collide on the primary key, not on the NIF. Nothing here now depends
+// on the NIFs differing; the counter is kept so a venue's tax id still reads as its own.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -141,8 +157,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), seed a catalogue and a staff
- * person with a known PIN (as the app role), and read back the sellable products — one unit product
+ * Stand up a fresh chained venue + registered SIF, seed a catalogue and a staff
+ * person with a known PIN, and read back the sellable products — one unit product
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%). Each test
  * gets its OWN tenant so the `registros_facturacion`/`sales` counts are that test's alone,
  * order-independent (CLAUDE.md §4). Returns the login person's id so the test can log in as them and
@@ -185,11 +201,11 @@ async function setupVenue(): Promise<{
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { catalogueId, available, operatorId } = await withTransaction(suite.admin, async (tx) => {
+  const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
@@ -249,8 +265,8 @@ async function setupVenue(): Promise<{
       { locationId: cfg.locationId, categoryId: comida.id, stationId: defaultStation },
       { locationId: cfg.locationId, categoryId: bebidas.id, stationId: defaultStation },
     ]);
-    // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
-    // `persons`), so the login route can verify their credential and the sale is attributed to them.
+    // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
+    // the sale is attributed to them.
     // `persons.id` and `persons.created_at` are `$defaultFn` generators on NOT NULL columns
     // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
     const [person] = await tx
@@ -273,16 +289,16 @@ async function setupVenue(): Promise<{
   return { cfg, catalogueId, available, operatorId };
 }
 
-/** The till API's deps for a provisioned venue: the owner connection (routes drop to `app_user`
- * themselves via `withTransaction` + `asAppUser`), the real fiscal backend + system clock the sale path
- * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
+/** The till API's deps for a provisioned venue: the suite's one database handle, the real fiscal
+ * backend + system clock the sale path files through, and `secureCookies:false` so the session
+ * cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
   // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
   // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
   // `venueLocale` is the display default `GET /api/till`/`GET /api/locales` echo; mirror the cfg's
   // locale so it is internally consistent (these API suites assert no locale field).
   return {
-    db: suite.admin,
+    db: suite.db,
     backend,
     clock,
     cfg,
@@ -302,14 +318,12 @@ const RING = loadKeyRing({
  * over `FakeStripe` per provider id, and `get` takes only a provider id — no reader. The reader a sale
  * charges is a per-collect input (`CollectParams.readerRef`), so one cached provider serves every
  * reader on the vendor; caching here (rather than a fresh provider per `get`) is what lets the
- * two-readers-one-provider regression below prove the ref is not baked in. The provider is given its
- * OWN `providerDb` handle (a `PROBE_ROLE` connection the test opens/closes), since the provider's
- * `payments`-ledger writes run at whatever role THAT handle carries (see `PROBE_ROLE` above) — the
- * routes' own DB ops still run through `withTransaction` + `asAppUser` off `suite.admin`. This stands in for
+ * two-readers-one-provider regression below prove the ref is not baked in. The provider writes its
+ * `payments` ledger on the suite's one handle, the same handle the routes use. This stands in for
  * the boot pool (which would build the real seat from a sealed credential) so a capture/decline
  * genuinely round-trips the adapter without a network.
  */
-function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): CardProviderPool {
+function fakePool(cfg: TillConfig, client: FakeStripe): CardProviderPool {
   const cache = new Map<string, StripeTerminalProvider>();
   return {
     get: (providerId) => {
@@ -317,7 +331,7 @@ function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): Ca
       if (provider === undefined) {
         provider = new StripeTerminalProvider({
           client,
-          db: providerDb,
+          db: suite.db,
           nodeId: cfg.nodeId,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
           poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -337,7 +351,7 @@ function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): Ca
  * seat, exactly as boot does. */
 function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
   return {
-    db: suite.admin,
+    db: suite.db,
     backend,
     clock,
     cfg,
@@ -355,7 +369,7 @@ async function seedReader(
   const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
   // `card_readers.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
   // (`packages/payments/drizzle/0000_baseline.sql:2` and `:7`).
-  const [r] = await suite.admin
+  const [r] = await suite.db
     .insert(cardReaders)
     .values({
       provider: opts.provider ?? "stripe",
@@ -368,14 +382,14 @@ async function seedReader(
 
 /** Point a device at its DEFAULT reader (`device_card_readers`). */
 async function setDefaultReader(deviceId: string, readerId: string): Promise<void> {
-  await suite.admin.execute(sql`
+  await suite.db.execute(sql`
     insert into device_card_readers (device_id, reader_id) values (${deviceId}, ${readerId})`);
 }
 
 /** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay
  * path's pre-check reads only its presence). */
 async function connectStripe(): Promise<void> {
-  await withTransaction(suite.admin, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     putCredential(tx, RING, {
       purpose: "payments.stripe",
       value: {
@@ -393,9 +407,9 @@ function deviceIdOf(cookie: string): string {
   return cookie.split("=")[1]!.split(".")[0]!;
 }
 
-/** The stamped `payments.reader_id` for a working order (NULL when none), read as app_user. */
+/** The stamped `payments.reader_id` for a working order (NULL when none). */
 async function readerIdOnPayment(workingOrderId: string): Promise<string | null> {
-  const rows = await suite.admin.execute<{ reader_id: string | null }>(sql`
+  const rows = await suite.db.execute<{ reader_id: string | null }>(sql`
     select reader_id from payments where working_order_id = ${workingOrderId}`);
   return rows.rows[0]?.reader_id ?? null;
 }
@@ -407,9 +421,9 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
  * till and every sale's fiscal record is byte-identical to the pre-cutover env-till (the same `till_id`,
  * and `nodeId`/`seriesId` still come from cfg). An optional `deviceProfileId` binds a device profile —
  * the `/api/pay` tests need one declaring `integrated-card-payment` so `assertDeviceCapability` passes
- * (capabilities relocated onto the profile, Task 9). Join-and-accept runs on the app role under the
- * tenant (the production accept path), so the scrypt hash actually verifies and `tryReadDevice` resolves
- * a genuine binding rather than a miss.
+ * (capabilities relocated onto the profile, Task 9). Join-and-accept runs the production accept path,
+ * so the scrypt hash actually verifies and `tryReadDevice` resolves a genuine binding rather than a
+ * miss.
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
@@ -421,7 +435,7 @@ async function enrolTillCookie(
   // at accept, and `resolveDeviceBinding` AUTO-CREATES the register it rings against (named after the
   // device). Each call names the device uniquely so its auto-created register cannot collide.
   const profileId = deviceProfileId ?? (await seedProfileFF("till"));
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
   });
@@ -450,7 +464,7 @@ async function createTillProfile(): Promise<string> {
   // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches on
   // this engine, and `capabilities` is JSON in a text column, so the jsonb cast is both unnecessary
   // and a syntax error here (SQLite reads a colon as the start of a bind parameter).
-  const [prof] = await suite.admin
+  const [prof] = await suite.db
     .insert(deviceProfiles)
     .values({
       name: "Counter till",
@@ -469,7 +483,7 @@ async function seedProfileFF(
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
-  const [prof] = await suite.admin
+  const [prof] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${formFactor} ${profileCounter}`, formFactor, capabilities })
     .returning({ id: deviceProfiles.id });
@@ -480,7 +494,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -554,7 +568,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 4. A GENUINE chained fiscal record exists for this tenant/node — one, hashed (own tenant, so
     // the count is order-independent).
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -563,7 +577,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
 
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
-    const saleRows = await withTransaction(suite.admin, async (tx) => {
+    const saleRows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select({ operatorId: sales.operatorId }).from(sales);
     });
@@ -574,7 +588,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   // sale; this one drives the operator's WHOLE server-side journey — log in, read the menu, ring a
   // MIXED-rate basket built from that menu — and then holds the response to the legal ticket
   // standard (findings §14) AND the database to an intact hash chain across two sales. Nothing here
-  // touches production code; it is pure end-to-end verification over the same real-Postgres harness.
+  // touches production code; it is pure end-to-end verification over the same venue harness.
   it("walks the full journey: login → menu → mixed-rate sale → legal ticket + an intact fiscal chain", async () => {
     const { cfg, operatorId } = await setupVenue();
 
@@ -659,17 +673,21 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // The QR is the AEAT verification URL — required on every RRSIF invoice, so a non-empty string.
     expect(typeof ticket.qr).toBe("string");
     expect(ticket.qr.length).toBeGreaterThan(0);
-    const snapshottedLine = await suite.admin.execute<{
-      quantity: string;
-      unit_name: Record<string, string>;
-      unit_precision: number;
-    }>(sql`
-      -- sale_lines.quantity counts whole THOUSANDTHS, so the weighed 0.200 kg line is the row
-      -- where the column holds 200 -- an unquoted 0.200 here would compare an integer column with
-      -- a numeric and match nothing. Read as text: this asserts the stored COUNT, not an amount.
-      select cast(quantity as text) as quantity, unit_name, unit_precision from sale_lines
-      where quantity = 200`);
-    expect(snapshottedLine.rows).toEqual([
+    // Read through the TABLE DEFINITION, not a raw `select`: `unit_name` is a `json` column over
+    // text (`packages/db/src/schema/sales.ts:247`), and a raw read reaches no drizzle column
+    // mapper, so it hands back the stored JSON TEXT rather than the object asserted below.
+    // `quantity` stays an explicit text cast for the reason its old comment gave: sale_lines.quantity
+    // counts whole THOUSANDTHS, so the weighed 0.200 kg line is the row where the column holds 200,
+    // and reading it as text asserts the stored COUNT, not an amount.
+    const snapshottedLine = await suite.db
+      .select({
+        quantity: sql<string>`cast(${saleLines.quantity} as text)`,
+        unit_name: saleLines.unitName,
+        unit_precision: saleLines.unitPrecision,
+      })
+      .from(saleLines)
+      .where(sql`${saleLines.quantity} = 200`);
+    expect(snapshottedLine).toEqual([
       {
         quantity: "200",
         unit_name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
@@ -698,7 +716,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // increments `secuencia` and carries the first record's ACTUAL huella as its predecessor
     // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
     // the stored 64-hex huella the append-only table pins.
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -749,7 +767,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -767,12 +785,12 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
     // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
     // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
-    const station = await withTransaction(suite.admin, async (tx) => {
+    const station = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
     const profileId = await seedProfileFF("kds");
-    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Pantalla",
       profileId,
       stationId: station.id,
@@ -791,7 +809,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -855,7 +873,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
     //    under its id and attributed to the logged-in operator.
-    const after = await withTransaction(suite.admin, async (tx) => {
+    const after = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return {
         registros: await tx.select().from(registrosFacturacion),
@@ -895,7 +913,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(replayTicket.tender).toEqual({ method: "cash", change: "2.00" });
 
     // Still exactly ONE record — the replay filed nothing.
-    const stillOne = await withTransaction(suite.admin, async (tx) => {
+    const stillOne = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -908,77 +926,68 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 // row by id, PRE-CHECKS the provider is connected, then drives the reader's provider
 // (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
 // network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
-// capture/decline genuinely round-trips the adapter rather than being stubbed. Real Postgres for the
-// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering need
-// a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
-// the cookieless refusal is hermetic, in `till-api.test.ts`.
+// capture/decline genuinely round-trips the adapter rather than being stubbed. These cases reached
+// this engine needing a second, non-superuser connection for the provider's own ledger writes; that
+// subject is gone with the roles (see the file header) and what is left is the reader ROUTING —
+// which reader a collect drives, and which id lands on `payments.reader_id`. The cookieless refusal
+// is hermetic, in `till-api.test.ts`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const reader = await seedReader();
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      const workingOrderId = randomUUID();
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(200);
-      const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
-      expect(outcome.outcome).toBe("captured");
-      expect(outcome.ticket?.total).toBe("1.50");
-      // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
-      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(200);
+    const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
+    expect(outcome.outcome).toBe("captured");
+    expect(outcome.ticket?.total).toBe("1.50");
+    // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
+    expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
   it("a request readerId OVERRIDES the device default, and stamps that reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const dflt = await seedReader({ name: "Default" });
-      const other = await seedReader({ name: "Other" });
-      await setDefaultReader(deviceIdOf(deviceCookie), dflt.id);
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const dflt = await seedReader({ name: "Default" });
+    const other = await seedReader({ name: "Other" });
+    await setDefaultReader(deviceIdOf(deviceCookie), dflt.id);
 
-      const workingOrderId = randomUUID();
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: workingOrderId,
-          readerId: other.id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        readerId: other.id,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(200);
-      expect((await payRes.json()).outcome).toBe("captured");
-      // The OVERRIDE reader was charged and stamped, not the default.
-      expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(200);
+    expect((await payRes.json()).outcome).toBe("captured");
+    // The OVERRIDE reader was charged and stamped, not the default.
+    expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
   });
 
   it("two active readers on ONE provider: two sales route each to its OWN providerRef (not the first)", async () => {
@@ -989,41 +998,36 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // records the reader id `processPaymentIntent` drove, in order — assert the two DISTINCT refs.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const client = new FakeStripe();
-      const app = new Hono();
-      // One pool, one FakeStripe: the pay path calls `pool.get("stripe")` for BOTH sales and must get
-      // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const readerA = await seedReader({ name: "Reader A" });
-      const readerB = await seedReader({ name: "Reader B" });
+    const client = new FakeStripe();
+    const app = new Hono();
+    // One pool, one FakeStripe: the pay path calls `pool.get("stripe")` for BOTH sales and must get
+    // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const readerA = await seedReader({ name: "Reader A" });
+    const readerB = await seedReader({ name: "Reader B" });
 
-      const pay = async (readerId: string): Promise<void> => {
-        const res = await app.request("/api/pay", {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-          body: JSON.stringify({
-            id: randomUUID(),
-            readerId,
-            lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          }),
-        });
-        expect(res.status).toBe(200);
-        expect((await res.json()).outcome).toBe("captured");
-      };
+    const pay = async (readerId: string): Promise<void> => {
+      const res = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          id: randomUUID(),
+          readerId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).outcome).toBe("captured");
+    };
 
-      await pay(readerA.id);
-      await pay(readerB.id);
+    await pay(readerA.id);
+    await pay(readerB.id);
 
-      // Each sale drove ITS reader's vendor ref — not readerA's twice (the bug's signature).
-      expect(client.processedReaders).toEqual([readerA.providerRef, readerB.providerRef]);
-    } finally {
-      await providerDb.close();
-    }
+    // Each sale drove ITS reader's vendor ref — not readerA's twice (the bug's signature).
+    expect(client.processedReaders).toEqual([readerA.providerRef, readerB.providerRef]);
   });
 
   it("a resolvePending sweep tick BEFORE the first sale does not break the subsequent sale (no 500)", async () => {
@@ -1035,65 +1039,55 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // captures cleanly.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const pool = fakePool(cfg, providerDb, new FakeStripe());
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const reader = await seedReader();
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const pool = fakePool(cfg, new FakeStripe());
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
-      // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
-      const swept = await pool.get("stripe");
-      await swept.resolvePending(new Date());
+    // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
+    // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
+    const swept = await pool.get("stripe");
+    await swept.resolvePending(new Date());
 
-      const workingOrderId = randomUUID();
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(200); // not a 500
-      expect((await payRes.json()).outcome).toBe("captured");
-      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(200); // not a 500
+    expect((await payRes.json()).outcome).toBe("captured");
+    expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
   it("a device with no default reader and no request readerId is reader.not_found", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
 
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: randomUUID(),
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(404);
-      expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(404);
+    expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
   });
 
   it("a reader whose provider has NO sealed credential is reader.provider_disconnected (not a decline)", async () => {
@@ -1102,143 +1096,123 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // actionable `reader.provider_disconnected` (409) instead of a misleading 200 declined.
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      const reader = await seedReader(); // active reader, but provider not connected
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const reader = await seedReader(); // active reader, but provider not connected
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: randomUUID(),
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(409);
-      expect(await payRes.json()).toMatchObject({
-        error: { code: "reader.provider_disconnected" },
-      });
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(409);
+    expect(await payRes.json()).toMatchObject({
+      error: { code: "reader.provider_disconnected" },
+    });
   });
 
   it("returns 200 { outcome: 'declined' } on a decline — NOT a 4xx, and files nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const client = new FakeStripe();
-      client.declineNext();
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const reader = await seedReader();
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const client = new FakeStripe();
+    client.declineNext();
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, client)), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      const workingOrderId = randomUUID();
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
 
-      expect(payRes.status).toBe(200);
-      expect(await payRes.json()).toEqual({ outcome: "declined" });
+    expect(payRes.status).toBe(200);
+    expect(await payRes.json()).toEqual({ outcome: "declined" });
 
-      const after = await withTransaction(suite.admin, async (tx) => {
-        await asAppUser(tx);
-        return {
-          registros: await tx.select().from(registrosFacturacion),
-          wo: await tx
-            .select({ status: workingOrders.status })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, workingOrderId)),
-        };
-      });
-      expect(after.registros).toHaveLength(0);
-      expect(after.wo).toEqual([{ status: "open" }]);
-    } finally {
-      await providerDb.close();
-    }
+    const after = await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      return {
+        registros: await tx.select().from(registrosFacturacion),
+        wo: await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, workingOrderId)),
+      };
+    });
+    expect(after.registros).toHaveLength(0);
+    expect(after.wo).toEqual([{ status: "open" }]);
   });
 
   it("demo/prepare drives the local simulator and stamps NO reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      // The demo/prepare shape: `deps.cardProvider` is the local simulator (no pool, no reader row).
-      const app = new Hono();
-      mountTillApi(
-        app,
-        {
-          db: suite.admin,
-          backend,
-          clock,
-          cfg,
-          secureCookies: false,
-          venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb),
-        },
-        noopLog,
-      );
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    // The demo/prepare shape: `deps.cardProvider` is the local simulator (no pool, no reader row).
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg,
+        secureCookies: false,
+        venueLocale: cfg.locale,
+        cardProvider: new SimulatorPaymentProvider(suite.db),
+      },
+      noopLog,
+    );
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
-      const workingOrderId = randomUUID();
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          simulationOutcome: "captured",
-        }),
-      });
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        simulationOutcome: "captured",
+      }),
+    });
 
-      expect(payRes.status).toBe(200);
-      expect((await payRes.json()).outcome).toBe("captured");
-      // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
-      expect(await readerIdOnPayment(workingOrderId)).toBeNull();
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(200);
+    expect((await payRes.json()).outcome).toBe("captured");
+    // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
+    expect(await readerIdOnPayment(workingOrderId)).toBeNull();
   });
 
   it("still 400s an empty walk-up basket — a genuine fault, mapped through run, not a payment outcome", async () => {
     const { cfg, operatorId } = await setupVenue();
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      await connectStripe();
-      const reader = await seedReader();
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({ id: randomUUID(), lines: [] }),
-      });
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+    });
 
-      expect(payRes.status).toBe(400);
-      expect(await payRes.json()).toMatchObject({ error: { code: "sale.empty_basket" } });
-    } finally {
-      await providerDb.close();
-    }
+    expect(payRes.status).toBe(400);
+    expect(await payRes.json()).toMatchObject({ error: { code: "sale.empty_basket" } });
   });
 });
 
@@ -1247,88 +1221,73 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 describe("GET /api/till (per-device card provider, over HTTP)", () => {
   it("maps the device's default reader provider to the till union and lists active readers", async () => {
     const { cfg } = await setupVenue();
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      const reader = await seedReader(); // provider "stripe"
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const reader = await seedReader(); // provider "stripe"
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as {
-        cardProvider: string;
-        defaultReaderId: string;
-        activeReaders: { id: string; name: string; provider: string }[];
-      };
-      // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
-      expect(body.cardProvider).toBe("stripe_terminal");
-      // The default reader's OWN id (Task 17) — needed to name it in `activeReaders` below, since
-      // `cardProvider` alone only names the provider TYPE, not which reader on it is the default.
-      expect(body.defaultReaderId).toBe(reader.id);
-      expect(body.activeReaders).toEqual([
-        { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
-      ]);
-    } finally {
-      await providerDb.close();
-    }
+    const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      cardProvider: string;
+      defaultReaderId: string;
+      activeReaders: { id: string; name: string; provider: string }[];
+    };
+    // "stripe" → "stripe_terminal" (the till's closed union), never the raw seat id.
+    expect(body.cardProvider).toBe("stripe_terminal");
+    // The default reader's OWN id (Task 17) — needed to name it in `activeReaders` below, since
+    // `cardProvider` alone only names the provider TYPE, not which reader on it is the default.
+    expect(body.defaultReaderId).toBe(reader.id);
+    expect(body.activeReaders).toEqual([
+      { id: reader.id, name: "Front counter", provider: "stripe_terminal" },
+    ]);
   });
 
   it("a device with no default reader gets cardProvider 'none'", async () => {
     const { cfg } = await setupVenue();
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
-      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.cardProvider).toBe("none");
-      expect(body.defaultReaderId).toBeUndefined();
-    } finally {
-      await providerDb.close();
-    }
+    const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cardProvider).toBe("none");
+    expect(body.defaultReaderId).toBeUndefined();
   });
 
   it("a demo/prepare till surfaces the simulator regardless of any reader", async () => {
     const { cfg } = await setupVenue();
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(
-        app,
-        {
-          db: suite.admin,
-          backend,
-          clock,
-          cfg,
-          secureCookies: false,
-          venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb),
-        },
-        noopLog,
-      );
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      const reader = await seedReader();
-      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg,
+        secureCookies: false,
+        venueLocale: cfg.locale,
+        cardProvider: new SimulatorPaymentProvider(suite.db),
+      },
+      noopLog,
+    );
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
-      const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      // Practice mode wins over any configured reader.
-      expect(body.cardProvider).toBe("simulator");
-      // The real reader's id stays hidden too — there is no reader behind the local simulator.
-      expect(body.defaultReaderId).toBeUndefined();
-    } finally {
-      await providerDb.close();
-    }
+    const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Practice mode wins over any configured reader.
+    expect(body.cardProvider).toBe("simulator");
+    // The real reader's id stays hidden too — there is no reader behind the local simulator.
+    expect(body.defaultReaderId).toBeUndefined();
   });
 });
 
-// Drive place, prep, advance and collect through the same venue on PostgreSQL.
+// Drive place, prep, advance and collect through the same venue.
 // In ticket_then_pay mode, collect files the sale through the real fiscal backend.
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
@@ -1336,7 +1295,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     // Flip this venue's location to `ticket_then_pay` (Mode T) — `setupVenue` provisions the DEFAULT
     // `prepay`, so both the DB column and the in-memory cfg are updated together, the same two-part
     // flip `working-order.pg.test.ts`'s `modeVenue` makes.
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
     );
     const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
@@ -1370,7 +1329,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(placed.status).toBe(200);
     expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
 
-    const noSaleYet = await withTransaction(suite.admin, async (tx) => {
+    const noSaleYet = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales);
     });
@@ -1487,7 +1446,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(groupsReady.find((g) => g.orderId === workingOrderId)!.items[0]!.state).toBe("ready");
 
     // 5. COLLECT: Mode T files `recordSale` IMMEDIATE here, placed → settled — the genuine chained
-    // fiscal write this real-Postgres suite exists to prove.
+    // fiscal write this suite exists to prove.
     const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -1500,7 +1459,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
 
-    const after = await withTransaction(suite.admin, async (tx) => {
+    const after = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
@@ -1605,9 +1564,9 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
 // KDS-1 collect fix — the Mode-P counter handover. A settled walk-up fired to the kitchen and walked to
 // `ready` is handed to the customer via POST /api/orders/:id/collect — the NON-FISCAL marker that stamps
 // `collected_at` and drops the order off the station display (the very thing the regression made
-// impossible: a settled order was immutable, so a fired Mode-P order lingered forever). Real Postgres,
-// because it needs a genuine fiscal settle (`POST /api/sales`, Mode P's walk-up) plus the 0056
-// enforce_transition relaxation — neither of which the hermetic stub `FiscalBackend` can exercise.
+// impossible: a settled order was immutable, so a fired Mode-P order lingered forever). It needs a
+// genuine fiscal settle (`POST /api/sales`, Mode P's walk-up) plus the 0056 enforce_transition
+// relaxation — neither of which the hermetic stub `FiscalBackend` can exercise.
 describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
   it("hands over a fired, ready order: 200, collected_at stamped, off the station queue; a still-OPEN order is refused working_order.not_settled", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
@@ -1669,10 +1628,16 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     expect(collect.status).toBe(200);
 
     // collected_at is stamped (direct witness) AND the order is GONE from the station queue.
-    const [wo] = await withTransaction(suite.admin, async (tx) => {
+    const [wo] = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
-        .select({ collected: sql<boolean>`collected_at is not null`, status: workingOrders.status })
+        .select({
+          // `.mapWith(Boolean)` because `sql<boolean>` is a TypeScript cast and not a read mapping:
+          // without it this expression arrives as the number 1, which `toEqual` separates from
+          // `true`. Measured both ways on this file, 2026-09-22.
+          collected: sql`collected_at is not null`.mapWith(Boolean),
+          status: workingOrders.status,
+        })
         .from(workingOrders)
         .where(eq(workingOrders.id, workingOrderId));
     });
@@ -1700,9 +1665,9 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 });
 
 // A handheld can file cash and manual-card sales. Receipt, integrated-payment and drawer actions
-// require their profile capabilities; prep mutations retain the handheld restriction.
-// Real PostgreSQL exercises device lookup and fiscal writes as app_user; PGlite's default
-// superuser cannot establish that the deployment role holds the required grants.
+// require their profile capabilities; prep mutations retain the handheld restriction. These cases
+// drive real device lookup and real chained fiscal writes; nothing here is about privileges any
+// more (see the file header).
 describe("handheld sales and device capability gates", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — a handheld form factor binds none — it is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The
@@ -1715,7 +1680,7 @@ describe("handheld sales and device capability gates", () => {
     // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
     // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
     const profileId = await seedProfileFF("phone-portrait", capabilities);
-    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId,
       registerId: cfg.tillId,
@@ -1798,7 +1763,7 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
@@ -1828,7 +1793,7 @@ describe("handheld sales and device capability gates", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const opens = await suite.admin.execute(sql`select id from drawer_opens `);
+    const opens = await suite.db.execute(sql`select id from drawer_opens `);
     expect(opens.rows).toHaveLength(0);
 
     const ticket = await res.json();
@@ -1839,7 +1804,7 @@ describe("handheld sales and device capability gates", () => {
     // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
     // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
     // separate device metadata; it never keys the chain.
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -1887,7 +1852,7 @@ describe("handheld sales and device capability gates", () => {
     // chain-opening shape the handheld cash parity test above asserts (own tenant, node = cfg.nodeId — the
     // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
-    const registros = await withTransaction(suite.admin, async (tx) => {
+    const registros = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
@@ -1902,9 +1867,9 @@ describe("handheld sales and device capability gates", () => {
 
     // The manual-card side effect a cash sale does NOT have: exactly one CAPTURED `payments` row for the
     // sale, under the sentinel `manual` provider with a freshly minted `manual-…` ref — no reader, no
-    // network call (`recordManualCardPayment` commits inline in the sale transaction). Read on the
-    // superuser admin — the `paymentsFor`/`paymentCount` shape in `working-order.pg.test.ts`.
-    const paymentRows = await suite.admin.execute<{
+    // network call (`recordManualCardPayment` commits inline in the sale transaction). Every column
+    // read here is text, so the raw read needs no drizzle mapper.
+    const paymentRows = await suite.db.execute<{
       provider: string;
       state: string;
       payment_ref: string;
@@ -1979,12 +1944,12 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // Author a capability-less handheld device profile and enrol a device bound to it.
-    const [prof] = await suite.admin
+    const [prof] = await suite.db
       .insert(deviceProfiles)
       .values({ name: "Waiter phone", formFactor: "phone-portrait", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     const deviceProfileId = prof!.id;
-    const dev = await enrolDeviceForTest(suite.admin, cfg, {
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Waiter phone",
       profileId: deviceProfileId,
       registerId: cfg.tillId,
@@ -2013,10 +1978,10 @@ describe("handheld sales and device capability gates", () => {
     const { cfg, available, operatorId } = await setupVenue();
     // Flip to invoice-first (Mode I), so PLACE files the DEFERRED chained invoice — the fiscal write the
     // firewall protects. Same two-part flip (DB column + in-memory cfg) the Mode-T test above makes.
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
     );
-    await suite.admin.execute(sql`
+    await suite.db.execute(sql`
       update departments set default_service_mode = 'invoice_first'
       where location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
@@ -2049,7 +2014,7 @@ describe("handheld sales and device capability gates", () => {
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
-    const afterRefused = await withTransaction(suite.admin, async (tx) => {
+    const afterRefused = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -2065,7 +2030,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(placed.status).toBe(200);
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const afterPlaced = await withTransaction(suite.admin, async (tx) => {
+    const afterPlaced = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -2076,7 +2041,7 @@ describe("handheld sales and device capability gates", () => {
     const { cfg, available, operatorId } = await setupVenue();
     // Mode T (ticket_then_pay): COLLECT files `recordSale` immediate — the chained write. PLACE files
     // nothing under Mode T, so the pre-collect setup writes no fiscal record.
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
     );
     const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
@@ -2115,7 +2080,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const afterRefused = await withTransaction(suite.admin, async (tx) => {
+    const afterRefused = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -2132,7 +2097,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(collect.status).toBe(200);
     expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const after = await withTransaction(suite.admin, async (tx) => {
+    const after = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
@@ -2187,7 +2152,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const stillPlaced = await withTransaction(suite.admin, async (tx) => {
+    const stillPlaced = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2203,7 +2168,7 @@ describe("handheld sales and device capability gates", () => {
       body: JSON.stringify({ reason: "customer left" }),
     });
     expect(cancelled.status).toBe(200);
-    const abandoned = await withTransaction(suite.admin, async (tx) => {
+    const abandoned = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2218,7 +2183,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const { cfg, catalogueId, available, operatorId } = await setupVenue();
   const product = available.find((item) => item.pricingUnit === "each")!;
   const { extraListId, quesoId, optionListId, labelId } = await withTransaction(
-    suite.admin,
+    suite.db,
     async (tx) => {
       await asAppUser(tx);
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
@@ -2282,7 +2247,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const profileId = await seedProfileFF("till", ["print-receipt"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
-  const printerId = await withTransaction(suite.admin, async (tx) => {
+  const printerId = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const printer = await createPrinter(tx, cfg, {
       name: "Modifier receipts",
@@ -2313,7 +2278,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // The dish's line carries the answer it froze; the extras pick is a child line of its own and
   // answers nothing. The default content language keys the staff-name maps, so it is read back from
   // the venue rather than assumed.
-  const { defaultLanguage } = await withTransaction(suite.admin, async (tx) => {
+  const { defaultLanguage } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return readContentLanguages(tx, cfg.locale);
   });
@@ -2349,19 +2314,23 @@ it("files an extras pick and an options answer through cash checkout and reprint
     { rate: "21.00", base: "2.48", tax: "0.52" },
     { rate: "10.00", base: "1.27", tax: "0.13" },
   ]);
-  const stored = await withTransaction(suite.admin, async (tx) => {
+  const stored = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     // `quantity` and `vat_rate` are whole numbers at their own scales — thousandths and basis
-    // points — read as text so the assertion pins the stored counts.
-    const rows = await tx.execute<{
-      quantity: string;
-      vat_rate: string;
-      unit_name: Record<string, string> | null;
-      unit_precision: number | null;
-    }>(sql`select cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate, unit_name, unit_precision
-             from sale_lines order by line_no`);
+    // points — read as text so the assertion pins the stored counts. `unit_name` comes off the
+    // table definition rather than a raw `select` for the reason the weighed-line read above
+    // states: a raw read of a `json` column returns the stored TEXT.
+    const rows = await tx
+      .select({
+        quantity: sql<string>`cast(${saleLines.quantity} as text)`,
+        vat_rate: sql<string>`cast(${saleLines.vatRate} as text)`,
+        unit_name: saleLines.unitName,
+        unit_precision: saleLines.unitPrecision,
+      })
+      .from(saleLines)
+      .orderBy(saleLines.lineNo);
     const records = await tx.select().from(registrosFacturacion);
-    return { rows: rows.rows, records };
+    return { rows, records };
   });
   expect(stored.rows).toEqual([
     {
@@ -2381,7 +2350,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
   // The options answer IS frozen, on the DISH's working-order line, with the list's and the label's
   // names copied by value; the child line answers nothing of its own.
-  const frozen = await withTransaction(suite.admin, async (tx) => {
+  const frozen = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({ optionSnapshots: workingOrderLines.optionSnapshots })
@@ -2392,7 +2361,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   expect(frozen).toEqual([{ optionSnapshots: [frozenAnswer] }, { optionSnapshots: [] }]);
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
   // sale froze, never the catalogue's current ones.
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await updateProduct(tx, quesoId, { name: "Manchego" });
   });
@@ -2411,7 +2380,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     headers,
   });
   expect(reprint.status, await reprint.clone().text()).toBe(200);
-  const printed = await withTransaction(suite.admin, async (tx) => {
+  const printed = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ payload: Buffer }>(
       sql`select payload from print_jobs where printer_id=${printerId} and kind='document'`,
@@ -2430,7 +2399,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // and label stored no customer text, so the staff names are what a diner reads.
   expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
-  const recordCount = await withTransaction(suite.admin, async (tx) => {
+  const recordCount = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
   });

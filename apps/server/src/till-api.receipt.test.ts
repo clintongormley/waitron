@@ -31,7 +31,8 @@ import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { preparationRoutes } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -49,13 +50,21 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
-// REAL Postgres, not PGlite: the manual reprint + drawer-open routes read a GENUINE chained fiscal
-// sale back and enqueue paper through the app role (CLAUDE.md §4 — PGlite runs every connection as a
-// superuser holding every grant). Setup mirrors `till-api.pg.test.ts` (a provisioned
-// venue + a seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
+// The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
+// back and paper enqueued for it. Setup mirrors `till-api.pg.test.ts` (a provisioned venue + a
+// seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
 // receipt-printer config helpers from `receipt-print.test.ts`.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template, and its header opened by claiming REAL Postgres over PGlite because these
+// routes write through the app role. That role no longer exists: every `asAppUser(tx)` call below is
+// inert (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep, so nothing here
+// establishes what an application role may read or write.
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -83,8 +92,10 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique and tenants
-// accumulate for the shared container's life).
+// A fresh NIF per venue that nothing in this file now depends on: each test provisions its own, and
+// `useVenueDb`'s per-test reset empties `tenants` first, so the unique index this dodges
+// (`tenants_country_tax_id_key`, `packages/db/drizzle/0000_baseline.sql:38`) is never met twice.
+// Pinning it to one constant left all 29 cases passing (measured 2026-09-22).
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -151,11 +162,11 @@ async function setupVenue(): Promise<{
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { each, operatorId, supervisorId } = await withTransaction(suite.admin, async (tx) => {
+  const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -218,7 +229,7 @@ async function setupVenue(): Promise<{
 
 function apiDeps(cfg: TillConfig): TillApiDeps {
   return {
-    db: suite.admin,
+    db: suite.db,
     backend,
     clock,
     cfg,
@@ -230,7 +241,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 /** Create a `cloud_poll` receipt printer (no agent needed — the enqueue is a pure INSERT, so no
  *  transport is ever touched on these routes) and return its id. */
 async function makePrinter(cfg: TillConfig): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
@@ -247,7 +258,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -268,7 +279,7 @@ async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -291,7 +302,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   }[]
 > {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -309,7 +320,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
 /** Set the location's `drawer_open_policy` ('gated' | 'open') directly (the app role holds UPDATE on
  *  locations). The column defaults to 'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await tx
       .update(locations)
@@ -320,7 +331,7 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 
 async function registroCount(cfg: TillConfig): Promise<number> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return (await tx.select().from(registrosFacturacion)).length;
   });
@@ -328,7 +339,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 
 async function saleCount(cfg: TillConfig): Promise<number> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return (await tx.select({ id: sales.id }).from(sales)).length;
   });
@@ -362,11 +373,11 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   // auto-creates the register it rings against, so the resolved sale till is this device's own.
   // `device_profiles.id`, `.created_at` and `.updated_at` are `$defaultFn` generators on NOT NULL
   // columns (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`).
-  const [profile] = await suite.admin
+  const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Counter till profile ${n}`, formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
     profileId: profile!.id,
   });
@@ -402,7 +413,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -760,8 +771,13 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
       "/api/drawer/open",
       withOverride(cookie, { personId: "not-a-uuid", pin: "5555" }),
     );
-    // Screened as a UUID before it can reach the persons.id uuid column (a 22P02 → opaque 500) — mapped
-    // to the SAME person.not_found (401) a well-formed-but-absent id already gets.
+    // Screened as a UUID (`apps/server/src/till-api.ts`, `parseDrawerOverride`) and mapped to the SAME
+    // person.not_found (401) a well-formed-but-absent id already gets. The `22P02` this case is named
+    // for was the PostgreSQL consequence the screen was written against: `persons.id` is a text column
+    // here (`packages/identity/drizzle/0000_baseline.sql:46`), so a malformed id reaching the query
+    // would simply match no row. Deleting `!isUuid(raw.personId)` from that function leaves all 29
+    // cases in this file passing (measured 2026-09-22) — so this case now pins the CODE the route
+    // answers with, and nothing here still holds the screen itself up.
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "person.not_found" },
@@ -872,9 +888,9 @@ describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTT
 });
 
 afterEach(async () => {
-  await suite.admin.execute(sql`delete from management_sessions`);
-  await suite.admin.execute(sql`delete from sessions`);
-  await suite.admin.execute(sql`delete from persons`);
+  await suite.db.execute(sql`delete from management_sessions`);
+  await suite.db.execute(sql`delete from sessions`);
+  await suite.db.execute(sql`delete from persons`);
 });
 
 describe("original receipt and payment slip actions", () => {
@@ -931,7 +947,7 @@ describe("payment slip persisted capture facts", () => {
       const cookie = await login(app, cfg, operatorId);
       const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
       // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
-      await suite.admin.execute(
+      await suite.db.execute(
         sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
       );
       const res = await app.request(`/api/sales/${id}/payment-slip`, {
@@ -970,7 +986,7 @@ describe("payment slip persisted capture facts", () => {
   it("lays the payment slip out for the till printer's paper width and character set", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
@@ -982,7 +998,7 @@ describe("payment slip persisted capture facts", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
@@ -1048,9 +1064,9 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   const cookie = await login(app, cfg, operatorId);
   const id = await ringSale(app, cfg, cookie, each.menuItemId);
   const originalTaxId = (
-    await suite.admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`)
+    await suite.db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`)
   ).rows[0]!.tax_id;
-  await suite.admin.execute(
+  await suite.db.execute(
     sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
   );
   // Through the table definition: `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT
@@ -1058,7 +1074,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   // `receipt` is JSON in a text column, so the `::jsonb` cast the statement carried is both
   // unnecessary and a syntax error here. The row it writes is unchanged: the CURRENT receipt text,
   // which the reprint below must NOT read — it reprints the sale's own snapshot.
-  await suite.admin
+  await suite.db
     .insert(tenantReceipts)
     .values({
       id: 1,

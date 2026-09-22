@@ -1,8 +1,16 @@
+// The fiscal half of split-bill: paying a carved check files its own registro, the items partition
+// across the checks, and a repeated pay replays rather than files twice.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
+// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
+// what the deployment role, which no longer exists, may read or write.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -30,11 +38,13 @@ import { openTab, splitOffCheck } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// File chained fiscal records through app_user on PostgreSQL. Each case uses a
-// fresh venue; readback counts explicitly match that venue.
+// Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -63,8 +73,9 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same shape `till-sale.test.ts`'s `nextNif` uses.
+// Every provisioned venue gets its own NIF — the same shape `till-sale.test.ts`'s `nextNif` uses.
+// The tax id is unique across tenants, and a counter costs nothing whether or not the helper's
+// per-test reset has already emptied the table.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -131,11 +142,11 @@ async function setupVenue(): Promise<Seeded> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const seeded = await withTransaction(suite.admin, async (tx) => {
+  const seeded = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
@@ -168,7 +179,7 @@ async function setupVenue(): Promise<Seeded> {
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -239,7 +250,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -260,7 +271,7 @@ describe("split-bill: pay each check files its own registro", () => {
   it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 registros with contiguous numbers", async () => {
     const seeded = await setupVenue();
     const { cfg } = seeded;
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     // Origin tab (3× agua @21%, 0.300 kg jamón @10%) carved into 3 checks (design §3 "the 4 working
     // orders = 3 checks + emptied origin") — A = 1 agua + whole jamón (MIXED VAT); B, C = 1 agua each,
@@ -321,7 +332,7 @@ describe("split-bill: pay each check files its own registro", () => {
   it("partitions the items — every unit filed on exactly ONE check, quantity conserved, origin emptied", async () => {
     const seeded = await setupVenue();
     const { cfg } = seeded;
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     // Same 3-check split as above (DRY): A = 1 agua + whole jamón; B = 1 agua; C = 1 agua.
     const { tabId, a } = await splitIntoThreeChecks(seeded, deps);
@@ -386,7 +397,7 @@ describe("split-bill: pay each check files its own registro", () => {
 
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
     // Open a 2× agua tab and carve ONE agua onto a detached check — the working order under proof.
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "2" }] }),
