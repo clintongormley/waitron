@@ -4976,6 +4976,33 @@ now run.
 says in its own header that it scans `apps/server` only. Whatever step converts them should widen
 the guard to the package it converts, or the same thing happens again.
 
+**GAP TWELVE IS DONE — 2026-09-22, commit `6ddb1207`.** `packages/reporting` is 18 files of 20
+passing, 206 tests where 88 passed: 114 red→green, zero green→red by sorted name. Every replacement
+was measured against PGlite with a control in the other direction (the business day over 28,800
+instants; the filed date of issue over 960 instant/offset pairs; the period bounds over 68 pairs;
+per-line VAT rounding over 220 — the floating-point form is wrong in all 220). **Four losses named**:
+a business-day window crossing a daylight-saving change AT the cutover hour can differ (8 of 288,000,
+Europe/Madrid at 02:30, twice a year); the VAT aggregate no longer refuses an out-of-range filed
+amount; it returns one row per breakdown ELEMENT because the sum moved into exact Decimal arithmetic;
+and the business-day helpers no longer take a transaction. The residue guard now scans a named ROOTS
+list (its own package plus reporting's `src` and `test`), four proofs by deletion. **FIVE NEGATIVE
+CASES WERE PASSING VACUOUSLY** — they crafted PostgreSQL-shaped errors for `pgErrorCode`, which on
+this engine reads one code string for every failure, so each returned false for the wrong reason;
+rewritten against a measured refusal shape.
+
+**FOUR MORE GAPS, from the same conversion.** Fifteenth: **48 `.pg.test.ts` files tree-wide have no
+harness on this branch** (two of them in reporting, left alone because another seat's header records
+their SQL as deliberately unconverted) — convert, delete or gate is a branch-level decision, and it
+is step 27's. Sixteenth: **`pgErrorCode`/`pgErrorMessage` rot is not confined to reporting** — every
+package that crafts a SQLSTATE-shaped error object to test a refusal may be passing vacuously, and
+the five found here were found only because someone re-ran them. Seventeenth: `minutesSince` is
+duplicated in `apps/server/src/working-order.ts` and `packages/reporting/src/overdue-orders.ts`; a
+third copy makes it `@waitron/shared`'s. Eighteenth: **the residue guard now reads two packages'
+trees from inside `apps/server`, and CI is scoped** — a pull request touching only
+`packages/reporting` does not run `apps/server`'s suite, so the guard would not run. CLAUDE.md §4
+says a guard that reads the whole tree belongs in the ROOT Vitest project, which the ungated `lint`
+job runs on every push; moving it there is the fix.
+
 **A FOURTEENTH GAP — found 2026-09-22. `waitron-break-glass` cannot be BUILT.**
 `apps/server/src/bin-break-glass.ts` imports the removed `createPostgresDb`, so
 `pnpm --filter @waitron/server build` exits 1 at its sixth esbuild and four bundles are never
