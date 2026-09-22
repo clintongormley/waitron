@@ -1,14 +1,14 @@
--- The eight BEHAVIOURAL triggers this package carried under PostgreSQL, restored as SQLite triggers.
+-- The nine BEHAVIOURAL rules this package carried under PostgreSQL, restored as SQLite triggers.
 --
 -- Regenerating every migration set from the TypeScript schema for the storage switch dropped every
 -- hand-written trigger: a trigger has never been declarable in TypeScript, so all of them lived in
 -- `--custom` SQL and went with the regeneration. The eighteen APPEND-ONLY ones came back at runtime
 -- (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`, called from
--- `packages/migrations/src/apply.ts`, from names each module declares). These eight came back as
+-- `packages/migrations/src/apply.ts`, from names each module declares). These nine came back as
 -- nothing, and this file is where they come back.
 --
--- WHY ALL EIGHT ARE TRIGGERS AGAIN, rather than checks moved into the callers: each is a
--- database-level backstop that survives ANY caller, SQLite expresses all eight, and restoring them
+-- WHY ALL NINE ARE TRIGGERS AGAIN, rather than checks moved into the callers: each is a
+-- database-level backstop that survives ANY caller, SQLite expresses all nine, and restoring them
 -- as triggers preserves the behaviour exactly rather than moving a refusal into one code path and
 -- leaving every other path — a repair script, a future route, a restore — unguarded.
 --
@@ -16,7 +16,9 @@
 --
 --   1. SQLite has no `BEFORE INSERT OR UPDATE` — one trigger takes exactly one event. The three
 --      triggers that covered more than one event are split, keeping the PostgreSQL name as the base
---      and suffixing the event, so twelve names stand for eight rules.
+--      and suffixing the event, so fourteen names stand for nine rules. (The binding rule at the
+--      foot of this file arrived split ALREADY: PostgreSQL wrote it as two triggers of its own, for
+--      a reason that outlives the engine, and its names are unchanged.)
 --   2. PostgreSQL interpolated ids into its messages with `%` (`working order % cannot transition
 --      from % to %`). SQLite's `raise` takes a LITERAL only, so every message here is a fixed
 --      string. `packages/db/drizzle/0001_db_baseline_sql.sql` on `origin/main` has the originals.
@@ -36,8 +38,8 @@
 -- A refusal raised below arrives at `node:sqlite` as errcode 1811 (`SQLITE_CONSTRAINT_TRIGGER`)
 -- with `message` equal to the raise text. An `ON DELETE RESTRICT` refusal carries the SAME code
 -- with the message `FOREIGN KEY constraint failed`, so a caller that needs to tell them apart reads
--- the message, not the code. Guard: `scripts/behavioural-triggers.test.ts`, which pins all twelve
--- names AND tries a real offending write against each rule, with an accepting control beside it.
+-- the message, not the code. Guard: `scripts/behavioural-triggers.test.ts`, which pins every name
+-- AND tries a real offending write against each rule, with an accepting control beside it.
 
 -- A settlement's tenders must cover the sale: the sale's total, plus the SIGNED total of every
 -- rectificativa that corrects it (usually negative), plus the tips those tenders carried.
@@ -46,7 +48,8 @@
 -- `sales_assert_tenders_cover` returned early — "the sale itself was rolled back; nothing left to
 -- reconcile". The `exists` on the first line of the WHERE says so out loud, and it changes no
 -- outcome: deleted from this trigger, the whole suite in `scripts/behavioural-triggers.test.ts`
--- still passes 35/35 (measured 2026-09-22), because with no sale row `(SELECT total …)` is NULL,
+-- still passes in full (measured 2026-09-22, when it held 35 cases), because with no sale row
+-- `(SELECT total …)` is NULL,
 -- `<>` against NULL is NULL, and the WHERE is not satisfied. It is kept as a statement of intent,
 -- not as a condition anything rests on, and no test can tell it apart from its absence.
 --
@@ -329,4 +332,80 @@ BEGIN
     AND exists (
       SELECT 1 FROM devices d WHERE d.device_profile_id = new.id AND d.active <> 0
     );
+END;
+--> statement-breakpoint
+-- The BINDING RULE: a device's form factor — read from its PROFILE, never from a column on the
+-- device — decides what it binds. A `kds` device binds a kitchen station and no register; every
+-- other form factor binds a register and no station. No CHECK constraint can say this, because the
+-- deciding value lives in another table; it has always been a trigger.
+--
+-- TWO triggers for one rule, the file header's difference 1: SQLite takes one event per trigger.
+-- PostgreSQL split the same rule in two as well, and for a second reason that survives here — the
+-- UPDATE half is GATED. `requireDevice` touches `last_seen_at` on every authenticated request, and
+-- that UPDATE changes no binding column, so the gate is false and the `device_profiles` lookup
+-- never runs.
+--
+-- The gate is a `WHEN` rather than the body form the rest of this file uses: it decides WHETHER the
+-- rule runs at all and is shared by all three refusals below it, so in the bodies it would be the
+-- same four lines written three times. `is not` is SQLite's null-safe comparison, which is
+-- PostgreSQL's `IS DISTINCT FROM`, and `active` is a boolean column — an integer on this engine —
+-- so it is read against 0 rather than against a truthy value this file would have to assume.
+--
+-- The `old.active = 0 and new.active <> 0` disjunct re-validates a REACTIVATION, and without it
+-- this sequence lands an active device whose binding contradicts its profile: deactivate the
+-- device, change the profile's form factor (`device_profile_form_factor_locked` above permits that
+-- while no ACTIVE device references it), then switch the device back on. Guard: the reactivation
+-- case in `packages/db/src/schema/devices.trigger.pg.test.ts`.
+--
+-- The first refusal, on a `device_profile_id` naming no profile, is unreachable through the product:
+-- `devices.device_profile_id` is NOT NULL with an `ON DELETE RESTRICT` foreign key, and the store
+-- turns foreign keys on (`packages/store/src/index.ts:133`). It is kept because the rule must not
+-- rest on that — with the row missing, `form_factor` is NULL, and BOTH arms below compare against
+-- NULL and stay silent, so dropping this line would ACCEPT such a device rather than refuse it.
+-- `scripts/behavioural-triggers.test.ts` runs with `pragma foreign_keys = off` and is where it is
+-- exercised.
+--
+-- ENGINE DIFFERENCE, beyond the header's three: PostgreSQL enforced this with a pair of CONSTRAINT
+-- triggers that took `for share` on the profile row so a concurrent form-factor UPDATE serialised
+-- against an insert instead of racing it. There are no row locks here and nothing below takes one;
+-- what serialises two writers now is the venue file's write queue
+-- (`packages/store/src/write-queue.ts`). Nothing in this repository re-proves that claim for this
+-- rule — the concurrency case that made it was deleted with the PostgreSQL harness, as
+-- `packages/db/src/schema/device-profiles.trigger.pg.test.ts` records.
+CREATE TRIGGER device_binding_rule_insert
+BEFORE INSERT ON devices
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'device has no profile')
+  WHERE NOT exists (SELECT 1 FROM device_profiles p WHERE p.id = new.device_profile_id);
+
+  SELECT raise(abort, 'a kds device binds a station and no register')
+  WHERE (SELECT p.form_factor FROM device_profiles p WHERE p.id = new.device_profile_id) = 'kds'
+    AND (new.station_id IS NULL OR new.till_id IS NOT NULL);
+
+  SELECT raise(abort, 'a non-kds device binds a register and no station')
+  WHERE (SELECT p.form_factor FROM device_profiles p WHERE p.id = new.device_profile_id) <> 'kds'
+    AND (new.till_id IS NULL OR new.station_id IS NOT NULL);
+END;
+--> statement-breakpoint
+CREATE TRIGGER device_binding_rule_update
+BEFORE UPDATE ON devices
+FOR EACH ROW
+WHEN (
+  old.station_id IS NOT new.station_id
+  OR old.till_id IS NOT new.till_id
+  OR old.device_profile_id IS NOT new.device_profile_id
+  OR (old.active = 0 AND new.active <> 0)
+)
+BEGIN
+  SELECT raise(abort, 'device has no profile')
+  WHERE NOT exists (SELECT 1 FROM device_profiles p WHERE p.id = new.device_profile_id);
+
+  SELECT raise(abort, 'a kds device binds a station and no register')
+  WHERE (SELECT p.form_factor FROM device_profiles p WHERE p.id = new.device_profile_id) = 'kds'
+    AND (new.station_id IS NULL OR new.till_id IS NOT NULL);
+
+  SELECT raise(abort, 'a non-kds device binds a register and no station')
+  WHERE (SELECT p.form_factor FROM device_profiles p WHERE p.id = new.device_profile_id) <> 'kds'
+    AND (new.till_id IS NULL OR new.station_id IS NOT NULL);
 END;

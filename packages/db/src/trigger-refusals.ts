@@ -15,8 +15,8 @@
  * would stop being translated SILENTLY — `triggerRaised` compares by equality, so the caller would
  * simply never recognise the refusal again.
  *
- * Only the seven REFUSING triggers are here. `working_orders_clear_table_status` acts instead of
- * refusing and raises nothing, so it has no wording to pin.
+ * Every REFUSING trigger is here. `working_orders_clear_table_status` acts instead of refusing and
+ * raises nothing, so it has no wording to pin.
  */
 
 /** `sale_settlements_check_coverage`: the tenders do not add up to the sale plus corrections plus tips. */
@@ -40,3 +40,24 @@ export const VARIANT_LOCALES_REFUSAL = "variant_descriptions must carry exactly 
 /** `device_profile_form_factor_locked`: an active device still depends on the profile's form factor. */
 export const FORM_FACTOR_REFUSAL =
   "cannot change form factor of a profile in use by an active device";
+
+/**
+ * `device_binding_rule_*`: the device's `device_profile_id` names no profile.
+ *
+ * Unreachable through the product — the column is NOT NULL behind an `ON DELETE RESTRICT` foreign
+ * key and the store turns foreign keys on — and kept because the rule must not rest on that: with
+ * the profile row missing, `form_factor` is NULL and neither arm below fires, so the device would
+ * be ACCEPTED rather than refused.
+ */
+export const MISSING_PROFILE_REFUSAL = "device has no profile";
+
+/** `device_binding_rule_*`: a `kds` device bound to no station, or to a register as well. */
+export const KDS_BINDING_REFUSAL = "a kds device binds a station and no register";
+
+/**
+ * `device_binding_rule_*`: any other form factor bound to no register, or to a station as well.
+ *
+ * PostgreSQL named the offending form factor in this message; SQLite's `raise` takes a literal, so
+ * the words say `non-kds` instead of the value.
+ */
+export const REGISTER_BINDING_REFUSAL = "a non-kds device binds a register and no station";

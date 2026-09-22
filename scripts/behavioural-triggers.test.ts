@@ -10,22 +10,26 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
 import {
   COVERAGE_REFUSAL,
   FORM_FACTOR_REFUSAL,
+  KDS_BINDING_REFUSAL,
   LOCALES_REFUSAL,
+  MISSING_PROFILE_REFUSAL,
   OPEN_PARENT_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
+  REGISTER_BINDING_REFUSAL,
   TRANSITION_REFUSAL,
   VARIANT_LOCALES_REFUSAL,
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
- * The eight BEHAVIOURAL triggers `packages/db` carried under PostgreSQL still refuse — or still
- * act — against a database the PRODUCT migrated.
+ * The nine BEHAVIOURAL rules `packages/db` carried under PostgreSQL still refuse — or still act —
+ * against a database the PRODUCT migrated.
  *
  * These are the database-level backstops that are not append-only: a settlement's tender coverage,
  * a tender after settlement, a working order's status transitions, lines written against an order
- * that is not open, a line's description maps matching the venue's invoice locales, and a device
- * profile's form factor while an active device uses it — plus the one that ACTS rather than
- * refuses, clearing a dining table's service status when its tab closes. They were hand-written
+ * that is not open, a line's description maps matching the venue's invoice locales, a device
+ * profile's form factor while an active device uses it, and a device's station-or-register binding
+ * against its profile's form factor — plus the one that ACTS rather than refuses, clearing a dining
+ * table's service status when its tab closes. They were hand-written
  * `--custom` SQL, a trigger has never been declarable in TypeScript, and regenerating every
  * migration set from the schema for the storage switch dropped all of them. They are restored by
  * `packages/db/drizzle/0001_behavioural_triggers.sql`.
@@ -59,9 +63,11 @@ import {
 /**
  * Every behavioural trigger the migration creates, pinned by name.
  *
- * TWELVE names for EIGHT PostgreSQL triggers. SQLite has no `BEFORE INSERT OR UPDATE` — one
- * trigger takes exactly one event — so the three that covered more than one event are split, and
- * the suffix names the event. The split is the engine's; the rules are unchanged.
+ * FOURTEEN names for NINE rules. SQLite has no `BEFORE INSERT OR UPDATE` — one trigger takes
+ * exactly one event — so the three that covered more than one event are split, and the suffix names
+ * the event. That split is the engine's; the rules are unchanged. The binding rule's two names are
+ * PostgreSQL's own: it split that one itself, so that an UPDATE touching no binding column never
+ * pays for the profile lookup.
  */
 /**
  * The other triggers a fully migrated venue carries, and why they are named here.
@@ -85,6 +91,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
 ];
 
 const EXPECTED_TRIGGERS = [
+  "device_binding_rule_insert",
+  "device_binding_rule_update",
   "device_profile_form_factor_locked",
   "sale_settlements_check_coverage",
   "tenders_reject_post_settlement",
@@ -211,6 +219,7 @@ function seed(connection) {
     `insert into locations (id, name, invoice_locales, operation_description) ` +
       `values ('loc', 'Venue', '["es","ca"]', 'Restaurante')`,
     `insert into tills (id, location_id, name, created_at) values ('till', 'loc', 'Till 1', '${STAMP}')`,
+    `insert into tills (id, location_id, name, created_at) values ('till-2', 'loc', 'Till 2', '${STAMP}')`,
 
     // Working orders, one per case that changes an order's state.
     workingOrder("wo-open", "open"),
@@ -262,13 +271,35 @@ function seed(connection) {
     tender("tender-corrected", "sale-corrected", 700),
     `insert into sale_settlements (id, sale_id, settled_at) values ('ss-seed', 'sale-settled', '${STAMP}')`,
 
-    // Device profiles and one active device.
+    // A kitchen station, so the binding rule's kds arm has a valid station to accept.
+    `insert into kitchen_stations (id, location_id, name, created_at) ` +
+      `values ('station', 'loc', 'Pase', '${STAMP}')`,
+
+    // Device profiles and one active device. The device carries `till_id` because its profile's
+    // form factor is `till` and device_binding_rule_insert refuses that shape without one — this
+    // seed row is itself the rule's first accepting control.
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-used', 'Counter', 'till', '${STAMP}', '${STAMP}')`,
     `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
       `values ('dp-free', 'Spare', 'till', '${STAMP}', '${STAMP}')`,
-    `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
-      `values ('dev-active', 'loc', 'dp-used', 'Counter 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-active', 'loc', 'dp-used', 'till', 'Counter 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
+
+    // The binding rule's own profiles, separate from the two above so that attaching a device to
+    // one never changes what the form-factor drift guard's cases see.
+    `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
+      `values ('dp-bind-kds', 'Pase', 'kds', '${STAMP}', '${STAMP}')`,
+    `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
+      `values ('dp-bind-till', 'Caja', 'till', '${STAMP}', '${STAMP}')`,
+    // Valid rows to UPDATE into a bad shape, and one deactivated row for the reactivation case.
+    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-rebind', 'loc', 'dp-bind-till', 'till', 'Caja 2', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-heartbeat', 'loc', 'dp-bind-till', 'till', 'Caja 3', 'hash', 1, '${STAMP}', '${STAMP}')`,
+    `insert into device_profiles (id, name, form_factor, created_at, updated_at) ` +
+      `values ('dp-drift', 'Caja que deriva', 'till', '${STAMP}', '${STAMP}')`,
+    `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+      `values ('dev-off', 'loc', 'dp-drift', 'till', 'Caja 4', 'hash', 0, '${STAMP}', '${STAMP}')`,
   ];
   for (const statement of statements) connection.exec(statement);
 }
@@ -562,6 +593,140 @@ describe("working_orders_clear_table_status", () => {
   it("leaves it alone when the tab is only placed", () => {
     connection.exec(`update working_orders set status = 'placed' where id = 'wo-tab-placed'`);
     expect(statusOf("dt-stays")).toBe("status-busy");
+  });
+});
+
+describe("device_binding_rule_insert", () => {
+  it("refuses a kds device that binds no station", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-kds-bare', 'loc', 'dp-bind-kds', 'Pase 1', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(KDS_BINDING_REFUSAL);
+  });
+
+  it("refuses a kds device that also binds a register", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, station_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-kds-both', 'loc', 'dp-bind-kds', 'station', 'till', 'Pase 2', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(KDS_BINDING_REFUSAL);
+  });
+
+  it("refuses a non-kds device that binds no register", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-bare', 'loc', 'dp-bind-till', 'Caja 9', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(REGISTER_BINDING_REFUSAL);
+  });
+
+  it("refuses a non-kds device that also binds a station", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, station_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-both', 'loc', 'dp-bind-till', 'station', 'till', 'Caja 10', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(REGISTER_BINDING_REFUSAL);
+  });
+
+  // Reachable here and nowhere else: this file runs with `pragma foreign_keys = off`, and in the
+  // product the NOT NULL column behind an `ON DELETE RESTRICT` key cannot name a missing profile.
+  // Without this refusal the row would be ACCEPTED — `form_factor` is NULL, so neither arm fires.
+  it("refuses a device whose profile does not exist", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-ghost', 'loc', 'dp-missing', 'till', 'Fantasma', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(MISSING_PROFILE_REFUSAL);
+  });
+
+  it("raises through the trigger class, not through a foreign key", () => {
+    expect(
+      errcodeFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-kds-bare2', 'loc', 'dp-bind-kds', 'Pase 3', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBe(1811);
+  });
+
+  it("accepts a kds device bound to a station and no register", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, station_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-kds-ok', 'loc', 'dp-bind-kds', 'station', 'Pase 4', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts a non-kds device bound to a register and no station", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into devices (id, location_id, device_profile_id, till_id, label, token_hash, active, enrolled_at, created_at) ` +
+          `values ('dev-till-ok', 'loc', 'dp-bind-till', 'till', 'Caja 11', 'hash', 1, '${STAMP}', '${STAMP}')`,
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("device_binding_rule_update", () => {
+  it("refuses a stray station added to a register device", () => {
+    expect(
+      refusalFor(connection, `update devices set station_id = 'station' where id = 'dev-rebind'`),
+    ).toBe(REGISTER_BINDING_REFUSAL);
+  });
+
+  it("refuses a rebind onto a profile the binding contradicts", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update devices set device_profile_id = 'dp-bind-kds' where id = 'dev-rebind'`,
+      ),
+    ).toBe(KDS_BINDING_REFUSAL);
+  });
+
+  it("accepts a rebind onto another register", () => {
+    expect(
+      refusalFor(connection, `update devices set till_id = 'till-2' where id = 'dev-heartbeat'`),
+    ).toBeUndefined();
+  });
+
+  // The three cases below run in order: the drift is set up, then reactivation is refused, then the
+  // heartbeat on that same drifted row shows the gate is what decides WHETHER the rule runs.
+  it("lets an inactive device's profile drift (the drift guard blocks only ACTIVE devices)", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update device_profiles set form_factor = 'kds' where id = 'dp-drift'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses reactivating a device whose binding the drifted profile contradicts", () => {
+    expect(refusalFor(connection, `update devices set active = 1 where id = 'dev-off'`)).toBe(
+      KDS_BINDING_REFUSAL,
+    );
+  });
+
+  // `requireDevice` touches `last_seen_at` on every authenticated request. The row it runs against
+  // here is one the rule WOULD refuse, so an ungated trigger would refuse this write too — which is
+  // what makes this an assertion about the gate rather than about a row that was fine anyway.
+  it("says nothing about an update that touches no binding column", () => {
+    expect(
+      refusalFor(connection, `update devices set last_seen_at = '${STAMP}' where id = 'dev-off'`),
+    ).toBeUndefined();
   });
 });
 

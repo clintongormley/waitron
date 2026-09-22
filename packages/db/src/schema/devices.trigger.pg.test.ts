@@ -1,28 +1,19 @@
 /**
- * RED ON THIS BRANCH, AND NOT BY OVERSIGHT.
+ * The device BINDING RULE: a `kds`-profile device binds a kitchen station and no register, and every
+ * other form factor binds a register and no station. The deciding value — the profile's form factor
+ * — lives in another table, so no CHECK constraint can express it; the rule is two triggers,
+ * `device_binding_rule_insert` and `device_binding_rule_update`, in
+ * `packages/db/drizzle/0001_behavioural_triggers.sql`.
  *
- * This suite is the only thing that holds the device BINDING RULE: a `kds`-profile device binds a
- * kitchen station and no register, and every other form factor binds a register and no station. On
- * PostgreSQL that rule was two triggers, `device_binding_rule_insert` and
- * `device_binding_rule_update` (`packages/db/src/schema/devices.ts` still names them in its own
- * comments).
- *
- * **Neither trigger is in the SQLite migration set.** Regenerating every set from the schema
- * dropped every hand-written trigger, and `packages/db/drizzle/0001_behavioural_triggers.sql`
- * restored eight of them — the binding rule is not one of the eight, and
- * `scripts/behavioural-triggers.test.ts` pins that list by EQUALITY, so re-adding the trigger would
- * fail that guard until its list grows too. Measured 2026-09-22 against a database migrated with
- * `CORE_MIGRATIONS`: `select name from sqlite_master where type = 'trigger'` returns 28 names and
- * neither `device_binding_rule_insert` nor `device_binding_rule_update` is among them.
- *
- * So a `kds` device with no station, a till device with a stray station, and a device reactivated
- * onto an incompatible profile are all ACCEPTED by this database today. The cases below are left
- * asserting what they always asserted, and they fail. Restoring the trigger — or deciding the rule
- * moves into application code and deleting this file with that decision written down — is the
- * owner's call, not this conversion's.
+ * WHAT THIS SUITE ADDS to `scripts/behavioural-triggers.test.ts`, which pins the same two triggers
+ * by name and refuses a write against each arm: every case here goes through the DRIZZLE builder,
+ * so it is the shape the application writes — `id`, `enrolled_at` and `created_at` are `$defaultFn`
+ * columns applied CLIENT-side, and a rule that only held for hand-written SQL would pass there and
+ * fail here.
  *
  * The name still ends `.pg.test.ts`, and nothing here reaches PostgreSQL any more; the rename waits
- * on that same decision.
+ * on the same sweep as `asAppUser` and `pgErrorCode`
+ * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 25).
  */
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -185,6 +176,11 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     // requireDevice touches last_seen_at on every authenticated request. That UPDATE changes no
     // binding column, so the update trigger's condition is false and the device_profiles lookup
     // never runs — the performance point of the two-trigger split. It must succeed.
+    //
+    // This device's binding is VALID, so the case would pass with the gate deleted too. What
+    // separates the two is the same heartbeat run against a device the rule would refuse:
+    // `scripts/behavioural-triggers.test.ts`, "says nothing about an update that touches no binding
+    // column".
     await insertDevice({
       profileId: tillProfileId,
       stationId: null,
