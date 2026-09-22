@@ -61,6 +61,22 @@ export function appendOnly(table: string, cls: TableClass, reason: string): Clas
   return { table, class: cls, reason, appendOnly: true };
 }
 
+/**
+ * The tables {@link appendOnly} marked, in declaration order.
+ *
+ * One derivation, three readers, because the same list is needed in three unconnected places and a
+ * second `filter`/`map` written by hand is how two of them drift: `orderedMigrationSets`
+ * (`packages/module/src/module.ts`) builds the product's boot-path sets, each owning package's own
+ * migration descriptor carries it for a caller that migrates that set alone (a test helper does
+ * exactly that), and `installAppendOnlyTriggers` turns whichever list it is handed into triggers.
+ *
+ * Guard: `scripts/append-only-migration-sets.test.ts`, which compares a package's descriptor with
+ * this function's result over the package's own classification list.
+ */
+export function appendOnlyTablesIn(classifications: readonly ClassifiedTable[]): string[] {
+  return classifications.filter((c) => c.appendOnly === true).map((c) => c.table);
+}
+
 /** The physical table names in one class. No production consumer: the package barrel exports it and
  * this package's own test calls it, and nothing else in the tree does. Held because the split it
  * computes is live in the CLASS itself — the class decides which database FILE a table lives in

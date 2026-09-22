@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { installAppendOnlyTriggers } from "@waitron/store";
 import { openVenueDatabase, type Database, type VenueDatabase } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier } from "./identifiers.js";
@@ -10,9 +11,22 @@ import { assertSafeIdentifier } from "./identifiers.js";
 /** Setup budget for opening the files and applying the migration sets. */
 const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
+/**
+ * A migration set a suite hands over: what drizzle needs, plus what the set's own module declared
+ * append-only.
+ *
+ * `appendOnlyTables` is optional because a suite may hand over a folder no module owns — the two
+ * suites in this file's own test that pass `migrations: []` and build their tables in `setup` are
+ * that case. What a caller omitting it gets is a database where a ledger row can be rewritten,
+ * which is why the field is stated here rather than inferred from anything.
+ */
+export type VenueMigrationSet = MigrationOptions & {
+  readonly appendOnlyTables?: readonly string[];
+};
+
 export interface VenueDbOptions {
   /** Migration sets, applied in order. Cross-package ordering is the caller's to state. */
-  migrations: MigrationOptions[];
+  migrations: VenueMigrationSet[];
   /** Extra setup once migrated — installing a fake backend, seeding a fixture. */
   setup?: (db: Database) => Promise<void>;
   /** Override when a suite's own setup is slower than the default. */
@@ -166,7 +180,15 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     directory = await mkdtemp(join(tmpdir(), "waitron-venue-db-"));
     store = await openVenueDatabase(directory);
     db = store.venue;
-    for (const migrations of options.migrations) await runMigrations(db, migrations);
+    for (const migrations of options.migrations) {
+      await runMigrations(db, migrations);
+      // Inside the loop, immediately after this set migrated, for the reason
+      // `packages/migrations/src/apply.ts` states: `create trigger` needs the table to exist, so a
+      // single pass at the end would refuse the first set's tables if a later set threw. This is
+      // what makes a suite's database refuse what the box refuses — the product installs the same
+      // triggers from the same list in `applyMigrations`, which a suite does not go through.
+      installAppendOnlyTriggers(db, migrations.appendOnlyTables ?? []);
+    }
     if (options.setup !== undefined) await options.setup(db);
     // After setup so a fake backend's tables are in the delete set; the plan records only names and
     // trigger text, so setup's own seeded rows do not affect it.

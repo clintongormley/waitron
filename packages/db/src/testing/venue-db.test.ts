@@ -198,3 +198,90 @@ describe("after both of those suites finished", () => {
     expect(directories.map((directory) => existsSync(directory))).toEqual([false, false]);
   });
 });
+
+/**
+ * One row in `table`, with foreign keys and check constraints turned off so one generic value
+ * satisfies every column. The technique — and the reason for it — is
+ * `scripts/append-only-triggers.test.ts`'s: neither pragma touches TRIGGERS, which is what the
+ * cases below are about, and the control case runs under exactly the same two.
+ *
+ * Both pragmas are issued outside a transaction: inside one `pragma foreign_keys` is a silent no-op
+ * (measured on this branch, recorded on `packages/media/drizzle/0001_image_references.sql`).
+ */
+function seedOneRow(db: Database, table: string): void {
+  db.run(sql.raw("pragma foreign_keys = off"));
+  db.run(sql.raw("pragma ignore_check_constraints = on"));
+  const columns = db
+    .all<{ name: string; type: string; notnull: number; pk: number }>(
+      sql.raw(`pragma table_info("${table}")`),
+    )
+    .filter((column) => column.notnull === 1 || column.pk === 1);
+  const value = (type: string) => {
+    const declared = type.toUpperCase();
+    if (declared.includes("INT") || declared.includes("REAL") || declared.includes("NUM"))
+      return "1";
+    return declared.includes("BLOB") ? "x'00'" : "'1'";
+  };
+  db.run(
+    sql.raw(
+      `insert into "${table}" (${columns.map((c) => `"${c.name}"`).join(", ")}) ` +
+        `values (${columns.map((c) => value(c.type)).join(", ")})`,
+    ),
+  );
+}
+
+/**
+ * What the ENGINE said, or `undefined` if the statement was accepted.
+ *
+ * The engine's own words, never drizzle's: its wrapper message is
+ * `Failed to run the query '<the statement>'`, so a `toThrow(/sales is append-only/)` against the
+ * wrapper reads the STATEMENT it quoted and passes with no trigger installed at all — measured here
+ * on the way to this helper, and the same false-pass shape
+ * `scripts/append-only-triggers.test.ts` records for its own case.
+ */
+function refusalFor(db: Database, statement: string): string | undefined {
+  try {
+    db.run(sql.raw(statement));
+    return undefined;
+  } catch (error) {
+    const cause = error instanceof Error ? error.cause : undefined;
+    return cause instanceof Error
+      ? cause.message
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  }
+}
+
+/**
+ * A suite's database refuses what the box refuses: every table the migrated set's own module
+ * declared `appendOnly()` carries the refusal triggers.
+ *
+ * Why this is the helper's business and not the product's alone: the product installs them in
+ * `applyMigrations` (`packages/migrations/src/apply.ts`), which a suite does not go through — it
+ * hands `runMigrations` a folder and a table name. Without the install here, a test that rewrites a
+ * filed sale passes and proves nothing about the box, in the one area CLAUDE.md §5 says cannot be
+ * repaired afterwards.
+ */
+describe("a migrated set's append-only tables", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("refuses an update of a row in a table core declared append-only", () => {
+    seedOneRow(suite.db, "sales");
+    expect(refusalFor(suite.db, "update sales set locale = 'es-ES'")).toBe("sales is append-only");
+  });
+
+  it("refuses a delete", () => {
+    seedOneRow(suite.db, "sales");
+    expect(refusalFor(suite.db, "delete from sales")).toBe("sales is append-only");
+  });
+
+  // The control, in the other direction: a table nobody declared append-only takes both statements
+  // under the same two pragmas. Without it, a seeding failure would look like a refusal.
+  it("leaves a table nobody declared append-only writable", () => {
+    seedOneRow(suite.db, "tills");
+    suite.db.run(sql.raw("update tills set name = 'renamed'"));
+    suite.db.run(sql.raw("delete from tills"));
+    expect(count(suite.db, "tills")).toBe(0);
+  });
+});

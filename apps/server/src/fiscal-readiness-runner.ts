@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { openVenueDatabase, runMigrations, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
-import { migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
 import { nodeId, seriesId, tillId } from "@waitron/shared";
 import {
@@ -82,15 +82,19 @@ export async function submitFiscalReadiness(args: {
   // Its own venue DIRECTORY under the state root, retained between runs exactly as the single
   // PGlite directory was: the readiness sample is a real preproduction sale on a real chain, so it
   // must not share a file with the box's own venue and must survive a restart.
-  const store = await openVenueDatabase(join(args.stateDir, `fiscal-readiness-db-${testIdentity}`));
+  const directory = join(args.stateDir, `fiscal-readiness-db-${testIdentity}`);
+  // Through the product's own migrating path rather than set-by-set on this function's own handle,
+  // which is what it did before: `applyMigrations` is the one place that installs the append-only
+  // refusal triggers, and the sample here is a real preproduction sale on a real chain — so without
+  // it a filed record in this database could be rewritten while the box refuses it (CLAUDE.md §5).
+  // It takes the migration lock and opens its own handle, so it runs BEFORE this one is opened.
+  await applyMigrations(
+    directory,
+    migrationOptionsFor(orderedMigrationSets(args.modules), args.migrationsRoot ?? null),
+  );
+  const store = await openVenueDatabase(directory);
   const db = store.venue;
   try {
-    for (const migrations of migrationOptionsFor(
-      orderedMigrationSets(args.modules),
-      args.migrationsRoot ?? null,
-    )) {
-      await runMigrations(db, migrations);
-    }
     const venue = await testVenue(db, args.venue, args.modules);
     const secret = args.contribution.provisioningSecret;
     if (secret !== undefined) await secret.seal({ db, ring: args.ring }, args.secret);

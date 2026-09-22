@@ -6,7 +6,7 @@ import type { ChangeSource } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
-import type { ClassifiedTable } from "@waitron/sync-enrolment";
+import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
@@ -460,9 +460,7 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
   // caller's edit reach all of them.
   return ordered.map((m) => ({
     ...m.migrations,
-    appendOnlyTables: (m.classification ?? [])
-      .filter((entry) => entry.appendOnly === true)
-      .map((entry) => entry.table),
+    appendOnlyTables: appendOnlyTablesIn(m.classification ?? []),
   }));
 }
 

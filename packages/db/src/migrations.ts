@@ -1,4 +1,6 @@
 import { fileURLToPath } from "node:url";
+import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
+import { CORE_CLASSIFICATION } from "./classification.js";
 
 /**
  * This package's own migration set, in the same descriptor shape as
@@ -20,8 +22,16 @@ import { fileURLToPath } from "node:url";
  * second clause is the one that went stale: `packages/fiscal-verifactu/src/testing/postgres.ts` now
  * imports `CORE_MIGRATIONS` from `@waitron/db`, precisely what it said would not happen. Same
  * folder, same table, one definition.
+
+ * `appendOnlyTables` is the third field a caller needs and drizzle does not: the tables this set's
+ * own module declared `appendOnly()`. It travels WITH the set because that is the only level at
+ * which the list is true — the tables exist once this set has migrated and not before — so every
+ * caller that applies a set has what it needs to protect it, whether it is `applyMigrations` on the
+ * box or `useVenueDb` in a suite. Derived, never written out: a hand-copied list beside the
+ * declarations is the drift this repository has already paid for elsewhere.
  */
 export const CORE_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
   migrationsTable: "__drizzle_migrations_db",
+  appendOnlyTables: appendOnlyTablesIn(CORE_CLASSIFICATION),
 } as const;
