@@ -4983,6 +4983,35 @@ produced: `bin-break-glass.js`, `bin-restore.js`, `bin-rejoin.js` and `node-entr
 shipped command (`waitron.commands`). The three scripts gap nine converted are emitted BEFORE it,
 which is the only reason they build at all.
 
+**GAP FOURTEEN IS DONE — 2026-09-22, commit `77e0aa19`.** `waitron-break-glass` takes a venue
+directory, copying `rejoin-command.ts`, and `pnpm --filter @waitron/server build` exits 0 with all
+eleven bundles emitted — the four that were never produced among them. One test was replaced rather
+than kept: it pinned a refusal for `DATABASE_URL`, a variable this branch retires. Its replacement
+(the directory `WAITRON_VENUE_DIR` names is what gets opened, and an empty value falls back to
+`<stateDir>/venue`) is proven by deletion. `bin-break-glass.ts` still has no `.catch` backstop where
+`bin-restore.ts` and `bin-rejoin.ts` both do — pre-existing, but the exposure changed shape now that
+the command opens the engine itself, so it belongs to step group 8.
+
+**THE §5 TEST-TRIGGER GAP IS CLOSED — 2026-09-22, commit `79ed2fb1`** (owner verdict 4, 2026-09-22).
+`useVenueDb` installs the append-only refusal triggers from each set's own `appendOnlyTables`, which
+each package's migration descriptor now derives from its classification list through the one shared
+`appendOnlyTablesIn`. **The red wave the verdict asked to have measured is EMPTY**: six packages
+diffed by failing test NAME before and after (zero green→red), eighteen more searched for the
+refusal text (no hits), and `apps/server` — 65 suites use the helper — searched the same way (no
+hits). Three hedges: `packages/reporting` was mid-conversion and is not in the measurement, the grep
+sees only a failure whose message carries the refusal text, and a suite that is already red or
+skipped cannot show a new failure, so this wants re-measuring after step 27. Guard:
+`scripts/append-only-migration-sets.test.ts`, proven three ways by deletion.
+
+**AND A REAL DEFECT IN PRODUCT CODE, found while closing it and fixed in the same commit.**
+`apps/server/src/fiscal-readiness-runner.ts` migrated its retained sample database set by set on its
+own handle rather than through `applyMigrations`, so the readiness database — which holds a real
+preproduction sale on a real chain — let a filed sale be rewritten. It goes through `applyMigrations`
+now. **The class is worth carrying**: `applyMigrations` is the only place that installs the triggers,
+so any path that calls `runMigrations` directly is a path with no append-only enforcement. The
+remaining direct callers are the three `packages/db/src/testing` helpers step 27 deals with and five
+`apps/server/scripts` demos.
+
 **Four more findings from the same sweep, each one a decision rather than a translation.** None is
 taken here.
 
