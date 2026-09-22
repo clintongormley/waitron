@@ -8,13 +8,22 @@ import { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
 import { count, label, table, ts } from "./schema/columns.js";
 
 /**
- * The three claim helpers on SQLite. `job-claim.test.ts` beside this file is PGlite's and
- * `job-claim.pg.test.ts` a real server's; both are the storage swap's step 25 (step group 7).
+ * The three claim helpers, and the only suite over them. Two siblings stood beside this file until
+ * the SQLite flip: job-claim.test.ts, which ran the same six cases on PGlite, and
+ * job-claim.pg.test.ts against a real server. Both are deleted — the six cases live here, and what
+ * the real-server one held has no successor, so it is named below rather than assumed.
  *
  * What a case here can and cannot show: with one writer per file there is no second claimer to
  * partition a queue against, so every case is about what ONE claim selects, stamps and returns.
  * The property the deleted `for update … skip locked` bought — that a second claimer skips a row
  * the first holds — has nothing to hold it open on this engine.
+ *
+ * **One case had no successor at all and is not repeated here.** It was named "locks only the table
+ * `of` names, so a claim may join one the role may not lock", and it proved why the claim narrowed
+ * its lock: `app_user` held only `select, insert` on the joined table, and PostgreSQL wants an
+ * update-shaped privilege on every table a `FOR UPDATE` touches, so the unnarrowed form was refused
+ * `42501` while the narrowed one was allowed. There is no lock to narrow and no role to withhold a
+ * privilege, and `of` is gone from `LockedClaimSpec` (`./job-claim.ts`) for the same reason.
  */
 const probeJobs = table("probe_jobs", {
   position: count("position").primaryKey(),
