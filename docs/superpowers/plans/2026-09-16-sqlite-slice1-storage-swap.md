@@ -4768,6 +4768,44 @@ both, do not delete them — the dev stack is how the product is run from a work
 working developer path with no successor is the defect class `CLAUDE.md` §1 is about.
 
 
+**A SEVENTH GAP — found 2026-09-22. No step converts the tree's remaining ROW LOCKS.**
+`grep -n 'row lock\|\.for("update")'` over this file returns nothing. Two sites have been
+converted so far, each with its own commit and each reasoned from the write queue rather than
+assumed: `packages/workforce/src/chain.ts` and `packages/fiscal-verifactu/src/chain.ts`. What is
+left, counted on this tree rather than carried from anywhere (`grep -rn '\.for("' packages apps
+--include="*.ts"`, comments and tests excluded):
+
+| file | sites |
+| --- | --- |
+| `apps/server/src/working-order.ts` | 13 |
+| `apps/server/src/till-sale.ts` | 5 |
+| `apps/server/src/kitchen-print.ts`, `receipt-print.ts` | 1 each, both `for("share")` |
+| `apps/server/src/payments-api.ts` | 1 |
+| `packages/payments/src/store.ts` | 1 |
+| `packages/reporting/src/record-daily-close.ts` | 1 (its own private chain head) |
+| `packages/media/src/images.ts` | 1 |
+| `packages/bookings/src/testing/fake-core.ts` | 1 (a fixture) |
+
+**Two things make this more than a delete-the-clause sweep.** The compiler catches `.for(` and
+raises `Property 'for' does not exist` — so those sites cannot be missed. It does NOT catch a
+locking clause written inside a `sql` template, and there are several, all in suites that stage a
+race by holding a lock open: `packages/fiscal-verifactu/src/chain.concurrency.test.ts`,
+`packages/workforce/src/chain.concurrency.test.ts`,
+`packages/identity/src/passkey.concurrency.test.ts` (whose header already records that it is red
+for exactly this reason), `packages/reporting/src/record-daily-close.pg.test.ts`. Those suites do
+not want the clause removed; they want the step-25 treatment — "a contention test becomes a test
+that the write queue serialises writers" — and `racePair` in
+`packages/catalogue/test/fixtures.ts` is the shape that replaces them.
+
+And `for("share")` is not `for("update")`: the two print paths take a SHARE lock over a join, which
+was about holding a printer row still while a job was queued against it, not about serialising two
+writers. Read each one before deleting it.
+
+**Step:** convert the 24 remaining call sites, per file, each one stating what the lock arranged and
+why the write queue covers it; point at `assertExtraListForWrite`
+(`packages/catalogue/src/extras.ts`) rather than restating the pattern. Do NOT bundle the raw-SQL
+suites in — they are step 25's.
+
 - [ ] **Step 29: Run the whole workspace once**
 
 This is the one place in this plan a whole-workspace run is justified: the engine changed under everything.
