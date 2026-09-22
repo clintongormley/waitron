@@ -1,6 +1,5 @@
-import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedTender, seedTill, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -105,18 +104,23 @@ describe("computeCashUp", () => {
   it("reads the money columns as counts of whole cents, summed then converted once", async () => {
     // Written straight to the table as INTEGERS, past `seedTender`'s own decimalToCents, so this
     // pins what the column holds rather than what the fixture does with it. 12345 + 5 = 12350 cents
-    // is 123.50, and 250 + 0 = 250 cents is 2.50. A query that read the column as euros — which a
-    // `::numeric(12, 2)::text` cast does without error — would report "12350.00" and "250.00".
+    // is 123.50, and 250 + 0 = 250 cents is 2.50. A query that read the column as euros would
+    // report "12350.00" and "250.00".
+    //
+    // Through the table definition rather than in raw SQL, which is a conversion and not a
+    // loosening: `tenders.id` is supplied by `$defaultFn(newId)` in JavaScript on this engine, so a
+    // raw INSERT naming no id is refused `NOT NULL constraint failed`. The values are still the raw
+    // integer counts, which is what this case is about.
     const saleId = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: settledNoon,
       total: "123.50",
       lines: [{ vatRate: "21.00", lineTotal: "102.07" }],
     });
-    await suite.db.execute(sql`
-      insert into tenders (sale_id, method, amount, tip_amount, settled_at) values
-        (${saleId}, 'cash', 12345, 250, ${settledNoon}),
-        (${saleId}, 'cash', 5, 0, ${settledNoon})`);
+    await suite.db.insert(tenders).values([
+      { saleId, method: "cash", amount: 12345, tipAmount: 250, settledAt: settledNoon },
+      { saleId, method: "cash", amount: 5, tipAmount: 0, settledAt: settledNoon },
+    ]);
     const cash = await run();
     expect(cash.byTill[0]!.byMethod).toEqual([{ method: "cash", amount: "123.50", tip: "2.50" }]);
     expect(cash.byTill[0]!.cashTakings).toBe("123.50");

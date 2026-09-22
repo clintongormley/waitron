@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   addDecimal,
   locationId as brandLocationId,
@@ -15,6 +15,8 @@ import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import {
   catalogues,
   diningTables,
+  invoiceSeries,
+  locations,
   products,
   purchaseInvoiceVat,
   purchaseInvoices,
@@ -23,6 +25,7 @@ import {
   saleVoids,
   sales,
   tenders,
+  tills,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -49,19 +52,22 @@ export interface SeededVenue {
 // and the tenants/nodes inserts); this file only adds the location/till/series db has no seeder for.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Main', array['es-ES'], 'Test op') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(
-    sql`insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`,
-  );
-  const tillId = brandTillId(till.rows[0]!.id);
+  const [location] = await db
+    .insert(locations)
+    .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Test op" })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Till 1" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
-  );
-  const seriesId = brandSeriesId(series.rows[0]!.id);
-  return { locationId, tillId, nodeId, seriesId };
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "A" })
+    .returning({ id: invoiceSeries.id });
+  return { locationId, tillId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
@@ -75,10 +81,11 @@ export async function seedNodeAndSeries(
   seriesCode = "B",
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
   const nodeId = await seedNode(db, brandLocationId(venue.locationId));
-  const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (node_id, code) values (${nodeId}, ${seriesCode}) returning id`,
-  );
-  return { nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: seriesCode })
+    .returning({ id: invoiceSeries.id });
+  return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 // A venue-scoped unique index on tills(location_id, name) means two seeded tills in one
@@ -90,10 +97,8 @@ export async function seedTill(
   locationId: string,
   name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
-  const till = await db.execute<{ id: string }>(
-    sql`insert into tills (location_id, name) values (${locationId}, ${name}) returning id`,
-  );
-  return brandTillId(till.rows[0]!.id);
+  const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
+  return brandTillId(till!.id);
 }
 
 /**
@@ -306,6 +311,12 @@ export async function seedFiredLine(
     queuedAt?: string;
   },
 ): Promise<void> {
+  // One clock reading for this line's three stamps. It was `now()` — this engine has no such
+  // function, and `now()` was transaction time, so the three agreed; taking one reading here keeps
+  // them agreeing. The backdated `queued_at` is the same subtraction `now() - N * interval '1
+  // minute'` performed, moved onto a Date because there is no interval type either.
+  const firedAtMs = Date.now();
+  const firedAt = new Date(firedAtMs).toISOString();
   const [catalogue] = await db
     .insert(catalogues)
     .values({ name: "Test catalogue" })
@@ -333,7 +344,7 @@ export async function seedFiredLine(
       unitPriceGross: decimalToCents(decimal("1.00")),
       vatRate: decimalToBasisPoints(decimal("10.00")),
       lineTotal: decimalToCents(decimal("1.00")),
-      servedAt: opts.served ? sql`now()` : null,
+      servedAt: opts.served ? firedAt : null,
     })
     .returning({ id: workingOrderLines.id });
   await db.insert(ticketItems).values({
@@ -341,8 +352,8 @@ export async function seedFiredLine(
     workingOrderId: opts.orderId,
     workingOrderLineId: line!.id,
     stationId: seed.stationId,
-    queuedAt: opts.queuedAt ?? sql`now() - (${opts.ageMinutes} * interval '1 minute')`,
-    firedAt: sql`now()`,
+    queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),
+    firedAt,
   });
 }
 
@@ -409,13 +420,15 @@ export async function seedFiredOrder(
   );
   const status = opts.status ?? "open";
   if (status !== "open" || opts.collected) {
+    // One reading for both stamps — what `now()` gave by being transaction time.
+    const terminalAt = new Date().toISOString();
     await db
       .update(workingOrders)
       .set({
         status,
         // The settled_at CHECK (working_orders_settled_at_ck) is biconditional on status='settled'.
-        settledAt: status === "settled" ? sql`now()` : null,
-        collectedAt: opts.collected ? sql`now()` : null,
+        settledAt: status === "settled" ? terminalAt : null,
+        collectedAt: opts.collected ? terminalAt : null,
       })
       .where(eq(workingOrders.id, orderId));
   }

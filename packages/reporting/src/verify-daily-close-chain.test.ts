@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, dailyCloses, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
-import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
+import type { CashCountInput, DailyCloseRecord, DailyCloseSnapshot } from "./close-types.js";
 
 // PGlite, deliberately — and the right target for the WALK. The re-walk (contiguity, genesis,
 // broken-link, hash recomputation from the jsonb read-back) is deterministic logic over rows already
@@ -52,25 +52,37 @@ function verify() {
 // A structurally-valid snapshot for a crafted row whose CONTENT is never reached by the assertion
 // under test (a genesis/link/sequence break is caught before the hash recompute, so it need not
 // reproduce entry_hash). Only the hash-mismatch case relies on it not reproducing a chosen digest,
-// which any fixed literal does.
-const SNAPSHOT = JSON.stringify({
+// which any fixed literal does. It is the OBJECT, not its text: the column serialises its own value
+// (`json` in `columns.ts`), so handing it a string would store a JSON string rather than a document.
+const SNAPSHOT = {
   close: {},
   cashReconciliation: { byTill: [], nodeVariance: "0.00" },
-});
+} as unknown as DailyCloseSnapshot;
 
 /** Owner INSERT of one close row. INSERT is not what
  * the append-only trigger guards, so no bypass is needed; this is how a break is staged without
- * mutating a committed row. */
+ * mutating a committed row.
+ *
+ * Through the table definition rather than in raw SQL. Two things forced it, both of them the
+ * engine rather than a preference: `daily_closes.id` is supplied by `$defaultFn(newId)` in
+ * JavaScript, so a raw INSERT naming no id is refused `NOT NULL constraint failed`; and `snapshot`
+ * is a `json` column, whose serialisation is the column's own — the `::jsonb` cast this carried has
+ * no equivalent here. The snapshot is therefore passed as the OBJECT rather than as its text. */
 function craftClose(opts: {
   businessDay: string;
   sequenceNo: number;
   prevEntryHash: string;
   entryHash: string;
 }): Promise<unknown> {
-  return suite.db.execute(sql`
-    insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_by, snapshot) values (${venue.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
-      ${opts.prevEntryHash}, ${opts.entryHash}, ${CLOSED_BY}, ${SNAPSHOT}::jsonb
-    )`);
+  return suite.db.insert(dailyCloses).values({
+    nodeId: venue.nodeId,
+    businessDay: opts.businessDay,
+    sequenceNo: opts.sequenceNo,
+    prevEntryHash: opts.prevEntryHash,
+    entryHash: opts.entryHash,
+    closedBy: CLOSED_BY,
+    snapshot: SNAPSHOT,
+  });
 }
 
 describe("verifyDailyCloseChain — the chain re-walk", () => {

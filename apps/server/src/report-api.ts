@@ -237,7 +237,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
         const { nodeId, clock } = await buildReportContext(tx);
-        const businessDay = await currentBusinessDay(tx, clock);
+        const businessDay = currentBusinessDay(clock);
         // No `nodeId` → venue-wide (all nodes). `nodeId` (from `buildReportContext`) still scopes the
         // open-tables tile below by its LOCATION.
         const input = {

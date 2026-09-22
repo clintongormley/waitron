@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -173,14 +172,12 @@ describe("computeOverdueOrders", () => {
     // ONE shared instant for BOTH lines — a real multi-station fire inserts every line in ONE
     // statement against a single shared `defaultNow()` (`apps/server/src/working-order.ts`'s
     // `fireLines`), so both rows get the BIT-IDENTICAL `queued_at`. Two separate `seedFiredLine` calls
-    // each computing their own "now() - N minutes" do NOT tie exactly (each runs a few milliseconds
-    // apart in its own implicit transaction) — reading the timestamp once and pinning it via
-    // `queuedAt` is what reproduces the real tie.
-    const tiedQueuedAt = (
-      await suite.db.execute<{ ts: string }>(
-        sql`select (now() - interval '11 minutes')::text as ts`,
-      )
-    ).rows[0]!.ts;
+    // each computing their own "eleven minutes ago" do NOT tie exactly (each reads the clock a few
+    // milliseconds apart) — reading the clock once and pinning it via `queuedAt` is what
+    // reproduces the real tie. The reading moved out of SQL with the engine: it was
+    // `select (now() - interval '11 minutes')::text`, and it is the same instant in the same
+    // canonical spelling the column now holds.
+    const tiedQueuedAt = new Date(Date.now() - 11 * 60_000).toISOString();
     // Fire line_no 2 (station "Barra") FIRST and line_no 1 (station "Cocina") SECOND — insertion order
     // is the OPPOSITE of line_no order. If the reduction ever fell back to insertion/PGlite-scan order
     // instead of the query's own `queued_at, line_no` ORDER BY, this would report "Barra"; the

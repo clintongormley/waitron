@@ -53,28 +53,34 @@ export async function computeInputVat(
   const dateFilter = periodDateFilter(sql`p.received_on`, input.year, input.period);
 
   // `purchase_invoice_vat.base` and `.tax` count whole cents, and `deductible_proportion` counts
-  // whole basis points — 10000 of them is the whole of the tax. The divisor below moved from 100
-  // to 10000 with the scale, so the product is the same numeric count of cents with a fraction it
-  // was before, and every amount this reports is the amount it reported before. The rounding goes
-  // to 0 decimal places of CENTS — the same granularity (one cent) and the same rule (Postgres
-  // `round(numeric, …)` is half away from zero, matching `@waitron/shared`'s `percentOf`). It is
-  // still rounded PER invoice line and only then summed, which is the per-invoice exactness rule
-  // the output side follows.
+  // whole basis points — 10000 of them is the whole of the tax. The rounding goes to whole CENTS,
+  // half away from zero, PER invoice line and only then summed, which is the per-invoice exactness
+  // rule the output side follows.
   //
-  // The proportion is cast `::numeric` because it is an `integer` column now: `bigint * integer`
-  // is a `bigint`, and dividing that by 10000 would TRUNCATE rather than leave a fraction for
-  // `round` to decide. The cast is what keeps the whole expression in numeric arithmetic, as it
-  // was when the column itself was a `numeric`.
+  // WHY THE EXPRESSION LOOKS LIKE THAT. It was `round(v.tax * p.deductible_proportion::numeric /
+  // 10000, 0)`. This engine has no exact decimal type: `/ 10000` between two integers is INTEGER
+  // division, which truncates, and `/ 10000.0` is binary floating point, whose `round` then answers
+  // a REAL — and a real read back as text renders `"0.0"`, which `rawCentsToDecimal` refuses
+  // outright. So the whole thing is done in integers: `(abs(x) + 5000) / 10000` is half-up on the
+  // MAGNITUDE, and multiplying the sign back on makes that half away from zero, matching
+  // PostgreSQL's `round(numeric, 0)` and `@waitron/shared`'s `percentOf`. A rectificativa's negative
+  // cuota is the reason the sign cannot be dropped.
   //
-  // Each sum is a count of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment. `round(numeric, 0)` renders no decimal point, so
-  // the tax sum's text is a plain integer like the base's (measured on both engines, 2026-09-20).
+  // Measured against PGlite 0.5.8 (PostgreSQL 18.3), 2026-09-22: 220 (tax, proportion) pairs — 22
+  // cuotas including zero, negatives and every exact-tie magnitude × 10 proportions including 0,
+  // 10000 and three that land on a tie — compared with `round(t * p::numeric / 10000, 0)::text`.
+  // The integer form above agreed on 220 of 220. The floating form disagreed on 220 of 220, which
+  // is the control in the other direction, and it is not a near miss: every answer carried a
+  // decimal point the reader would have thrown on.
+  //
+  // Each sum is a count of whole cents read raw, handed over as TEXT by `cast(… as text)` — what
+  // `::text` was — and converted by `rawCentsToDecimal`; see its doc comment.
   //
   // The rate is grouped on the column itself. The `numeric(5,2)` cast this replaced was there so
   // that two spellings of one rate could not split into two lines; a whole number of basis points
   // has one spelling, so there is nothing left to normalise — the normalisation moved to
-  // `decimalToBasisPoints` on the way in. The output side still reads its rate out of a jsonb
-  // document, where two spellings ARE possible, so `aggregateVatByRate` keeps its cast.
+  // `decimalToBasisPoints` on the way in. The output side still reads its rate out of a JSON
+  // document, where two spellings ARE possible, so `aggregateVatByRate` keeps normalising.
   const { rows } = await tx.execute<{
     rate: string;
     kind: PurchaseVatKind;
@@ -82,10 +88,13 @@ export async function computeInputVat(
     tax: string;
   }>(sql`
     select
-      v.rate::text as rate,
+      cast(v.rate as text) as rate,
       v.kind as kind,
-      sum(v.base)::text as base,
-      sum(round(v.tax * p.deductible_proportion::numeric / 10000, 0))::text as tax
+      cast(sum(v.base) as text) as base,
+      cast(sum(
+        (abs(v.tax * p.deductible_proportion) + 5000) / 10000
+          * sign(v.tax * p.deductible_proportion)
+      ) as text) as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
     where p.regime = 'general'

@@ -16,7 +16,7 @@ describe("fixtures", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from sale_lines where sale_id = ${saleId}`,
+      sql`select count(*) as n from sale_lines where sale_id = ${saleId}`,
     );
     expect(rows[0]!.n).toBe(1);
   });
