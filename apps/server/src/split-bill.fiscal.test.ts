@@ -41,7 +41,7 @@ let clock: TrustedClock;
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `till-sale.test.ts`/`catalogue-demo.ts` document. `recordSale` reads `now()`
+ * identical stub shape `till-sale.test.ts`/`record-one-sale.ts` document. `recordSale` reads `now()`
  * once and touches neither `anchor` nor `currentAnchor`.
  */
 function systemClock(): TrustedClock {

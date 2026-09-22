@@ -5,12 +5,16 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  invoiceSeries,
+  locations,
+  nodes,
   readNodeMembership,
   readSingletonRole,
   stampDeployment,
+  tenants,
+  tills,
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
@@ -90,24 +94,59 @@ let proceedsDatabaseUrl: string;
 /** Seed the box's own fiscal identity (tenant/location/node/till/series) PLUS the peer node row carrying
  * the peer's public key (the trust anchor the fetched chart's signature verifies against). */
 async function seed(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90333333J', 'Reconcile SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
-            array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Box') on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
+  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
+  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90333333J", legalName: "Reconcile SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Box",
+    })
+    .onConflictDoNothing();
   // The peer node, with its identity public key — this is what puts the peer's key in the box's trust set.
-  await admin.execute(sql`insert into nodes (id, location_id, name, public_key)
-    values (${PEER_NODE}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
-            'Cloud', ${PEER_KEY.publicKey}) on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
-            ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
+  await admin
+    .insert(nodes)
+    .values({
+      id: PEER_NODE,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Cloud",
+      publicKey: PEER_KEY.publicKey,
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Till",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(invoiceSeries)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      code: "A",
+    })
+    .onConflictDoNothing();
 }
 
 /** The box's OWN stale chart: it still names ITSELF serving-primary at `term`. */

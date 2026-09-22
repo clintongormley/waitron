@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
@@ -9,6 +9,7 @@ import {
   locations,
   printJobs,
   sales,
+  tenantReceipts,
   tills,
   withTransaction,
 } from "@waitron/db";
@@ -502,9 +503,12 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(sql`
-        insert into tenant_receipts (receipt)
-        values (${JSON.stringify({ footerMessage: "Gracias por su visita" })}::jsonb)`);
+      // Through the table definition: `receipt` is a JSON column whose own write mapping encodes
+      // the object, and `updated_at` is a JavaScript generator a raw insert never reaches. The
+      // `::jsonb` cast this replaces is a syntax error on this engine.
+      await tx
+        .insert(tenantReceipts)
+        .values({ receipt: { footerMessage: "Gracias por su visita" } });
     });
 
     await recordTillSale(

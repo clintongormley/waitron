@@ -212,7 +212,7 @@ async function seedTable(
  */
 async function openOrderCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: string }>(
-    sql`select count(*)::text as n from working_orders where status = 'open'`,
+    sql`select cast(count(*) as text) as n from working_orders where status = 'open'`,
   );
   return Number(rows[0]!.n);
 }
@@ -271,7 +271,7 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
 /** How many `sales` rows reference this working order — read as the owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
@@ -279,7 +279,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 /** How many chained `registros_facturacion` rows exist for this working order's sale (owner read). */
 async function registroCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count
+    select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
@@ -398,7 +398,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // The table now reads free: its tab_id STILL points at the order (no settle-time write), but the
     // order is settled, so the "open tab" join finds nothing (occupancy — Task 9).
     const { rows } = await suite.admin.execute<{ n: string }>(sql`
-      select count(*)::text as n
+      select cast(count(*) as text) as n
       from dining_tables dt join working_orders wo on wo.id = dt.tab_id
       where dt.id = ${tableId} and wo.status = 'open'`);
     expect(Number(rows[0]!.n)).toBe(0);
@@ -559,10 +559,10 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // its order lives in. Without this, a regression where `openTab` stopped setting `tab_id` would leave
     // both filings table-less and make the equality below vacuously true.
     const tabPointers = await suiteB.admin.execute<{ n: string }>(
-      sql`select count(*)::text as n from dining_tables where tab_id = ${tabId}`,
+      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${tabId}`,
     );
     const walkUpPointers = await suite.admin.execute<{ n: string }>(
-      sql`select count(*)::text as n from dining_tables where tab_id = ${walkUpId}`,
+      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${walkUpId}`,
     );
     expect(Number(tabPointers.rows[0]!.n)).toBe(1); // the tab IS a table's running tab
     expect(Number(walkUpPointers.rows[0]!.n)).toBe(0); // the walk-up is anchored to no table
@@ -609,7 +609,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     expect(await deliveryTableOf(id)).toBe(tableId);
     // A delivery is NOT a tab — no dining_tables row points at it.
     const { rows } = await suite.admin.execute<{ n: string }>(
-      sql`select count(*)::text as n from dining_tables where tab_id = ${id}`,
+      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${id}`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });
@@ -634,7 +634,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     // Nothing was filed and no order was created — the guard fires before any write (the tx rolls back).
     expect(await saleCount(orderId)).toBe(0);
     const { rows } = await suite.admin.execute<{ n: string }>(
-      sql`select count(*)::text as n from working_orders where id = ${orderId}`,
+      sql`select cast(count(*) as text) as n from working_orders where id = ${orderId}`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });

@@ -4,6 +4,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   diningTables,
+  locations,
+  tableServiceStatuses,
+  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -68,15 +71,21 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Through the table definitions rather than raw SQL: `invoice_locales` is a JSON array in a text
+  // column on this engine (`labelList`, packages/db/src/schema/columns.ts), so there is no array
+  // constructor to write, and `id` is a `$defaultFn` a raw insert would never reach.
+  const locationId = randomUUID();
+  await db.insert(locations).values({
+    id: locationId,
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const tillId = randomUUID();
+  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -108,15 +117,19 @@ async function setupVenue(): Promise<Seeded> {
     await assignCatalogueToLocation(tx, locationId, cat.id);
     const t1 = await createTable(tx, cfg, { label: "T1" });
     const t2 = await createTable(tx, cfg, { label: "T2" });
-    const status = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
-    );
+    // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
+    // engine, which a raw insert never reaches — it failed with
+    // `NOT NULL constraint failed: table_service_statuses.id`.
+    const activeStatusId = randomUUID();
+    await tx
+      .insert(tableServiceStatuses)
+      .values({ id: activeStatusId, label: "Bill requested", color: "#ef4444" });
     return {
       aguaId: agua.id,
       jamonId: jamon.id,
       tableId: t1.id,
       tableId2: t2.id,
-      activeStatusId: status.rows[0]!.id,
+      activeStatusId,
     };
   });
   return { cfg, ...seeded };
@@ -422,7 +435,7 @@ describe("unjoinTable", () => {
         .from(diningTables)
         .where(eq(diningTables.id, tableId));
       const [{ count }] = await tx
-        .select({ count: sql<number>`count(*)::int` })
+        .select({ count: sql<number>`cast(count(*) as int)` })
         .from(workingOrders)
         .where(eq(workingOrders.status, "open"));
       return { anchor, count };

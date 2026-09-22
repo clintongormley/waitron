@@ -8,16 +8,19 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  locations,
+  nodes,
   readStandardSeriesId,
   setDeploymentMode,
   setSingletonRole,
   stampDeployment,
+  tenants,
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type {
   Endorsement,
@@ -142,25 +145,43 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
  * authenticates. `pin_hash` is NOT NULL, so a value is supplied even though the endpoint uses the
  * password. */
 async function seedTillIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90111111H', 'Promote Endpoint Till SL')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
-            array['en']::text[], 'Hospitality')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote Endpoint node')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into persons (id, display_name, pin_hash, password_hash, role)
-    values (${ADMIN_ID}, 'Promote Admin', ${hashPin("1234")},
-            ${hashPassword(ADMIN_PW)}, 'admin')
-    on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `persons` is one of those on this engine;
+  // and `array['en']::text[]` is a PostgreSQL array constructor plus a PostgreSQL cast operator,
+  // both refused at prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it
+  // replaces were — narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Endpoint Till SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Barra",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Promote Endpoint node",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(persons)
+    .values({
+      id: ADMIN_ID,
+      displayName: "Promote Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(ADMIN_PW),
+      role: "admin",
+    })
+    .onConflictDoNothing();
   await establishNodeIdentity({ ownerDb: admin, ring: RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
 }
 
@@ -169,14 +190,19 @@ async function seedTillIdentity(admin: Database): Promise<void> {
  * term-3 chart, the DB-stored mirror connection config + sealed sync token the mirror boot reads, and
  * deployment stamped production then mode='mirror'. */
 async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> {
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90222222H', 'Promote Endpoint Cloud SL')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
-    on conflict do nothing`);
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Endpoint Cloud SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: MIRROR_LOCATION_ID,
+      name: "Barra",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

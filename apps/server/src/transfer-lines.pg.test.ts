@@ -215,7 +215,7 @@ async function setupTwoTabs(): Promise<{
 /** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
@@ -223,7 +223,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
 /** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
 async function registroCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count
+    select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
@@ -239,7 +239,7 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
   // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
-    select total::text as total from sales where working_order_id = ${workingOrderId}
+    select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
   return rawCentsToDecimal(rows[0]!.total);
 }

@@ -1,7 +1,15 @@
+/**
+ * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
+ * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
+ * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/device.pg.test.ts` in `apps/server`, which reports `7 tests | 7 skipped` and
+ * then fails the FILE. No assertion below has run on this branch; its SQL is converted anyway so
+ * nothing has to be untangled twice.
+ */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
@@ -34,15 +42,26 @@ interface SeededVenue {
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.admin;
   await seedTenant(admin);
-  const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators a raw
+  // insert never reaches while the columns are NOT NULL, and `invoice_locales` is a JSON array in a
+  // text column rather than the PostgreSQL `text[]` the `array[...]` constructor built.
+  const [loc] = await admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await admin
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -61,16 +80,18 @@ async function setupVenue(): Promise<SeededVenue> {
 /** Seed a device profile of the given form factor (owner SQL for setup). `name` is unique per tenant
  * (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two distinct names. */
 async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor)
-    values (${name}, ${formFactor})
-    returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name, formFactor })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
 }
 
 async function tillCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from tills `,
+    // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
+    // syntax error to this parser (`unrecognized token: ":"`).
+    sql`select count(*) as n from tills `,
   );
   return rows[0]!.n;
 }
@@ -176,17 +197,24 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // that is not this venue's is rejected here, not trusted. A foreign-venue till (another location of
     // the SAME tenant) trips it.
     const { cfg } = await setupVenue();
-    const other = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Terraza', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const foreignTill = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (location_id, name) values (${other.rows[0]!.id}, 'Caja 1') returning id`);
+    const [other] = await suite.admin
+      .insert(locations)
+      .values({
+        name: "Terraza",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const [foreignTill] = await suite.admin
+      .insert(tills)
+      .values({ locationId: other!.id, name: "Caja 1" })
+      .returning({ id: tills.id });
     const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
     await expect(
       enrolDeviceForTest(suite.admin, cfg, {
         name: "Camarero",
         profileId,
-        registerId: foreignTill.rows[0]!.id,
+        registerId: foreignTill!.id,
       }),
     ).rejects.toMatchObject({ code: "device.binding_invalid", params: { field: "tillId" } });
   });

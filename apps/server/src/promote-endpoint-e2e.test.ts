@@ -10,11 +10,17 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
+  deviceProfiles,
+  devices,
+  kitchenStations,
+  locations,
   readDeploymentMode,
   readSingletonRole,
   readStandardSeriesId,
   setDeploymentMode,
   stampDeployment,
+  tenants,
+  tills,
   withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
@@ -22,7 +28,7 @@ import {
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, hashSecret } from "@waitron/identity";
+import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -154,14 +160,26 @@ let migrationsRoot: string;
  * Returns the cloud's own nodeId + the reserved standard series id the promote must correct trading.env
  * to. Deployment is stamped production then mode='mirror'. */
 async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSeriesId: string }> {
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90222222H', 'Promote E2E Cloud SL')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
-    on conflict do nothing`);
+  // Every fixture row in this file goes in through its TABLE DEFINITION, the same change
+  // `packages/db/src/testing/seed.ts` and `testing/fiscal-fixtures.ts` took. Two reasons: a raw
+  // insert reaches no `$defaultFn` generator, and `created_at` on `tenants`, `tills`, `persons`,
+  // `device_profiles`, `devices` and `kitchen_stations` is one of those on this engine; and
+  // `array['en']::text[]` / `'[]'::jsonb` are PostgreSQL array and cast syntax refused at prepare
+  // here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote E2E Cloud SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: MIRROR_LOCATION_ID,
+      name: "Barra",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
@@ -236,28 +254,51 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
  * device cookie verifies). */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
   await seedLegacySellingUnits(admin);
-  await admin.execute(sql`
-    insert into tills (id, location_id, name)
-    values (${MIRROR_TILL_ID}, ${MIRROR_LOCATION_ID}, 'Barra')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into persons (id, display_name, pin_hash, role)
-    values (${STAFF_ID}, 'Cajera', ${hashPin(STAFF_PIN)}, 'staff')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into device_profiles (id, name, form_factor, capabilities)
-    values (${DEVICE_PROFILE_ID}, 'Counter', 'till', '[]'::jsonb)
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into devices (id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${MIRROR_LOCATION_ID}, ${DEVICE_PROFILE_ID},
-            ${MIRROR_TILL_ID}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into kitchen_stations
-      (location_id, name, display_order, is_default, active)
-    values (${MIRROR_LOCATION_ID}, 'Kitchen', 0, true, true)
-    on conflict do nothing`);
+  await admin
+    .insert(tills)
+    .values({ id: MIRROR_TILL_ID, locationId: MIRROR_LOCATION_ID, name: "Barra" })
+    .onConflictDoNothing();
+  await admin
+    .insert(persons)
+    .values({
+      id: STAFF_ID,
+      displayName: "Cajera",
+      pinHash: hashPin(STAFF_PIN),
+      role: "staff",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(deviceProfiles)
+    .values({
+      id: DEVICE_PROFILE_ID,
+      name: "Counter",
+      formFactor: "till",
+      // The empty capability list, handed over as a value: the column's own write mapping is what
+      // encodes it, where the raw statement spelled a PostgreSQL jsonb cast.
+      capabilities: [],
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(devices)
+    .values({
+      id: DEVICE_ID,
+      locationId: MIRROR_LOCATION_ID,
+      deviceProfileId: DEVICE_PROFILE_ID,
+      tillId: MIRROR_TILL_ID,
+      label: "Counter till",
+      tokenHash: hashSecret(DEVICE_TOKEN),
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(kitchenStations)
+    .values({
+      locationId: MIRROR_LOCATION_ID,
+      name: "Kitchen",
+      displayOrder: 0,
+      isDefault: true,
+      active: true,
+    })
+    .onConflictDoNothing();
 
   await withTransaction(admin, async (tx) => {
     await asAppUser(tx);

@@ -4,17 +4,24 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  deviceProfiles,
+  devices,
+  invoiceSeries,
+  locations,
+  nodes,
   setDeploymentMode,
   setSingletonRole,
   stampDeployment,
+  tenants,
+  tills,
+  workingOrders,
   writeMirrorConfig,
   type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPin, hashSecret } from "@waitron/identity";
+import { hashPin, hashSecret, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { roleUrl } from "./testing/postgres.js";
@@ -115,27 +122,64 @@ let migrationsRoot: string;
  * whichever node holds it. Seeded identically on A and B — the "same device rows seeded directly" the
  * design names. */
 async function seedVenue(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90444444A', 'Reroute E2E SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${LOCATION}, 'Loc', array['en']::text[], 'Hospitality') on conflict do nothing`);
+  // Through the table definitions, not raw SQL. Every id here is supplied explicitly (the two nodes
+  // and both series must match the constants the reroute is asserted against), so this is not about
+  // generated ids — it is the `array['en']::text[]` constructor and the `'[]'::jsonb` cast, both of
+  // which this engine refuses, plus the `created_at`/`enrolled_at` stamps that are JavaScript
+  // generators a raw insert never reaches. The untargeted `on conflict do nothing` becomes a
+  // primary-key-targeted one at each call: every row here is keyed by the id it supplies, and an
+  // untargeted form absorbs EVERY unique conflict rather than the one the caller means
+  // (CLAUDE.md §3).
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90444444A", legalName: "Reroute E2E SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  await admin
+    .insert(locations)
+    .values({
+      id: LOCATION,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing({ target: locations.id });
   for (const node of [NODE_A, NODE_B]) {
-    await admin.execute(sql`insert into nodes (id, location_id, name)
-      values (${node}, ${LOCATION}, 'Node') on conflict do nothing`);
+    await admin
+      .insert(nodes)
+      .values({ id: node, locationId: LOCATION, name: "Node" })
+      .onConflictDoNothing({ target: nodes.id });
   }
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL}, ${LOCATION}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${SERIES_A}, ${NODE_A}, 'A') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${SERIES_B}, ${NODE_B}, 'B') on conflict do nothing`);
-  await admin.execute(sql`insert into persons (id, display_name, pin_hash, role)
-    values (${PERSON}, 'Cajera', ${hashPin("5555")}, 'staff') on conflict do nothing`);
-  await admin.execute(sql`insert into device_profiles (id, name, form_factor, capabilities)
-    values (${DEVICE_PROFILE}, 'Counter', 'till', '[]'::jsonb) on conflict do nothing`);
-  await admin.execute(sql`insert into devices (id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${LOCATION}, ${DEVICE_PROFILE}, ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
-    on conflict do nothing`);
+  await admin
+    .insert(tills)
+    .values({ id: TILL, locationId: LOCATION, name: "Till" })
+    .onConflictDoNothing({ target: tills.id });
+  await admin
+    .insert(invoiceSeries)
+    .values({ id: SERIES_A, nodeId: NODE_A, code: "A" })
+    .onConflictDoNothing({ target: invoiceSeries.id });
+  await admin
+    .insert(invoiceSeries)
+    .values({ id: SERIES_B, nodeId: NODE_B, code: "B" })
+    .onConflictDoNothing({ target: invoiceSeries.id });
+  await admin
+    .insert(persons)
+    .values({ id: PERSON, displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+    .onConflictDoNothing({ target: persons.id });
+  await admin
+    .insert(deviceProfiles)
+    .values({ id: DEVICE_PROFILE, name: "Counter", formFactor: "till", capabilities: [] })
+    .onConflictDoNothing({ target: deviceProfiles.id });
+  await admin
+    .insert(devices)
+    .values({
+      id: DEVICE_ID,
+      locationId: LOCATION,
+      deviceProfileId: DEVICE_PROFILE,
+      tillId: TILL,
+      label: "Counter till",
+      tokenHash: hashSecret(DEVICE_TOKEN),
+    })
+    .onConflictDoNothing({ target: devices.id });
 }
 
 /** An OS-assigned free port, released before use — WAITRON_HTTP_PORT rejects "0", so the host cannot
@@ -242,8 +286,12 @@ beforeAll(async () => {
   });
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
-  await b.admin.execute(sql`insert into working_orders (id, till_id, node_id, order_number, status)
-    values (${TAB_ID}, ${TILL}, ${NODE_A}, 1, 'open') on conflict do nothing`);
+  // `working_orders.opened_at` is a JavaScript generator on this engine, so this goes through the
+  // table definition like the rest of the fixture; the conflict target is the id this row supplies.
+  await b.admin
+    .insert(workingOrders)
+    .values({ id: TAB_ID, tillId: TILL, nodeId: NODE_A, orderNumber: 1, status: "open" })
+    .onConflictDoNothing({ target: workingOrders.id });
 }, 180_000);
 
 afterAll(async () => {

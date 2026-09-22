@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTransaction, type Database, type DeploymentMode } from "@waitron/db";
+import { nowIso, withTransaction, type Database, type DeploymentMode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { resolveManagementSession, verifyPin } from "@waitron/identity";
@@ -92,7 +92,7 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
       await ensureMirrorViewer(db);
       const n = await withTransaction(db, (tx) =>
         tx.execute<{ c: string }>(
-          sql`select count(*)::text as c from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+          sql`select cast(count(*) as text) as c from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
         ),
       );
       expect(n.rows[0]?.c).toBe("1");
@@ -108,11 +108,18 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
   };
 
   // Age the ambient session past the 1-minute throttle (and past the 30-minute IDLE_TIMEOUT_MS) so the
-  // next request's keepalive must fire. A fixed literal interval — never built from a variable.
+  // next request's keepalive must fire. A fixed two-minute step — never built from a variable.
+  //
+  // The subtraction moved onto a `Date` in JavaScript: this engine has neither `now()` nor an
+  // interval type. `toISOString()` is the spelling `mirror-session.ts` and every other writer of
+  // this `tsString` column uses, which is what makes the keepalive's `<` on it a correct time
+  // ordering (`packages/printing/src/runtime.ts` has the measurement).
+  const BACKDATE_MS = 2 * 60_000;
   const backdateLastSeen = (db: Database): Promise<unknown> => {
+    const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
     return withTransaction(db, (tx) =>
       tx.execute(
-        sql`update management_sessions set last_seen_at = now() - interval '2 minutes'
+        sql`update management_sessions set last_seen_at = ${staleSeenAt}
             where id = ${MIRROR_VIEWER_SESSION_ID}`,
       ),
     );
@@ -261,7 +268,9 @@ describe("mirror ambient viewer session (real Postgres, as app_user)", () => {
       // write and leave the session dead. The `or ended_at is not null` clause must revive it.
       await withTransaction(db, (tx) =>
         tx.execute(
-          sql`update management_sessions set ended_at = now() where id = ${MIRROR_VIEWER_SESSION_ID}`,
+          // `nowIso()` bound in place of `now()`: this engine has no such function, and this is the
+          // spelling `mirror-session.ts` itself stamps `ended_at` with.
+          sql`update management_sessions set ended_at = ${nowIso()} where id = ${MIRROR_VIEWER_SESSION_ID}`,
         ),
       );
       expect(await isEnded(db)).toBe(true);

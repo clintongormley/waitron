@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, nowIso, tenants, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import type { CardProviderContribution } from "@waitron/payments";
@@ -62,25 +62,36 @@ interface Venue {
 /** A fresh tenant + location + a manager and a staff person, each with a management session. Each
  * test seeds its OWN venue so reader/credential counts are order-independent across the shared clone. */
 async function seedVenue(): Promise<Venue> {
-  await suite.admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
-  const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
+  // Through the table definitions: `tenants.created_at` and `locations.id` are JavaScript
+  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
+  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
+  // error here.
+  await suite.admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
+  const [loc] = await suite.admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
     const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
+      personId: mgr!.id,
     });
-    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
   return {
@@ -838,8 +849,12 @@ describe("reader adoption and local management", () => {
     });
     const unpairWrite = withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
+      // ONE clock reading bound to BOTH stamps. PostgreSQL's `now()` is transaction-start time, so
+      // the two columns took the same value in this single statement; reading `nowIso()` once keeps
+      // that exact. Both are text columns, and this is their canonical spelling.
+      const unpaired = nowIso();
       await tx.execute(
-        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where id = ${id}`,
+        sql`update card_readers set active = false, disabled_at = ${unpaired}, unpaired_at = ${unpaired} where id = ${id}`,
       );
       updated();
       await hold;

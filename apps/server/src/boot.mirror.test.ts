@@ -9,9 +9,14 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
+  invoiceSeries,
+  locations,
+  nodes,
   readSingletonRole,
   setDeploymentMode,
   stampDeployment,
+  tenants,
+  tills,
   writeMirrorConfig,
   type Database,
 } from "@waitron/db";
@@ -118,20 +123,49 @@ let adoptingDatabaseUrl: string;
  * WAITRON_TILL_*_ID name — on one clone, as the container superuser.
  */
 async function seedIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
-            array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
-            ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
+  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
+  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Mirror SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Node",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Till",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(invoiceSeries)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      code: "A",
+    })
+    .onConflictDoNothing();
 }
 
 beforeAll(async () => {

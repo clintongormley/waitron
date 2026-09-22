@@ -16,7 +16,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, verifyAmendmentChain, withTransaction } from "@waitron/db";
+import { asAppUser, nowIso, verifyAmendmentChain, withTransaction } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
@@ -250,7 +250,7 @@ async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
 /** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
@@ -263,7 +263,7 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
   // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ total: string }>(sql`
-    select total::text as total from sales where working_order_id = ${workingOrderId}
+    select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
   return rawCentsToDecimal(rows[0]!.total);
 }
@@ -292,7 +292,7 @@ async function frozenUnitLabels(
 /** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
 async function registroCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count
+    select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
@@ -308,7 +308,7 @@ async function tendersFor(workingOrderId: string): Promise<{ method: string; amo
   // `tenders.amount` counts whole cents, read raw and converted by `rawCentsToDecimal`; the
   // helper hands back the amount its callers assert on.
   const { rows } = await suite.admin.execute<{ method: string; amount: string }>(sql`
-    select t.method, t.amount::text as amount
+    select t.method, cast(t.amount as text) as amount
     from tenders t
     join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
@@ -334,7 +334,7 @@ async function paymentsFor(
   }>(sql`
     -- payments.amount counts whole cents, read raw and converted by rawCentsToDecimal in the
     -- mapping below, which returns the amount the callers assert on.
-    select p.provider, p.state, p.amount::text as amount,
+    select p.provider, p.state, cast(p.amount as text) as amount,
            (p.sale_id is not null and p.sale_id = s.id) as linked
     from payments p
     join sales s on s.working_order_id = p.working_order_id
@@ -353,7 +353,7 @@ async function paymentsFor(
  *  a card lost-response retry must not file a SECOND captured payment. */
 async function paymentCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from payments where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from payments where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
@@ -516,7 +516,7 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
  */
 async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
   const { rows } = await suite.admin.execute<{ line_total: string }>(sql`
-    select line_total::text as line_total from working_order_lines where working_order_id = ${id}
+    select cast(line_total as text) as line_total from working_order_lines where working_order_id = ${id}
   `);
   const total = rows.reduce<Decimal>(
     (sum, r) => addDecimal(sum, rawCentsToDecimal(r.line_total)),
@@ -980,11 +980,11 @@ describe("parkOrder concurrent replay", () => {
       // Exactly ONE order and ONE line — the loser replayed, allocating no second number (its counter
       // increment rolled back with the aborted tx) and inserting nothing.
       const { rows: orderRows } = await suite.admin.execute<{ count: number }>(
-        sql`select count(*)::int as count from working_orders where id = ${id}`,
+        sql`select cast(count(*) as int) as count from working_orders where id = ${id}`,
       );
       expect(orderRows[0]!.count).toBe(1);
       const { rows: lineRows } = await suite.admin.execute<{ count: number }>(
-        sql`select count(*)::int as count from working_order_lines where working_order_id = ${id}`,
+        sql`select cast(count(*) as int) as count from working_order_lines where working_order_id = ${id}`,
       );
       expect(lineRows[0]!.count).toBe(1);
     } finally {
@@ -2070,8 +2070,11 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
     // legal placed → settled transition (the enforce_transition trigger forbids editing a placed row
     // any other way). The default-station display drops a collected order (§3e), so it leaves the queue.
+    // ONE clock reading bound twice: PostgreSQL's `now()` was transaction-start time, so the two
+    // columns this statement set always held the SAME instant. `nowIso()` called twice would not.
+    const settledNow = nowIso();
     await suite.admin.execute(sql`
-      update working_orders set status = 'settled', settled_at = now(), collected_at = now()
+      update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
       where id = ${id1}`);
     expect(
       (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),

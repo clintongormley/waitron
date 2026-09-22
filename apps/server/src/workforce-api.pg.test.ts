@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, nowIso, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { absences, rosterVersions, shiftSwaps, shifts } from "@waitron/workforce";
+import { convenioConfig } from "@waitron/workforce-es";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -70,19 +72,23 @@ async function setupVenue(): Promise<Venue> {
   const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+    // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
+    // `$defaultFn` generator on this engine, which a raw insert never reaches.
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
     const mSes = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
+      personId: mgr!.id,
     });
     const sSes = await startManagementSession(tx, {
-      personId: stf.rows[0]!.id,
+      personId: stf!.id,
     });
-    return { locationId: loc.rows[0]!.id, personId: mgr.rows[0]!.id, mSid: mSes.id, sSid: sSes.id };
+    return { locationId: loc.rows[0]!.id, personId: mgr!.id, mSid: mSes.id, sSid: sSes.id };
   });
   return {
     locationId: seeded.locationId,
@@ -121,19 +127,39 @@ async function send(
 }
 
 async function seedAcceptedSwap(personId: string, locationId: string): Promise<string> {
-  const shift = await suite.admin.execute<{ id: string }>(sql`
-    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-    values (${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0) returning id`);
-  const swap = await suite.admin.execute<{ id: string }>(sql`
-    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
-  return swap.rows[0]!.id;
+  const [shift] = await suite.admin
+    .insert(shifts)
+    .values({
+      personId,
+      locationId,
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+    })
+    .returning({ id: shifts.id });
+  const [swap] = await suite.admin
+    .insert(shiftSwaps)
+    .values({
+      requestedByPersonId: personId,
+      fromShiftId: shift!.id,
+      toPersonId: personId,
+      status: "accepted",
+    })
+    .returning({ id: shiftSwaps.id });
+  return swap!.id;
 }
 async function seedRequestedAbsence(personId: string): Promise<string> {
-  const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into absences (person_id, absence_kind, starts_on, ends_on)
-    values (${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
-  return r.rows[0]!.id;
+  const [r] = await suite.admin
+    .insert(absences)
+    .values({
+      personId,
+      kind: "holiday",
+      startsOn: "2026-03-02",
+      endsOn: "2026-03-04",
+    })
+    .returning({ id: absences.id });
+  return r!.id;
 }
 
 describe("Workforce API over real Postgres (roster publish, decide columns, gates)", () => {
@@ -190,9 +216,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
   it("publishes end-to-end as the app role and returns the breaches array", async () => {
     const v = await setupVenue();
     // Seed the location's convenio_config (as admin — owner).
-    await suite.admin.execute(
-      sql`insert into convenio_config (location_id) values (${v.locationId})`,
-    );
+    await suite.admin.insert(convenioConfig).values({ locationId: v.locationId });
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", v.managerCookie, {
       locationId: v.locationId,
@@ -324,12 +348,27 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
     // (the planned side is published-only, so a null-version draft would be excluded)
     // and assert it comes back as a no-show — proving the read runs as app_user without leaking or 500-ing.
     const v = await setupVenue();
-    const version = await suite.admin.execute<{ id: string }>(sql`
-      insert into roster_versions (location_id, period_start, period_end, status, published_at)
-      values (${v.locationId}, '2026-03-02', '2026-03-08', 'published', now()) returning id`);
-    await suite.admin.execute(sql`
-      insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, roster_version_id)
-      values (${v.personId}, ${v.locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0, ${version.rows[0]!.id})`);
+    // `now()` has no equivalent here: the clock is read in JavaScript and bound. `published_at` is a
+    // text column, and `nowIso()` is the canonical spelling every other writer of it uses.
+    const [version] = await suite.admin
+      .insert(rosterVersions)
+      .values({
+        locationId: v.locationId,
+        periodStart: "2026-03-02",
+        periodEnd: "2026-03-08",
+        status: "published",
+        publishedAt: nowIso(),
+      })
+      .returning({ id: rosterVersions.id });
+    await suite.admin.insert(shifts).values({
+      personId: v.personId,
+      locationId: v.locationId,
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      rosterVersionId: version!.id,
+    });
     const res = await send(
       mountApp(),
       "GET",

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tenants, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
@@ -39,13 +39,22 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  await suite.admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
-  const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { locationId: loc.rows[0]!.id };
+  // Both rows go in through their table definitions, the same change
+  // `packages/db/src/testing/seed.ts` took: `tenants.created_at` and `locations.id` are
+  // `$defaultFn` values on this engine rather than SQL DEFAULTs, which a raw insert never reaches,
+  // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
+  await suite.admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
+  const [loc] = await suite.admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  return { locationId: loc!.id };
 }
 
 let tenantA: Tenant;
@@ -126,7 +135,7 @@ async function authenticate(token: string): Promise<{ agentId: string }> {
  *  table and not about what the route chose to return. */
 async function agentRowCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from print_agents where node_id = ${cfg.nodeId}`,
+    sql`select cast(count(*) as int) as n from print_agents where node_id = ${cfg.nodeId}`,
   );
   return rows[0]!.n;
 }

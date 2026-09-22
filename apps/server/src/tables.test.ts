@@ -4,7 +4,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   DEFAULT_TIME_ZONE,
   asAppUser,
+  locations,
+  nowIso,
   ticketItems,
+  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -50,6 +53,24 @@ import "./errors.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 const LOCALE = "es-ES";
+
+/**
+ * An ISO stamp `minutes` before the reading this call takes, for a `tsString` column — what
+ * `now() - interval '<n> minutes'` wrote before the engine changed (SQLite has neither function nor
+ * interval type).
+ *
+ * The clock read here is the FIXTURE's, taken a few milliseconds before the read under test takes
+ * its own (`listTablesWithState` calls `Date.now()` once per call, `working-order.ts:4720`), so the
+ * age the read measures is `minutes` PLUS whatever the suite spent in between. That direction is
+ * the safe one for every case below, which sit inside a band rather than on its edge: 12 minutes is
+ * between the seeded station's `overdue` 10 and `forgotten` 15, and 16 is past 15 with no upper
+ * bound above it. PostgreSQL's `now()` was transaction time and had the same property, one
+ * transaction earlier.
+ */
+function minutesAgo(minutes: number): string {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
 // The whole manifest, not [core]: the tables here belong to several modules that FK into core, and
 // `manifestSets()` is that whole ordered set.
 const suite = useVenueDb({
@@ -66,15 +87,29 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
   // Default the location's time_zone from the schema default (Europe/Madrid) unless a test pins one —
   // the reserved-on-floor read derives venue-local "today"/"now" from this column (design §2b/§4).
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description, time_zone)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento', ${timeZone}) returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+      timeZone,
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -520,16 +555,29 @@ async function setupTabVenue(): Promise<{
 }> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -683,10 +731,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     // both, which is exactly what lets the client apply the en-camino > listos precedence.
     const away = items.find((i) => i.lineId === lines[0]!.id)!;
     await asApp(cfg, (tx) =>
-      tx
-        .update(ticketItems)
-        .set({ awayAt: sql`now()` })
-        .where(eq(ticketItems.id, away.id)),
+      tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, away.id)),
     );
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 1, readyToServe: 2, pendingToServe: 2 });
@@ -735,7 +780,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     // Backdate line 1's ticket item past the seeded station's default overdue threshold (10) but under
     // forgotten (15); line 2 stays fresh.
     await asApp(cfg, (tx) =>
-      tx.execute(sql`update ticket_items set queued_at = now() - interval '12 minutes'
+      tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(12)}
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 
@@ -780,7 +825,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
 
     // Line 1 past forgotten (15); line 2 left fresh — the table reports the worse of the two.
     await asApp(cfg, (tx) =>
-      tx.execute(sql`update ticket_items set queued_at = now() - interval '16 minutes'
+      tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(16)}
                      where working_order_line_id = ${lines[0]!.id}`),
     );
 

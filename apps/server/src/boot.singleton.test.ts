@@ -5,9 +5,17 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSingletonRole, stampDeployment, type Database } from "@waitron/db";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  setSingletonRole,
+  stampDeployment,
+  tenants,
+  tills,
+  type Database,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { runTunnelClient } from "@waitron/tunnel";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -83,20 +91,49 @@ let primaryDatabaseUrl: string;
  * clone, as the container superuser — mirrors boot.mirror.test.ts's `seedIdentity`.
  */
 async function seedIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90333333P', 'Secondary SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
-            array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
-            ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
+  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
+  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Node",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Till",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(invoiceSeries)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      code: "A",
+    })
+    .onConflictDoNothing();
 }
 
 beforeAll(async () => {

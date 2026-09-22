@@ -222,7 +222,7 @@ async function ringSale(venue: GbVenue): Promise<{ saleId: SaleId; backendId: st
 /** Owner read: how many rows `table` holds. */
 async function countRows(table: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(
-    sql`select count(*)::text as count from ${sql.identifier(table)} `,
+    sql`select cast(count(*) as text) as count from ${sql.identifier(table)} `,
   );
   return Number(rows[0]!.count);
 }

@@ -10,12 +10,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   captureError,
+  locations,
+  nodes,
   readDeploymentMode,
   readSingletonRole,
   readStandardSeriesId,
   setDeploymentMode,
   setSingletonRole,
   stampDeployment,
+  tenants,
+  tills,
   withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
@@ -122,25 +126,41 @@ const PROMOTE_RING = loadKeyRing({
  * `prepay`.
  */
 async function seedTillIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90111111H', 'Promote Till SL')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
-            array['en']::text[], 'Hospitality')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote node')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote till')
-    on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine;
+  // and `array['en']::text[]` is a PostgreSQL array constructor plus a PostgreSQL cast operator,
+  // both refused at prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it
+  // replaces were — narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Till SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Barra",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Promote node",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Promote till",
+    })
+    .onConflictDoNothing();
   await establishNodeIdentity(
     { ownerDb: admin, ring: PROMOTE_RING },
     TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -402,14 +422,19 @@ const MIRROR_NUMERO_INSTALACION = 7;
 async function seedMirrorIdentity(
   admin: Database,
 ): Promise<{ nodeId: string; standardSeriesId: string }> {
-  await admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90222222H', 'Promote Cloud SL')
-    on conflict do nothing`);
-  await admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
-    on conflict do nothing`);
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: MIRROR_LOCATION_ID,
+      name: "Barra",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

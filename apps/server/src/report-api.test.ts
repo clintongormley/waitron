@@ -1,18 +1,21 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
+  invoiceSeries,
+  locations,
+  nodes,
   purchaseInvoiceVat,
   purchaseInvoices,
   sales,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { addDecimal, decimal, decimalToBasisPoints, decimalToCents } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -132,22 +135,35 @@ const suite = useVenueDb({
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
     // The one venue's location/till/node/series, seeded directly as the superuser (the demo idiom).
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
-    tillId = till.rows[0]!.id;
-    const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (location_id, name)
-      values (${locationId}, 'Nodo 1') returning id`);
-    nodeId = node.rows[0]!.id;
-    const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (node_id, code)
-      values (${nodeId}, 'A') returning id`);
-    seriesId = series.rows[0]!.id;
+    // Through the table definitions, not raw SQL: every `id` here (and `tills.created_at` /
+    // `nodes.created_at`) is a JavaScript `$defaultFn` generator on this engine, which a raw insert
+    // never reaches, and `invoice_locales` is encoded by the column's own write mapping — the
+    // `array[...]` constructor it replaces is a syntax error here. `invoice_series.next_number`
+    // keeps its column DEFAULT of 1, which drizzle leaves to the engine.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Sala principal",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
+    tillId = till!.id;
+    const [node] = await db
+      .insert(nodes)
+      .values({ locationId, name: "Nodo 1" })
+      .returning({ id: nodes.id });
+    nodeId = node!.id;
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "A" })
+      .returning({ id: invoiceSeries.id });
+    seriesId = series!.id;
 
     // A known month (August) + quarter (Q1, via the February sale) of trade, plus one August purchase.
     for (const s of AUGUST_SALES) await seedSale(db, s);
@@ -159,17 +175,19 @@ const suite = useVenueDb({
     // cookie. `pin_hash` is NOT NULL, so a value is supplied though these sessions are minted directly.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const [stf] = await tx
+        .insert(persons)
+        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
-        personId: mgr.rows[0]!.id,
+        personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        personId: stf.rows[0]!.id,
+        personId: stf!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
     });

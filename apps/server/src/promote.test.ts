@@ -5,6 +5,7 @@ import {
   captureError,
   CORE_MIGRATIONS,
   createPgliteDb,
+  locations,
   runMigrations,
   stampDeployment,
   setSingletonRole,
@@ -65,10 +66,19 @@ async function localSecondary(): Promise<{
   await stampDeployment(db, "preproduction");
   await setSingletonRole(db, "secondary"); // (primary, secondary) — a local secondary
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+  // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts` took:
+  // `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL DEFAULT, so a raw
+  // insert omitting it returns nothing to brand — and `array['es-ES']` is PostgreSQL array syntax
+  // the engine refuses at prepare.
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const nodeId = await seedNode(db, brandLocationId(loc!.id));
   await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   const holders = createDeploymentHolders("primary", "secondary");
   return {
@@ -344,10 +354,15 @@ async function mirror(): Promise<{
   await stampDeployment(db, "preproduction");
   await setDeploymentMode(db, "mirror"); // (mirror, secondary)
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
   const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

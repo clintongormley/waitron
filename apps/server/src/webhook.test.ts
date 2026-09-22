@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tills, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -67,17 +67,25 @@ async function seedInitiated(
 ): Promise<SeededPayment> {
   await seedTenant(db);
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Counter', array['es'], 'Retail') returning id`);
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${loc.rows[0]!.id}, 'Till 1') returning id`);
-  const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, order_number) values (${till.rows[0]!.id}, 1) returning id`);
+  // Through the table definitions, not raw SQL: `locations.id`, `tills.id`, `working_orders.id` and
+  // the `created_at`/`opened_at` stamps are all JavaScript `$defaultFn` generators on this engine,
+  // which a raw insert never reaches, and `invoice_locales` is encoded by the column's own write
+  // mapping — the `array[...]` constructor it replaces is a syntax error here.
+  const [loc] = await db
+    .insert(locations)
+    .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
+    .returning({ id: locations.id });
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: loc!.id, name: "Till 1" })
+    .returning({ id: tills.id });
+  const [wo] = await db
+    .insert(workingOrders)
+    .values({ tillId: till!.id, orderNumber: 1 })
+    .returning({ id: workingOrders.id });
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
-      workingOrderId: wo.rows[0]!.id,
+      workingOrderId: wo!.id,
       provider: "stripe",
       paymentRef: randomUUID(),
       externalRef: sessionId,

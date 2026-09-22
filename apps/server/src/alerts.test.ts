@@ -1,12 +1,19 @@
 // PGlite: reads on one transaction, no concurrency and no connection-role question.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  locations,
+  tills,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
-import { hashPin } from "@waitron/identity";
+import { hashPin, persons } from "@waitron/identity";
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
@@ -41,13 +48,25 @@ const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"
 
 async function seedVenue(): Promise<{ tillId: TillId }> {
   await seedTenant(db);
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
-  return { tillId: brandTillId(till.rows[0]!.id) };
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Sala",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Caja 1" })
+    .returning({ id: tills.id });
+  return { tillId: brandTillId(till!.id) };
 }
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -403,10 +422,14 @@ describe("readHandledAlerts", () => {
   it("lists handled events from the last 30 days with who handled them", async () => {
     const v = await seedVenue();
     const person = await asApp(async (tx) => {
-      const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('Ada', ${hashPin("1234")}, 'manager') returning id`);
-      return p.rows[0]!.id;
+      // Through the table definition for the same reason as `seedVenue` above: `persons.id` and
+      // `persons.created_at` are `$defaultFn` generators and both columns are NOT NULL, so the raw
+      // insert stopped at `NOT NULL constraint failed: persons.id`.
+      const [p] = await tx
+        .insert(persons)
+        .values({ displayName: "Ada", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      return p!.id;
     });
     await raise(v, "payment.offline_forward_declined", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);

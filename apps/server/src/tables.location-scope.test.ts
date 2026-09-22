@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -41,16 +41,28 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
   await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values (${name}, array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, ${`${name} Caja`}) returning id`);
+    // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+    // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+    // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+    // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+    // a text column, which is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name,
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = location!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: `${name} Caja` })
+      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      tillId: brandTillId(till.rows[0]!.id),
+      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),

@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
   createPgliteDb,
+  locations,
   runMigrations,
   stampDeployment,
   readMembershipTrustSet,
@@ -51,10 +51,19 @@ async function fencedNode(): Promise<{
   await runMigrations(db, CREDENTIALS_MIGRATIONS);
   await stampDeployment(db, "preproduction");
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+  // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts`
+  // took: `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL DEFAULT,
+  // so a raw insert omitting it returns nothing to brand — and `array['es-ES']` is PostgreSQL
+  // array syntax the engine refuses at prepare (`near "['es-ES']": syntax error`).
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const nodeId = await seedNode(db, brandLocationId(loc!.id));
   await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   return {
     db,

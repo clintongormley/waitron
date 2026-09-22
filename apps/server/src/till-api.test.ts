@@ -2,12 +2,24 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  asAppUser,
+  canvases,
+  deviceProfiles,
+  floorZones,
+  kitchenCourses,
+  locations,
+  tenantReceipts,
+  tills,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPinThrottle, endSession, hashPin, loginWithPin } from "@waitron/identity";
+import { departments, preparationRoutes } from "@waitron/venue-service";
+import { createPinThrottle, endSession, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
@@ -106,34 +118,44 @@ const suite = useVenueDb({
     // `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the
     // working-order-line insert `POST /api/working-orders` fires `check_locales`, which demands a
     // line's `descriptions` keys equal the location's locales EXACTLY.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
     // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
     const defaultStationId = await seedKitchenStation(db, {
-      locationId: brandLocationId(loc.rows[0]!.id),
+      locationId: brandLocationId(loc!.id),
     });
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
-    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
     // Abel: ACTIVE, inserted after Ana but sorts before her. Zoe: SUSPENDED, must be excluded.
-    const abelRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Abel', ${hashPin("1111")}, 'staff') returning id`);
-    abel = { id: abelRow.rows[0]!.id };
-    await db.execute(sql`
-      insert into persons (display_name, pin_hash, role, status)
-      values ('Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
+    const [abelRow] = await db
+      .insert(persons)
+      .values({ displayName: "Abel", pinHash: hashPin("1111"), role: "staff" })
+      .returning({ id: persons.id });
+    abel = { id: abelRow!.id };
+    await db
+      .insert(persons)
+      .values({ displayName: "Zoe", pinHash: hashPin("2222"), role: "staff", status: "suspended" });
     // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
     // product in a SECOND catalogue attached as a non-default accessible menu
     // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
@@ -157,7 +179,7 @@ const suite = useVenueDb({
           // `allergens` map to carry back — the field this route carries through unchanged.
           allergens: { sulphites: { presence: "may_contain" } },
         });
-        await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+        await assignCatalogueToLocation(tx, loc!.id, cat.id);
 
         const cat2 = await createCatalogue(tx, { name: "Happy Hour" });
         const p2 = await createProduct(tx, {
@@ -168,23 +190,37 @@ const suite = useVenueDb({
           unitPrice: "2.50",
           vatClass: "general",
         });
-        await addCatalogueToLocation(tx, loc.rows[0]!.id, cat2.id);
+        await addCatalogueToLocation(tx, loc!.id, cat2.id);
 
-        const department = await tx.execute<{ id: string }>(sql`
-        insert into departments
-          (location_id, name, trading_name, default_service_mode)
-        values (${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
-        returning id`);
-        const zone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (location_id, name)
-        values (${loc.rows[0]!.id}, 'Counter') returning id`);
+        const [department] = await tx
+          .insert(departments)
+          .values({
+            locationId: loc!.id,
+            name: "Restaurant",
+            tradingName: "Restaurant",
+            defaultServiceMode: "prepay",
+          })
+          .returning({ id: departments.id });
+        const [zone] = await tx
+          .insert(floorZones)
+          .values({ locationId: loc!.id, name: "Counter" })
+          .returning({ id: floorZones.id });
+        // Three statements where PostgreSQL took two. `zone_service_policies_default_allowed_fk`
+        // (zone_id, default_menu_id) → zone_menus was DEFERRABLE INITIALLY DEFERRED on PostgreSQL
+        // and sqlite-core has no deferrable option, so it is checked AT THE STATEMENT here — and
+        // `zone_menus.zone_id` points back at the policy row, so neither table can be filled first
+        // with `default_menu_id` already set. The comment above the key in
+        // `packages/venue-service/src/schema/service.ts` records the same order. The FINAL rows are
+        // the ones this fixture always wrote; only the number of statements changed.
         await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, default_menu_id, is_counter_default)
-        values (${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+        values (${loc!.id}, ${zone!.id}, ${department!.id}, null, true)`);
         await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
-        values (${zone.rows[0]!.id}, ${cat.id})`);
+        values (${zone!.id}, ${cat.id})`);
+        await tx.execute(sql`
+        update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zone!.id}`);
         const section = await createMenuSection(tx, {
           menuId: cat.id,
           name: { es: "Bebidas" },
@@ -195,9 +231,11 @@ const suite = useVenueDb({
           sectionId: section.id,
           grossPrice: "1.75",
         });
-        await tx.execute(sql`
-          insert into preparation_routes (location_id, product_id, station_id)
-          values (${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
+        await tx.insert(preparationRoutes).values({
+          locationId: loc!.id,
+          productId: p.id,
+          stationId: defaultStationId,
+        });
 
         const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
         const hiddenSection = await createMenuSection(tx, {
@@ -214,7 +252,7 @@ const suite = useVenueDb({
         return {
           agua: { ...p, catalogueId: cat.id },
           cerveza: { ...p2, catalogueId: cat2.id },
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone!.id,
           offerId: offer.id,
           hiddenOfferId: hiddenOffer.id,
         };
@@ -226,7 +264,7 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
   },
 });
 
@@ -375,12 +413,17 @@ async function seedDeviceProfile(
   canvasId: string | null,
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
-  const { rows } = await withTransaction(db, async (tx) => {
+  const rows = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    return tx.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds)
-      values (${name}, 'till', ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb, ${inactivityTimeoutSeconds})
-      returning id`);
+    // Through the table definition rather than raw SQL: `device_profiles.id`, `.created_at` and
+    // `.updated_at` are `$defaultFn` generators on NOT NULL columns
+    // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches
+    // on this engine. Both casts go with it: `canvas_id` is a text column here, not a uuid, and
+    // `capabilities` is JSON in a text column.
+    return tx
+      .insert(deviceProfiles)
+      .values({ name, formFactor: "till", canvasId, capabilities, inactivityTimeoutSeconds })
+      .returning({ id: deviceProfiles.id });
   });
   return rows[0]!.id;
 }
@@ -435,10 +478,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // `venue.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const mgr = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Marta', ${hashPin("9999")}, 'manager') returning id`);
-    const managerId = mgr.rows[0]!.id;
+    const [mgr] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Marta", pinHash: hashPin("9999"), role: "manager" })
+      .returning({ id: persons.id });
+    const managerId = mgr!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
@@ -466,10 +510,16 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // that hardcoded a locale. Cleaned up so the roster tests' exact ordering assertions stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role, locale)
-      values ('Beatriz', ${hashPin("7777")}, 'staff', 'en-GB') returning id`);
-    const personId = row.rows[0]!.id;
+    const [row] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: "Beatriz",
+        pinHash: hashPin("7777"),
+        role: "staff",
+        locale: "en-GB",
+      })
+      .returning({ id: persons.id });
+    const personId = row!.id;
 
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const res = await app.request("/api/session", {
@@ -573,7 +623,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
    *  attempt never reached `loginWithPin` (a login would have inserted a row). */
   async function sessionCount(personId: string): Promise<number> {
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from sessions where person_id = ${personId}`,
+      sql`select cast(count(*) as int) as n from sessions where person_id = ${personId}`,
     );
     return rows[0]!.n;
   }
@@ -880,10 +930,11 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
   // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Ana)
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
   async function loginFresh(pin: string): Promise<{ personId: string; sessionId: string }> {
-    const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Locale User', ${hashPin(pin)}, 'staff') returning id`);
-    const personId = row.rows[0]!.id;
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Locale User", pinHash: hashPin(pin), role: "staff" })
+      .returning({ id: persons.id });
+    const personId = row!.id;
     const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
@@ -1237,12 +1288,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // offers) and drops the retired one. Direct inserts as the PGlite superuser (pure setup, like
     // the bump_mode seed above); cleaned up in `finally` so the shared-location default `[]` case
     // stays order-independent.
-    await suite.db.execute(
-      sql`insert into kitchen_courses (location_id, name, display_order, active) values
-        (${cfg.locationId}, 'Postres', 2, true),
-        (${cfg.locationId}, 'Entrantes', 1, true),
-        (${cfg.locationId}, 'Retirado', 0, false)`,
-    );
+    // `kitchen_courses.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
+    // (`packages/db/drizzle/0000_baseline.sql:211` and `:216`).
+    await suite.db.insert(kitchenCourses).values([
+      { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
+      { locationId: cfg.locationId, name: "Entrantes", displayOrder: 1, active: true },
+      { locationId: cfg.locationId, name: "Retirado", displayOrder: 0, active: false },
+    ]);
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -1270,9 +1322,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // test also pins its absence. Cleaned up in `finally` so the shared-tenant default case above
     // stays order-independent (CLAUDE.md §4).
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
-    await suite.db.execute(sql`
-      insert into tenant_receipts (receipt)
-      values (${JSON.stringify(authoredReceipt)}::jsonb)`);
+    // `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT NULL column
+    // (`packages/db/drizzle/0000_baseline.sql:512`), and `receipt` is JSON in a text column, so the
+    // jsonb cast goes with the raw statement.
+    await suite.db.insert(tenantReceipts).values({ receipt: authoredReceipt });
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -1294,11 +1347,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // it off the canvas). Seed a canvas + a profile referencing it, enrol a `till` device bound to that
     // profile, and prove `GET /api/till` resolves + returns both. Cleaned up in `finally` so the
     // shared-tenant no-cookie assertion above stays order-independent (CLAUDE.md §4).
-    const prof = await suite.db.execute<{ id: string }>(sql`
-      insert into canvases (name, definition)
-      values ('Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
-      returning id`);
-    const canvasId = prof.rows[0]!.id;
+    // `canvases.id`, `.created_at` and `.updated_at` are `$defaultFn` generators on NOT NULL
+    // columns (`packages/db/drizzle/0000_baseline.sql:480`, `:483`, `:484`), and `definition` is
+    // JSON in a text column.
+    const [prof] = await suite.db
+      .insert(canvases)
+      .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
+      .returning({ id: canvases.id });
+    const canvasId = prof!.id;
     const deviceProfileId = await seedDeviceProfile(
       suite.db,
       "Counter",
@@ -1437,27 +1493,28 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     const sessionId = await openSession(suite.db);
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
-    const second = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
+    const [second] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: `Device zone ${deviceId}` })
+      .returning({ id: floorZones.id });
     await suite.db.execute(sql`
       insert into zone_service_policies
         (location_id, zone_id, department_id, service_mode)
-      select ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
+      select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
-      values (${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
+      values (${second!.id}, ${aguaProduct.catalogueId})`);
     await suite.db.execute(sql`
       insert into device_zone_defaults (device_id, zone_id)
-      values (${deviceId}, ${second.rows[0]!.id})`);
+      values (${deviceId}, ${second!.id})`);
 
     const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ context: { zoneId: second.rows[0]!.id } });
+    expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
   });
 
   it("returns the offers allowed in an explicit service zone", async () => {
@@ -1810,10 +1867,14 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
     expect(allowed.status).toBe(200);
     // Read straight from the column, which counts whole cents: 175 is the stored 1.75. Nothing
-    // converts here, so this asserts the stored COUNT; the ::int cast only normalises it to a
-    // number for the assertion, and would raise 22003 rather than answer wrong on a big one.
+    // converts here, so this asserts the stored COUNT; the cast only normalises it to a number for
+    // the assertion. `cast(x as int)` is the spelling because this engine has no cast operator —
+    // and UNLIKE the `::int` it replaces it refuses nothing: PostgreSQL raised 22003 on a value
+    // too wide for an `integer`, where SQLite's INTEGER is 64-bit whatever the declared type says
+    // (`packages/db/src/schema/columns.ts`, the `smallCount`/`bigCount` note). The values here are
+    // three digits, so nothing in this case turns on that.
     const priced = await suite.db.execute<{ unit_price_gross: number }>(sql`
-      select unit_price_gross::int as unit_price_gross
+      select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${allowedId}`);
     expect(priced.rows).toEqual([{ unit_price_gross: 175 }]);
 
@@ -2524,21 +2585,28 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     // Seed one active floor zone in the till's own venue. `GET /api/zones` must read it back through
     // the app role, and the table-create must accept it, so those two paths — not this insert — are
     // under test. This is the only zone-seeding test in the suite, so "Comedor" cannot collide.
-    const zoneRow = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${cfg.locationId}, 'Comedor') returning id`);
-    const zoneId = zoneRow.rows[0]!.id;
+    const [zoneRow] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Comedor" })
+      .returning({ id: floorZones.id });
+    const zoneId = zoneRow!.id;
+    // Two statements where PostgreSQL took one: a data-modifying CTE (`with department as (insert
+    // … returning id) insert …`) is a PostgreSQL feature, and SQLite refuses an INSERT inside a
+    // WITH. The department id now travels in JavaScript instead; the rows written are the same
+    // two.
+    const [department] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: cfg.locationId,
+        name: "Dining room",
+        tradingName: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+      .returning({ id: departments.id });
     await suite.db.execute(sql`
-      with department as (
-        insert into departments
-          (location_id, name, trading_name, default_service_mode)
-        values (${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
-        returning id
-      )
       insert into zone_service_policies
         (location_id, zone_id, department_id)
-      select ${cfg.locationId}, ${zoneId}, department.id
-      from department`);
+      values (${cfg.locationId}, ${zoneId}, ${department!.id})`);
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${zoneId}, ${aguaProduct.catalogueId})`);
@@ -2761,10 +2829,11 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   let zoneId: string;
 
   beforeAll(async () => {
-    const managerRow = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Manolo (manager)', ${hashPin("9999")}, 'manager') returning id`);
-    managerPersonId = managerRow.rows[0]!.id;
+    const [managerRow] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Manolo (manager)", pinHash: hashPin("9999"), role: "manager" })
+      .returning({ id: persons.id });
+    managerPersonId = managerRow!.id;
     const managerSession = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
@@ -2778,10 +2847,11 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     // the roster's `[abel, ana]` invariant untouched (no extra staff person seeded).
     staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    const zoneRow = await suite.db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${cfg.locationId}, 'Sala') returning id`);
-    zoneId = zoneRow.rows[0]!.id;
+    const [zoneRow] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Sala" })
+      .returning({ id: floorZones.id });
+    zoneId = zoneRow!.id;
   });
 
   // Remove the seeded manager (and its session) so `GET /api/staff`'s EXACT `[abel, ana]` roster
@@ -3038,7 +3108,12 @@ async function modifierOfferFixture() {
       vatClass: "general",
     });
     await tx.execute(
-      sql`insert into preparation_routes (location_id,product_id,station_id) select location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
+      // Still a SELECT-driven copy of the existing route. `preparation_routes.id` is a
+      // `$defaultFn` generator on a NOT NULL column
+      // (`packages/venue-service/drizzle/0000_baseline.sql:47`) that no raw insert reaches, and an
+      // INSERT … SELECT cannot go through the table definition, so the id is generated here and
+      // bound into the select list.
+      sql`insert into preparation_routes (id,location_id,product_id,station_id) select ${randomUUID()},location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
     const section = await createMenuSection(tx, {
       menuId: aguaProduct.catalogueId,
@@ -3346,12 +3421,25 @@ describe("canonical modifier HTTP serialization", () => {
 
   it("carries extras and options through table opening and a later round", async () => {
     const f = await modifierOfferFixture();
-    const zone = await suite.db.execute<{ id: string }>(
-      sql`insert into floor_zones (location_id,name) values (${cfg.locationId},'Modifier tables') returning id`,
-    );
-    const zoneId = zone.rows[0]!.id;
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Modifier tables" })
+      .returning({ id: floorZones.id });
+    const zoneId = zone!.id;
+    // Two statements where PostgreSQL took one: a data-modifying CTE (`with department as (insert
+    // … returning id) insert …`) is a PostgreSQL feature and SQLite refuses an INSERT inside a
+    // WITH, so the department id travels in JavaScript. The rows written are the same two.
+    const [modifierDepartment] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: cfg.locationId,
+        name: "Modifier tables",
+        tradingName: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+      .returning({ id: departments.id });
     await suite.db.execute(
-      sql`with department as (insert into departments (location_id,name,trading_name,default_service_mode) values (${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (location_id,zone_id,department_id) select ${cfg.locationId},${zoneId},department.id from department`,
+      sql`insert into zone_service_policies (location_id,zone_id,department_id) values (${cfg.locationId},${zoneId},${modifierDepartment!.id})`,
     );
     await suite.db.execute(
       sql`insert into zone_menus (zone_id,menu_id) values (${zoneId},${aguaProduct.catalogueId})`,

@@ -1,17 +1,21 @@
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
+  locations,
+  nowIso,
+  printJobs,
+  tenants,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import {
   locationId as brandLocationId,
@@ -57,30 +61,41 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  await suite.admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
-  const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { locationId: loc.rows[0]!.id };
+  // Through the table definitions: `tenants.created_at` and `locations.id` are JavaScript
+  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
+  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
+  // error here.
+  await suite.admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
+  const [loc] = await suite.admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  return { locationId: loc!.id };
 }
 
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
     const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
+      personId: mgr!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      personId: stf.rows[0]!.id,
+      personId: stf!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
@@ -924,9 +939,12 @@ describe("print job resend as the deployment role", () => {
       printerId,
       new Uint8Array([0, 255, 27, 64, 29, 86, 0]),
     );
-    await suite.admin.execute(
-      sql`update print_jobs set status = 'done', delivered_at = now() where id = ${originalId}`,
-    );
+    // `now()` has no equivalent here; the clock is read in JavaScript and bound. `delivered_at` is
+    // a text column, and `nowIso()` is the canonical spelling every other writer of it uses.
+    await suite.admin
+      .update(printJobs)
+      .set({ status: "done", deliveredAt: nowIso() })
+      .where(eq(printJobs.id, originalId));
     const path = `/management-api/print-jobs/${originalId}/resend`;
     expect((await send(app, "POST", path)).status).toBe(401);
     const denied = await send(app, "POST", path, { cookie: staffCookie });
@@ -944,7 +962,11 @@ describe("print job resend as the deployment role", () => {
       payload: string;
       attempts: number;
     }>(
-      sql`select id, status, encode(payload, 'hex') as payload, attempts from print_jobs where id in (${jobId}, ${originalId}) order by status::text`,
+      // `encode(bytea, 'hex')` is PostgreSQL's; SQLite's `hex()` is the same bytes in UPPER case, so
+      // `lower()` keeps the assertion's spelling exactly. `order by status::text` loses its cast
+      // because `status` IS text here (it was a PostgreSQL enum), and 'done' still sorts before
+      // 'queued'.
+      sql`select id, status, lower(hex(payload)) as payload, attempts from print_jobs where id in (${jobId}, ${originalId}) order by status`,
     );
     expect(rows.rows).toEqual([
       { id: originalId, status: "done", payload: "00ff1b401d5600", attempts: 0 },

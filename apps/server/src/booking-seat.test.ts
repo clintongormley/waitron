@@ -2,12 +2,17 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  persons,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
 import {
   locationId as brandLocationId,
@@ -53,15 +58,28 @@ interface Venue {
 
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const tillCfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -72,10 +90,14 @@ async function setupVenue(): Promise<Venue> {
   };
   const managerSid = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const p = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
+    // Through the table definition for the same reason as the venue rows above: `persons.id` and
+    // `persons.created_at` are `$defaultFn` generators and both columns are NOT NULL
+    // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
+    const [p] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const session = await startManagementSession(tx, { personId: p!.id });
     return session.id;
   });
   const ctx: ModuleRouteContext = {

@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  asAppUser,
+  deviceProfiles,
+  sales,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -23,7 +30,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -32,7 +39,8 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
+import { MANUAL_PROVIDER, SimulatorPaymentProvider, cardReaders } from "@waitron/payments";
+import { preparationRoutes } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -86,7 +94,7 @@ const noopLog: Logger = () => {};
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `till-sale.test.ts`/`catalogue-demo.ts` document. `recordSale` reads `now()`
+ * identical stub shape `till-sale.test.ts`/`record-one-sale.ts` document. `recordSale` reads `now()`
  * once and touches neither `anchor` nor `currentAnchor`.
  */
 function systemClock(): TrustedClock {
@@ -232,20 +240,23 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    await tx.execute(sql`
-      insert into preparation_routes (location_id, category_id, station_id)
-      values
-        (${cfg.locationId}, ${comida.id},
-          (select id from kitchen_stations
-           where location_id = ${cfg.locationId} and is_default)),
-        (${cfg.locationId}, ${bebidas.id},
-          (select id from kitchen_stations
-           where location_id = ${cfg.locationId} and is_default))`);
+    // Through the table definition rather than raw SQL: `preparation_routes.id` is a `$defaultFn`
+    // generator on a NOT NULL column (`packages/venue-service/drizzle/0000_baseline.sql:47`) that a
+    // raw insert never reaches on this engine. The station is still the same correlated read.
+    const defaultStation = sql`(select id from kitchen_stations
+           where location_id = ${cfg.locationId} and is_default)`;
+    await tx.insert(preparationRoutes).values([
+      { locationId: cfg.locationId, categoryId: comida.id, stationId: defaultStation },
+      { locationId: cfg.locationId, categoryId: bebidas.id, stationId: defaultStation },
+    ]);
     // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
     // `persons`), so the login route can verify their credential and the sale is attributed to them.
-    const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
+    // `persons.id` and `persons.created_at` are `$defaultFn` generators on NOT NULL columns
+    // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
     const menuItems = new Map([
       [jamon.id, jamonItem.id],
       [agua.id, aguaItem.id],
@@ -256,7 +267,7 @@ async function setupVenue(): Promise<{
         ...product,
         menuItemId: menuItems.get(product.id)!,
       })),
-      operatorId: person.rows[0]!.id,
+      operatorId: person!.id,
     };
   });
   return { cfg, catalogueId, available, operatorId };
@@ -342,11 +353,17 @@ async function seedReader(
   opts: { provider?: string; providerRef?: string; name?: string } = {},
 ): Promise<{ id: string; providerRef: string }> {
   const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
-  const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into card_readers (provider, provider_ref, name)
-    values (${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
-    returning id`);
-  return { id: r.rows[0]!.id, providerRef };
+  // `card_readers.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
+  // (`packages/payments/drizzle/0000_baseline.sql:2` and `:7`).
+  const [r] = await suite.admin
+    .insert(cardReaders)
+    .values({
+      provider: opts.provider ?? "stripe",
+      providerRef,
+      name: opts.name ?? "Front counter",
+    })
+    .returning({ id: cardReaders.id });
+  return { id: r!.id, providerRef };
 }
 
 /** Point a device at its DEFAULT reader (`device_card_readers`). */
@@ -428,11 +445,20 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
 
 /** Create a till profile with the reader and drawer capabilities needed by payment tests. */
 async function createTillProfile(): Promise<string> {
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values ('Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
-    returning id`);
-  return prof.rows[0]!.id;
+  // Through the table definition rather than raw SQL: `device_profiles.id`, `.created_at` and
+  // `.updated_at` are `$defaultFn` generators on NOT NULL columns
+  // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches on
+  // this engine, and `capabilities` is JSON in a text column, so the jsonb cast is both unnecessary
+  // and a syntax error here (SQLite reads a colon as the start of a bind parameter).
+  const [prof] = await suite.admin
+    .insert(deviceProfiles)
+    .values({
+      name: "Counter till",
+      formFactor: "till",
+      capabilities: ["integrated-card-payment", "open-cash-drawer"],
+    })
+    .returning({ id: deviceProfiles.id });
+  return prof!.id;
 }
 
 /** Seed a `device_profiles` row of a given FORM FACTOR (a device is DEFINED by its profile since Task
@@ -443,11 +469,11 @@ async function seedProfileFF(
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values (${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
-    returning id`);
-  return prof.rows[0]!.id;
+  const [prof] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Profile ${formFactor} ${profileCounter}`, formFactor, capabilities })
+    .returning({ id: deviceProfiles.id });
+  return prof!.id;
 }
 
 beforeAll(() => {
@@ -641,7 +667,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       -- sale_lines.quantity counts whole THOUSANDTHS, so the weighed 0.200 kg line is the row
       -- where the column holds 200 -- an unquoted 0.200 here would compare an integer column with
       -- a numeric and match nothing. Read as text: this asserts the stored COUNT, not an amount.
-      select quantity::text as quantity, unit_name, unit_precision from sale_lines
+      select cast(quantity as text) as quantity, unit_name, unit_precision from sale_lines
       where quantity = 200`);
     expect(snapshottedLine.rows).toEqual([
       {
@@ -1953,11 +1979,11 @@ describe("handheld sales and device capability gates", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
 
     // Author a capability-less handheld device profile and enrol a device bound to it.
-    const prof = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor, capabilities)
-      values ('Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
-      returning id`);
-    const deviceProfileId = prof.rows[0]!.id;
+    const [prof] = await suite.admin
+      .insert(deviceProfiles)
+      .values({ name: "Waiter phone", formFactor: "phone-portrait", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const deviceProfileId = prof!.id;
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Waiter phone",
       profileId: deviceProfileId,
@@ -2332,7 +2358,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       vat_rate: string;
       unit_name: Record<string, string> | null;
       unit_precision: number | null;
-    }>(sql`select quantity::text as quantity, vat_rate::text as vat_rate, unit_name, unit_precision
+    }>(sql`select cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate, unit_name, unit_precision
              from sale_lines order by line_no`);
     const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };

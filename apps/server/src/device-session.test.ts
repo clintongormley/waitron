@@ -1,9 +1,34 @@
+/**
+ * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
+ * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
+ * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/device-session.test.ts` in `apps/server`, which reports
+ * `27 tests | 27 skipped` and then fails the FILE. No assertion below has run on this branch; its
+ * SQL is converted anyway so nothing has to be untangled twice.
+ *
+ * Every fixture below writes through its TABLE DEFINITION rather than as raw SQL, the change
+ * `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
+ * this engine: each table's `id` (and `tills.created_at`, `canvases.created_at`,
+ * `device_profiles.created_at`/`updated_at`, `devices.enrolled_at`) is a `$defaultFn` generator a
+ * raw insert never reaches while the column is NOT NULL, and a JavaScript boolean cannot bind on
+ * this driver. It is also what encodes the JSON and list columns, whose `::jsonb`, `::uuid` and
+ * `array[...]` spellings are syntax this parser refuses (`unrecognized token: ":"`).
+ */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { asAppUser, withTransaction } from "@waitron/db";
+import {
+  asAppUser,
+  canvases,
+  deviceProfiles,
+  devices,
+  kitchenStations,
+  locations,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -53,15 +78,22 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
   const admin = suite.admin;
   await seedTenant(admin);
-  const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const [loc] = await admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await admin
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -119,11 +151,11 @@ async function seedDeviceProfile(
   capabilities: CapabilityFlag[],
   canvasId: string | null = null,
 ): Promise<string> {
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, canvas_id, capabilities)
-    values (${name}, ${formFactor}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
-    returning id`);
-  return prof.rows[0]!.id;
+  const [prof] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name, formFactor, canvasId, capabilities })
+    .returning({ id: deviceProfiles.id });
+  return prof!.id;
 }
 
 /**
@@ -138,11 +170,11 @@ async function enrolTillDeviceFixture(): Promise<{
   tillId: string;
 }> {
   const { cfg } = await setupStation();
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (name, definition)
-    values ('Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
-    returning id`);
-  const canvasId = prof.rows[0]!.id;
+  const [canvas] = await suite.admin
+    .insert(canvases)
+    .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
+    .returning({ id: canvases.id });
+  const canvasId = canvas!.id;
   // This fixture explicitly grants reader and drawer access. Its canvas reference is the front-counter canvas —
   // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
   // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
@@ -284,11 +316,11 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   token: string;
 }> {
   const { cfg } = await setupStation();
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (name, definition)
-    values ('Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
-    returning id`);
-  const canvasId = prof.rows[0]!.id;
+  const [canvas] = await suite.admin
+    .insert(canvases)
+    .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
+    .returning({ id: canvases.id });
+  const canvasId = canvas!.id;
   // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
   // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
@@ -735,22 +767,36 @@ describe("tryReadDevice dev override resolves a seeded device (real Postgres)", 
   async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
     const admin = suite.admin;
     await seedTenant(admin);
-    const loc = await admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const st = await admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name, is_default)
-      values (${locationId}, 'Cocina', true) returning id`);
+    const [loc] = await admin
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [st] = await admin
+      .insert(kitchenStations)
+      .values({ locationId, name: "Cocina", isDefault: true })
+      .returning({ id: kitchenStations.id });
     // A kds profile → the binding rule requires a station and no register.
-    const prof = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor)
-      values ('Pantalla', 'kds') returning id`);
-    const dev = await admin.execute<{ id: string }>(sql`
-      insert into devices (location_id, device_profile_id, station_id, label, token_hash, active)
-      values (${locationId}, ${prof.rows[0]!.id}, ${st.rows[0]!.id}, 'Pantalla Cocina',
-              'scrypt$00$00', true) returning id`);
-    return { deviceId: dev.rows[0]!.id };
+    const [prof] = await admin
+      .insert(deviceProfiles)
+      .values({ name: "Pantalla", formFactor: "kds" })
+      .returning({ id: deviceProfiles.id });
+    const [dev] = await admin
+      .insert(devices)
+      .values({
+        locationId,
+        deviceProfileId: prof!.id,
+        stationId: st!.id,
+        label: "Pantalla Cocina",
+        tokenHash: "scrypt$00$00",
+        active: true,
+      })
+      .returning({ id: devices.id });
+    return { deviceId: dev!.id };
   }
 
   it("DOES resolve a device scoped to its OWN tenant", async () => {

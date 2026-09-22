@@ -1,12 +1,13 @@
-import { sql } from "drizzle-orm";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  locations,
   readDeploymentEnvironment,
   readDeploymentMode,
   readMirrorConfig,
+  tenants,
   type Database,
 } from "@waitron/db";
 import {
@@ -240,10 +241,12 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
 
   it("refuses a FOREIGN tenant before any mutation (§5, one tenant per database)", async () => {
     // Seed a DIFFERENT tenant into the mirror, then adopt a bundle for our tenant identity: refused.
-    await mirrorAdmin.execute(
-      sql`insert into tenants (id, country, tax_id, legal_name)
-          values (1, 'ES', '99999999R', 'Incumbent SL')`,
-    );
+    // Through the table definition, like every other fixture row in this package: a raw insert
+    // reaches no `$defaultFn` generator (`tenants.created_at` is one), and the sibling location
+    // insert below carried `array[...]`, which this engine refuses at prepare.
+    await mirrorAdmin
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
     const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
     // Refused before any mutation: the database carries no deployment stamp.
@@ -251,12 +254,14 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
   });
 
   it("refuses a same-tenant venue before any mutation", async () => {
-    await mirrorAdmin.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name)
-      values (1, 'ES', '80000001K', 'Incumbent SL')`);
-    await mirrorAdmin.execute(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Existing venue', array['en-GB'], 'Hospitality')`);
+    await mirrorAdmin
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
+    await mirrorAdmin.insert(locations).values({
+      name: "Existing venue",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
     const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
     expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();

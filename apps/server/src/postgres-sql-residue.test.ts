@@ -17,13 +17,23 @@ import { describe, expect, it } from "vitest";
  * - It reads TEXT. It finds the templates by scanning for the characters `sql` followed by a
  *   backtick, so a fragment built as a plain string and handed to `sql.raw`, or assembled from
  *   pieces, is invisible to it.
- * - It scans the NON-TEST files of this package only. A `.test.ts` file is out of scope (those are
- *   converted in their own wave), and so is every other package.
+ * - It scans THIS package only. Every other package is out of scope.
  * - Its list of PostgreSQL-only constructs is hand-written, and it grew as the sweep met more of
  *   them. It catches the shapes this package actually carried; one nobody has met yet passes.
+ * - It over-reports in one direction, which costs a reader time rather than hiding anything: the
+ *   scan leaves `${…}` in place, so a JavaScript `Date.now()` interpolated into a template matches
+ *   the `now()` pattern. Hoist the expression to a `const` above the template rather than
+ *   weakening the pattern — the bound value is the same and the statement stays readable.
+ * - It sees the WRITTEN statement, not the one that runs. Two faults it is blind to were the
+ *   larger half of the sweep it was written for: a raw `insert` leaning on a column default that
+ *   is a JavaScript `$defaultFn` generator on this engine (a raw insert never reaches one, so the
+ *   row is refused NOT NULL at run time), and a raw `select` of a `json` or boolean column, which
+ *   skips drizzle's read mapping and hands back the stored TEXT or a 0/1. Both are invisible here
+ *   and only a suite that RUNS finds them.
  */
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
+const SELF = fileURLToPath(import.meta.url);
 
 /** PostgreSQL-only spellings, each with what SQLite answers when one reaches the engine. */
 const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] = [
@@ -47,7 +57,13 @@ const FORBIDDEN: readonly { readonly name: string; readonly pattern: RegExp }[] 
   },
 ];
 
-/** Every non-test `.ts` file under this package's `src`. */
+/**
+ * Every `.ts` file under this package's `src`, tests included — this file excepted.
+ *
+ * A suite's own fixture reaches the engine exactly the way a request handler does, and a statement
+ * SQLite cannot parse is refused at PREPARE either way. The exception is this file, which plants a
+ * residual statement on purpose in the negative control below.
+ */
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -55,7 +71,7 @@ function sourceFiles(dir: string): string[] {
     // `isFile()`, not a name test: a failed browser run leaves a DIRECTORY named `*.test.ts`
     // (CLAUDE.md §4), and `readFileSync` on one throws `EISDIR`.
     if (statSync(path).isDirectory()) out.push(...sourceFiles(path));
-    else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) out.push(path);
+    else if (entry.endsWith(".ts") && path !== SELF) out.push(path);
   }
   return out;
 }
@@ -88,7 +104,7 @@ function sqlTemplates(source: string): { line: number; body: string }[] {
   return found;
 }
 
-describe("no PostgreSQL-only SQL survives in this package's non-test source", () => {
+describe("no PostgreSQL-only SQL survives in this package's source", () => {
   it("finds none", () => {
     const offenders: string[] = [];
     for (const path of sourceFiles(HERE)) {

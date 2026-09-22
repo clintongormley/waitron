@@ -1,7 +1,20 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  diningTables,
+  invoiceSeries,
+  locations,
+  nodes,
+  nowIso,
+  saleLines,
+  sales,
+  tenders,
+  tills,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,7 +24,7 @@ import {
   decimalToCents,
   decimalToThousandths,
 } from "@waitron/shared";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -58,27 +71,50 @@ async function seedTodaySale(db: Database): Promise<void> {
   // literals; `sale_lines.quantity` and `sale_lines.vat_rate` are whole numbers at their OWN
   // scales — thousandths and basis points — so each is converted by its own function.
   const cents = (value: string): number => decimalToCents(decimal(value));
-  const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-      total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${tillId}, ${nodeId}, ${seriesId}, 1, now(), 0,
-      ${cents(SEED.grossTotal)},
-      ${JSON.stringify([{ rate: "21.00", base: SEED.base, tax: SEED.tax }])}::jsonb,
-      'es-ES', array['es-ES'], 'fake', 'recorded'
-    ) returning id`);
-  const saleId = sale.rows[0]!.id;
-  await db.execute(sql`
-    insert into tenders (sale_id, method, amount, tip_amount, settled_at)
-    values (${saleId}, 'cash', ${cents(SEED.tenderAmount)}, ${cents(SEED.tipAmount)}, now())`);
-  await db.execute(sql`
-    insert into sale_lines
-      (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${saleId}, 1, ${SEED.name},
-            ${JSON.stringify(SEED.descriptions)}::jsonb,
-            ${decimalToThousandths(decimal(SEED.lineQuantity))}, ${cents("3.50")},
-            ${decimalToBasisPoints(decimal("21.00"))}, ${cents(SEED.lineTotal)})`);
+  // ONE clock reading, bound to BOTH stamps. `now()` has no equivalent here, and the two statements
+  // were separate `execute` calls, so PostgreSQL gave each its own transaction-start time; a single
+  // `nowIso()` keeps the sale and its tender on the same business day, which is what the fixture
+  // needs. `issued_at`/`settled_at` are text columns and this is their canonical spelling.
+  const stamp = nowIso();
+  // Through the table definitions: every id is a `$defaultFn` generator here, `vat_breakdown`,
+  // `descriptions` and `invoice_locales` are encoded by their own write mappings (the `::jsonb`
+  // casts and the `array[...]` constructor they replace are both refused by this engine), and every
+  // scaled-integer value above is still converted by the same function it was.
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      tillId,
+      nodeId,
+      seriesId,
+      invoiceNumber: 1,
+      issuedAt: stamp,
+      issuedOffsetMinutes: 0,
+      total: cents(SEED.grossTotal),
+      vatBreakdown: [{ rate: "21.00", base: SEED.base, tax: SEED.tax }],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  const saleId = sale!.id;
+  await db.insert(tenders).values({
+    saleId,
+    method: "cash",
+    amount: cents(SEED.tenderAmount),
+    tipAmount: cents(SEED.tipAmount),
+    settledAt: stamp,
+  });
+  await db.insert(saleLines).values({
+    saleId,
+    lineNo: 1,
+    name: SEED.name,
+    descriptions: SEED.descriptions,
+    quantity: decimalToThousandths(decimal(SEED.lineQuantity)),
+    unitPrice: cents("3.50"),
+    vatRate: decimalToBasisPoints(decimal("21.00")),
+    lineTotal: cents(SEED.lineTotal),
+  });
 }
 
 /** Seed dining tables at the node's location: one ACTIVE + OPEN (tab_id → a working order), one ACTIVE
@@ -91,23 +127,23 @@ async function seedTodaySale(db: Database): Promise<void> {
  * count, so openTables becomes {open:2, total:3} and the route test's {open:1, total:2} assertion
  * fails on both fields; restore it and the test passes. */
 async function seedDiningTables(db: Database): Promise<void> {
-  const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, node_id, order_number, status)
-    values (${tillId}, ${nodeId}, 1, 'open') returning id`);
-  const tabId = wo.rows[0]!.id;
-  await db.execute(sql`
-    insert into dining_tables (location_id, label, tab_id)
-    values (${locationId}, 'Mesa 1', ${tabId})`);
-  await db.execute(sql`
-    insert into dining_tables (location_id, label, tab_id)
-    values (${locationId}, 'Mesa 2', null)`);
+  const [wo] = await db
+    .insert(workingOrders)
+    .values({ tillId, nodeId, orderNumber: 1, status: "open" })
+    .returning({ id: workingOrders.id });
+  const tabId = wo!.id;
+  await db.insert(diningTables).values([
+    { locationId, label: "Mesa 1", tabId },
+    { locationId, label: "Mesa 2", tabId: null },
+  ]);
   // An INACTIVE table with an open tab — must be excluded from openTables.total AND .open.
-  const inactiveWo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, node_id, order_number, status)
-    values (${tillId}, ${nodeId}, 2, 'open') returning id`);
-  await db.execute(sql`
-    insert into dining_tables (location_id, label, tab_id, active)
-    values (${locationId}, 'Mesa 3 (baja)', ${inactiveWo.rows[0]!.id}, false)`);
+  const [inactiveWo] = await db
+    .insert(workingOrders)
+    .values({ tillId, nodeId, orderNumber: 2, status: "open" })
+    .returning({ id: workingOrders.id });
+  await db
+    .insert(diningTables)
+    .values({ locationId, label: "Mesa 3 (baja)", tabId: inactiveWo!.id, active: false });
 }
 
 const suite = useVenueDb({
@@ -118,29 +154,38 @@ const suite = useVenueDb({
     await seedTenant(db);
     // Default time_zone (Europe/Madrid) + day_cutover (06:00:00) — resolveVenueClock reads them back
     // and currentBusinessDay anchors the overview on the venue clock.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-    locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
-    tillId = till.rows[0]!.id;
-    const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (location_id, name)
-      values (${locationId}, 'Nodo 1') returning id`);
-    nodeId = node.rows[0]!.id;
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Sala principal",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
+    tillId = till!.id;
+    const [node] = await db
+      .insert(nodes)
+      .values({ locationId, name: "Nodo 1" })
+      .returning({ id: nodes.id });
+    nodeId = node!.id;
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
     // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
     // sale (venue-wide) while the per-till daily-close scoped to this node stays empty.
-    const node2 = await db.execute<{ id: string }>(sql`
-      insert into nodes (location_id, name)
-      values (${locationId}, 'Nodo 2') returning id`);
-    secondNodeId = node2.rows[0]!.id;
-    const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (node_id, code)
-      values (${nodeId}, 'A') returning id`);
-    seriesId = series.rows[0]!.id;
+    const [node2] = await db
+      .insert(nodes)
+      .values({ locationId, name: "Nodo 2" })
+      .returning({ id: nodes.id });
+    secondNodeId = node2!.id;
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "A" })
+      .returning({ id: invoiceSeries.id });
+    seriesId = series!.id;
 
     await seedTodaySale(db);
     await seedDiningTables(db);
@@ -149,17 +194,19 @@ const suite = useVenueDb({
     // role, each with a live management session so the route tests drive the gate through a real cookie.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const [stf] = await tx
+        .insert(persons)
+        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
-        personId: mgr.rows[0]!.id,
+        personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        personId: stf.rows[0]!.id,
+        personId: stf!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
     });

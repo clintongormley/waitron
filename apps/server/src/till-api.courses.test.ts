@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToLocation,
@@ -72,21 +71,30 @@ const suite = useVenueDb({
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    const locationId = brandLocationId(loc.rows[0]!.id);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(loc!.id);
     // A default kitchen station so the place-time fire (placeOrder → fireLines) has a fallback route.
     await seedKitchenStation(db, { locationId });
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     const nodeId = await seedNode(db, locationId);
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
 
     // Seed the courses + three products (two coursed, one loose) on the APP role under the tenant, the
     // same `withTransaction` + `asAppUser` path the routes read/write through — so the course FK + the
@@ -115,7 +123,7 @@ const suite = useVenueDb({
       await mk(PAN); // loose — no course assigned
       await setProductCourse(tx, cfg, sopa, ent.id);
       await setProductCourse(tx, cfg, filete, pri.id);
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, catalogue.id);
+      await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
     });
   },
 });
@@ -213,9 +221,10 @@ let tillDeviceCookie: string;
  *  `resolveDeviceBinding` auto-creates the register it rings against) and return its
  *  `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
-  const { rows } = await db.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor)
-      values ('Counter till profile', 'till') returning id`);
+  const rows = await db
+    .insert(deviceProfiles)
+    .values({ name: "Counter till profile", formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(db, cfg, { name: "Counter till", profileId: rows[0]!.id });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }

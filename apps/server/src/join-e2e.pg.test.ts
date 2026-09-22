@@ -1,6 +1,22 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the real-PostgreSQL harness it runs on is gone.
+ *
+ * WHAT IT REPORTS TODAY. It does not COLLECT: `useTemplateDb` throws `useTemplateDb: no shared
+ * container in scope. Wire the package's vitest globalSetup to a file that calls
+ * `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/join-e2e.pg.test.ts` in `apps/server`, which reports `3 tests | 3 skipped`
+ * and then fails the FILE. Nothing below has run on this branch; the SQL it writes is converted
+ * anyway so nothing has to be untangled twice.
+ *
+ * WHAT ITS `.pg` SUFFIX STILL MEANS is now only half true and is left rather than rewritten: the
+ * reason recorded below is that PGlite makes every connection a superuser, so the grants these
+ * routes run under would not be exercised. Whether that reason survives the storage swap is not
+ * something this conversion establishes.
+ */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { deviceProfiles } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
@@ -94,18 +110,24 @@ let profileCounter = 0;
  *  setup). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
-    returning id`);
-  return rows[0]!.id;
+  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
+  // never reaches, and the table definition is also what encodes `capabilities`, whose `::jsonb`
+  // cast is a syntax error to this parser.
+  const [row] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
 }
 
 /** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
  *  table and not about what a route chose to show. */
 async function pendingCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from join_requests `,
+    // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
+    // syntax error to this parser (`unrecognized token: ":"`).
+    sql`select count(*) as n from join_requests `,
   );
   return rows[0]!.n;
 }

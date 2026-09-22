@@ -202,8 +202,10 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
       passkeys: number;
       recovery_codes: number;
     }>(sql`select p.totp_secret, p.google_subject,
-      (select count(*)::int from webauthn_credentials w where w.person_id=p.id) as passkeys,
-      (select count(*)::int from recovery_codes r where r.person_id=p.id) as recovery_codes
+      -- cast(x as int) rather than the PostgreSQL cast operator, which this engine refuses with
+      -- unrecognized token ":" -- the same rewrite working-order.ts took.
+      (select cast(count(*) as int) from webauthn_credentials w where w.person_id=p.id) as passkeys,
+      (select cast(count(*) as int) from recovery_codes r where r.person_id=p.id) as recovery_codes
       from persons p where p.id=${adminId}`);
     expect(state.rows[0]).toEqual({
       totp_secret: null,

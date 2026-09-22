@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -12,8 +12,15 @@ import {
   startManagementSession,
   encryptTotpSecret,
   hashPassword,
+  persons,
 } from "@waitron/identity";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import {
+  WORKFORCE_MIGRATIONS,
+  absences,
+  shiftSwaps,
+  shifts,
+  type ShiftSwapStatus,
+} from "@waitron/workforce";
 import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
@@ -45,27 +52,42 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    locationId = loc.rows[0]!.id;
-    const meRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Me', ${hashPin("1111")}, 'staff') returning id`);
-    me = meRow.rows[0]!.id;
-    const colRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Colleague', ${hashPin("2222")}, 'staff') returning id`);
-    colleague = colRow.rows[0]!.id;
-    const mgrRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Manager', ${hashPin("3333")}, 'manager') returning id`);
-    manager = mgrRow.rows[0]!.id;
+    // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+    // took: `locations.id`, `persons.id` and `persons.created_at` are `$defaultFn` generators on
+    // this engine that a raw insert never reaches while the columns are NOT NULL, and
+    // `invoice_locales` is a JSON array in a text column, which is what refused the `array[...]`
+    // constructor with `near "['es-ES']": syntax error`.
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
+    const [meRow] = await db
+      .insert(persons)
+      .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
+      .returning({ id: persons.id });
+    me = meRow!.id;
+    const [colRow] = await db
+      .insert(persons)
+      .values({ displayName: "Colleague", pinHash: hashPin("2222"), role: "staff" })
+      .returning({ id: persons.id });
+    colleague = colRow!.id;
+    const [mgrRow] = await db
+      .insert(persons)
+      .values({ displayName: "Manager", pinHash: hashPin("3333"), role: "manager" })
+      .returning({ id: persons.id });
+    manager = mgrRow!.id;
     // A staff person with an explicit `locale` preference (es-ES), distinct from VENUE_LOCALE (en-GB).
-    const localedRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role, locale)
-      values ('Localed', ${hashPin("4444")}, 'staff', 'es-ES') returning id`);
-    localed = localedRow.rows[0]!.id;
+    const [localedRow] = await db
+      .insert(persons)
+      .values({
+        displayName: "Localed",
+        pinHash: hashPin("4444"),
+        role: "staff",
+        locale: "es-ES",
+      })
+      .returning({ id: persons.id });
+    localed = localedRow!.id;
   },
 });
 
@@ -140,30 +162,45 @@ async function send(
 }
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
-    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(shifts)
+    .values({
+      personId,
+      locationId,
+      startsAt,
+      startsOffsetMinutes: 0,
+      endsAt,
+      endsOffsetMinutes: 0,
+      role: "bar",
+    })
+    .returning({ id: shifts.id });
+  return row!.id;
 }
 
 async function insertSwap(params: {
   requestedBy: string;
   fromShiftId: string;
   toPerson: string;
-  status?: string;
+  status?: ShiftSwapStatus;
 }): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
-    returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(shiftSwaps)
+    .values({
+      requestedByPersonId: params.requestedBy,
+      fromShiftId: params.fromShiftId,
+      toPersonId: params.toPerson,
+      status: params.status ?? "requested",
+    })
+    .returning({ id: shiftSwaps.id });
+  return row!.id;
 }
 
 async function insertAbsence(personId: string, startsOn: string, endsOn: string): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into absences (person_id, absence_kind, starts_on, ends_on)
-    values (${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(absences)
+    .values({ personId, kind: "holiday", startsOn, endsOn })
+    .returning({ id: absences.id });
+  return row!.id;
 }
 
 describe("mountMeApi — whoami", () => {
@@ -210,9 +247,14 @@ describe("mountMeApi — whoami", () => {
   it("never reports a session lifetime above the configured idle timeout", async () => {
     const cookie = await cookieFor(me);
     const sessionId = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
+    // Read out of the template rather than inlined into it: `postgres-sql-residue.test.ts` scans a
+    // `sql` template's text with the `${…}` interpolation left in place, so a JavaScript
+    // `Date.now()` inside one reads as PostgreSQL's `now()` to that guard. The value bound is
+    // unchanged.
+    const tenSecondsFromNow = new Date(Date.now() + 10_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions
-      set last_seen_at = ${new Date(Date.now() + 10_000).toISOString()}
+      set last_seen_at = ${tenSecondsFromNow}
       where id = ${sessionId}`);
 
     const res = await send(mountApp(), "GET", "/management-api/session/me", { cookie });
@@ -806,10 +848,11 @@ describe("mountMeApi — set your own locale", () => {
   // sibling whoami assertion (which pins `me`'s locale to null) is disturbed. The management session is
   // opened via `cookieFor` (the production `startManagementSession` path). Cleaned up in a finally (§4).
   async function freshPerson(pin: string): Promise<string> {
-    const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Locale User', ${hashPin(pin)}, 'staff') returning id`);
-    return row.rows[0]!.id;
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Locale User", pinHash: hashPin(pin), role: "staff" })
+      .returning({ id: persons.id });
+    return row!.id;
   }
   async function cleanup(personId: string): Promise<void> {
     await suite.db.execute(sql`delete from management_sessions where person_id = ${personId}`);

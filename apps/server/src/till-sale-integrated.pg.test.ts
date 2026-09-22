@@ -239,14 +239,14 @@ function cannedProvider(
 
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(
-    sql`select count(*)::text as count from sales where working_order_id = ${workingOrderId}`,
+    sql`select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}`,
   );
   return Number(rows[0]!.count);
 }
 
 async function registroCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count
+    select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}
@@ -256,7 +256,7 @@ async function registroCount(workingOrderId: string): Promise<number> {
 
 async function preparationTicketCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from ticket_items where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from ticket_items where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
@@ -343,7 +343,7 @@ async function tendersFor(
   // Both count whole cents, read raw and converted by `rawCentsToDecimal`; the helper hands its
   // callers the AMOUNTS, so their assertions read the same decimal literals they always did.
   const { rows } = await suite.admin.execute<{ method: string; amount: string; tip: string }>(sql`
-    select t.method, t.amount::text as amount, t.tip_amount::text as tip
+    select t.method, cast(t.amount as text) as amount, cast(t.tip_amount as text) as tip
     from tenders t join sales s on s.id = t.sale_id
     where s.working_order_id = ${workingOrderId}
     order by t.method
@@ -360,7 +360,7 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
   // returns the amount its callers assert on.
   const { rows } = await suite.admin.execute<{ total: string }>(
-    sql`select total::text as total from sales where working_order_id = ${workingOrderId}`,
+    sql`select cast(total as text) as total from sales where working_order_id = ${workingOrderId}`,
   );
   return rawCentsToDecimal(rows[0]!.total);
 }
@@ -376,7 +376,7 @@ async function paymentsFor(
     provider: string;
     state: string;
     external_ref: string | null;
-    linked: boolean;
+    linked: number;
   }>(sql`
     select p.provider, p.state, p.external_ref,
            (p.sale_id is not null and p.sale_id = s.id) as linked
@@ -384,17 +384,22 @@ async function paymentsFor(
     where p.working_order_id = ${workingOrderId}
     order by p.provider, p.external_ref
   `);
+  // `linked` arrives as the NUMBER 1 or 0, not a boolean: this engine has no boolean storage class
+  // and a comparison yields an integer. Measured 2026-09-22 on Node v26.7.0 —
+  // `node --experimental-sqlite -e "…select (a is not null and a = b) as linked…"` returns
+  // `{"linked":1}` with `typeof` number. The `=== 1` is where that now converts; every assertion
+  // on `linkedToSale` still reads `true`/`false`.
   return rows.map((r) => ({
     provider: r.provider,
     state: r.state,
     externalRef: r.external_ref,
-    linkedToSale: r.linked,
+    linkedToSale: r.linked === 1,
   }));
 }
 
 async function paymentCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(
-    sql`select count(*)::text as count from payments where working_order_id = ${workingOrderId}`,
+    sql`select cast(count(*) as text) as count from payments where working_order_id = ${workingOrderId}`,
   );
   return Number(rows[0]!.count);
 }

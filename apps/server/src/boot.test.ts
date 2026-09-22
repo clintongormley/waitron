@@ -1,5 +1,5 @@
 import { uploadImage } from "@waitron/media";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 // Real PostgreSQL checks startup through app_user connections and contending backends.
 import { randomUUID, X509Certificate } from "node:crypto";
@@ -16,10 +16,14 @@ import { Agent } from "undici";
 import {
   captureError,
   createPostgresDb,
+  locations,
+  nodes,
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
+  tenants,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -264,25 +268,34 @@ beforeAll(async () => {
   // exist or every successful-boot test would fail at that read. `order_flow` defaults to
   // `prepay`. A distinctive NIF (90M base) stays clear of every other seed generator sharing this
   // database.
-  await suite.admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90000000K', 'Boot Till SL')`);
-  await suite.admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
-            array['es-ES'], 'Venta en establecimiento')`);
+  // Each row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine;
+  // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
+  await suite.admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
+  await suite.admin.insert(locations).values({
+    id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
   // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
   // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
   // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
   // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
-  await suite.admin.execute(sql`
-    insert into nodes (id, location_id, name, filing_module)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
-  await suite.admin.execute(sql`
-    insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till')`);
+  await suite.admin.insert(nodes).values({
+    id: TILL_ENV.WAITRON_TILL_NODE_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Boot Till",
+    filingModule: "verifactu",
+  });
+  await suite.admin.insert(tills).values({
+    id: TILL_ENV.WAITRON_TILL_TILL_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Boot Till",
+  });
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -554,24 +567,35 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
-  const person = await suite.admin.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role) values ('Passive read probe', ${hashPin("1234")}, 'manager') returning id`,
-  );
-  const personId = person.rows[0]!.id;
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn` values on
+  // this engine rather than SQL DEFAULTs, and a raw insert reaches neither.
+  const [person] = await suite.admin
+    .insert(persons)
+    .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
+    .returning({ id: persons.id });
+  const personId = person!.id;
   try {
     const session = await withTransaction(suite.admin, (tx) =>
       startManagementSession(tx, { personId }),
     );
-    const age = async (): Promise<string> =>
-      (
+    // Ten minutes back from the clock, subtracted on a `Date` and bound: this engine has neither
+    // `now()` nor an interval type. `toISOString()` is the spelling `@waitron/identity`'s own
+    // writers of this `tsString` column use, which is what makes the keepalive's staleness
+    // comparison on it a correct time ordering. The `::text` the two reads carried is gone rather
+    // than rewritten as a cast: the column IS text here, so it converted nothing.
+    const BACKDATE_MS = 10 * 60_000;
+    const age = async (): Promise<string> => {
+      const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
+      return (
         await suite.admin.execute<{ seen: string }>(
-          sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id} returning last_seen_at::text as seen`,
+          sql`update management_sessions set last_seen_at = ${staleSeenAt} where id = ${session.id} returning last_seen_at as seen`,
         )
       ).rows[0]!.seen;
+    };
     const seen = async (): Promise<string> =>
       (
         await suite.admin.execute<{ seen: string }>(
-          sql`select last_seen_at::text as seen from management_sessions where id = ${session.id}`,
+          sql`select last_seen_at as seen from management_sessions where id = ${session.id}`,
         )
       ).rows[0]!.seen;
     const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
@@ -1552,11 +1576,11 @@ describe("startServer, against a real container as the deployment role", () => {
           // assertions.
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
           const tenants = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenants`,
+            sql`select cast(count(*) as int) as n from tenants`,
           );
           expect(tenants.rows[0]!.n).toBe(1);
           const nodes = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from nodes`,
+            sql`select cast(count(*) as int) as n from nodes`,
           );
           expect(nodes.rows[0]!.n).toBe(1);
 
@@ -1654,11 +1678,11 @@ describe("startServer, against a real container as the deployment role", () => {
           // `provision`. `check` is the clone's superuser connection, used for both table
           // observations.
           const tenants = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenants`,
+            sql`select cast(count(*) as int) as n from tenants`,
           );
           expect(tenants.rows[0]!.n).toBe(0);
           const sealed = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(0);
 
@@ -1754,11 +1778,11 @@ describe("startServer, against a real container as the deployment role", () => {
           // provisioned — the real provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`)
           // ran end-to-end.
           const sealed = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
           const provisioned = await check.execute<{ id: string }>(
-            sql`select id::text as id from tenants`,
+            sql`select cast(id as text) as id from tenants`,
           );
           expect(provisioned.rows).toEqual([{ id: "1" }]);
 

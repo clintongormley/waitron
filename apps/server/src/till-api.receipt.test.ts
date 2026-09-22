@@ -4,10 +4,12 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
+  deviceProfiles,
   drawerOpens,
   locations,
   printJobs,
   sales,
+  tenantReceipts,
   tills,
   withTransaction,
 } from "@waitron/db";
@@ -23,10 +25,11 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, updatePrinter } from "@waitron/printing";
+import { preparationRoutes } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -185,21 +188,29 @@ async function setupVenue(): Promise<{
         update zone_service_policies set default_menu_id = ${cat.id}
         where location_id = ${cfg.locationId}
           and is_counter_default`);
-    await tx.execute(sql`
-        insert into preparation_routes
-          (location_id, category_id, station_id, no_preparation)
-        values (${cfg.locationId}, ${bebidas.id}, null, true)`);
-    const staff = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
-    const supervisor = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
+    // Through the table definitions rather than raw SQL: `preparation_routes.id`, `persons.id` and
+    // `persons.created_at` are `$defaultFn` generators on NOT NULL columns that a raw insert never
+    // reaches on this engine (`packages/venue-service/drizzle/0000_baseline.sql:47`,
+    // `packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
+    await tx.insert(preparationRoutes).values({
+      locationId: cfg.locationId,
+      categoryId: bebidas.id,
+      stationId: null,
+      noPreparation: true,
+    });
+    const [staff] = await tx
+      .insert(persons)
+      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    const [supervisor] = await tx
+      .insert(persons)
+      .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
+      .returning({ id: persons.id });
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
     return {
       each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
-      operatorId: staff.rows[0]!.id,
-      supervisorId: supervisor.rows[0]!.id,
+      operatorId: staff!.id,
+      supervisorId: supervisor!.id,
     };
   });
   return { cfg, each, operatorId, supervisorId };
@@ -349,12 +360,15 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   const n = tillDeviceCounter;
   // A `till` device is defined by a `till`-form-factor profile (Task 7); `resolveDeviceBinding`
   // auto-creates the register it rings against, so the resolved sale till is this device's own.
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor)
-      values (${`Counter till profile ${n}`}, 'till') returning id`);
+  // `device_profiles.id`, `.created_at` and `.updated_at` are `$defaultFn` generators on NOT NULL
+  // columns (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`).
+  const [profile] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Counter till profile ${n}`, formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: `Counter till ${n}`,
-    profileId: rows[0]!.id,
+    profileId: profile!.id,
   });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -1039,9 +1053,21 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   await suite.admin.execute(
     sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
   );
-  await suite.admin.execute(
-    sql`insert into tenant_receipts (id, receipt) values (1, ${JSON.stringify({ headerSubtitle: "Current welcome", footerMessage: "Current farewell" })}::jsonb) on conflict (id) do update set receipt = excluded.receipt`,
-  );
+  // Through the table definition: `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT
+  // NULL column (`packages/db/drizzle/0000_baseline.sql:512`) that a raw insert never reaches, and
+  // `receipt` is JSON in a text column, so the `::jsonb` cast the statement carried is both
+  // unnecessary and a syntax error here. The row it writes is unchanged: the CURRENT receipt text,
+  // which the reprint below must NOT read — it reprints the sale's own snapshot.
+  await suite.admin
+    .insert(tenantReceipts)
+    .values({
+      id: 1,
+      receipt: { headerSubtitle: "Current welcome", footerMessage: "Current farewell" },
+    })
+    .onConflictDoUpdate({
+      target: tenantReceipts.id,
+      set: { receipt: { headerSubtitle: "Current welcome", footerMessage: "Current farewell" } },
+    });
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",
     headers: { cookie },

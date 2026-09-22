@@ -1,8 +1,16 @@
+/**
+ * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
+ * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
+ * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/join-api.pg.test.ts` in `apps/server`, which reports `34 tests | 34 skipped`
+ * and then fails the FILE. No assertion below has run on this branch; its SQL is converted anyway
+ * so nothing has to be untangled twice.
+ */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, withTransaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { mountJoinApi } from "./join-api.js";
@@ -68,18 +76,24 @@ async function knock(
 let profileCounter = 0;
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
-    returning id`);
-  return rows[0]!.id;
+  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
+  // never reaches, and it is also what encodes `capabilities` — the `::jsonb` cast is a syntax
+  // error to this parser (`unrecognized token: ":"`).
+  const [row] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
 }
 
 /** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
  *  table and not about what a route chose to show. */
 async function pendingCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from join_requests `,
+    // No `::int` here or in the two sibling counts below: `count(*)` already comes back as a
+    // JavaScript number, and the cast operator is a syntax error to this parser.
+    sql`select count(*) as n from join_requests `,
   );
   return rows[0]!.n;
 }
@@ -162,8 +176,13 @@ describe("the pairing-mode control", () => {
       const app = mountApp(venue.cfg, mode);
       if (initiallyOpen) mode.open();
       clock += 60_000;
+      // The clock is read in JavaScript and the instant bound: this engine has neither `now()` nor
+      // an interval type. One statement, so no transaction-start reading has to be shared. `clock`
+      // above is the PAIRING mode's injected clock and is deliberately not this value: what is
+      // being aged here is the management session's own `last_seen_at`.
+      const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
       await suite.admin.execute(sql`
-      update management_sessions set last_seen_at = now() - interval '10 minutes'
+      update management_sessions set last_seen_at = ${sessionSeenAt}
       where id = ${sessionId}`);
       const session = () =>
         withTransaction(suite.admin, (tx) =>
@@ -192,8 +211,9 @@ describe("the pairing-mode control", () => {
     const sessionId = venue.managerCookie.split("=")[1]!;
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
+    const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.admin.execute(sql`
-      update management_sessions set last_seen_at = now() - interval '1 hour'
+      update management_sessions set last_seen_at = ${sessionSeenAt}
       where id = ${sessionId}`);
     const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
       cookie: venue.managerCookie,
@@ -517,7 +537,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     // The agent's ask is untouched: a device.manage holder cannot turn it into a device.
     expect(await pendingCount()).toBe(1);
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from devices where id = ${agent.joinId}`,
+      sql`select count(*) as n from devices where id = ${agent.joinId}`,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -680,7 +700,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
 describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   async function agentCount(): Promise<number> {
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from print_agents `,
+      sql`select count(*) as n from print_agents `,
     );
     return rows[0]!.n;
   }

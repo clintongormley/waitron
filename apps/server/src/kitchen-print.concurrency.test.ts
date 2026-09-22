@@ -23,11 +23,32 @@
  * every query onto one. On this engine the corresponding question is whether the write queue admits
  * the second transaction, and `racePair` (`packages/catalogue/test/fixtures.ts`) is the shape that
  * asks it.
+ *
+ * WHAT THE PostgreSQL-ONLY SWEEP CHANGED HERE, and what it deliberately did not. The fixture's
+ * `locations`/`tills` inserts now go through their table definitions, because `array[…]` is a
+ * syntax error on this engine and both ids are JavaScript generators a raw insert never reaches.
+ * Three reads lost a `::int`/`::` cast that was only ever shaping the DRIVER's answer: each call
+ * site already wraps the value in `Number(…)` or reads it through the column, so no assertion
+ * moved. The `pg_locks` SELECT itself is left exactly as it was, cast apart — it is PostgreSQL's
+ * own catalogue and there is nothing to translate it INTO.
+ *
+ * NOTHING BELOW HAS BEEN RUN on this branch, this sweep included: the file still does not COLLECT,
+ * for the `useTemplateDb` reason above (re-measured 2026-09-22 by running this file alone after the
+ * sweep — `1 test | 1 skipped`, then the file fails). So the conversions here are checked by the
+ * typechecker and by reading, and by nothing else.
  */
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { count as countRows, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  asAppUser,
+  locations,
+  printJobs,
+  printers,
+  tills,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -93,8 +114,11 @@ function gate(): { passed: Promise<void>; open: () => void } {
  *  literal fact we need: connection B's deactivate UPDATE is queued behind A's FOR SHARE lock. */
 async function waitForABlockedBackend(): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt += 1) {
+    // `pg_locks` is PostgreSQL's own catalogue and stays as it is. Only the `::int` went: it existed
+    // so node-postgres handed back a number rather than a bigint string, and the `Number(...)` on
+    // the next line already covers that.
     const waiting = await probe.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_locks where not granted`,
+      sql`select count(*) as n from pg_locks where not granted`,
     );
     if (Number(waiting.rows[0]!.n) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -113,16 +137,22 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
     // ---- Setup, committed on the admin connection so both racing backends see it ----
     await seedTenant(suite.admin);
     await seedLegacySellingUnits(suite.admin);
-    const loc = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
+    const [loc] = await suite.admin
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [till] = await suite.admin
+      .insert(tills)
+      .values({ locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
     const nodeId = await seedNode(suite.admin, brandLocationId(locationId));
     const cfg: TillConfig = {
-      tillId: brandTillId(till.rows[0]!.id),
+      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),
@@ -201,13 +231,18 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
     expect(deactivateDone).toBe(true);
 
     // The fire enqueued its job (proof it was never aborted), and B's deactivation landed AFTER it.
-    const jobs = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from print_jobs where printer_id = ${printerId}`,
-    );
-    expect(Number(jobs.rows[0]!.n)).toBe(1);
-    const printerRow = await suite.admin.execute<{ active: boolean }>(
-      sql`select active from printers where id = ${printerId}`,
-    );
-    expect(printerRow.rows[0]!.active).toBe(false);
+    const jobs = await suite.admin
+      .select({ n: countRows() })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    expect(Number(jobs[0]!.n)).toBe(1);
+    // Read through the table definition: `printers.active` is an integer column with a boolean read
+    // mapping on this engine, so a raw `select active` would hand back 0/1 and the assertion below
+    // — unchanged — would be comparing a number with `false`.
+    const printerRow = await suite.admin
+      .select({ active: printers.active })
+      .from(printers)
+      .where(eq(printers.id, printerId));
+    expect(printerRow[0]!.active).toBe(false);
   });
 });

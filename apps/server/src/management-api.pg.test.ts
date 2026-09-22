@@ -1,3 +1,17 @@
+/**
+ * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
+ * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
+ * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/management-api.pg.test.ts` in `apps/server`, which reports
+ * `39 tests | 39 skipped` and then fails the FILE. No assertion below has run on this branch; its
+ * SQL is converted anyway so nothing has to be untangled twice.
+ *
+ * Two cases here ("refuses a duplicate…", "preserves one active admin…") stage a race by issuing
+ * two requests with `Promise.all` on ONE database handle. Whether they still stage anything is NOT
+ * established by this conversion: `withTransaction` now runs each body inside the venue file's
+ * write queue, which admits one write transaction at a time (`assertExtraListForWrite`,
+ * `packages/catalogue/src/extras.ts`), so the interleave they were written for may no longer occur.
+ */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
@@ -196,8 +210,10 @@ describe("Management API staff + session routes over real Postgres", () => {
       }),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    // No `::int` here or below: `count(*)` already comes back as a JavaScript number, and the cast
+    // operator is a syntax error to this parser (`unrecognized token: ":"`).
     const matching = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from persons
+      select count(*) as count from persons
       where lower(display_name)='same till name'`);
     expect(matching.rows[0]!.count).toBe(1);
   });
@@ -231,7 +247,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
     const remaining = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from persons
+      select count(*) as count from persons
       where role='admin' and status='active'`);
     expect(remaining.rows[0]!.count).toBe(1);
   });

@@ -54,7 +54,7 @@ let clock: TrustedClock;
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `catalogue-demo.ts`/`record-one-sale.ts` document. `recordSale` reads
+ * identical stub shape `record-one-sale.ts` documents. `recordSale` reads
  * `now()` once and touches neither `anchor` nor `currentAnchor`.
  */
 function systemClock(): TrustedClock {
@@ -255,6 +255,38 @@ beforeAll(() => {
   });
 });
 
+/** The six frozen names a raw read of `working_order_lines` / `sale_lines` hands back — the two
+ *  `descriptions` columns as the TEXT the engine stores, because a raw `execute` bypasses the
+ *  column's own JSON read mapping (measured 2026-09-22 against `menu_sections.name` in
+ *  `catalogue-api.test.ts`, which came back as `{"en":"Drinks",…}` rather than an object). */
+type StoredNames = {
+  variant_id: string;
+  name: string;
+  variant_name: string | null;
+  kitchen_name: string | null;
+  variant_kitchen_name: string | null;
+  descriptions: string;
+  variant_descriptions: string | null;
+};
+
+/** Parse the two JSON columns at the row, leaving every assertion below exactly as it was. The
+ *  decode moved out of the driver, not out of the test. */
+function decodeNames<T extends StoredNames>(
+  row: T,
+): Omit<T, "descriptions" | "variant_descriptions"> & {
+  descriptions: Record<string, string>;
+  variant_descriptions: Record<string, string> | null;
+} {
+  return {
+    ...row,
+    descriptions: JSON.parse(row.descriptions) as Record<string, string>,
+    variant_descriptions:
+      row.variant_descriptions === null
+        ? null
+        : (JSON.parse(row.variant_descriptions) as Record<string, string>),
+  };
+}
+
 describe("recordTillSale", () => {
   it("requires a published variant and freezes its menu price and presentation facts", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
@@ -282,26 +314,21 @@ describe("recordTillSale", () => {
     expect(result.total).toBe("8.20");
     // The filed sale line carries the SAME six names as the frozen order line — filing copies the
     // snapshot rather than resolving the catalogue a second time.
-    const snapshots = await suite.admin.execute<{
-      variant_id: string;
-      name: string;
-      variant_name: string | null;
-      kitchen_name: string | null;
-      variant_kitchen_name: string | null;
-      descriptions: Record<string, string>;
-      variant_descriptions: Record<string, string> | null;
-      unit_price_gross?: number | null;
-    }>(sql`
+    const snapshots = await suite.admin.execute<StoredNames & { unit_price_gross?: number | null }>(
+      sql`
       -- unit_price_gross counts whole cents, and the assertion below is on that COUNT, not on an
-      -- amount: ::int only normalises it to a number, and raises 22003 rather than answering wrong.
+      -- amount. The integer cast that used to sit on this column only normalised node-postgres's
+      -- answer to a number; the column is an integer column on this engine and the driver already
+      -- hands back a number, so the cast is dropped rather than replaced. The count is unchanged.
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
-             variant_descriptions, unit_price_gross::int as unit_price_gross
+             variant_descriptions, unit_price_gross
       from working_order_lines
       union all
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, null
       from sale_lines
-      order by unit_price_gross nulls last`);
+      order by unit_price_gross nulls last`,
+    );
     const names = {
       variant_id: variantIds!.double,
       name: "Agua mineral",
@@ -311,7 +338,7 @@ describe("recordTillSale", () => {
       descriptions: { [LOCALE]: "Agua mineral" },
       variant_descriptions: { [LOCALE]: "Doble ración" },
     };
-    expect(snapshots.rows).toEqual([
+    expect(snapshots.rows.map(decodeNames)).toEqual([
       { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
@@ -409,20 +436,12 @@ describe("recordTillSale", () => {
       tender: { method: "cash", amount: "8.90" },
     });
     expect(result.total).toBe("8.90");
-    const stored = await suite.admin.execute<{
-      variant_id: string;
-      name: string;
-      variant_name: string | null;
-      kitchen_name: string | null;
-      variant_kitchen_name: string | null;
-      descriptions: Record<string, string>;
-      variant_descriptions: Record<string, string> | null;
-    }>(sql`
+    const stored = await suite.admin.execute<StoredNames>(sql`
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions
       from sale_lines
       order by line_no`);
-    expect(stored.rows).toEqual([
+    expect(stored.rows.map(decodeNames)).toEqual([
       {
         variant_id: variantIds!.double,
         name: "Agua mineral",
@@ -473,7 +492,7 @@ describe("recordTillSale", () => {
       },
     ]);
     const prep = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from ticket_items
+      select cast(count(*) as integer) as count from ticket_items
       `);
     expect(prep.rows).toEqual([{ count: 1 }]);
   });
@@ -494,7 +513,7 @@ describe("recordTillSale", () => {
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
     const prep = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from ticket_items
+      select cast(count(*) as integer) as count from ticket_items
       `);
     expect(prep.rows).toEqual([{ count: 1 }]);
 
@@ -1237,8 +1256,13 @@ describe("ordering extras and options — parent + child lines", () => {
     // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note guard.
     const columns = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
+      // This engine has no `information_schema`; a table's columns come from the PRAGMA function,
+      // the same replacement `configuration-transfer.ts:403` takes. The structural claim is
+      // unchanged: an unknown table would yield no rows, and `toContain("option_snapshots")` below
+      // would fail first, so an empty answer cannot pass the two `not.toContain` assertions by
+      // vacuum.
       const { rows } = await tx.execute<{ column_name: string }>(
-        sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
+        sql`select name as column_name from pragma_table_info('sale_lines')`,
       );
       return rows.map((row) => row.column_name);
     });

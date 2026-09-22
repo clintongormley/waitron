@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { departments } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -42,21 +43,30 @@ const suite = useVenueDb({
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
     // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
     // superuser — pure setup, as `@waitron/db`'s own seed helpers document.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
-    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
     // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
   },
 });
 
@@ -296,20 +306,25 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
       const from = await createTable(tx, d.cfg, { label: "MC-from" });
       const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
       const fromTab = await openTab(tx, d.cfg, { tableId: from.id });
-      const department = await tx.execute<{ id: string }>(sql`
-          insert into departments
-            (location_id, name, trading_name, default_service_mode)
-          values (${d.cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
-          returning id`);
-      const zone = await tx.execute<{ id: string }>(sql`
-          insert into floor_zones (location_id, name)
-          values (${d.cfg.locationId}, 'Dining room') returning id`);
+      const [department] = await tx
+        .insert(departments)
+        .values({
+          locationId: d.cfg.locationId,
+          name: "Restaurant",
+          tradingName: "Restaurant",
+          defaultServiceMode: "table_tab",
+        })
+        .returning({ id: departments.id });
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: d.cfg.locationId, name: "Dining room" })
+        .returning({ id: floorZones.id });
       await tx.execute(sql`
           insert into order_service_contexts
             (working_order_id, location_id, zone_id, department_id, service_mode)
           values (
-            ${intoTab.tabId}, ${d.cfg.locationId}, ${zone.rows[0]!.id},
-            ${department.rows[0]!.id}, 'table_tab'
+            ${intoTab.tabId}, ${d.cfg.locationId}, ${zone!.id},
+            ${department!.id}, 'table_tab'
           )`);
       return { intoTabId: intoTab.tabId, fromTabId: fromTab.tabId };
     });

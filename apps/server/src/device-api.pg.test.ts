@@ -1,8 +1,16 @@
+/**
+ * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
+ * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
+ * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/device-api.pg.test.ts` in `apps/server`, which reports `40 tests | 40 skipped`
+ * and then fails the FILE. No assertion below has run on this branch; its SQL is converted anyway
+ * so nothing has to be untangled twice.
+ */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -198,11 +206,16 @@ async function seedProfile(
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values (${`Profile ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
-    returning id`);
-  return rows[0]!.id;
+  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
+  // never reaches, and it is also what encodes `capabilities` — the list is handed over as an array
+  // rather than pre-stringified, because the column's own write mapping is what serialises it, and
+  // the `::jsonb` cast it used to carry is a syntax error to this parser.
+  const [row] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
 }
 
 /**
@@ -291,8 +304,11 @@ describe("POST /api/device/join", () => {
     );
     // The refusal happens before any DB work: no row, so a flood cannot fill the pending cap or the
     // connection pool (CLAUDE.md §5 — nothing external may block a sale).
+    // No `::int` here or on the four sibling counts in this file: `count(*)` already comes back as
+    // a JavaScript number, and the cast operator is a syntax error to this parser
+    // (`unrecognized token: ":"`).
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests `,
+      sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -379,7 +395,7 @@ describe("POST /api/device/join", () => {
     );
     expect(mode.refusedRecently()).toBe(0);
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests `,
+      sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -446,7 +462,7 @@ describe("devMode auto-accept", () => {
 
     // The request row is CONSUMED by the accept — it is now a device, not a pending join.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests `,
+      sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -465,7 +481,7 @@ describe("devMode auto-accept", () => {
     // The throw is inside the same transaction as the mint, so the just-created request is rolled back —
     // no orphan pending row nobody can approve.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests `,
+      sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -1030,7 +1046,7 @@ describe("join rate limiter (spec §8)", () => {
     });
     // Refused before any DB work: only the two admitted knocks left rows.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests `,
+      sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(2);
 

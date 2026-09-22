@@ -195,7 +195,7 @@ async function tabIdOf(tableId: string): Promise<string | null> {
 /** How many `sales` rows reference this working order — read as the superuser owner. */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
-    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+    select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }

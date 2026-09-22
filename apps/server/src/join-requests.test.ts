@@ -1,3 +1,26 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the harness it runs on is gone, and three of its cases
+ * stage races on two PostgreSQL connections that this engine cannot give them.
+ *
+ * WHAT IT REPORTS TODAY. It does not COLLECT: `useTemplateDb` throws `useTemplateDb: no shared
+ * container in scope. Wire the package's vitest globalSetup to a file that calls
+ * `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
+ * `npx vitest run src/join-requests.test.ts` in `apps/server`, which reports `35 tests | 35 skipped`
+ * and then fails the FILE. No assertion below has run on this branch.
+ *
+ * WHAT WENT, for the three `suite.pg.connect()` cases. `createJoinRequest`'s transaction-scoped
+ * advisory lock was removed in `cd2838e4`; the venue file's write queue gives the same whole-
+ * database scope by construction, since it is per FILE and admits ONE write transaction at a time
+ * (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`). So the interleave those cases
+ * stage — one creator holding open while a second counts — is no longer expressible: the second
+ * `withTransaction` does not begin until the first has committed. The cases are kept, not deleted:
+ * what still has to hold is that two overlapping creators never both pass the cap and that the
+ * loser is refused by name (`device.join_full`, `join_request.not_found`), and nothing else in this
+ * package asserts that.
+ *
+ * The SQL every case writes is converted anyway, so that nothing has to be untangled twice the day
+ * this package has a database again.
+ */
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -19,6 +42,7 @@ import {
 // and the sibling suite imports it from the subpath (`device-api.pg.test.ts:5-6`).
 import {
   asAppUser,
+  deviceProfiles,
   joinRequests,
   printAgents,
   withTransaction,
@@ -44,11 +68,15 @@ async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
 ): Promise<string> {
   profileCounter += 1;
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, capabilities)
-    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
-    returning id`);
-  return rows[0]!.id;
+  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
+  // never reaches, and it is also what encodes `capabilities` — the `::jsonb` cast is a syntax
+  // error to this parser (`unrecognized token: ":"`).
+  const [row] = await suite.admin
+    .insert(deviceProfiles)
+    .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
 }
 
 // One transaction run as the real `app_user` role — the shape every verb here is
@@ -135,10 +163,18 @@ describe("createJoinRequest", () => {
     // only way to pin one to a known value. The seeded row's own REAL number is 77, unrelated to 13:
     // if it were 13 too, a broken "real avoids existing reals" rule would make this pass for the
     // wrong reason.
-    await suite.admin.execute(sql`
-      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      values (${venue.cfg.locationId}, 'device'::join_request_kind, 'seeded', 'x', '77', '{13,86}'::text[])
-    `);
+    // Through the table definition: `join_requests.id` and `created_at` are `$defaultFn`
+    // generators, `kind` is a plain text column with a CHECK rather than a PostgreSQL enum TYPE (so
+    // the `::join_request_kind` cast has nothing to name), and `decoy_numbers` is a JSON array in a
+    // text column, not a `text[]`.
+    await suite.admin.insert(joinRequests).values({
+      locationId: venue.cfg.locationId,
+      kind: "device",
+      label: "seeded",
+      tokenHash: "x",
+      verificationNumber: "77",
+      decoyNumbers: ["13", "86"],
+    });
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
@@ -153,12 +189,19 @@ describe("createJoinRequest", () => {
     // per-KIND cap (10) never trips on them — pendingNumbers reads across BOTH kinds
     // (design §1.2 rule 3), so they still count toward this request's forbidden set. "00" and "01"
     // are the only two values left free.
-    await suite.admin.execute(sql`
-      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      select ${venue.cfg.locationId}, 'print_agent'::join_request_kind,
-             'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
-      from generate_series(2, 99) as n
-    `);
+    // The rows are built in JavaScript and inserted through the table definition. `generate_series`
+    // is a PostgreSQL set-returning function with no counterpart guaranteed here, `lpad` likewise,
+    // and the column notes on the seed above apply unchanged.
+    await suite.admin.insert(joinRequests).values(
+      Array.from({ length: 98 }, (_, i) => i + 2).map((n) => ({
+        locationId: venue.cfg.locationId,
+        kind: "print_agent" as const,
+        label: `seed ${n}`,
+        tokenHash: "x",
+        verificationNumber: String(n).padStart(2, "0"),
+        decoyNumbers: [],
+      })),
+    );
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       // Force the real pick onto "00", the first free value — "01" is then the ONLY value left for
@@ -300,12 +343,16 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
   it("nine pending plus two overlapping creations never exceed the cap; the loser gets device.join_full", async () => {
     const venue = await setupVenue(suite.admin);
     // Seed nine pending `device` requests directly — one shy of the cap. Reals 01..09, empty decoys.
-    await suite.admin.execute(sql`
-      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      select ${venue.cfg.locationId}, 'device'::join_request_kind,
-             'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
-      from generate_series(1, 9) as n
-    `);
+    await suite.admin.insert(joinRequests).values(
+      Array.from({ length: 9 }, (_, i) => i + 1).map((n) => ({
+        locationId: venue.cfg.locationId,
+        kind: "device" as const,
+        label: `seed ${n}`,
+        tokenHash: "x",
+        verificationNumber: String(n).padStart(2, "0"),
+        decoyNumbers: [],
+      })),
+    );
     const a = await suite.pg.connect();
     const b = await suite.pg.connect();
     const bRead = deferred();
@@ -336,8 +383,10 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
       });
       const outcomes = await Promise.allSettled([waiter, signaller]);
 
+      // No `::int` here or in the three sibling counts below: `count(*)` already comes back as a
+      // JavaScript number, and the cast operator is a syntax error to this parser.
       const { rows } = await suite.admin.execute<{ n: number }>(sql`
-        select count(*)::int as n from join_requests
+        select count(*) as n from join_requests
         where kind = 'device'
       `);
       expect(rows[0]!.n).toBeLessThanOrEqual(PENDING_CAP);
@@ -675,7 +724,7 @@ describe("acceptDeviceJoinRequest", () => {
       expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
       const { rows } = await suite.admin.execute<{ n: number }>(sql`
-        select count(*)::int as n from devices
+        select count(*) as n from devices
         where id = ${made.joinId}
       `);
       expect(rows[0]!.n).toBe(1);
@@ -725,13 +774,13 @@ describe("acceptDeviceJoinRequest", () => {
       expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
       const { rows: deviceRows } = await suite.admin.execute<{ n: number }>(sql`
-        select count(*)::int as n from devices
+        select count(*) as n from devices
         where id = ${made.joinId}
       `);
       expect(deviceRows[0]!.n).toBe(1);
       // No orphan register from the loser: exactly the one the winner's accept created.
       const { rows: tillRows } = await suite.admin.execute<{ n: number }>(sql`
-        select count(*)::int as n from tills
+        select count(*) as n from tills
         where name = 'Till racer'
       `);
       expect(tillRows[0]!.n).toBe(1);
