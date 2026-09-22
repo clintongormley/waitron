@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { ALL_MODULES } from "@waitron/composition";
-import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
+import { openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
 import { serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
@@ -24,10 +24,9 @@ const CLEAR = "\u001B[3J\u001B[H\u001B[2J";
  * get wrong lives in `cli.ts`, which is injected and fully tested. Its verification is the bundle
  * check in the plan — `node dist/bin.js` printing usage and exiting 2.
  *
- * There is no `DATABASE_URL` requirement here, unlike `packages/credentials/src/bin.ts`: this tool
- * connects as an ADMIN, per command, and `keyring` connects to nothing at all. Demanding a
- * connection string at boot would make the one command that needs no database impossible to run
- * without one.
+ * There is no storage requirement here, unlike `packages/credentials/src/bin.ts`: `venue` opens a
+ * venue directory of its own and `keyring` opens nothing at all. Demanding one at boot would make
+ * the one command that needs no database impossible to run without one.
  */
 async function main(): Promise<number> {
   try {
@@ -40,7 +39,7 @@ async function main(): Promise<number> {
         clearScreen: () => void process.stdout.write(CLEAR),
       },
       env: process.env,
-      connect: (uri) => createPostgresDb(uri),
+      openVenue: (directory) => openVenueDatabase(directory),
       applyVenue,
       modules: ALL_MODULES,
       // Persist the resolved fiscal-slot `modules.json` when this box's state dir is known, so a boot
@@ -123,17 +122,17 @@ const SINK = new Writable({
  * resolve — Node printed `Warning: Detected unsettled top-level await` and exited 0, reporting
  * success for a command that never ran. Observed directly with `printf '' | node <probe>` before
  * this race existed; with it, the same input returns `got=[]` and exits 0 through the normal path.
- * `""` is a value no caller in `cli.ts` acts on. It is REFUSED at each of the two that take one —
- * `--database` by `assertIdentifier` (`provisioning.invalid_identifier`) and the admin connection
- * string by `resolveAdminUri` (`provisioning.admin_uri_missing`) — and at the "Apply this plan?"
- * prompt it is simply not `y`, so nothing is applied.
+ * `""` is a value no caller in `cli.ts` acts on. It is REFUSED where it would otherwise be acted on
+ * — the venue directory, by `resolveVenueDir` (`provisioning.venue_dir_missing`), because an empty
+ * directory is a RELATIVE path rather than no path — and at the "Apply this plan?" prompt it is
+ * simply not `y`, so nothing is applied.
  *
  * An earlier version of this sentence said `""` was "what every caller in `cli.ts` already treats
- * as 'not supplied'". That was false in the one place it mattered: `resolveAdminUri` returned the
- * prompt's answer unchecked, and an empty connection string is one `pg` resolves to
- * `localhost:5432` as the OS user rather than rejecting. The race below therefore handed a
- * non-interactive run a live connection to whatever answers there. The guard in `resolveAdminUri`
- * is what makes the sentence true; it was not true when it was written.
+ * as 'not supplied'". That was false in the one place it mattered: the connection string this tool
+ * used to take was returned from the prompt unchecked, and an empty one is what `pg` resolved to
+ * `localhost:5432` as the OS user rather than rejecting. The storage switch moved the hazard rather
+ * than removing it — an empty DIRECTORY is the relative path `venue.db` — and `resolveVenueDir`'s
+ * guard is what keeps the sentence true.
  *
  * `ABORT_ERR` is Ctrl+D at the prompt. It is an operator saying "stop", not a fault, so it becomes
  * the same empty answer rather than a stack trace.

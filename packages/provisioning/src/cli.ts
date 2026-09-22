@@ -5,6 +5,7 @@ import {
   readDeploymentEnvironment,
   type Database,
   type DeploymentEnvironment,
+  type VenueDatabase,
 } from "@waitron/db";
 import {
   assertPasswordLength,
@@ -15,10 +16,8 @@ import {
 } from "@waitron/identity";
 import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
 import { venueFiscalSelection } from "./venue-fiscal.js";
-import { assertIdentifier, withDatabase, withRole } from "./identifiers.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
-import { sqlStateOf } from "./sql-state.js";
 import { applyVenue } from "./venue-apply.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
@@ -37,8 +36,9 @@ import "./errors.js";
 export interface CliDeps {
   io: ProvisioningIo;
   env: Record<string, string | undefined>;
-  /** Opens a connection to a connection string. The caller of each connection closes it. */
-  connect(uri: string): Promise<Database>;
+  /** Opens this node's venue directory — the two SQLite files it stores everything in. The caller
+   * closes the store, which owns both. */
+  openVenue(directory: string): Promise<VenueDatabase>;
   /** The venue apply: it runs the whole location flow as one transaction against a live target
    * database, and what `venue` decides — what it prompts, prints and refuses — is testable without
    * one. `planVenue`/`describeVenueAction` are pure, so they are NOT injected: the tests run the
@@ -63,15 +63,17 @@ export interface CliDeps {
   readTenants: typeof readTenantIdentities;
 }
 
-/** The one environment variable this tool reads a secret from. Named once so the guard that
- * refuses an empty one and the error that reports it cannot drift apart. */
-const ADMIN_URI_VARIABLE = "WAITRON_ADMIN_DATABASE_URL";
+/** The environment variable `apps/server` reads the venue directory from (`config.ts`'s `venueDir`).
+ * `venue` reads the same one, so a box's own setting is what stands its venue up: an operator asked
+ * to type the path instead could provision a directory the server never opens. Named once so the
+ * fallback and the error that reports nothing supplied it cannot drift apart. */
+const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
 
 /** The env var the admin PIN is read from. A login PIN is a secret, so — exactly like the admin
  * connection string above — it is NEVER an argv flag (`argv` is world-readable in `ps` and lands in
  * shell history): it comes from this variable or an echo-off prompt, and from nowhere else. `parse`
  * declares no `--admin-pin`, so `strict: true` turns one into a parse error rather than a silent
- * acceptance, the same defence `ADMIN_URI_VARIABLE` relies on. */
+ * acceptance. */
 const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN";
 
 /** The env var the admin dashboard PASSWORD is read from. Like the PIN and the admin connection
@@ -84,7 +86,7 @@ const USAGE = [
   "usage: waitron-provision <command> [options]",
   "",
   "  keyring                                            generate the credential key ring",
-  "  venue    [--database <name>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
+  "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
@@ -96,11 +98,10 @@ const USAGE = [
   "--admin-last-names: the admin's real name is left unset when neither is given, so a",
   "script driving this command is never stopped by a question it did not expect.",
   "",
-  "The admin connection string is NOT an option. It carries a password, and argv is",
-  "world-readable in `ps` and lands in shell history, so it is read from",
-  "WAITRON_ADMIN_DATABASE_URL or from an echo-off prompt — and from nowhere else.",
-  "It must be a URL: postgres://user:pass@host:port/database. A libpq keyword/value",
-  "string or a bare socket path is refused — see README.md, 'Secrets'.",
+  "--venue-dir is the directory holding this node's two SQLite files. Omitted, it is",
+  "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
+  "asked for. There is no connection string and no database name: one directory is the",
+  "database.",
   "",
   "The admin PIN and dashboard password (venue) are NOT options either, for the same reason: a",
   "login secret must not reach argv, so each is read from WAITRON_ADMIN_PIN /",
@@ -177,26 +178,24 @@ async function keyring(argv: string[], deps: CliDeps): Promise<number> {
  * injected module's own seed for that node (the fiscal seed is what registers it as a SIF) — the
  * whole slice `planVenue`/`applyVenue` compose.
  *
- * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
- * done first — the fiscal regime's own venue-field seat, which refuses a legal name or operation
- * description carrying a character XML forbids, an operation description over 500 characters, and
- * either series code outside AEAT's character set or longer than the 38-character base
- * (`setup.request_invalid`, naming the offending field), and then the pure `planVenue`, which
- * refuses an unimplemented territory, a bad locale count and duplicate series codes — so a
- * malformed request costs the operator neither a pasted admin credential nor an opened connection
- * (venue-plan.ts's "no admin connection is spent on a malformed request"). Only then is the admin
- * URI asked for and the target opened.
+ * The ORDER: everything that can be resolved and validated WITHOUT a database is done first — the
+ * fiscal regime's own venue-field seat, which refuses a legal name or operation description
+ * carrying a character XML forbids, an operation description over 500 characters, and either series
+ * code outside AEAT's character set or longer than the 38-character base (`setup.request_invalid`,
+ * naming the offending field), and then the pure `planVenue`, which refuses an unimplemented
+ * territory, a bad locale count and duplicate series codes — so a malformed request opens nothing
+ * (venue-plan.ts's "no admin connection is spent on a malformed request", which is now "no venue
+ * directory is opened"). Only then is the directory opened.
  *
- * Unlike `instance`, the connection is to the TARGET database as the OWNER-admin, not to the cluster
- * admin: `applyVenue` inserts as the role that owns the tables, so there is no
- * second role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a
- * partial venue must never be.
+ * It opens the venue directory and writes through its venue file; there is no cluster, no second
+ * role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a partial
+ * venue must never be.
  */
 async function venue(argv: string[], deps: CliDeps): Promise<number> {
   let values;
   try {
     ({ values } = parse(argv, {
-      database: { type: "string" },
+      "venue-dir": { type: "string" },
       country: { type: "string" },
       "tax-id": { type: "string" },
       "legal-name": { type: "string" },
@@ -226,13 +225,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   try {
-    // Resolved and VALIDATED before the admin connection string is even asked for — a mistyped
-    // country or database name should not cost the operator a paste of a privileged credential. Only
-    // the database name uses `assertIdentifier`; the rest are free text (a legal name has spaces, a
-    // territory has hyphens) and are checked only where a check has meaning — the country's shape
-    // here, the deeper request shape in `planVenue` below.
-    const database = await resolveOption(values.database, "database name: ", deps);
-    assertIdentifier("database", database);
+    // Resolved and VALIDATED before anything is opened — a mistyped country or a directory nothing
+    // supplied should cost no open at all. The directory is checked only for being SUPPLIED: a path
+    // has no grammar this tool can hold it to, and the engine's own refusal to open it is the check
+    // (`withVenueState`). The rest are free text (a legal name has spaces, a territory has hyphens)
+    // and are checked only where a check has meaning — the country's shape here, the deeper request
+    // shape in `planVenue` below.
+    const venueDir = await resolveVenueDir(values["venue-dir"], deps);
     const country = assertCountry(
       await resolveOption(values.country, "country (ISO-3166 alpha-2, e.g. ES): ", deps),
     );
@@ -344,9 +343,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const fiscalConfig = selection.config;
     // The regime's own rules on the four fields the operator just typed, reached through the same
     // contract seat the setup wizard uses (`FiscalContribution.venueFields`) — this file names no
-    // regime package. Run HERE, before `resolveAdminUri` asks for an admin credential and long
-    // before `applyVenue` mints the tenant, node, SIF and hash chain, so a refusal costs no
-    // connection and leaves nothing behind (CLAUDE.md §5). Without it this command could provision a
+    // regime package. Run HERE, long before `applyVenue` mints the tenant, node, SIF and hash
+    // chain, so a refusal opens nothing and leaves nothing behind (CLAUDE.md §5). Without it this command could provision a
     // venue whose series code the tax agency rejects, and every sale it ever took would be refused
     // at the chain seam with no way back — `create-series` is ON CONFLICT DO NOTHING, so re-running
     // reuses the tenant. A regime that files nothing offers no seat; the optional call is how its
@@ -361,28 +359,25 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
-    // codes. Kept BEFORE `resolveAdminUri` on purpose — see this function's header.
+    // codes. Kept BEFORE the venue directory is opened on purpose — see this function's header.
     const actions = planVenue(request, modules);
 
-    const adminUri = await resolveAdminUri(deps);
-
-    return await withVenueState(adminUri, database, deps, async (target) => {
+    return await withVenueState(venueDir, deps, async (target) => {
       let environment: DeploymentEnvironment | null;
       try {
-        // The SQLSTATE-bearing STATE READ: reading the deployment stamp as an admin that may lack
-        // privilege on the target's tables fails 42501, exactly as `instance`/`status` read theirs.
-        // Classified via `asUnreadable`, like the connect in `withVenueState`; the venue APPLY below
-        // keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never dressed as a
-        // read one. Only this stamp read is wrapped, NOT `applyVenue`.
+        // The STATE READ: a venue file that opened and then could not be read — a corrupt or
+        // truncated one. Classified via `asUnreadable`, like the open in `withVenueState`; the venue
+        // APPLY below keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never
+        // dressed as a read one. Only this stamp read is wrapped, NOT `applyVenue`.
         environment = await deps.readEnvironment(target);
       } catch (error) {
-        throw asUnreadable(error, database);
+        throw asUnreadable(error, venueDir);
       }
       if (environment === null) {
         // A venue cannot be filed against a database with no environment stamp — stamping is
         // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
         // stamped here.
-        throw new AppError("provisioning.database_unstamped", { database });
+        throw new AppError("provisioning.database_unstamped", { database: venueDir });
       }
 
       // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
@@ -398,14 +393,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         assertNoForeignTenant(
           await deps.readTenants(target),
           { country: ensure.country, taxId: ensure.taxId },
-          database,
+          venueDir,
         );
       }
 
-      deps.io.stdout(`Plan for a venue in ${database} (${environment}):`);
-      // Which cluster, so the operator confirming this sees the mistake the summary otherwise hides.
-      // Never the password.
-      deps.io.stdout(`Cluster: ${describeAdmin(adminUri)}`);
+      // The DIRECTORY, so the operator confirming this sees the mistake the summary otherwise hides:
+      // a venue stood up somewhere the server never opens.
+      deps.io.stdout(`Plan for a venue in ${venueDir} (${environment}):`);
       deps.io.stdout("");
       for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
       deps.io.stdout("");
@@ -432,7 +426,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
           // A concurrent venue run created a conflicting row between this run's plan and its apply.
           // `applyVenue` guards the natural keys it knows with `ON CONFLICT DO NOTHING`; this is the
           // residual race, named rather than left to reach the operator as `unexpected failure`.
-          throw new AppError("provisioning.venue_conflict", { database });
+          throw new AppError("provisioning.venue_conflict", { database: venueDir });
         }
         throw error;
       }
@@ -443,75 +437,64 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
- * Opens the OWNER-admin connection to the TARGET database, runs `body`, and closes it in a
- * `finally`. The venue apply owns the tables and runs as itself, so there is one connection to
- * manage — no cluster-admin handle, no second read, no target that may not exist yet.
+ * Opens the venue DIRECTORY, runs `body` against its venue file, and closes the store in a
+ * `finally`. The store owns both files, so closing it closes both — there is nothing else to
+ * manage: no cluster handle, no second connection, no role to assume.
  *
- * The CONNECT is classified: a SQLSTATE-bearing failure — the target database absent, or the admin
- * URI lacking privilege on it — becomes `provisioning.state_unreadable` naming the database (via
- * `asUnreadable`), while a failure with NO SQLSTATE (a broken socket, a bug) is rethrown untouched.
- * The other SQLSTATE-bearing STATE READ, the deployment-stamp read (`deps.readEnvironment`), is
- * wrapped the same way in `venue()`'s body, so connect and state read carry the same contract.
+ * `body` is handed the VENUE handle. A venue plan writes `ledger` and `state` tables — the taxpayer,
+ * the location, the till, the node, its series and each module's seed — and those live in the venue
+ * file; the node file holds this node's own identity, which a venue plan does not touch. Same split
+ * `apps/server`'s boot names (`const db = store.venue`).
+ *
+ * The OPEN is classified: a failure carrying an error `code` — the engine's or the filesystem's —
+ * becomes `provisioning.state_unreadable` naming the directory (via `asUnreadable`), while a failure
+ * with no code (a bug) is rethrown untouched.
+ * The other classified read, the deployment-stamp read (`deps.readEnvironment`), is wrapped the same
+ * way in `venue()`'s body, so open and state read carry the same contract.
  *
  * What is deliberately NOT classified is the venue APPLY: `applyVenue`'s own failures keep their
  * mapping in `venue()` (a unique violation → `provisioning.venue_conflict`, anything else rethrown).
- * A genuine insert error is not a fact about whether the database was readable, and labelling it
+ * A genuine insert error is not a fact about whether the directory was readable, and labelling it
  * `state_unreadable` would be wrong — the §1 defect class this repository guards against.
  */
 async function withVenueState(
-  adminUri: string,
-  database: string,
+  venueDir: string,
   deps: CliDeps,
   body: (target: Database) => Promise<number>,
 ): Promise<number> {
-  let target: Database;
+  let store: VenueDatabase;
   try {
-    // As the OWNER-admin, via the role option: `applyVenue` inserts as the table owner
-    // (`MIGRATOR_ROLE`), and a plain admin connection cannot CREATE TABLE in a migrator-owned
-    // database. There is no prior admin probe, so a refused SET ROLE surfaces here as
-    // `state_unreadable` along with every other SQLSTATE the connect can carry.
-    target = await deps.connect(targetUri(adminUri, database));
+    store = await deps.openVenue(venueDir);
   } catch (error) {
-    // A SQLSTATE-bearing connect failure is the database's verdict (absent, or no privilege on it);
-    // `asUnreadable` maps it to `provisioning.state_unreadable` and returns a broken socket
-    // untouched.
-    throw asUnreadable(error, database);
+    throw asUnreadable(error, venueDir);
   }
   try {
-    return await body(target);
+    return await body(store.venue);
   } finally {
-    // A pool; leaking it keeps the process alive after `main` returns.
-    await target.close();
+    // Two open SQLite files; leaking them keeps the process alive after `main` returns.
+    await store.close();
   }
 }
 
 /**
- * The structured form of a failure to reach or read a deployment — or the original error, when it
- * carries no SQLSTATE and is therefore not the database's verdict on anything.
+ * The structured form of a failure to open or read a venue directory — or the original error, when
+ * it carries no code and is therefore not the engine's or the filesystem's verdict on anything.
+ *
+ * `reason` is the error's own `code`, never its message: a driver message can quote the failing
+ * statement, and an `Error` here has already reached a path where nothing may be echoed unchecked.
+ * The two real shapes, measured on Node v26.7.0 against `openVenueDatabase` — a directory path
+ * running through a regular file gives `code: "ENOTDIR"`, and a directory whose `venue.db` is not a
+ * database gives `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN
+ * directory is not a failure at all: it is created and opened, so the commonest wrong-path mistake
+ * reaches `provisioning.database_unstamped` rather than this.
  *
  * Returns the error to throw rather than throwing it, so each call site reads as `throw
  * asUnreadable(...)` and TypeScript still sees the path as terminating.
  */
-function asUnreadable(error: unknown, database: string): unknown {
-  const sqlState = sqlStateOf(error);
-  if (sqlState === null) return error;
-  return new AppError("provisioning.state_unreadable", { database, sqlState });
-}
-
-/**
- * The role `venue` opens its session as. It owns the target database's tables, so `applyVenue`
- * inserts as their owner.
- *
- * Named here rather than imported: the path that CREATED this role — `waitron-provision instance`
- * — was deleted with the rest of the PostgreSQL deployment model, so nothing in this repository
- * creates it any more. This command requires a database somebody else set up that way.
- */
-const MIGRATOR_ROLE = "waitron_migrator";
-
-/** The target database, opened AS the migrator via the session role option, so the session can
- * read and write a migrator-owned database. */
-function targetUri(adminUri: string, database: string): string {
-  return withRole(withDatabase(adminUri, database), MIGRATOR_ROLE);
+function asUnreadable(error: unknown, venueDir: string): unknown {
+  const reason = (error as { code?: unknown } | null)?.code;
+  if (typeof reason !== "string") return error;
+  return new AppError("provisioning.state_unreadable", { database: venueDir, reason });
 }
 
 /**
@@ -583,49 +566,35 @@ async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Pr
 }
 
 /**
- * The admin connection string, from the environment or from an echo-off prompt.
+ * The venue directory: the `--venue-dir` flag, then `WAITRON_VENUE_DIR`, then a prompt.
  *
- * There is no third source, and specifically no flag: the string carries a password, `argv` is
- * world-readable in `ps` and lands in shell history, and `parse` above is `strict` precisely so
- * that adding one is a parse error rather than a silent acceptance.
+ * The variable sits BETWEEN the flag and the prompt on purpose. It is the one `apps/server` reads
+ * for the same directory (`config.ts`'s `venueDir`), so on a box that has it set the tool and the
+ * server agree by construction; an operator asked to type the path could type a different one and
+ * stand a venue up in a directory the server never opens. A flag still wins, because an operator
+ * naming a directory explicitly means that one.
  *
- * **An empty answer is refused, not returned.** The env var was already guarded for `""`; the
- * prompt's answer was not, and `bin.ts`'s `ask` returns `""` deliberately for an exhausted stdin or
- * a Ctrl+D. `pg` treats an empty connection string as no connection string at all rather than as an
- * error — run against this repo's `pg@8.23.0`, `new Client({ connectionString: "" })` resolved to
- * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0` builds
- * its clients with `new this.Client(this.options)` (`index.js:241`) from the same options — so
- * `instance` would have created, migrated and STAMPED a database on whatever cluster answers there.
- * See `errors.ts` for why that is the unacceptable failure mode rather than merely a confusing one.
+ * **An empty answer is refused, not returned.** Every path `openVenueStore` builds is
+ * `join(directory, …)`, and `join("", "venue.db")` is the RELATIVE `venue.db` — so an empty value
+ * stands a venue up wherever the process happens to be running, silently, and a hash chain and a
+ * series number cannot be taken back (CLAUDE.md §5). `bin.ts`'s `ask` returns `""` deliberately for
+ * an exhausted stdin or a Ctrl+D, which is exactly the non-interactive shape `README.md` documents,
+ * so the prompt answering nothing is a real case rather than a theoretical one. The same guard
+ * `apps/server`'s `config.ts` carries for the same variable, for the same reason.
  *
- * **A string that is not a URL is refused too**, and this is the ONE place that decides it, for
- * both commands and both sources. `pg` accepts forms `new URL` rejects — measured, not assumed:
- * inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, the
- * connection string `/var/run/postgresql` parsed to `{host:"/var/run/postgresql",port:5432}`,
- * `connect()` succeeded and `select inet_server_addr() is null` returned `t`, while
- * `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. The parse
- * half still holds on the installed `pg@8.23.0` — same `{host,port}`, same `new URL` throw — but
- * the container half, the socket connect, has not been re-run since. Every
- * consumer of this string after this function re-points it with `new URL` — `targetUri`'s
- * `withDatabase` and `describeAdmin` for the plan summary — so a form only `pg` accepts is a form
- * this tool cannot carry. `errors.ts` records why the fix is a refusal rather than a conninfo parser.
+ * Not a secret, and not an identifier either: a directory path has no grammar this tool can hold it
+ * to (`assertIdentifier`'s lower-case-and-underscores rule described a database NAME, which had to
+ * survive a connection string and a DDL statement). Whether the path is usable is the engine's
+ * answer, and `withVenueState` classifies it.
  */
-async function resolveAdminUri(deps: CliDeps): Promise<string> {
-  const uri = await readAdminUri(deps);
-  // `URL.canParse` rather than a try/catch: there is then no caught error object in scope for a
-  // future edit to print, and the error thrown here carries no part of the string by construction.
-  if (!URL.canParse(uri)) {
-    throw new AppError("provisioning.admin_uri_not_a_url", { variable: ADMIN_URI_VARIABLE });
-  }
-  return uri;
-}
-
-async function readAdminUri(deps: CliDeps): Promise<string> {
-  const fromEnv = deps.env[ADMIN_URI_VARIABLE];
-  if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
-  const answer = (await deps.io.promptSecret("admin connection string (not shown): ")).trim();
+async function resolveVenueDir(flag: string | undefined, deps: CliDeps): Promise<string> {
+  const fromFlag = flag?.trim();
+  if (fromFlag !== undefined && fromFlag !== "") return fromFlag;
+  const fromEnv = deps.env[VENUE_DIR_VARIABLE]?.trim();
+  if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
+  const answer = (await deps.io.prompt("venue directory: ")).trim();
   if (answer === "") {
-    throw new AppError("provisioning.admin_uri_missing", { variable: ADMIN_URI_VARIABLE });
+    throw new AppError("provisioning.venue_dir_missing", { variable: VENUE_DIR_VARIABLE });
   }
   return answer;
 }
@@ -659,33 +628,6 @@ async function readAdminPassword(deps: CliDeps): Promise<string> {
   const fromEnv = deps.env[ADMIN_PASSWORD_VARIABLE];
   if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
   return deps.io.promptSecret("admin password (not shown): ");
-}
-
-/**
- * WHICH CLUSTER is about to be written to, for the confirmation an operator gives.
- *
- * The plan summary named a database and an environment and nothing else, so it could not reveal
- * the one mistake it exists to catch: an admin connection string pointing somewhere other than
- * where the operator believes. That is the fiscally expensive mistake — one database per
- * environment, a pre-production database is never promoted, and `instance` migrates and STAMPS
- * whatever it is pointed at.
- *
- * Host, port and username. NEVER the password and never the whole string: `README.md`'s "Secrets"
- * section used to promise the admin's username was never printed either, and was narrowed in the
- * commit that added this rather than left to contradict the code.
- *
- * `new URL` cannot throw here, and that is a fact about `resolveAdminUri` rather than about this
- * function: it refuses a string `new URL` cannot parse before returning one, so the only strings
- * that reach here have already been parsed once. This used to carry its own `try`/`catch`
- * returning "unknown — the admin connection string is not a URL", which was the right answer while
- * such a string could get this far. It no longer can, and the case it existed for — a Unix-socket
- * directory path such as `/var/run/postgresql`, which `pg` connects with and `new URL` rejects —
- * is now refused up front, because `withDatabase` needed the same parse and threw a bare
- * `TypeError` at it only once a connection had already been opened.
- */
-function describeAdmin(adminUri: string): string {
-  const url = new URL(adminUri);
-  return url.username === "" ? url.host : `${url.username}@${url.host}`;
 }
 
 /** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check

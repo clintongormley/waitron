@@ -152,10 +152,6 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     action:
       "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
-  "provisioning.admin_uri_not_a_url": {
-    title: "The box's database address is not a valid address.",
-    action: "Ask whoever installed this box to check its settings.",
-  },
   "migrations.incomplete": {
     // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
     // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this

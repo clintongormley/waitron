@@ -40,14 +40,14 @@ import "@waitron/shared";
  *   natural. It is wrong on both counts. `deployment.*` here denotes the environment STAMP and
  *   nothing else — `deployment.already_stamped` (`packages/db/src/errors.ts:44`),
  *   and `deployment.environment_mismatch` (`apps/server/src/errors.ts:120`) are both about WHICH
- *   ENVIRONMENT a deployment belongs to, and this code is about none of that. Its 28P01 case fails
- *   at the CONNECT, before any deployment has been reached at all. Its structural sibling is
+ *   ENVIRONMENT a deployment belongs to, and this code is about none of that. Its refused-OPEN case
+ *   fails before any deployment has been reached at all. Its structural sibling is
  *   `credentials.payload_unreadable`
  *   (`packages/credentials/src/errors.ts:79-85`): a CLI that could not read an input it needs,
  *   named for the domain of the CLI's work and carrying the thing it failed to read as a param,
  *   exactly as `database` is carried here.
- * - `admin_uri_missing` names an input THIS TOOL needs, at a moment when nothing has been reached:
- *   no deployment, no database, no role. `credentials.key_missing`
+ * - `venue_dir_missing` names an input THIS TOOL needs, at a moment when nothing has been reached:
+ *   no deployment, no directory, no file. `credentials.key_missing`
  *   (`packages/credentials/src/errors.ts:16`) is the same fact under its own domain's prefix, and
  *   `server.config_missing` (`apps/server/src/errors.ts:19`) is the same fact under the process's.
  *
@@ -63,57 +63,23 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** Nothing supplied the admin connection string: `WAITRON_ADMIN_DATABASE_URL` was unset or
-     * empty AND the echo-off prompt answered nothing — which is what an exhausted stdin or a Ctrl+D
-     * produces, deliberately, in `bin.ts`'s `ask`.
+    /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,
+     * AND the prompt answered nothing — which is what an exhausted stdin or a Ctrl+D produces,
+     * deliberately, in `bin.ts`'s `ask`.
      *
-     * Refused rather than passed through, because `pg` does not refuse it either. Run against this
-     * repo's `pg@8.23.0`: `new Client({ connectionString: "" })` resolved to
-     * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}` — an empty string is
-     * falsy, so nothing is parsed and every default applies — and `pg-pool@3.14.0` builds each
-     * client with `new this.Client(this.options)` (`index.js:241`) off the same options object. So
-     * an unset or misspelled variable plus a non-interactive stdin, which is exactly the shape
-     * `README.md` documents for CI, had `venue` open whatever cluster answers on localhost:5432
-     * and mint a taxpayer, a node and its invoice series in it. A chain and a series number cannot
-     * be taken back (CLAUDE.md §5).
+     * Refused rather than passed through, because an empty directory is not "no directory": every
+     * path the store builds is `join(directory, …)`, and `join("", "venue.db")` is the RELATIVE
+     * `venue.db`. So an unset variable plus a non-interactive stdin, which is exactly the shape
+     * `README.md` documents for CI, would have `venue` mint a taxpayer, a node and its invoice
+     * series into a pair of files in whatever directory the process happened to be started from.
+     * A chain and a series number cannot be taken back (CLAUDE.md §5). `apps/server`'s `config.ts`
+     * carries the same guard on the same variable, for the same reason.
      *
-     * `variable` is our own declared environment-variable NAME, never its value — the shape
-     * `credentials.key_missing` and `server.config_missing` both carry, for the same reason. The
-     * value it names is the one secret this tool takes as INPUT, and printing it is the thing this
-     * whole file forbids. */
-    "provisioning.admin_uri_missing": { variable: string };
-    /** The admin connection string was supplied and is not a URL `new URL` can parse.
-     *
-     * Refused rather than accepted, because `pg` and `new URL` disagree about real, WORKING
-     * connection strings and this tool needs both to agree. Run inside a `postgres:18-alpine`
-     * container (PostgreSQL 18.4) with `pg@8.22.0` and the connection string
-     * `/var/run/postgresql`: pg parsed it to `{host:"/var/run/postgresql",port:5432}`, `connect()`
-     * succeeded, and `select inet_server_addr() is null` returned `t` — a live connection over the
-     * cluster's Unix socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the
-     * same process.
-     *
-     * `pg` is not the only consumer here. This tool RE-POINTS the admin string at the target
-     * database (`targetUri` → `withDatabase`, `cli.ts`) and parses it again to name the cluster in
-     * the plan summary (`describeAdmin`), and both are a `new URL`. With the socket path above,
-     * `withDatabase(uri, "waitron_prod")` threw `TypeError: Invalid URL`. That was measured when
-     * three such re-points existed, two of them on the since-deleted `instance` path; what it
-     * establishes is that `pg` and `new URL` disagree, which is unchanged. Unrefused, the throw
-     * reaches the operator as `unexpected failure (TypeError)` (`bin.ts`'s catch-all), not as a
-     * code.
-     *
-     * Supporting the non-URL forms properly was the alternative and was rejected: re-pointing a
-     * libpq keyword/value string at a different database, user and password means parsing and
-     * re-serialising conninfo (quoting, escaping, `host=` vs `hostaddr=`), and a mistake there
-     * points `migrate` and `stamp` at the WRONG database — which one database per environment
-     * makes unrecoverable. Refusing the form this tool cannot re-point is the honest answer.
-     *
-     * `variable` is our own declared environment-variable NAME — the same param
-     * `provisioning.admin_uri_missing` carries, and named for the same reason: the string itself may
-     * carry a password in every form `pg` accepts (`host=db.example password=hunter2` is one), so it
-     * is never echoed. The variable is named even when this run read the string from the echo-off
-     * prompt instead; it is where the tool reads it from, and the operator's fix goes in one of
-     * those two places. */
-    "provisioning.admin_uri_not_a_url": { variable: string };
+     * `variable` is our own declared environment-variable NAME, never a path an operator typed —
+     * the shape `credentials.key_missing` and `server.config_missing` both carry. A directory is
+     * not a secret, but there is nothing to echo here: the whole point of the refusal is that
+     * nothing supplied one. */
+    "provisioning.venue_dir_missing": { variable: string };
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
@@ -129,15 +95,21 @@ declare module "@waitron/shared" {
      * header describes. `value` IS echoed, the same format-check family as
      * `provisioning.invalid_identifier` above: an operator's typo, never a secret. */
     "provisioning.invalid_country": { value: string };
-    /** A venue was requested against a database with no environment stamp. `venue` reads the stamp
-     * with `readDeploymentEnvironment` (`packages/db`) on the target BEFORE it applies anything; a
-     * `null` result means the database was never stamped, so there is no environment to file its
-     * sales under. Refused here rather than stamped — stamping belongs to whichever path created
-     * the database (`provisionVenue`, `apps/server/src/provision.ts`), and one database per
-     * environment is a fiscal invariant a stamp cannot take back.
+    /** A venue was requested against a venue directory with no environment stamp. `venue` reads the
+     * stamp with `readDeploymentEnvironment` (`packages/db`) BEFORE it applies anything; a `null`
+     * result means it was never stamped — and that includes a directory with no schema at all,
+     * because that reader asks `sqlite_master` first and answers `null` when the `deployment` table
+     * is absent. So this is also what a VIRGIN directory gives: opening one succeeds (it is
+     * created), which makes this, not a failed open, the refusal a mistyped path meets.
+     *
+     * Refused here rather than stamped — stamping belongs to whichever path stood the box up
+     * (`provisionVenue`, `apps/server/src/provision.ts`), and one database per environment is a
+     * fiscal invariant a stamp cannot take back.
      *
      * `provisioning.*`: a refusal of standing a venue up, the same activity the header describes.
-     * `database` is operator-typed configuration and never a secret. */
+     * `database` is the venue DIRECTORY — operator-typed configuration, never a secret. The param
+     * keeps the name the whole family uses; `apps/server`'s boot made the same choice when the
+     * directory became the database (`ownerDatabaseName = config.venueDir`). */
     "provisioning.database_unstamped": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
      * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the keys it knows —
@@ -262,25 +234,23 @@ declare module "@waitron/shared" {
     "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
-    /** Reading what a deployment already has — `pg_database`, `pg_roles`, the journal tables, the
-     * deployment stamp — failed at the database. Every command here reads before it decides, so
-     * this is where an admin connection that cannot see the target database surfaces, and it is a
-     * REACHABLE case rather than a defensive one: an admin that did not create the database holds
-     * no privilege on the tables inside it, and `select environment from deployment` fails with
-     * 42501. Observed directly against `postgres:18-alpine` — see `README.md`'s "When the admin did
-     * not create the database" for the transcript and the remedy. 28P01 (a wrong password in the
-     * admin connection string) arrives here too, from the CONNECT rather than from a read: `pg`
-     * authenticates when the pool hands out its first connection. An earlier version of this
-     * sentence claimed the opposite — that `pg` authenticates lazily on first use, so a bad password
-     * would surface at the first read — and the container disproved it, printing
-     * `unexpected failure (error)` while the connect sat outside the guard. `cli.ts`'s
-     * `withVenueState` carries the same receipt at the site that acts on it.
+    /** Opening the venue directory, or reading the deployment stamp out of it, failed. `venue`
+     * reads before it decides, so this is where a directory the tool cannot use surfaces.
      *
-     * Raised ONLY when the failure carries a SQLSTATE. Anything else is a bug or a broken socket,
-     * not a fact about this database, and is rethrown unchanged rather than dressed up as one.
-     * `database` is operator-typed and `sqlState` is five `[0-9A-Z]` characters (sql-state.ts);
-     * neither can carry the admin connection string that produced it. */
-    "provisioning.state_unreadable": { database: string; sqlState: string };
+     * Measured on Node v26.7.0 against the real `openVenueDatabase`, which is what makes the two
+     * reachable shapes concrete rather than defensive: a path running through a regular file gives
+     * `code: "ENOTDIR"` from the `mkdir`, and a directory whose `venue.db` is not a database gives
+     * `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN directory is
+     * neither — it is created and opened — so a mistyped path lands on
+     * `provisioning.database_unstamped` instead. `cli.ts`'s `withVenueState` carries the same
+     * receipt at the site that acts on it.
+     *
+     * Raised ONLY when the failure carries a string `code`. Anything else is a bug, not a fact
+     * about this directory, and is rethrown unchanged rather than dressed up as one. `reason` is
+     * that `code` and never the message: a driver message can quote the failing statement, which
+     * this file's header forbids echoing. `database` is the venue directory — operator-typed
+     * configuration, never a secret. */
+    "provisioning.state_unreadable": { database: string; reason: string };
     /** A database being migrated is owned by a role other than `waitron_migrator`.
      *
      * **NOTHING IN THIS REPOSITORY RAISES THIS TODAY.** Both throwers lived on the

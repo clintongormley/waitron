@@ -9,16 +9,6 @@ Design: [`docs/superpowers/specs/2026-07-29-provisioning-tool-design.md`](../../
 This document is the operational half of that spec — written for whoever runs the tool, not whoever
 reads its source.
 
-> **`venue` does not run on this branch.** It opens a PostgreSQL connection string, and the storage
-> switch replaced PostgreSQL with a directory of SQLite files: `@waitron/db` no longer exports
-> `createPostgresDb`, which `src/bin.ts` imports to build the connection. This package's own
-> `typecheck` script reports it as `TS2305` on `src/bin.ts`.
-> Repointing the command at a venue directory is unscheduled work;
-> until it happens, stand a venue up through the setup flow
-> (`apps/server/src/provision.ts`) or the dev stack (`apps/server/scripts/dev-setup.ts`), and read
-> the `venue` section below as a description of the library underneath it (`planVenue` /
-> `applyVenue`), which every one of those paths still uses.
-
 The command that **did** stand a deployment up — `waitron-provision instance`, which created a
 database, created the `waitron_migrator` and `waitron_app` roles, migrated and stamped it — was
 deleted with the PostgreSQL deployment model, along with `status`. With one SQLite directory there
@@ -39,10 +29,10 @@ and neither surviving command migrates anything.
 
 ## The two commands
 
-| Command   | What it needs                                                         | How often           |
-| --------- | --------------------------------------------------------------------- | ------------------- |
-| `keyring` | nothing at all — no database, no connection string                    | once per deployment |
-| `venue`   | the migrator connection (role option) to a stamped, migrated database | once per venue      |
+| Command   | What it needs                                 | How often           |
+| --------- | --------------------------------------------- | ------------------- |
+| `keyring` | nothing at all — no venue directory, no files | once per deployment |
+| `venue`   | a migrated, stamped venue directory           | once per venue      |
 
 `venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
@@ -56,7 +46,7 @@ no fiscal identity.
 usage: waitron-provision <command> [options]
 
   keyring                                            generate the credential key ring
-  venue    [--database <name>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
+  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
            [--location-name <name>] [--territory <t>] [--locale <l>]...
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
@@ -91,18 +81,24 @@ then every composed module's provisioning seed — the fiscal module's registers
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.
 
-`venue` connects to the **target database as `waitron_migrator`** — the role that owns every table —
-by opening the admin's `WAITRON_ADMIN_DATABASE_URL` with a session role option
-(`options=-c role=waitron_migrator`). `applyVenue` inserts as that owner, and a plain admin
-connection could not write the migrator-owned `public` schema. **Nothing in this repository creates
-that role any more**: it was `instance`'s, and the database has to have been set up that way by
-something else. The database must also already be **stamped and migrated**: a venue against an
-unstamped database is refused (`provisioning.database_unstamped`), because one database per
-environment is a fiscal invariant and this command does not stamp.
+`venue` opens **one venue directory** — the two SQLite files this node keeps everything in — and
+writes through its venue file, the one holding every `ledger` and `state` table. There is no
+connection string, no cluster, no role and no grant: the directory IS the database. It takes the
+path from `--venue-dir`, then from `WAITRON_VENUE_DIR` (the same variable `apps/server` reads, so a
+box's own setting is what stands its venue up), then from a prompt.
 
-The admin person is seeded with two login secrets, both **required** and both handled exactly like
-the admin connection string — read from an environment variable or an echo-off prompt, **never**
-from `argv`: a till **PIN** (`WAITRON_ADMIN_PIN`, for the counter POS) and a dashboard **password**
+The directory must already be **migrated and stamped**. Neither is this command's job: boot migrates
+(`apps/server/src/boot.ts` → `applyMigrations`) and whichever path stood the box up does the
+stamping (`provisionVenue`, `apps/server/src/provision.ts`). A venue against an unstamped directory
+is refused (`provisioning.database_unstamped`), because one database per environment is a fiscal
+invariant a stamp cannot take back. That refusal is also what a mistyped path meets: opening a
+virgin directory SUCCEEDS — it is created — so the stamp read, not the open, is where a wrong path
+is caught. Run against the built bundle on 2026-09-22: a virgin `/tmp/f1-virgin` gave
+`provisioning.database_unstamped {"database":"/tmp/f1-virgin"}`, and a migrated, stamped directory
+minted the venue and its SIF.
+
+The admin person is seeded with two login secrets, both **required** and both read from an
+environment variable or an echo-off prompt, **never** from `argv`: a till **PIN** (`WAITRON_ADMIN_PIN`, for the counter POS) and a dashboard **password**
 (`WAITRON_ADMIN_PASSWORD`, for the management dashboard, ≥8 characters). Each is hashed at the CLI
 boundary (`assertPinLength` / `assertPasswordLength` enforce the same floors the identity package
 does), so only the hash ever reaches the plan or the database. The display name (`--admin-name`) and
@@ -118,8 +114,8 @@ so the provisioned admin can sign in immediately. The C2b mirror-bundle adoption
 authenticates that admin **by id** via `loginManagerById`, because it is a server-to-server flow
 carrying the id rather than the dashboard form.
 
-It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
-confirmation (`--yes` skips it), applies, then prints the new `node` id and one
+It reads what would be created, prints the plan headed by the venue directory and the environment
+stamped on it, asks for confirmation (`--yes` skips it), applies, then prints the new `node` id and one
 `seeded:` line per module seed that ran (the fiscal module's names its SIF id and installation
 number). The SIF's `id_sistema_informatico` is **not** an option — it is the `WAITRON_ID_SISTEMA`
 product constant (`W1`, owned by `packages/fiscal-verifactu`), which identifies Waitron's software,
@@ -128,8 +124,7 @@ not the venue.
 `--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
 `--locale` count outside one-or-two (`provisioning.invalid_locales`) and equal standard and
-rectificative series codes (`provisioning.duplicate_series_code`) before any admin connection is
-opened. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
+rectificative series codes (`provisioning.duplicate_series_code`) before the directory is opened. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and either series code outside AEAT's character set or longer than
 the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
@@ -145,88 +140,57 @@ between this run's read and its write.
 
 ## Secrets
 
-Four, handled differently, **none ever in `argv`**.
+Three, handled differently, **none ever in `argv`**.
 
 | Secret                   | How it gets in or out                                                                              |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | Credential key ring      | OUTPUT of `keyring` only. Printed once, acknowledged, then screen and scrollback cleared.          |
-| Admin connection string  | INPUT (`venue`). `WAITRON_ADMIN_DATABASE_URL`, or an echo-off prompt. There is no flag.            |
 | Admin till PIN           | INPUT (`venue`). `WAITRON_ADMIN_PIN`, or an echo-off prompt. No flag. Hashed at the CLI boundary.  |
 | Admin dashboard password | INPUT (`venue`). `WAITRON_ADMIN_PASSWORD`, or an echo-off prompt. No flag. Hashed at the boundary. |
 
-`--admin-url` is **not** an option, and neither is `--password` or `--key`. `argv` is world-readable
-in `ps` and lands in shell history, so the parser is `strict` and any such flag is a parse error
-rather than something silently accepted — `src/cli.test.ts`'s "refuses any flag that would put a
-secret in argv" and "refuses --admin-url as a flag, in both argv forms" are what keep it that way.
+There used to be a fourth — the admin connection string. The storage switch retired it: a venue is a
+directory of SQLite files, so there is no password to carry and `--venue-dir` is an ordinary flag.
+`--admin-url` is still **not** an option, and neither is `--password` or `--key`. `argv` is
+world-readable in `ps` and lands in shell history, so the parser is `strict` and any such flag is a
+parse error rather than something silently accepted — `src/cli.test.ts`'s "refuses any flag that
+would put a secret in argv" and "refuses --admin-url as a flag, in both argv forms" are what keep it
+that way, the second of those precisely because an operator reaching for the retired flag must not
+have their old connection string quietly ignored.
 
-Set the environment variable for a non-interactive run:
-
-```bash
-WAITRON_ADMIN_DATABASE_URL=postgres://admin:secret@host:5432/postgres \
-  node dist/bin.js venue --database waitron --country ES … --yes
-```
-
-If neither source supplies one, the run stops with `provisioning.admin_uri_missing` — it does not
-fall back to a default. `pg` resolves an **empty** connection string to `localhost:5432` as the OS
-user rather than rejecting it, so without that refusal an unset or misspelled variable plus a
-non-interactive stdin would have `venue` open whatever cluster answers there and mint a taxpayer, a
-node and its invoice series in it.
-
-**It must be a URL** — `postgres://user:pass@host:port/database`. `pg` also accepts a libpq
-keyword/value string (`host=… port=… user=…`) and a bare Unix-socket directory path
-(`/var/run/postgresql`), and this tool refuses both with `provisioning.admin_uri_not_a_url` before
-it connects. That is a real refusal of something that works, not a formatting preference: measured
-inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, the socket
-path connected successfully (`select inet_server_addr() is null` → `t`) while
-`new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. `venue`
-re-points the admin string at the target database (`withDatabase`, then `withRole` for the session
-role option) and parses it again to name the cluster in its plan summary (`describeAdmin`). Each of
-those three is a `new URL`, so a form only `pg` can parse is one this tool cannot carry.
-
-**A socket-only cluster is still reachable** — spell the socket directory as a URL host, libpq's own
-percent-encoded form:
+Set the environment variables for a non-interactive run:
 
 ```bash
-WAITRON_ADMIN_DATABASE_URL='postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/postgres'
+WAITRON_VENUE_DIR=/var/lib/waitron/venue \
+  WAITRON_ADMIN_PIN=... WAITRON_ADMIN_PASSWORD=... \
+  node dist/bin.js venue --country ES ... --yes
 ```
 
-Run in the same container: `pg` parsed that to `{host:"/var/run/postgresql",user:"postgres"}`,
-connected over the socket (`inet_server_addr() is null` → `t`), and it survives this tool's
-re-pointing — `withDatabase(…, "waitron_probe_db")` produced
-`postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/waitron_probe_db`, which connected to that
-database over the same socket. `postgresql://user@localhost/db?host=/var/run/postgresql`
-was measured to work the same way. What does **not** work is dropping the user
-(`postgresql:///postgres?host=/var/run/postgresql` failed with
-`no PostgreSQL user name specified in startup packet`, 28000) or leaving the host empty with a user
-present (`postgresql://postgres@/postgres?host=…`, which `new URL` itself rejects).
+If nothing supplies the venue directory — no flag, no variable, and a prompt that answers nothing,
+which is what an exhausted stdin or a Ctrl+D gives — the run stops with
+`provisioning.venue_dir_missing`. It does not fall back to a default, and specifically not to the
+empty string: every path the store builds is `join(directory, ...)`, so an empty one is the RELATIVE
+`venue.db` and would mint a taxpayer, a node and its invoice series into whatever directory the
+process was started from.
 
-**The admin's PASSWORD never appears in anything this tool prints**, from either source, and neither
-does the connection string as a whole. Its **username, host and port do**, deliberately, in one
-place: `venue`'s plan summary prints `Cluster: <user>@<host>:<port>` above the actions.
-
-That is a **narrowing** of what this section used to promise, which was that the username never
-appeared either. A confirmation that cannot name the cluster cannot reveal the mistake it exists to
-catch, and that mistake is the fiscally expensive one: one database per environment, and a venue
-mints a chain and a series in whatever it is pointed at. A username is not a credential on its own,
-and the operator supplied it in the first place.
+**Nothing this tool prints carries a secret.** The plan summary names the venue directory and the
+environment stamped on it, both operator-supplied configuration, and the admin's PIN and password
+appear nowhere — not in plaintext, not as a hash.
 
 ## What it refuses, and what to do about it
 
 Every refusal is a structured code and its params on stderr — never a raw driver message.
 
-| Code                                 | What happened                                                                       | What to do                                                                                                                                                                                                       |
-| ------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provisioning.admin_uri_missing`     | Neither `WAITRON_ADMIN_DATABASE_URL` nor the prompt gave an admin connection string | Set the variable, or answer the prompt. Refused rather than defaulted — see "Secrets" above for what `pg` does with an empty one.                                                                                |
-| `provisioning.admin_uri_not_a_url`   | The admin connection string is not a URL `new URL` can parse                        | Spell it `postgres://user:pass@host:port/database`. A libpq keyword/value string or a bare socket path is refused before connecting — see "Secrets" above, including the URL spelling for a socket-only cluster. |
-| `provisioning.invalid_identifier`    | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                            | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                     |
-| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                                   |
-| `provisioning.database_unstamped`    | The target database carries no environment stamp                                    | Stamping belongs to whichever path created the database. Point `venue` at one that is stamped and migrated.                                                                                                      |
-| `provisioning.state_unreadable`      | The connection could not reach or read the target database. `sqlState` says why     | `28P01`: wrong password. `3D000`: the database does not exist. `42501`: the connection cannot read the target's tables — commonly a missing `SET ROLE` grant on `waitron_migrator`.                              |
-| `provisioning.foreign_tenant`        | The database already holds a DIFFERENT taxpayer                                     | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                       |
-| `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply  | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                          |
-| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                        | Today only `ES-common` is implemented.                                                                                                                                                                           |
-| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                   | Give one or two.                                                                                                                                                                                                 |
-| `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                             | Give them different codes; they are two separate series.                                                                                                                                                         |
+| Code                                 | What happened                                                                                                   | What to do                                                                                                                                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `provisioning.venue_dir_missing`     | Nothing supplied the venue directory: no `--venue-dir`, no `WAITRON_VENUE_DIR`, and the prompt answered nothing | Set the variable, pass the flag, or answer the prompt. Refused rather than defaulted — see "Secrets" above for where an empty one would have written.                                                        |
+| `provisioning.invalid_country`       | `--country` is not two ASCII letters                                                                            | Type an ISO-3166-1 alpha-2 code, such as `ES`.                                                                                                                                                               |
+| `provisioning.database_unstamped`    | The venue directory carries no environment stamp — including one with no schema at all                          | Boot the box against that directory first: boot migrates it, and the path that stands the box up stamps it. This is also what a mistyped path gives, because a virgin directory opens fine.                  |
+| `provisioning.state_unreadable`      | The venue directory could not be opened, or its stamp could not be read. `reason` is the error's own code       | `ENOTDIR`: the path runs through a regular file. `ERR_SQLITE_ERROR`: the file is there and is not a database — a truncated or corrupt one; restore it from a backup. Both were run against the built bundle. |
+| `provisioning.foreign_tenant`        | The venue already holds a DIFFERENT taxpayer                                                                    | Stop. One tenant per database is the isolation boundary — see the fiscal invariants below.                                                                                                                   |
+| `provisioning.venue_conflict`        | A concurrent run committed a conflicting row between this run's plan and its apply                              | Re-run. A same-venue re-run is a no-op.                                                                                                                                                                      |
+| `fiscal.regime_not_implemented`      | `--territory` names a fiscal regime with no module behind it                                                    | Today only `ES-common` is implemented.                                                                                                                                                                       |
+| `provisioning.invalid_locales`       | `--locale` was given no times, or more than twice                                                               | Give one or two.                                                                                                                                                                                             |
+| `provisioning.duplicate_series_code` | `--series-code` and `--rectificative-code` are the same                                                         | Give them different codes; they are two separate series.                                                                                                                                                     |
 
 Waitron is not in production (CLAUDE.md §3, "no backwards-compatibility or data-migration code until
 Waitron is in production"), which is the carve-out under which a code has twice been DELETED rather
@@ -234,7 +198,9 @@ than deprecated: SP-3c dropped `provisioning.id_sistema_invalid` when the softwa
 into the fiscal module as `sif.id_sistema_invalid`, and the instance-path deletion dropped
 `provisioning.role_over_privileged`, `role_unusable`, `role_creation_failed`,
 `membership_grant_failed` and `grant_ineffective` along with the only code that threw them. The
-never-rename rule stands for the day a venue is live.
+venue command's own repointing dropped two more the same way — `provisioning.admin_uri_missing` and
+`admin_uri_not_a_url`, which described a connection string this tool no longer takes, replaced by
+`provisioning.venue_dir_missing`. The never-rename rule stands for the day a venue is live.
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a database's own words one level down
@@ -242,19 +208,19 @@ from where they were withheld.
 
 ## Known limitations
 
-### An unreachable host is still an opaque failure
+### A failure with no error code is still an opaque failure
 
-A failure carrying no SQLSTATE — a refused socket, a DNS failure — is rethrown untouched and reaches
-the operator as `unexpected failure (Error)`. That is deliberate: it is not the database's verdict
-on anything, and dressing it up as one would be a claim the code cannot support. Confirmed against a
-container by pointing the admin URL at a dead port.
+A failure carrying no string `code` is rethrown untouched and reaches the operator as
+`unexpected failure (Error)`. That is deliberate: it is not the engine's or the filesystem's verdict
+on anything, and dressing it up as one would be a claim the code cannot support. The two failures
+that DO carry one were measured against the real opener and are in the table above.
 
 ## Fiscal invariants this tool is bound by
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across, so pre-production sales would leave a permanent hole
-  in the production series. `venue` reads the target's stamp and refuses an unstamped database
-  rather than stamping one itself.
+  in the production series. `venue` reads the venue directory's stamp and refuses an unstamped one
+  rather than stamping it itself.
 - **One taxpayer per database.** `venue` reads the stored `(country, tax_id)` before it applies and
   refuses a second, different one (`provisioning.foreign_tenant`), with a narrower refusal inside
   the transaction for a taxpayer committed between that read and the write.

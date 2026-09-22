@@ -7,19 +7,16 @@ import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 // scans shipped source only, and this package already declares it as a devDependency for
 // `venue-apply.e2e.test.ts`.
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
-import type { Database, DeploymentEnvironment } from "@waitron/db";
+import type { DeploymentEnvironment, VenueDatabase } from "@waitron/db";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
-import { withDatabase, withRole } from "./identifiers.js";
 import type { VenueAction } from "./venue-plan.js";
 import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
 
-const DATABASE = "waitron_demo";
-const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
-/** The connection `venue` opens to the target database: re-pointed at `waitron_demo` and carrying
- * the role option so the session runs AS `waitron_migrator`, the table owner. */
-const TARGET_URI = withRole(withDatabase(ADMIN_URI, DATABASE), "waitron_migrator");
+/** The venue directory `venue` opens — the two SQLite files this node stores everything in, the
+ * same directory `apps/server` reads from `WAITRON_VENUE_DIR`. */
+const VENUE_DIR = "/var/lib/waitron/venue";
 
 /** What the injected `applyVenue` hands back — the ids and seed reports `venue` prints in its result
  * summary. */
@@ -49,8 +46,8 @@ const MODULES: readonly WaitronModule[] = [
  * is the one implemented set (fiscal-modules.ts); tests that need a refusal swap it out. */
 const VENUE_ARGS = [
   "venue",
-  "--database",
-  DATABASE,
+  "--venue-dir",
+  VENUE_DIR,
   "--country",
   "ES",
   "--tax-id",
@@ -91,14 +88,12 @@ const VENUE_ARGS = [
   "owner@example.test",
 ];
 
-/** The three secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
- * admin connection string (WAITRON_ADMIN_DATABASE_URL), the admin PIN (WAITRON_ADMIN_PIN) and the
- * admin dashboard PASSWORD (WAITRON_ADMIN_PASSWORD). Most venue tests supply all three from the env so
- * no prompt fires; the ones that exercise the prompt path omit WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD
+/** The two secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
+ * admin PIN (WAITRON_ADMIN_PIN) and the admin dashboard PASSWORD (WAITRON_ADMIN_PASSWORD). Most venue
+ * tests supply both from the env so no prompt fires; the ones that exercise the prompt path omit them
  * and answer through `secrets` instead. The PIN is `4321` and the password `dashPass123` throughout, so
  * a seeded admin's hashes are checkable with `verifyPin("4321", …)` / `verifyPassword("dashPass123", …)`. */
 const VENUE_ENV = {
-  WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
   WAITRON_ADMIN_PIN: "4321",
   WAITRON_ADMIN_PASSWORD: "dashPass123",
 };
@@ -116,7 +111,7 @@ interface Harness {
   writeModuleConfig: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
   readTenants: ReturnType<typeof vi.fn>;
-  connect: ReturnType<typeof vi.fn>;
+  openVenue: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
 
@@ -130,19 +125,25 @@ function harness(
     modules?: readonly WaitronModule[];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
     readTenants?: () => Promise<{ country: string; taxId: string }[]>;
-    connect?: (uri: string) => Promise<Database>;
+    openVenue?: (directory: string) => Promise<VenueDatabase>;
   } = {},
 ): Harness {
   const lines: string[] = [];
   const asked: string[] = [];
   const askedSecretly: string[] = [];
   const answers = [...(options.answers ?? [])];
-  const secrets = [...(options.secrets ?? [ADMIN_URI])];
+  const secrets = [...(options.secrets ?? [])];
   let cleared = 0;
   let closes = 0;
 
-  const db = { close: async () => void (closes += 1) } as unknown as Database;
-  const connect = vi.fn(options.connect ?? (async () => db));
+  // The two handles one venue directory holds. `venue` writes through the VENUE one and closes the
+  // store, which owns both files — so `closes` counts stores, not handles.
+  const store = {
+    venue: { name: "venue file" },
+    node: { name: "node file" },
+    close: async () => void (closes += 1),
+  } as unknown as VenueDatabase;
+  const openVenue = vi.fn(options.openVenue ?? (async () => store));
   // The venue seams, injected because their real implementations need a live target database and
   // what `venue` DECIDES — what it prompts, prints, refuses — does not.
   const applyVenue = vi.fn(options.applyVenue ?? (async () => VENUE_RESULT));
@@ -164,7 +165,7 @@ function harness(
     writeModuleConfig,
     readEnvironment,
     readTenants,
-    connect,
+    openVenue,
     deps: {
       io: {
         stdout: (line) => void lines.push(line),
@@ -180,7 +181,7 @@ function harness(
         clearScreen: () => void (cleared += 1),
       },
       env: options.env ?? {},
-      connect: connect as unknown as CliDeps["connect"],
+      openVenue: openVenue as unknown as CliDeps["openVenue"],
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: options.modules ?? MODULES,
       writeModuleConfig: writeModuleConfig as unknown as CliDeps["writeModuleConfig"],
@@ -188,11 +189,6 @@ function harness(
       readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
-}
-
-/** Every `postgres://` URI printed, in order. */
-function printedUris(lines: string[]): string[] {
-  return lines.join("\n").match(/postgres:\/\/\S+/g) ?? [];
 }
 
 describe("runCli", () => {
@@ -230,25 +226,26 @@ describe("runCli", () => {
   });
 
   it("refuses --admin-url as a flag, in both argv forms", async () => {
-    // The admin connection string carries a password, so it is NOT an option — it comes from
-    // WAITRON_ADMIN_DATABASE_URL or an echo-off prompt and from nowhere else. Pinned separately
-    // from the loop above because `--admin-url` is the one an operator is most likely to try:
-    // earlier drafts of this tool's own usage text advertised it.
+    // There is no admin connection string any more — this tool opens a venue DIRECTORY — but the
+    // flag an operator is most likely to reach for is still the one earlier drafts of this tool's
+    // own usage text advertised, and it carried a password. It must meet a parse error, not a
+    // silently ignored flag that leaves the string in their shell history for nothing.
+    const URL_SHAPED = "postgres://admin:adminsecret@db.example:5432/postgres";
     for (const command of ["keyring", "venue"]) {
       const h = harness();
-      expect(await runCli([command, "--admin-url", ADMIN_URI], h.deps)).toBe(2);
-      expect(h.connect).not.toHaveBeenCalled();
+      expect(await runCli([command, "--admin-url", URL_SHAPED], h.deps)).toBe(2);
+      expect(h.openVenue).not.toHaveBeenCalled();
 
       const g = harness();
-      expect(await runCli([command, `--admin-url=${ADMIN_URI}`], g.deps)).toBe(2);
-      expect(g.connect).not.toHaveBeenCalled();
+      expect(await runCli([command, `--admin-url=${URL_SHAPED}`], g.deps)).toBe(2);
+      expect(g.openVenue).not.toHaveBeenCalled();
     }
   });
 
   it("rejects a stray positional after the command", async () => {
     const h = harness();
     expect(await runCli(["venue", "waitron_demo"], h.deps)).toBe(2);
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("rejects a stray positional after keyring, which takes no options at all", async () => {
@@ -260,10 +257,10 @@ describe("runCli", () => {
     expect(h.lines.join("\n")).not.toContain("WAITRON_CREDENTIALS_KEY=");
   });
 
-  it("keyring needs no database and no admin connection", async () => {
+  it("keyring opens no venue directory at all", async () => {
     const h = harness();
     expect(await runCli(["keyring"], h.deps)).toBe(0);
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.lines.join("\n")).toContain("WAITRON_CREDENTIALS_KEY=");
   });
@@ -278,82 +275,6 @@ describe("runCli", () => {
     expect(h.asked.join(" ")).toMatch(/legal name/i);
     expect(h.asked.join(" ")).not.toMatch(/city/i);
   });
-
-  it("reads the admin connection string from the environment rather than asking", async () => {
-    const h = harness({ answers: ["n"], env: VENUE_ENV });
-    await runCli(VENUE_ARGS, h.deps);
-    expect(h.askedSecretly).toEqual([]);
-    // `venue` re-points the admin string at the target database, so the string itself is what
-    // `targetUri` was built from rather than what `connect` was called with.
-    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
-  });
-
-  it("asks for the admin connection string with the echo off when nothing supplied it", async () => {
-    // The PIN and password come from the env so the ONE echo-off prompt left is the admin string.
-    const h = harness({
-      answers: ["n"],
-      secrets: [ADMIN_URI],
-      env: { WAITRON_ADMIN_PIN: "4321", WAITRON_ADMIN_PASSWORD: "dashPass123" },
-    });
-    await runCli(VENUE_ARGS, h.deps);
-    // Read through `promptSecret`, never `prompt`: the difference is whether it appears on screen.
-    expect(h.askedSecretly).toHaveLength(1);
-    expect(h.asked.join(" ")).not.toContain("connection");
-    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
-  });
-
-  it("refuses an empty admin connection string", async () => {
-    // `pg` does not refuse one either, which is the whole hazard. Run against this repo's
-    // `pg@8.23.0`: `new Client({ connectionString: "" })` came back as
-    // `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0`
-    // builds every client with `new this.Client(this.options)` (`index.js:241`) off the same
-    // options object. So an unset or misspelled WAITRON_ADMIN_DATABASE_URL plus a stdin that
-    // answers nothing — the non-interactive shape README.md documents for CI, where `bin.ts`'s
-    // `ask` returns `""` on an exhausted stream or Ctrl+D — would have had `venue` open whatever
-    // cluster answers on localhost:5432 and mint a taxpayer, a node and its invoice series in it.
-    // §5: a chain and a series number cannot be taken back.
-    const h = harness({
-      env: { WAITRON_ADMIN_PIN: "4321", WAITRON_ADMIN_PASSWORD: "dashPass123" },
-      secrets: [""],
-    });
-    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'provisioning.admin_uri_missing {"variable":"WAITRON_ADMIN_DATABASE_URL"}',
-    );
-    // Nothing was opened, so nothing could be written. The exit code alone would pass against a
-    // version that connected first and complained afterwards.
-    expect(h.connect).not.toHaveBeenCalled();
-    expect(h.applyVenue).not.toHaveBeenCalled();
-  });
-
-  it("counts an empty env var and a blank answer as nothing supplied, not as a value", async () => {
-    const SECRETS_IN_ENV = { WAITRON_ADMIN_PIN: "4321", WAITRON_ADMIN_PASSWORD: "dashPass123" };
-    for (const options of [
-      // Set but empty: `resolveAdminUri` falls through to the prompt, which also answers nothing.
-      { env: { ...SECRETS_IN_ENV, WAITRON_ADMIN_DATABASE_URL: "" }, secrets: [""] },
-      // Whitespace only, from the prompt: `.trim()` makes it the same case.
-      { env: SECRETS_IN_ENV, secrets: ["   "] },
-    ]) {
-      const h = harness(options);
-      expect(await runCli(VENUE_ARGS, h.deps)).toBe(1);
-      expect(h.lines.join("\n")).toContain("provisioning.admin_uri_missing");
-      expect(h.connect).not.toHaveBeenCalled();
-    }
-  });
-
-  it("never echoes the admin connection string back, from either source", async () => {
-    for (const h of [
-      harness({ answers: ["n"], env: VENUE_ENV }),
-      harness({
-        answers: ["n"],
-        secrets: [ADMIN_URI],
-        env: { WAITRON_ADMIN_PIN: "4321", WAITRON_ADMIN_PASSWORD: "dashPass123" },
-      }),
-    ]) {
-      await runCli(VENUE_ARGS, h.deps);
-      expect(h.lines.join("\n")).not.toContain("adminsecret");
-    }
-  });
 });
 
 describe("runCli venue", () => {
@@ -366,8 +287,8 @@ describe("runCli venue", () => {
     // (see the next test), and the plan summary names the environment it read.
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
 
-    // Applied ONCE, with the plan `planVenue` produced, against the TARGET connection (the
-    // owner-admin that owns the tables).
+    // Applied ONCE, with the plan `planVenue` produced, against the VENUE file of the directory
+    // that was opened.
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
     const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
     expect(actions.map((action) => action.kind)).toEqual([
@@ -392,18 +313,17 @@ describe("runCli venue", () => {
     expect(
       seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
     ).toBe(true);
-    // The PIN and password came from the env (VENUE_ENV) — the env-var half of the same discipline the
-    // admin connection string follows — so no echo-off prompt fired for either, and neither was read
-    // from argv (VENUE_ARGS carries no PIN/password flag).
+    // The PIN and password came from the env (VENUE_ENV), so no echo-off prompt fired for either,
+    // and neither was read from argv (VENUE_ARGS carries no PIN/password flag).
     expect(h.askedSecretly).toEqual([]);
 
-    // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
-    // the apply. Every insert must reach that database through the same connection.
-    expect(h.connect).toHaveBeenCalledTimes(1);
-    // `venue` opens the target AS the migrator (the role option), because `applyVenue` inserts as the
-    // table owner and a plain admin connection cannot CREATE TABLE in a migrator-owned database.
-    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
-    expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
+    // One open of the venue directory, and the apply writes through its VENUE handle — the file
+    // that holds every `ledger` and `state` table. The node file holds this node's own identity and
+    // is not what a venue plan writes.
+    expect(h.openVenue).toHaveBeenCalledTimes(1);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
+    const opened = (await h.openVenue.mock.results[0].value) as VenueDatabase;
+    expect(applyDeps.db).toBe(opened.venue);
     // The same (fiscal-slot-resolved) module list the plan was built from reaches the apply, so a
     // seed-module action always names a module the runner holds. The fake MODULES carries no fiscal-slot
     // member, so the selection leaves the set unchanged — hence content-equal to MODULES.
@@ -412,9 +332,7 @@ describe("runCli venue", () => {
     expect(h.writeModuleConfig).toHaveBeenCalledTimes(1);
 
     const printed = h.lines.join("\n");
-    expect(printed).toContain("Plan for a venue in waitron_demo (preproduction):");
-    // The cluster the operator is about to write to — host, port, user; never the password.
-    expect(printed).toContain("Cluster: admin@db.example:5432");
+    expect(printed).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
     expect(printed).toContain("ensure tenant ES/B12345678");
     // The admin is named in the plan the operator confirms — but the PIN is a secret and never
     // appears, neither in plaintext nor as a hash.
@@ -426,14 +344,12 @@ describe("runCli venue", () => {
       "seeded:   fiscal-verifactu — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
     );
 
-    // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,
-    // the admin dashboard password never appears, and venue mints no connection strings.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
+    // No secret anywhere: the admin PIN never appears, neither in plaintext nor as a hash, and
+    // neither does the admin dashboard password.
     expect(printed).not.toContain("4321");
     expect(printed).not.toContain("dashPass123");
-    expect(printedUris(h.lines)).toEqual([]);
-    // The target connection was closed, whichever way the run ended.
+    // The venue directory was closed, whichever way the run ended. Closing the STORE closes both
+    // files.
     expect(h.closes()).toBe(1);
   });
 
@@ -502,10 +418,10 @@ describe("runCli venue", () => {
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"seriesCode"}');
     // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so what
-    // matters is that the mint was never reached — and that no admin credential was spent getting
-    // there, which is why the seat runs before `resolveAdminUri`.
+    // matters is that the mint was never reached — and that nothing was opened getting there, which
+    // is why the seat runs before the venue directory is resolved.
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("names the OTHER series code when that is the bad one", async () => {
@@ -541,7 +457,7 @@ describe("runCli venue", () => {
     // plan/apply and the plaintext appears nowhere in what the operator saw. The PIN is NOT a flag
     // (see the argv-refusal test), so VENUE_ARGS carries no PIN — the prompt is the only source left.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: {},
       secrets: ["4321", "dashPass123"],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
@@ -641,7 +557,7 @@ describe("runCli venue", () => {
     ]) {
       const h = harness();
       expect(await runCli(args, h.deps)).toBe(2);
-      expect(h.connect).not.toHaveBeenCalled();
+      expect(h.openVenue).not.toHaveBeenCalled();
       expect(h.applyVenue).not.toHaveBeenCalled();
     }
   });
@@ -652,7 +568,7 @@ describe("runCli venue", () => {
     // applies the same `MIN_PIN_LENGTH` floor `createPerson` does. `999` (length 3) is below it and
     // is a distinctive string absent from every other arg, so the leak-safety assertion is real.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI, WAITRON_ADMIN_PIN: "999" },
+      env: { WAITRON_ADMIN_PIN: "999" },
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
@@ -661,7 +577,7 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).not.toContain("999");
     // Refused before the plan is built and before any connection — nothing is applied.
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a too-short admin password and applies nothing — the floor loginManager needs", async () => {
@@ -671,7 +587,6 @@ describe("runCli venue", () => {
     // distinctive string absent from every other arg, so the leak-safety assertion is real.
     const h = harness({
       env: {
-        WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
         WAITRON_ADMIN_PIN: "4321",
         WAITRON_ADMIN_PASSWORD: "shortpw",
       },
@@ -681,7 +596,7 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).toContain('password.too_short {"min":8}');
     expect(h.lines.join("\n")).not.toContain("shortpw");
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses an unimplemented territory and applies nothing", async () => {
@@ -693,7 +608,7 @@ describe("runCli venue", () => {
     expect(h.applyVenue).not.toHaveBeenCalled();
     // Refused by the PURE planner, before the admin credential is asked for or any connection is
     // opened (venue-plan.ts / errors.ts: "no admin connection is spent on a malformed request").
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a territory that does not belong to the country, before connecting", async () => {
@@ -709,7 +624,7 @@ describe("runCli venue", () => {
       'provisioning.territory_country_mismatch {"country":"PT","fiscalTerritory":"ES-common"}',
     );
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses an unstamped database before applying", async () => {
@@ -720,7 +635,7 @@ describe("runCli venue", () => {
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain(
-      'provisioning.database_unstamped {"database":"waitron_demo"}',
+      `provisioning.database_unstamped {"database":"${VENUE_DIR}"}`,
     );
     // The stamp was read — that is how the emptiness was learnt — and nothing was applied.
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
@@ -741,7 +656,7 @@ describe("runCli venue", () => {
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    expect(h.lines.join("\n")).toContain(`provisioning.foreign_tenant {"database":"${VENUE_DIR}"}`);
     // The identities were read — that is how the foreign tenant was learnt — and nothing was
     // applied: no second tenant can be written.
     expect(h.readTenants).toHaveBeenCalledTimes(1);
@@ -768,7 +683,7 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('provisioning.invalid_country {"value":"ESP"}');
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
   });
 
@@ -837,13 +752,46 @@ describe("runCli venue", () => {
     expect(location?.kind === "create-location" && location.invoiceLocales).toEqual(["es-ES"]);
   });
 
-  it("refuses a database name outside the identifier rule before connecting", async () => {
-    const args = VENUE_ARGS.map((arg) => (arg === DATABASE ? "Waitron Prod" : arg));
-    const h = harness({ env: VENUE_ENV });
-    const code = await runCli([...args, "--yes"], h.deps);
-    expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
-    expect(h.connect).not.toHaveBeenCalled();
+  it("refuses a venue directory nothing supplied, rather than opening the working directory", async () => {
+    // The same hazard an empty connection string carried, moved to the new seam: every path
+    // `openVenueStore` builds is `join(directory, …)`, and `join("", "venue.db")` is `venue.db` —
+    // a relative path, so an empty value stands a venue up wherever the process happens to be
+    // running, and a chain and a series number cannot be taken back (CLAUDE.md §5). The
+    // non-interactive shape is where it bites: `bin.ts`'s `ask` returns `""` for an exhausted
+    // stdin or a Ctrl+D, so nothing supplies the directory and nothing answers the prompt.
+    for (const args of [
+      // Neither flag nor variable, and the prompt answers nothing.
+      ["venue", ...VENUE_ARGS.slice(3)],
+      // A whitespace-only flag counts as absent, falls through to the same prompt.
+      VENUE_ARGS.map((arg) => (arg === VENUE_DIR ? "   " : arg)),
+    ]) {
+      const h = harness({ env: VENUE_ENV });
+      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+      expect(h.lines.join("\n")).toContain(
+        'provisioning.venue_dir_missing {"variable":"WAITRON_VENUE_DIR"}',
+      );
+      // Nothing was opened, so nothing could be written. The exit code alone would pass against a
+      // version that opened something first and complained afterwards.
+      expect(h.openVenue).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+    }
+  });
+
+  it("takes the venue directory from WAITRON_VENUE_DIR when no flag supplies it", async () => {
+    // The variable `apps/server` reads for the same directory (`config.ts`'s `venueDir`). An
+    // operator who typed a DIFFERENT path at the prompt would stand a venue up in a directory the
+    // server never opens, so the box's own setting is preferred over asking.
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_VENUE_DIR: VENUE_DIR } });
+    expect(await runCli(["venue", ...VENUE_ARGS.slice(3), "--yes"], h.deps)).toBe(0);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
+    // Read from the environment, so the operator was not asked for it.
+    expect(h.asked.join(" ")).not.toMatch(/venue directory/i);
+  });
+
+  it("prefers the flag over WAITRON_VENUE_DIR", async () => {
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_VENUE_DIR: "/somewhere/else" } });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
   });
 
   it("applies when the operator confirms with y", async () => {
@@ -868,7 +816,7 @@ describe("runCli venue", () => {
     const printed = h.lines.join("\n");
     expect(printed).toContain("Nothing was applied.");
     // The plan was still shown before the decline, and the connection closed.
-    expect(printed).toContain("Plan for a venue in waitron_demo");
+    expect(printed).toContain(`Plan for a venue in ${VENUE_DIR}`);
     expect(h.closes()).toBe(1);
   });
 
@@ -895,7 +843,7 @@ describe("runCli venue", () => {
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain('provisioning.venue_conflict {"database":"waitron_demo"}');
+    expect(h.lines.join("\n")).toContain(`provisioning.venue_conflict {"database":"${VENUE_DIR}"}`);
     // The driver's own message can quote the failing statement; it is never printed.
     expect(h.lines.join("\n")).not.toContain("UNIQUE constraint failed");
     expect(h.closes()).toBe(1);
@@ -914,64 +862,74 @@ describe("runCli venue", () => {
     expect(h.closes()).toBe(1);
   });
 
-  it("turns a refused CONNECT to the target into a structured code, applying nothing", async () => {
-    // Mirrors `instance`'s "reports a refused CONNECT". `venue` opens ONE connection — the target,
-    // via `withVenueState` — so a SQLSTATE-bearing connect failure (the target database absent,
-    // 3D000, or the admin URI lacking privilege on it) is the refused-CONNECT case. Before this fix
-    // it reached the operator as a raw `unexpected failure`; now it is `provisioning.state_unreadable`
-    // naming the database, exactly as `instance`/`status`. The stamp read and the apply never run.
+  it("turns a refused OPEN of the venue directory into a structured code, applying nothing", async () => {
+    // `venue` opens one thing — the venue directory, through `withVenueState` — so a failure there
+    // is the refused-open case. `ENOTDIR` is what it actually carries when the path runs through a
+    // regular file: measured on Node v26.7.0 against the real `openVenueDatabase`, a directory
+    // under a file gives `Error` with `code: "ENOTDIR"` and a message naming the path, while a
+    // directory holding a `venue.db` that is not a database gives `code: "ERR_SQLITE_ERROR"`,
+    // `errcode: 26`, "file is not a database". A VIRGIN directory opens fine — it is created — so
+    // the common wrong-path mistake is not this case at all; it reaches the unstamped refusal
+    // above. The stamp read and the apply never run.
     const h = harness({ env: VENUE_ENV });
-    h.connect.mockRejectedValue(
-      Object.assign(new Error('database "waitron_demo" does not exist'), { code: "3D000" }),
+    h.openVenue.mockRejectedValue(
+      Object.assign(new Error(`ENOTDIR: not a directory, mkdir '${VENUE_DIR}'`), {
+        code: "ENOTDIR",
+      }),
     );
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"3D000"}',
+      `provisioning.state_unreadable {"database":"${VENUE_DIR}","reason":"ENOTDIR"}`,
     );
     expect(h.readEnvironment).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
-    // No secret and no SQLSTATE-less raw driver text leaked into the operator's terminal.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
     // Nothing was opened, so nothing was closed.
     expect(h.closes()).toBe(0);
   });
 
   it("turns a refused stamp READ into a structured code, applying nothing", async () => {
-    // Mirrors `instance`'s "turns a read that the database refused into a structured code": an admin
-    // that did not create the target holds no privilege on its tables, so the deployment-stamp read
-    // fails 42501. A fact about the database, mapped to `provisioning.state_unreadable` — not the raw
-    // `unexpected failure` it surfaced as before this fix. The apply must NOT run.
-    // VENUE_ENV supplies the PIN and password from the env (like the refused-CONNECT mirror above), so
-    // the boundary secret checks pass and the run reaches the stamp read this test is about.
+    // A venue file that opened and then could not be read — a corrupt or truncated one. The apply
+    // must NOT run, and the reason reaches the operator as the driver's own error CODE rather than
+    // its message, which can quote the failing statement.
     const h = harness({
       env: VENUE_ENV,
       readEnvironment: () =>
         Promise.reject(
-          Object.assign(new Error("permission denied for table deployment"), { code: "42501" }),
+          Object.assign(new Error("file is not a database"), { code: "ERR_SQLITE_ERROR" }),
         ),
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"42501"}',
+      `provisioning.state_unreadable {"database":"${VENUE_DIR}","reason":"ERR_SQLITE_ERROR"}`,
     );
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
-    // The target connection WAS opened for the read, so it is still closed on the way out.
+    // The directory WAS opened for the read, so it is still closed on the way out.
     expect(h.closes()).toBe(1);
-    // No secret and no raw driver text leaked.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
+    // The driver's own message is never printed.
+    expect(printed).not.toContain("file is not a database");
   });
 
-  it("prompts for every omitted option, in order, reading the admin URI from the env", async () => {
+  it("lets a failure carrying no code at all escape rather than dressing it as unreadable", async () => {
+    // The other half of the classification: `state_unreadable` is a claim that the DATABASE refused
+    // something. A `TypeError` from a bug carries no `code`, is not the database's verdict on
+    // anything, and reaches `bin.ts` untouched (CLAUDE.md §1).
+    const h = harness({ env: VENUE_ENV });
+    h.openVenue.mockRejectedValue(new TypeError("directory is not a function"));
+    await expect(runCli([...VENUE_ARGS, "--yes"], h.deps)).rejects.toThrow(
+      "directory is not a function",
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("prompts for every omitted option, in order", async () => {
     const h = harness({
       answers: [
-        DATABASE,
+        VENUE_DIR,
         "ES",
         "B12345678",
         "Acme SL",
@@ -995,10 +953,10 @@ describe("runCli venue", () => {
         "owner@example.test", // admin email
       ],
       // The admin PIN and dashboard password are the echo-OFF options here: WAITRON_ADMIN_PIN and
-      // WAITRON_ADMIN_PASSWORD are unset (URL-only env), so each is read through `promptSecret`, never
-      // the visible `prompt`, PIN first then password. Only the admin URI is env-fed.
+      // WAITRON_ADMIN_PASSWORD are unset, so each is read through `promptSecret`, never the visible
+      // `prompt`, PIN first then password.
       secrets: ["4321", "dashPass123"],
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: {},
     });
     // `--yes` so the confirmation prompt does not appear amid the option prompts.
     const code = await runCli(["venue", "--yes"], h.deps);
@@ -1006,10 +964,9 @@ describe("runCli venue", () => {
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
 
     // The exact question sequence — proving both order and wording. The two invoice-locale entries
-    // exercise the repeat-until-blank loop, and the admin URI came from the env (echo-off prompt
-    // never fired).
+    // exercise the repeat-until-blank loop.
     expect(h.asked).toEqual([
-      "database name: ",
+      "venue directory: ",
       "country (ISO-3166 alpha-2, e.g. ES): ",
       "tax id (NIF): ",
       "legal name: ",
@@ -1032,8 +989,8 @@ describe("runCli venue", () => {
       "admin name: ",
       "admin email: ",
     ]);
-    // The admin PIN and password are the echo-off prompts, in that order (the admin URI came from the
-    // env; WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD are unset here so both fall through to a prompt).
+    // The admin PIN and password are the ONLY echo-off prompts, in that order (WAITRON_ADMIN_PIN and
+    // WAITRON_ADMIN_PASSWORD are unset here, so both fall through to a prompt).
     expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
 
     // The two locales prompted for reach the plan.

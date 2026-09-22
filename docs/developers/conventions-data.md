@@ -905,17 +905,20 @@ real venue is live; add its replacement in the same change.
 
 ## An empty connection string is a valid connection string
 
-`new Client({ connectionString: "" })` resolves to localhost with every default (`pg@8.23.0`), so an
-empty string is never "no value given". Anything reading a URL from env or a prompt refuses `""`
-explicitly: `readAdminUri` (`packages/provisioning/src/cli.ts`) takes `WAITRON_ADMIN_DATABASE_URL` or
-an echo-off prompt and throws `provisioning.admin_uri_missing` on an empty one. The command this was
-first written against, `waitron-provision instance`, went with the PostgreSQL deployment model on
-2026-09-22; `venue` is the reader left, and it is the reader this receipt was re-checked against.
+`new Client({ connectionString: "" })` resolved to localhost with every default (`pg@8.23.0`), so an
+empty string was never "no value given". **No reader of a connection string is left** — the storage
+switch took the last two with it on 2026-09-22, `waitron-provision instance` with the PostgreSQL
+deployment model and then `venue`'s own admin string when that command was repointed at a venue
+directory. The rule is kept because the SHAPE outlived the driver.
 
-The same "an empty value is a value" trap has a SQLite shape, and the same one-line answer: a path
-variable that is unset OR empty falls back to its default through `isUnset`
-(`apps/server/src/env-value.ts`) and never through `resolve("")`, which is the process's working
-directory. `apps/server/src/config.ts` states it at `stateDir`, `venueDir` and `logDir`.
+The SQLite shape, and the same one-line answer: a path variable that is unset OR empty falls back to
+its default through `isUnset` (`apps/server/src/env-value.ts`) and never through `resolve("")`,
+which is the process's working directory. `apps/server/src/config.ts` states it at `stateDir`,
+`venueDir` and `logDir`. The refusal shape is the other half, for a reader with no default to fall
+back to: `resolveVenueDir` (`packages/provisioning/src/cli.ts`) takes `--venue-dir`, then
+`WAITRON_VENUE_DIR`, then a prompt, and throws `provisioning.venue_dir_missing` when all three give
+nothing — because every path the store builds is `join(directory, …)`, so an empty directory is the
+RELATIVE `venue.db` rather than no directory at all.
 
 **Migrations**
 

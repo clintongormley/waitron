@@ -259,7 +259,6 @@ describe("curated operator text", () => {
     ];
     const thrownByRunEntry = [
       "server.config_missing",
-      "provisioning.admin_uri_not_a_url",
       "provisioning.database_ahead",
       "migrations.set_missing",
       "migrations.incomplete",

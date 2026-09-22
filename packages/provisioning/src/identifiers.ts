@@ -45,11 +45,10 @@ export { quoteLiteral } from "@waitron/shared";
  *
  * `role` is validated with the identifier grammar rather than quoted, the §3 rule for a value that
  * ends up embedded in a connection string rather than bound. `assertIdentifier` already refuses a
- * space, a quote or anything else libpq would mis-split, so no escaping pass is needed — and the
- * grammar is exactly the one `INSTANCE_ROLES` are drawn from.
+ * space, a quote or anything else libpq would mis-split, so no escaping pass is needed.
  *
- * A URI that already carries an `options` parameter is REFUSED, not merged: this tool composes every
- * URI it hands here (`withDatabase` of the admin string), and none of them carries `options`, so a
+ * A URI that already carries an `options` parameter is REFUSED, not merged: the one caller left
+ * (`apps/server/scripts/dev-setup.ts`) hands it a dev connection string carrying no `options`, so a
  * pre-existing one is a programmer error. Merging two libpq option strings correctly is not
  * attempted.
  */
@@ -76,23 +75,4 @@ export function withRole(uri: string, role: string): string {
  */
 export function generatePassword(): string {
   return randomBytes(24).toString("base64url");
-}
-
-/**
- * The same connection string, pointed at a different database on the same cluster. Every other
- * component of the URI — credentials, host, port, query parameters such as `sslmode` — is carried
- * through untouched.
- *
- * It lives beside `withRole` because the one caller left composes the two:
- * `cli.ts`'s `targetUri` is `withRole(withDatabase(adminUri, database), …)`.
- *
- * **`uri` must be one `new URL` can parse**, and a bare `TypeError` is what a caller gets
- * otherwise: `pg` accepts forms `new URL` rejects — a Unix-socket directory path such as
- * `/var/run/postgresql` is one it genuinely CONNECTS with. The caller guards its own entry point
- * rather than this function doing it; `cli.ts`'s `resolveAdminUri` is that guard.
- */
-export function withDatabase(uri: string, database: string): string {
-  const u = new URL(uri);
-  u.pathname = `/${database}`;
-  return u.toString();
 }

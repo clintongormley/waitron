@@ -11,15 +11,15 @@ export interface ProvisioningIo {
    * Reads one line from the tty with the echo turned OFF, for a value that must not appear on the
    * screen or in a screen recording.
    *
-   * The one thing this package reads through it today is the admin connection string, which carries
-   * a password. It is a PROMPT and never a flag, because `argv` is world-readable in `ps` and lands
-   * in shell history — the constraint `src/errors.ts`'s header states, and `cli.test.ts`'s
-   * "refuses any flag that would put a secret in argv" pins. `WAITRON_ADMIN_DATABASE_URL` is the
-   * only other way in.
+   * What this package reads through it today is the first admin's till PIN and dashboard password.
+   * Each is a PROMPT and never a flag, because `argv` is world-readable in `ps` and lands in shell
+   * history — the constraint `src/errors.ts`'s header states, and `cli.test.ts`'s "refuses any flag
+   * that would put a secret in argv" pins. `WAITRON_ADMIN_PIN` and `WAITRON_ADMIN_PASSWORD` are the
+   * only other ways in. The venue DIRECTORY is not read through here: a path is not a secret.
    *
    * A real terminal implementation turns off `echo` for the duration and restores it afterwards,
    * whether or not the read succeeded. Whatever is read is returned to the caller and never printed
-   * back, not even truncated: a connection string's password is not a prefix of anything safe.
+   * back, not even truncated: a password is not a prefix of anything safe.
    */
   promptSecret(question: string): Promise<string>;
   /**
