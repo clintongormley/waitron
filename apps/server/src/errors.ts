@@ -547,9 +547,11 @@ declare module "@waitron/shared" {
      * A move/join TARGET dining table already has an OPEN tab, so a party may not be relocated or
      * extended onto it — use `mergeTabs` to combine the two bills instead (design §3). A table is "free"
      * when its `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b);
-     * `table.occupied` fires only when it points at a STILL-OPEN order. `moveTab`/`joinTable` take the
-     * target `dining_tables` row `FOR UPDATE`, so two concurrent moves onto one free table serialise and
-     * the loser surfaces THIS code (the lock is the guard — there is no partial-unique). `tableId` — the
+     * `table.occupied` fires only when it points at a STILL-OPEN order. There is no partial-unique
+     * index behind the rule, so what makes two concurrent moves onto one free table serialise — the
+     * loser reading the winner's `tab_id` and surfacing THIS code — is that they cannot overlap: one
+     * write transaction runs on the venue file at a time (`assertAnchoredTabOpen` in
+     * `apps/server/src/working-order.ts` carries the chain and the receipt). `tableId` — the
      * occupied target — is caller-supplied, not a secret. `table.*` names the DOMAIN CONCEPT (the dining
      * table), never the throwing package (the rule `tenant.not_found`'s note gives). Mapped to 409 (the
      * table's state forbids the move), the sibling of TS-1's `tab.already_open`.
@@ -585,9 +587,11 @@ declare module "@waitron/shared" {
     "table.not_shared": { tableId: string; tabId: string };
     /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
-     * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
-     * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
-     * guard, so two concurrent openTabs serialise and the second surfaces THIS code. A stale `tab_id`
+     * most one open tab per table, design §2b). `openTab` reads the `dining_tables` row and checks its
+     * `tab_id`; there is NO partial-unique index, so what makes two concurrent openTabs serialise —
+     * the second surfacing THIS code — is that they cannot overlap: one write transaction runs on the
+     * venue file at a time (`openTab` in `apps/server/src/working-order.ts` carries the chain and the
+     * receipt). A stale `tab_id`
      * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
      * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
      * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
@@ -631,8 +635,8 @@ declare module "@waitron/shared" {
     "tab.merge_self": { tabId: string };
     /**
      * A transfer named the SAME tab as source and destination (`fromTabId === toTabId`). Refused
-     * before any lock or line read — moving items from a tab to itself is a no-op the caller did not
-     * mean, and letting it through would take the same tab's row `FOR UPDATE` twice. `tabId` is the
+     * before any check or line read — moving items from a tab to itself is a no-op the caller did not
+     * mean, and letting it through would check the same tab's row twice. `tabId` is the
      * caller-supplied uuid (both ids are equal here), echoed because it is not a secret. A CLIENT
      * request-shape fault (400), distinct from the state conflict `tab.not_open` (409): the ids are
      * well-formed, they are just equal. `tab.*` names the DOMAIN CONCEPT, not the throwing package

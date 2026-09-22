@@ -1,3 +1,38 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `for update` on the `daily_close_chain` head row that `recordDailyClose` took is gone.
+ *
+ * The clause this suite was built around is deleted, not translated: SQLite has no row locks and
+ * drizzle's SQLite query builder has no `.for()`. What serialises the writers instead is the venue
+ * file's write queue — one write transaction on the file at a time — stated once, with its
+ * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ * The function the comments below name, `selectHeadForUpdate`, is `selectHead` now, and
+ * `lockChainHead` is `readChainHead`, renamed with the clause so a function is not named for a lock
+ * it does not take.
+ *
+ * The `select … for update` in the second test's `holder` transaction is raw SQL inside a `sql`
+ * template, and it is deliberately NOT converted here — the raw-SQL suites are a later step's, and
+ * its treatment there is "a contention test becomes a test that the write queue serialises
+ * writers", with `racePair` (`packages/catalogue/test/fixtures.ts`) as the shape that replaces it.
+ *
+ * The two proofs-by-deletion recorded below (the comments on the third and fourth tests) cannot be
+ * re-run to say whether they still discriminate, because this suite does not COLLECT:
+ * `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
+ * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
+ * this branch removed. Measured 2026-09-22 on `pnpm --filter @waitron/reporting test`, where it
+ * reports `4 tests | 4 skipped` and then fails the FILE. Both of them describe a lock that no
+ * longer exists: "remove the `.for("update")` from `selectHeadForUpdate`" names a clause that is
+ * already removed, and "only the FOR UPDATE head lock keeps the sequence numbers distinct" names
+ * the wrong mechanism now. The `lock_timeout` / `55P03` assertion in the third test is
+ * PostgreSQL's and has no SQLite equivalent.
+ *
+ * It is left in place rather than deleted because its behavioural subjects still have to hold on
+ * this engine and nothing asserts them yet: that two closes of the SAME business day leave exactly
+ * one row with the loser refused (second test), and that N concurrent closes of DIFFERENT days get
+ * distinct, gap-free sequence numbers and a chain that re-verifies (fourth). The first test — that
+ * the writers run on distinct backend processes — is the one subject that does not survive at all:
+ * this engine has one connection per file, so there is nothing for it to assert.
+ */
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";

@@ -373,8 +373,12 @@ export type IntegratedPayDeps = TillSaleDeps & {
  * unit — or roll back together.
  *
  * The flow, keyed on `req.id` (spec §3):
- *  1. `SELECT … FOR UPDATE` the order. On a PARKED order this serialises a concurrent pay: the second
- *     connection blocks here until the first commits, then re-reads the row as `settled` (step 2).
+ *  1. Read the order's status. On a PARKED order a concurrent pay cannot interleave with this one:
+ *     ONE write transaction runs on the venue file at a time, so the second pay's WHOLE transaction —
+ *     this read included — starts only after the first has committed, and reads the row `settled`
+ *     (step 2). The mechanism, its measurement and its control are stated once on
+ *     `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). It is WIDER than the
+ *     `for update` it replaced: it covers every row this transaction touches, not one named row.
  *  2. Already `settled` → IDEMPOTENT REPLAY: return the existing sale's ticket, file NOTHING.
  *  3. `abandoned` → refuse (`working_order.not_open`), the domain code the settle UPDATE's trigger
  *     would otherwise raise raw.
@@ -385,11 +389,17 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *     a catalogue price change between park and pay never moves the filed total (line-add snapshot,
  *     7c). Either way file with `recordSale`'s immediate cash settlement tagged with
  *     `working_order_id = req.id`, then UPDATE the order `open → settled`.
- *  6. On a `23505` unique violation (a concurrent pay won the race — its `working_orders` row on a
- *     walk-up, or its sale on a parked order — committed first, aborting this transaction), CATCH it
- *     and replay in a FRESH transaction: read the winner's settled sale and return its ticket. Never
- *     a second filing. This is the concurrent backstop the `FOR UPDATE` lock cannot cover for a
- *     walk-up (there is no pre-existing row to lock).
+ *  6. On a unique violation (a concurrent pay for this id committed first, aborting this
+ *     transaction), CATCH it and replay in a FRESH transaction: read the winner's settled sale and
+ *     return its ticket. Never a second filing.
+ *
+ *     What this backstop is FOR narrowed when the engine changed. The hole it was written to cover
+ *     was the WALK-UP, which had no pre-existing row for `for update` to lock; step 1 now serialises
+ *     the walk-up shape like every other, because what is serialised is the transaction rather than a
+ *     row. It is kept because the guarantee was never the lock: `sales_working_order_id_key` refuses
+ *     a second sale for one working order whatever wrote it, including a writer that never went
+ *     through this process's queue — the same reasoning `MAX_APPEND_ATTEMPTS` is kept under
+ *     (`packages/fiscal-verifactu/src/chain.ts`).
  *
  * `operatorId` is the person who rang the sale, for attribution — supplied by the session (Task 5).
  */
@@ -403,17 +413,16 @@ export async function payWorkingOrder(
     return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
-      // 1. Lock/resolve the order by its id (one tenant per database). FOR UPDATE serialises a
-      //    concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks
-      //    nothing and the 23505 catch below is that shape's backstop.
+      // 1. Resolve the order by its id (one tenant per database). Doc comment step 1 for what
+      //    serialises a concurrent pay against this read, step 6 for why the catch below is kept.
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
-        .for("update");
+        .where(eq(workingOrders.id, req.id));
 
       // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
-      // loser of a parked-order race that blocked on the lock above and now sees it settled.
+      // loser of a concurrent pay — whose transaction, and so the read above, ran only after the
+      // winner committed.
       if (locked?.status === "settled") {
         return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
@@ -506,10 +515,9 @@ export async function payWorkingOrder(
     if (!isUniqueViolation(error)) {
       throw error;
     }
-    // A 23505 means a concurrent pay for this same id won the race and this transaction aborted. Roll
-    // back (already done by the failed `withTransaction`) and REPLAY in a fresh transaction: the winner
-    // has committed (a unique violation fires only against a COMMITTED conflicting row), so its
-    // settled sale is now readable.
+    // A duplicate means a pay for this same id won the race and this transaction aborted. Roll back
+    // (already done by the failed `withTransaction`) and REPLAY in a fresh transaction: the winner has
+    // committed — a unique index refuses against committed rows — so its settled sale is now readable.
     return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [row] = await tx
@@ -639,8 +647,10 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
  * the shared filing tail of `payWorkingOrder` (walk-up + retrieved) and `collectOrder`'s Mode-T branch
  * (ticket-then-pay). It takes the caller's `tx`, so the sale, its tender/settlement, its chained
  * fiscal record and the `open`/`placed` → `settled` transition all commit as one unit (or roll back
- * together). It does NOT lock or read the order status — the caller has already locked it `for update`
- * and is responsible for the guard — it only files, settles and transitions.
+ * together). It does NOT read or guard the order status — the caller has already resolved it and is
+ * responsible for the guard — it only files, settles and transitions. The caller's read is still true
+ * here: one write transaction runs on the venue file at a time, so nothing has moved the row in
+ * between (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`).
  *
  * `workingOrderId` tags the sale (`sales_working_order_id_key` = the idempotency key); `priced` is the
  * authoritative price (walk-up `priceBasket`, or a stored-lock `priceLockedLines`).
@@ -726,8 +736,9 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
-    // The caller has already taken a `.for("update")` lock on this row, so this can only ever match
-    // its own order.
+    // `id` is the primary key, so this matches at most its own order — and the status the caller
+    // guarded on is still the status this updates, because one write transaction runs on the venue
+    // file at a time (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`).
     .where(eq(workingOrders.id, workingOrderId));
 
   // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment
@@ -801,10 +812,12 @@ async function readOutstandingSaleForOrder(
  * Pay and settle a working order over an INTEGRATED card terminal — the SPLIT-transaction path
  * (design "ordering 2", issue-at-pay), built BESIDE {@link payWorkingOrder} (cash / manual card,
  * which stays behaviourally identical). The network `collect` MUST run OUTSIDE any database transaction
- * (T1/T2 — a lock is never held across a reader round-trip), so this is three phases in three separate
- * transactions:
+ * (T1/T2 — a transaction is never held across a reader round-trip; this mattered when the hold was one
+ * row's lock and it matters MORE now, because an open write transaction holds the whole venue file
+ * against every other writer — `assertExtraListForWrite`, `packages/catalogue/src/extras.ts`), so this
+ * is three phases in three separate transactions:
  *
- *  - P1 (tx A). Lock/resolve the order, decide the price, and — for a WALK-UP — create it `open` and
+ *  - P1 (tx A). Resolve the order, decide the price, and — for a WALK-UP — create it `open` and
  *    COMMIT, so the `working_orders` row exists before P2: the provider's `insertAttempting` carries a
  *    FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
  *    uncommitted row would violate. An already-`settled` order REPLAYS its ticket here (files nothing);
@@ -819,8 +832,14 @@ async function readOutstandingSaleForOrder(
  *  - P3 (tx B). On `captured`/`accepted_offline`, `finalizeCapture` files the immediate card sale,
  *    associates the just-captured payment, and settles the order — atomically.
  *
- * P1's `prepared` result is a small discriminated union covering every state the locked order can be
- * in, dispatched into five arms:
+ * P1's serialisation ENDS at its own commit, exactly as its `for update` did: one write transaction
+ * runs on the venue file at a time, and P1 is one transaction. So two pays for one id can both pass
+ * P1 with the order still unsettled and both reach P3 — which is why `finalizeCapture` and
+ * `finalizeSettle` each keep a real duplicate backstop, while `finalizeRecovery`,
+ * `finalizeSettleRecovery` and `collectOrder` (one transaction end to end) need none.
+ *
+ * P1's `prepared` result is a small discriminated union covering every state the order can be in,
+ * dispatched into five arms:
  *  - `replay` — the order is already `settled` (a retry whose first response was lost); returns the
  *    stored ticket and files nothing.
  *  - `recover` / `recover-settle` — the §4 capture-idempotency pre-check
@@ -849,11 +868,12 @@ export async function payWorkingOrderIntegrated(
   const prepared = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
+    // Resolve the order's status. The doc comment's "P1's serialisation ENDS at its own commit"
+    // paragraph is what this read is and is NOT protected by.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      .where(eq(workingOrders.id, req.id));
 
     // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
     if (locked?.status === "settled") {
@@ -1001,21 +1021,30 @@ export async function payWorkingOrderIntegrated(
  * `open`/`placed` → `settled` transition commit as one unit (or roll back together — proven by the
  * "association fails → the whole sale rolls back" case).
  *
- * Idempotency for a CONCURRENT winner is the `sales_working_order_id_key` 23505 backstop, mirroring
- * `payWorkingOrder`'s: if another pay for this id filed its sale first (between P1's commit and here),
- * `recordSale` collides on that unique key and this replays the winner's settled ticket rather than
- * filing a second unrepairable record. The SEQUENTIAL retry never reaches here — P1's `for update` read
- * already saw the order `settled` and replayed there. Two concurrent captures are ALSO serialised one
- * level down, inside `recordSale` itself: `checkIntegrity` takes the NODE's chain-head row lock
- * as its first statement and holds it until commit (`packages/core/src/record-sale.ts:181-185`), so the
- * second caller cannot even start its own `checkIntegrity` until the first has fully committed — by
- * which point the first's `sales` row already exists, and the second's own insert (step 4, after the
- * lock) is what hits the unique key. So, unlike `payWorkingOrder` (whose lock+file share one
- * transaction) this needs no internal re-lock of its own, but the 23505 path is real and reachable
- * rather than dead code: it is exercised end to end by "two concurrent pays for one parked order file
- * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.pg.test.ts`),
- * which drives two real, concurrently-racing app-role connections and asserts `registroCount === 1`.
- * A replay returns the persisted payment facts without reopening the drawer.
+ * Idempotency for a CONCURRENT winner is the `sales_working_order_id_key` unique backstop: if another
+ * pay for this id filed its sale first (between P1's commit and here), `recordSale` collides on that
+ * unique key and this replays the winner's settled ticket rather than filing a second unrepairable
+ * record. The SEQUENTIAL retry never reaches here — P1's read already saw the order `settled` and
+ * replayed there.
+ *
+ * This backstop is one of the two the engine change does NOT narrow (`finalizeSettle`'s
+ * `sale.already_settled` is the other), and the reason for both is the three-transaction split. One
+ * write transaction runs on the venue file at a time
+ * (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`), but P1, P2 and P3 are three of
+ * them with a network round trip in the middle, so two pays can both commit a P1 that saw the order
+ * unsettled and both arrive here. The loser's P3 then runs, whole, after the winner's P3 committed,
+ * and its own `recordSale` insert hits the unique key — the SAME outcome the row locks produced, one
+ * level up. This replaced a claim that named a chain-head row lock taken inside `checkIntegrity`:
+ * that lock is gone (`selectHead`, `packages/fiscal-verifactu/src/chain.ts`, converted with the rest),
+ * and `verifyChain` still reads the head first for the reason its own comment gives.
+ *
+ * The duplicate path is real and reachable rather than dead code: it is exercised end to end by "two
+ * concurrent pays for one parked order file ONE sale; the loser replays (one sale/settlement)"
+ * (`apps/server/src/till-sale-integrated.pg.test.ts`), which stages the race on two PostgreSQL
+ * connections (`suite.pg.connectAs`). That staging has not been converted, so the receipt is held by
+ * nothing that runs: on 2026-09-22 `pnpm --filter @waitron/server test` reported the file as 30
+ * tests, 30 skipped, erroring `useTemplateDb: no shared container in scope`. A replay returns the
+ * persisted payment facts without reopening the drawer.
  *
  * The tender records the WHOLE card charge (`total + tip`) with the tip attributed on it, satisfying
  * `settleSale`'s coverage identity `sum(amount) = total + sum(tip)`; the fiscal `total` stays ex-tip
@@ -1155,11 +1184,14 @@ async function finalizeCapture(
  * the association and the `open`/`placed` → `settled` transition commit as one unit (or roll back
  * together).
  *
- * Idempotency, WITHOUT a 23505 backstop: recovery only fires on an EXISTING order (the pre-check runs
- * for `locked !== undefined`), so — like `collectOrder`, and unlike `payWorkingOrder`'s walk-up shape —
- * the `SELECT … FOR UPDATE` here FULLY serialises a concurrent recovery: a second retry blocks on the
- * lock, re-reads the row `settled`, and REPLAYS the winner's ticket (filing/associating nothing). There
- * is no unlocked walk-up path left for a unique-key race to slip through.
+ * Idempotency, WITHOUT a duplicate backstop: this whole path is ONE transaction, and one write
+ * transaction runs on the venue file at a time (`assertExtraListForWrite`,
+ * `packages/catalogue/src/extras.ts`), so a concurrent recovery is FULLY serialised — the second retry
+ * runs after the winner committed, reads the row `settled`, and REPLAYS the winner's ticket
+ * (filing/associating nothing).
+ *
+ * The premise this argument dropped is "the order always exists here": serialising the transaction
+ * needs no row to exist. The `settled` re-read below, and the conclusion, are unchanged.
  *
  * The recovery contract (spec Decision 2 — this is fiscal-unrecoverable territory, §5):
  *  - The captured charge was gross `total + tip`, so the tip is RECONSTRUCTED as `captured.amount −
@@ -1182,16 +1214,15 @@ async function finalizeRecovery(
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
-    // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
-    // blocks, then re-reads `settled` and replays below.
+    // Re-read the status inside THIS transaction (the order always exists here). The doc comment
+    // states why a concurrent recovery cannot interleave with it.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      .where(eq(workingOrders.id, req.id));
 
-    // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
-    // the lock → idempotent replay, file and associate NOTHING.
+    // A concurrent winner (another retry) filed the sale and settled the order before this transaction
+    // started → idempotent replay, file and associate NOTHING.
     if (locked?.status === "settled") {
       return {
         outcome: "captured",
@@ -1248,8 +1279,8 @@ async function finalizeRecovery(
 
     // Link the EXISTING captured payment (the lost-T2 row) to the just-filed sale — NOT a second
     // `payments` row and NOT a re-charge. `associatePaymentWithSale` is write-once, so a concurrent
-    // recovery that reached here first has already claimed it (but the FOR UPDATE above means the loser
-    // never gets here — it replayed).
+    // recovery that reached here first has already claimed it — though the loser never gets here, it
+    // replayed above (doc comment).
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
@@ -1258,8 +1289,8 @@ async function finalizeRecovery(
     });
 
     // Lost-T2 recovery follows the same prepay fire point as a normal capture. A placed order already
-    // has ticket items from placing; an open order has not entered preparation yet. The order row lock
-    // above makes a concurrent recovery replay before it can reach this point.
+    // has ticket items from placing; an open order has not entered preparation yet. A concurrent
+    // recovery replays at the status read above and never reaches this point (doc comment).
     if (locked?.status === "open") {
       await firePrepayOrder(tx, cfg, req.id);
     }
@@ -1344,12 +1375,14 @@ async function firePrepayOrder(
  * the tender records that whole charge with the tip attributed on it — `settleSale`'s coverage identity
  * `charged = total + corrections + Σtip` holds, the tip staying OUTSIDE the fiscal total (design §9.2).
  *
- * Idempotency mirrors `finalizeCapture`'s 23505 backstop, on `sale.already_settled` instead: the
- * SEQUENTIAL retry never reaches here (P1's `for update` saw the order `settled` and replayed at step
- * 2), so this catch fires only when a CONCURRENT collect/recovery settled the invoice between P1 and
- * here — `settleSale`'s own `sale.already_settled` (the `sale_settlements` UNIQUE, or the
- * post-settlement `tenders` trigger WT002). It replays the settled ticket in a FRESH transaction (that
- * trigger may leave the failing transaction aborted, so the read cannot reuse it), settling nothing.
+ * Idempotency mirrors `finalizeCapture`'s unique backstop, on `sale.already_settled` instead: the
+ * SEQUENTIAL retry never reaches here (P1's read saw the order `settled` and replayed at step 2), so
+ * this catch fires only when a CONCURRENT collect/recovery settled the invoice between P1 and here.
+ * That window is the three-transaction split's, not the engine's — `finalizeCapture`'s doc comment
+ * derives it. What refuses the second settle is `settleSale`'s own `sale.already_settled` (the
+ * `sale_settlements` UNIQUE, or the post-settlement `tenders` trigger WT002). It replays the settled
+ * ticket in a FRESH transaction (that trigger may leave the failing transaction aborted, so the read
+ * cannot reuse it), settling nothing.
  * `readSettledTicket` reads the invoice back by working-order id; `change` stays "0.00" (a card hands
  * nothing back).
  */
@@ -1442,10 +1475,13 @@ async function finalizeSettle(
  * invoice). All in ONE transaction (settlement + tender + association + `placed → settled`), committed
  * as one unit or rolled back together.
  *
- * Idempotency, WITHOUT a backstop constraint (mirroring `finalizeRecovery`): recovery fires only on an
- * EXISTING order, so the `SELECT … FOR UPDATE` here FULLY serialises a concurrent recovery — a second
- * retry blocks, re-reads the order `settled`, and REPLAYS the winner's ticket (settling/associating
- * nothing). No unlocked path is left for a constraint race to slip through.
+ * Idempotency, WITHOUT a backstop constraint (mirroring `finalizeRecovery`): this whole path is ONE
+ * transaction, and one write transaction runs on the venue file at a time (`assertExtraListForWrite`,
+ * `packages/catalogue/src/extras.ts`), so a concurrent recovery is FULLY serialised — the second retry
+ * runs after the winner committed, reads the order `settled`, and REPLAYS the winner's ticket
+ * (settling/associating nothing). The premise this dropped is the same one `finalizeRecovery` dropped:
+ * the conclusion no longer needs the order to already exist, because what is serialised is the
+ * transaction rather than a row.
  *
  * The recovery contract (spec Decision 2 — fiscal-unrecoverable territory, §5), mirroring
  * `finalizeRecovery`:
@@ -1468,15 +1504,14 @@ async function finalizeSettleRecovery(
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
-    // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
-    // blocks, then re-reads `settled` and replays below.
+    // Re-read the status inside THIS transaction (the order always exists here). The doc comment
+    // states why a concurrent recovery cannot interleave with it.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      .where(eq(workingOrders.id, req.id));
 
-    // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
+    // A concurrent winner settled the invoice and moved the order before this transaction started →
     // idempotent replay, settle and associate NOTHING.
     if (locked?.status === "settled") {
       return {
@@ -1518,7 +1553,7 @@ async function finalizeSettleRecovery(
     });
 
     // Link the EXISTING captured payment (the lost-T2 row) to the issued sale — NOT a second `payments`
-    // row and NOT a re-charge. The FOR UPDATE above means the loser never reaches here (it replayed).
+    // row and NOT a re-charge. The loser never reaches here: it replayed at the status read above.
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
@@ -1583,11 +1618,14 @@ export function toPayOutcome(
  *  - `ticket_then_pay` (Mode T): no fiscal doc exists yet, so collect FILES `recordSale` immediate
  *    from the order's stored locked lines and moves `placed → settled` (the shared `fileImmediateSale`).
  *
- * Idempotency, both modes, WITHOUT a 23505 backstop: unlike `payWorkingOrder`'s walk-up shape (no row
- * to lock), a collected order ALWAYS exists (it was placed), so the `SELECT … FOR UPDATE` fully
- * serialises a concurrent collect — the loser blocks, then re-reads the row as `settled` and REPLAYS
- * the ticket (filing/settling nothing). The `sales_working_order_id_key` and `sale_settlements` UNIQUE
- * constraints are the constraints underneath, but the lock means neither is ever reached concurrently.
+ * Idempotency, both modes, WITHOUT a duplicate backstop: this is ONE transaction, and one write
+ * transaction runs on the venue file at a time (`assertExtraListForWrite`,
+ * `packages/catalogue/src/extras.ts`), so a concurrent collect is fully serialised — the loser runs
+ * after the winner committed, reads the row `settled` and REPLAYS the ticket (filing/settling
+ * nothing). The `sales_working_order_id_key` and `sale_settlements` UNIQUE constraints are the
+ * constraints underneath, and they are what refuses a duplicate written by anything that did not go
+ * through this process's queue. The premise this argument dropped is "a collected order ALWAYS
+ * exists": serialising the transaction needs no row to exist.
  *
  * The deployment holds one tenant per database. A non-`placed`, non-`settled` order (still
  * `open`, already `abandoned`, or absent in this database) fails closed with
@@ -1606,16 +1644,15 @@ export async function collectOrder(
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
-    // Lock the order for the life of the tx and read its status off the locked copy. A concurrent
-    // collect blocks here and re-reads `settled` below (the idempotency serialisation).
+    // Read the status inside THIS transaction, which is the whole idempotency serialisation — the
+    // doc comment derives it.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      .where(eq(workingOrders.id, req.id));
 
     // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
-    // concurrent collect that blocked on the lock above and now sees it settled. Files nothing.
+    // concurrent collect, whose transaction started after the winner committed. Files nothing.
     if (locked?.status === "settled") {
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     }

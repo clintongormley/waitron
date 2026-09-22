@@ -1,3 +1,25 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `select … for update` on the parent
+ * `working_orders` row that `appendOrderAmendment` took is gone.
+ *
+ * The clause this suite's concurrency case was built around is deleted, not translated: SQLite has
+ * no row locks and drizzle's SQLite query builder has no `.for()`. What serialises the writers
+ * instead is the venue file's write queue — one write transaction on the file at a time — stated
+ * once, with its measurement and its control, on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). `append-order-amendment.ts`'s own header says the same at
+ * the call site.
+ *
+ * The proof-by-deletion recorded below cannot be re-run to say whether it still discriminates,
+ * because this suite does not COLLECT: `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
+ * that calls startSharedContainer and provide("sharedPg", handle).` Measured 2026-09-22 —
+ * `npx vitest run --root packages/db src/append-order-amendment.test.ts` reports
+ * `Test Files 1 failed (1)` / `Tests 4 skipped (4)`. It is left in place rather than deleted
+ * because its behavioural subject — that ten writers leave one contiguous, re-verifying amendment
+ * chain — still has to hold on this engine, and nothing asserts it yet. Converting it is step 25's
+ * work, and `racePair` (`packages/catalogue/test/fixtures.ts`) is the shape that asks the question
+ * on this engine.
+ */
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -10,9 +32,10 @@ import { seedNode } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite cannot show is
-// the parent-row lock serialising concurrent appends — PGlite puts every query on one backend, so
-// the race never happens and a pass there would be theatre (CLAUDE.md §4). Everything else would
+// Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite could not show
+// was the parent-row lock serialising concurrent appends — PGlite puts every query on one backend,
+// so the race never happened and a pass there would have been theatre (CLAUDE.md §4). That lock is
+// gone; the banner at the top of this file says what holds its property now. Everything else would
 // pass on either target and rides along on the container this suite already needs, the WT001 case
 // included: `reject_mutation` fires for every actor, the owner and a superuser alike, and the case
 // grants the privilege rather than disabling the trigger.
@@ -274,18 +297,22 @@ describe("order_amendments append helper", () => {
     });
   });
 
-  it("serialises concurrent appends to one order into a gap-free, verifiable chain (Decision 2's parent-row lock)", async () => {
-    // The core proof of the parent-row lock, on real backends (PGlite serialises every query onto
-    // one backend, so it cannot show contention — CLAUDE.md §4). N writers append to ONE fresh
-    // order at once. The `SELECT … FOR UPDATE` on the parent row serialises them: each waits for the
-    // previous to commit, then reads the advanced max sequence, so all N commit with contiguous
-    // positions 1..N and one unbroken hash chain.
+  it("serialises concurrent appends to one order into a gap-free, verifiable chain", async () => {
+    // The subject: N writers append to ONE fresh order at once and all N commit with contiguous
+    // positions 1..N and one unbroken hash chain. On PostgreSQL the `SELECT … FOR UPDATE` on the
+    // parent row is what arranged it — each writer waited for the previous to commit, then read
+    // the advanced max sequence — and this ran on real backends because PGlite serialises every
+    // query onto one backend and so cannot show contention (CLAUDE.md §4).
     //
-    // Proven by deletion: drop `.for("update")` from appendOrderAmendment and the read-then-insert
-    // races — the concurrent writers all read the same max and collide on
-    // `order_amendments_chain_position_key` (23505), so `Promise.all` rejects and this test fails.
-    // (The FK from order_amendments to working_orders takes only a SHARED key-share lock on the
-    // parent, which does NOT serialise the writers — the exclusive FOR UPDATE is what does.)
+    // That proof was taken by deletion: dropping `.for("update")` from appendOrderAmendment made
+    // the read-then-insert race — every writer read the same max and collided on
+    // `order_amendments_chain_position_key` (23505), so `Promise.all` rejected and this failed.
+    // (The FK from order_amendments to working_orders took only a SHARED key-share lock on the
+    // parent, which did NOT serialise the writers; the exclusive FOR UPDATE was what did.)
+    //
+    // The clause is gone and so is the control: there is nothing left to delete here, and this
+    // file does not collect. See the banner at the top for what holds the property now and what
+    // converting this case would take.
     const WRITERS = 10;
     const order = await openOrder(TILL_A1, nodeA);
     const conns = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));

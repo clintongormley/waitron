@@ -7,24 +7,31 @@
 // NEVER-BLOCK (CLAUDE.md §5): enqueue is a pure outbox INSERT (`enqueuePrintJob`) — it opens no socket
 // and waits on no hardware — so a slow, broken, or absent printer can never delay a fire. The ONE way
 // `enqueuePrintJob` could abort the enclosing fire tx is its `printer.not_found` throw for a
-// missing/inactive printer, and TWO guards together make that unreachable so the enqueue can stay INSIDE
-// the fire tx (atomic with the fire) without a swallow:
+// missing/inactive printer (`packages/printing/src/outbox.ts`, the `active = true` pre-check), and TWO
+// things together make that unreachable, so the enqueue can stay INSIDE the fire tx (atomic with the
+// fire) without a swallow:
 //   1. The mapping query below pre-filters to `printers.active = true`, so a printer already deactivated
 //      when the read runs is filtered out — not enqueued, so its id never reaches `enqueuePrintJob`.
-//   2. That same read takes a `FOR SHARE` row lock on the mapped `printers` rows, so a printer active AT
-//      the read cannot be deactivated until this fire tx commits: a concurrent `deactivatePrinter` UPDATE
-//      needs a conflicting row lock and BLOCKS until commit. Without this lock the fire runs at READ
-//      COMMITTED and `enqueuePrintJob`'s OWN `active = true` re-check reads a FRESH snapshot, so a
-//      deactivation committing between the two reads would flip `active` to false and throw
-//      `printer.not_found`, aborting the fire (a §5 never-block violation). Proven by the two-connection
-//      real-Postgres test in `kitchen-print.concurrency.test.ts`.
-// So for any single-actor / serial input `enqueuePrintJob` never throws (pre-filter alone), and the
-// FOR SHARE lock extends that to the concurrent-deactivation race — the admin config change waits
-// briefly; the sale never fails. The lock is symmetric, so in the reverse ordering — an admin
-// `updatePrinter`/`deactivatePrinter` UPDATE already holding the row when the fire's FOR SHARE runs —
-// the FIRE waits instead, bounded by that single-statement admin tx (`gated`, commits immediately). That
-// is a bounded wait that COMPLETES the sale, never an abort: §5 forbids a sale FAILING, not a sub-ms
-// lock wait on printer config.
+//   2. No OTHER write transaction can run BETWEEN that read and `enqueuePrintJob`'s own
+//      `active = true` re-check. Both run inside one write transaction, and one write transaction
+//      runs on the venue file at a time (`packages/store/src/write-queue.ts`, reached through
+//      `withTransaction` in `packages/db/src/tenancy.ts`). Checked at the writer that used to be the
+//      race: the printer-deactivate route runs its UPDATE inside `gated`, which is a
+//      `withTransaction` (`apps/server/src/print-api.ts`), so it lands wholly before this fire or
+//      wholly after it. A writer that skipped `withTransaction` would be outside this argument —
+//      and outside CLAUDE.md §3, which is what the convention is for.
+//
+// On PostgreSQL the second job was a `FOR SHARE OF printers` row lock on the mapping read. It is
+// DELETED rather than translated: SQLite has no row locks, drizzle's SQLite query builder has no
+// `.for()`, and the write queue is the wider guarantee. That argument is stated once for the whole
+// tree, with its measurement and its control, on `assertExtraListForWrite`
+// (`packages/catalogue/src/extras.ts`); this file points at it rather than repeating it.
+//
+// The reverse ordering behaves as it did: an admin config change already in flight makes the FIRE
+// wait for it, and a wait COMPLETES the sale. §5 forbids a sale FAILING, not a wait on a config
+// write. What is genuinely wider than before is WHICH writes the fire waits behind — any write
+// transaction on the venue file, not only one touching this printer. That is the engine's
+// single-writer property, not a decision this file makes.
 //
 // This file THROWS no domain code of its own (the only throw on the path, `enqueuePrintJob`'s
 // `printer.not_found`, is made unreachable by those two guards), so it needs no `import "./errors.js"`.
@@ -85,15 +92,17 @@ function ticketName(text: Record<string, string>, locale: string): string {
 
 /**
  * The active station→printer mappings for `stationIds`, joined to `printers` for each printer's ticket
- * scope, FILTERED to ACTIVE printers, under a `FOR SHARE OF printers` row lock. Factored out of the fire
- * path so the recall/void correction path ({@link enqueueCorrectionSlips}) resolves printers through the
- * SAME locked lookup — the two never-block guards in this file's header (the `active = true` pre-filter
- * and the FOR SHARE lock that keeps a concurrent `deactivatePrinter` from flipping `active` before commit)
- * apply identically to a correction slip. `of: printers` scopes the lock to `printers` only (not the
- * mapping rows); FOR SHARE (not FOR KEY SHARE) is required because a `SET active = false` UPDATE touches
- * no key column, so only FOR SHARE conflicts with it.
+ * scope, FILTERED to ACTIVE printers. Factored out of the fire path so the recall/void correction path
+ * ({@link enqueueCorrectionSlips}) resolves printers through the SAME lookup — both never-block guards
+ * in this file's header apply identically to a correction slip.
+ *
+ * Named for the read it now is. On PostgreSQL this was `lockActivePrinters` and carried
+ * `FOR SHARE OF printers`; a function named for a lock it does not take is a false claim, which is why
+ * the rename travels with the deletion. What keeps a concurrent `deactivatePrinter` out of the gap
+ * between this read and the enqueue is the venue file's write queue — see this file's header, and
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`) for the mechanism.
  */
-async function lockActivePrinters(
+async function activePrinterMappings(
   tx: Transaction,
   stationIds: string[],
 ): Promise<
@@ -117,8 +126,7 @@ async function lockActivePrinters(
     })
     .from(stationPrinters)
     .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
-    .where(and(inArray(stationPrinters.stationId, stationIds), eq(printers.active, true)))
-    .for("share", { of: printers });
+    .where(and(inArray(stationPrinters.stationId, stationIds), eq(printers.active, true)));
 }
 
 /** The settings that change a kitchen ticket's bytes. Resolution does not: kitchen paper has no QR. */
@@ -311,16 +319,16 @@ export async function enqueueKitchenTickets(
 
   const stationIds = [...new Set(firedItems.map((f) => f.stationId))];
 
-  // The station→printer mappings for the involved stations, ACTIVE-filtered and FOR-SHARE-locked (the
-  // two never-block guards — see {@link lockActivePrinters} and this file's header). Read FIRST so a fire
+  // The station→printer mappings for the involved stations, ACTIVE-filtered (the first never-block
+  // guard — see {@link activePrinterMappings} and this file's header). Read FIRST so a fire
   // whose stations map to NO printer can return before the detail reads below — the common case for a
   // venue not using kitchen printing (see the early return).
-  const mappingRows = await lockActivePrinters(tx, stationIds);
+  const mappingRows = await activePrinterMappings(tx, stationIds);
 
   // No printer maps to any involved station → nothing to enqueue. Returning HERE, before the three
-  // detail reads below, skips those reads on every no-kitchen-printer fire and takes no row lock (an empty
-  // match locks nothing). Behaviour is otherwise unchanged: those reads exist only to BUILD tickets, and
-  // with no mapping there is no ticket to build — the old order ran them and then discarded the result.
+  // detail reads below, skips those reads on every no-kitchen-printer fire. Behaviour is otherwise
+  // unchanged: those reads exist only to BUILD tickets, and with no mapping there is no ticket to
+  // build — the old order ran them and then discarded the result.
   if (mappingRows.length === 0) return;
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
@@ -438,16 +446,16 @@ export async function enqueueKitchenTickets(
  * station (both station- and order-scope: a correction is a single item, so there is no consolidated
  * variant to build — the cook at each attached printer gets told what changed).
  *
- * DRY with the fire path: the station→printer lookup ({@link lockActivePrinters}), the item/modifier
+ * DRY with the fire path: the station→printer lookup ({@link activePrinterMappings}), the item/modifier
  * formatting ({@link buildTicketItems}), the station names ({@link readStationNames}) and the order header
  * ({@link readOrderHeader}) are the SAME factored reads {@link enqueueKitchenTickets} uses — so a slip's
  * qty/name/modifiers, table label and order number match the original ticket exactly.
  *
  * NEVER-BLOCK (§5) and the two printer guards apply exactly as on the fire path:
- * `lockActivePrinters` ACTIVE-filters and FOR-SHARE-locks, so `enqueuePrintJob`'s
- * `printer.not_found` stays unreachable and the enqueue rides the caller's recall/void tx (rolls
- * back with it). An empty `items` — the common case, a recall/void of a held line — enqueues
- * nothing.
+ * `activePrinterMappings` ACTIVE-filters, and the caller's write transaction is the only one running
+ * on the venue file, so `enqueuePrintJob`'s `printer.not_found` stays unreachable and the enqueue
+ * rides the caller's recall/void tx (rolls back with it). An empty `items` — the common case, a
+ * recall/void of a held line — enqueues nothing.
  *
  * NOTE for VOID: {@link voidTabLine}'s delete cascades the line + its ticket item away
  * (`ON DELETE CASCADE`), and this function RE-READS the line from `working_order_lines` via
@@ -465,7 +473,7 @@ export async function enqueueCorrectionSlips(
   if (items.length === 0) return;
 
   const stationIds = [...new Set(items.map((i) => i.stationId))];
-  const mappingRows = await lockActivePrinters(tx, stationIds);
+  const mappingRows = await activePrinterMappings(tx, stationIds);
   // No active printer maps to any involved station → nothing to enqueue (skips the detail reads below).
   if (mappingRows.length === 0) return;
 
@@ -538,8 +546,10 @@ export async function enqueueCorrectionSlips(
  * yields an empty set and is a pure NO-OP: `enqueueKitchenTickets` short-circuits on the empty
  * input and enqueues nothing, so reprint needs — and throws — no error code of its own. It
  * inherits the fire path's never-block posture for free: enqueue is an outbox INSERT that opens
- * no socket, and the `FOR SHARE` lock in `enqueueKitchenTickets` keeps `enqueuePrintJob`'s
- * `printer.not_found` unreachable exactly as it does on the fire path (see the header).
+ * no socket, and the single write transaction `enqueueKitchenTickets` runs inside keeps
+ * `enqueuePrintJob`'s `printer.not_found` unreachable exactly as it does on the fire path (see the
+ * header). The route that calls this opens that transaction: `apps/server/src/till-api.ts`, the
+ * `/api/orders/:id/reprint` handler.
  */
 export async function reprintOrderTickets(
   tx: Transaction,

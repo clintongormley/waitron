@@ -31,8 +31,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { joinTable, openTab } from "./working-order.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting, item
-// partition, quantity conservation, the FOR UPDATE lock ordering, fiscal filing multiplicity) is proven
+// PGlite, not real Postgres: `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting,
+// item partition, quantity conservation, the concurrency properties the venue file's write queue now
+// carries, fiscal filing multiplicity) is proven
 // in the TS-5 verb + fiscal suites (Tasks 1-5); this suite proves only the HTTP surface — the session
 // guard, the malformed-`:id`/`tableId` screens, the happy-path result shapes, and the STATUS mapping for
 // the new `table.not_joined` code — the same shape `till-api.transfer.test.ts`/`till-api.move-merge.test.ts`

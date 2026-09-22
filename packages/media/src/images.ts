@@ -294,12 +294,29 @@ export async function deleteImage(
   tx: Transaction,
   imageId: string,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
-  // FOR UPDATE conflicts with the FK's KEY SHARE lock when a product or category attaches this image.
+  // This read took `for update` on the image row, and the sentence here named the PostgreSQL lock
+  // interaction that made it work: a writer attaching this image to a product or a category was
+  // made by the foreign key to take KEY SHARE on this row, which FOR UPDATE conflicts with — so the
+  // attach could not slip between the usage check below and the delete. Neither half of that
+  // sentence survives. SQLite has no row locks and drizzle's SQLite query builder has no `.for()`;
+  // what keeps the attach out is that one write transaction runs on the venue file at a time, so
+  // the usage check and the delete are still the last word when they commit (the pattern, with its
+  // measurement and its control, is on `assertExtraListForWrite`,
+  // `packages/catalogue/src/extras.ts`).
+  //
+  // The foreign key itself is also gone, and that is NOT this change's doing and not repaired by
+  // it. `products_media_image_fk` and `category_details_media_image_fk` (both
+  // `REFERENCES media_images(filename) ON DELETE RESTRICT`) lived in hand-written `--custom`
+  // migration SQL — `git show origin/main:packages/media/drizzle/0001_media_baseline_sql.sql`,
+  // lines 108-112 — and the regeneration that produced this branch's baselines dropped them; a
+  // `media_image_fk` grep over this tree's `.sql` files finds nothing. So the usage check below is
+  // now the ONLY thing standing between a delete and a product row pointing at a filename that no
+  // longer exists. What would have caught this — `images.pg.test.ts`'s constraint assertion and its
+  // two `23503` cases — is red at collection on this branch, so nothing is watching it.
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
-    .where(eq(mediaImages.id, imageId))
-    .for("update");
+    .where(eq(mediaImages.id, imageId));
   if (!image) throw new AppError("image.not_found", { imageId });
   const uses = await listImageUsages(tx, imageId);
   if (uses.length > 0) return { deleted: false, uses };

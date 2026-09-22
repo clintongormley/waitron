@@ -4818,6 +4818,77 @@ why the write queue covers it; point at `assertExtraListForWrite`
 (`packages/catalogue/src/extras.ts`) rather than restating the pattern. Do NOT bundle the raw-SQL
 suites in — they are step 25's.
 
+**GAP SEVEN IS DONE — 2026-09-22.** Every builder `.for(...)` is gone from `apps` and `packages`:
+`grep -rn --include='*.ts' '\.for("' apps packages` returns only prose. `apps/server`'s typecheck
+went 113 → 79 errors and reports zero `Property 'for' does not exist`; the root Vitest project is
+51 files / 3,215 tests green, `pnpm lint` and `pnpm format:check` both 0.
+
+Three things the table above got wrong, each measured while doing the work:
+
+- **The bookings count is short by one.** The grep that built the table excluded tests, so it missed
+  the *builder* `.for("update")` at `packages/bookings/src/bookings-cas.test.ts:155`. That is a
+  compile error like any other, not a raw-SQL site, so anyone working from the table alone would
+  have left the package un-typecheckable.
+- **The compiler is not the only thing that catches `.for(`.** It is also a runtime
+  `TypeError: tx.select(...).from(...).where(...).for is not a function`, which is what
+  `packages/media/src/images.ts:302` was throwing and what removing it turned green.
+- **What the two `for("share")` locks held still was a FLAG across a read-to-read gap, not a row's
+  existence across a read-to-insert gap.** `print_jobs.printer_id` already has
+  `FOREIGN KEY … REFERENCES printers(id)` (`packages/db/drizzle/0000_baseline.sql:335`) and the FK
+  never needed help. The locks defended against an `UPDATE printers SET active = false` landing
+  between the mapping read and `enqueuePrintJob`'s own `active = true` pre-check
+  (`packages/printing/src/outbox.ts:42-46`), whose `printer.not_found` throw would abort the
+  enclosing fire transaction — a §5 never-block violation. No FK sees that update.
+
+Four functions were renamed with their clause, on the house rule that a function named for a lock it
+does not take is a false claim: `lockOpenTab` → `assertAnchoredTabOpen`, `lockActivePrinters` →
+`activePrinterMappings`, `requireRowForUpdate` → `requireRow`, and `record-daily-close.ts`'s
+`selectHeadForUpdate`/`lockChainHead` pair to `selectHead`/`readChainHead` (matching the two chain
+files). `lockOpenTabRow` was not renamed but DELETED: with the clause gone its body was the same
+statement and the same refusal as the existing `assertTabOpen`, so its callers use that.
+
+Four false claims about locks were found OUTSIDE the `.for(` sites, none of them reachable by the
+compiler, and all four are fixed here: `packages/db/src/allocate-number.ts` (the invoice-number
+UPDATE "takes a row lock … at READ COMMITTED"), `packages/core/src/record-sale.ts` and
+`record-correction.ts` ×2 (`checkIntegrity`'s chain-head lock, and the chain-then-series lock order
+that prevented a deadlock). `packages/db/src/append-order-amendment.test.ts` got the banner
+treatment: its concurrency case's proof-by-deletion names a clause that is gone, and the file does
+not collect (`Test Files 1 failed (1)` / `Tests 4 skipped (4)`, measured).
+
+**A TENTH GAP — found 2026-09-22 while converting `packages/media/src/images.ts`. Two foreign keys
+were lost in the regeneration and nothing is watching.** `products_media_image_fk` and
+`category_details_media_image_fk`, both
+`REFERENCES media_images(filename) ON DELETE RESTRICT`, are at
+`git show origin/main:packages/media/drizzle/0001_media_baseline_sql.sql` lines 108-112, in
+hand-written `--custom` SQL. A `media_image_fk` grep over this tree's `.sql` files finds nothing.
+This is the same class as the schema-constraints repair (`9fdae934`) and the eighth gap's triggers:
+a constraint that lived only in hand-written SQL went with the regeneration. It is NOT a silent
+green — `packages/media/src/images.pg.test.ts` asserts both constraints by name and their `23503`
+refusals (`:103`, `:114`, `:145`, `:160`) and is red at collection — but until it runs,
+`deleteImage`'s usage check is the only thing standing between a delete and a product row pointing
+at a filename that is gone. **One thing to establish before restoring them:** these keys cross
+packages (`products` is `packages/db`'s, `media_images` is `packages/media`'s), which may be why
+they were hand-written rather than declared in TypeScript, and `scripts/two-file-foreign-keys.test.ts`
+has a view on which tables may be joined at all.
+
+**AN ELEVENTH GAP — found 2026-09-22. `apps/server` is outside both the `now()` sweep and the cast
+sweep, and neither residual is a compile error.** Under `packages/` the conversion is visible in the
+code — file after file carries "the PostgreSQL `now()` this replaced read the DATABASE's clock".
+`apps/server` carries none of that, and still emits SQL this engine refuses:
+
+| residual | files |
+| --- | --- |
+| `sql\`now()\`` / `now()` inside a raw template | `working-order.ts` (13), `mirror-session.ts` (4), `break-glass-command.ts` (3), `device-session.ts` (2), `pairing-mode.ts` (2), `payments-api.ts` (2) |
+| a `::` cast | `working-order.ts` (24), `configuration-transfer.ts` (3), `testing/fiscal-fixtures.ts` (3), `report-api.ts` (2), `testing/seed-units.ts` (2), `till-sale.ts` (2), `boot-failure.ts`, `chain-height.ts`, `print-api.ts`, `workforce-api.ts` |
+
+Measured: `no such function: now` and `unrecognized token: ":"`. **Nothing on this branch catches
+either** — the typecheck cannot see inside a `sql` template, and the suites that would run this code
+mostly die earlier in a fixture. `apps/server/src/testing/seed-units.ts` is the worst of them: every
+case in `kitchen-print.test.ts` dies there in `setupVenue` before reaching the code under test, so
+converting the fixtures is what unblocks the measurement for everything else. The settled shapes are
+already on this branch — `cast(X as T)` for a cast (`59e173fc`, `cab1ec9d`) and the column
+vocabulary's `now()` bound from the process clock for the timestamp (`packages/db/src/reserved-identity.ts:115`).
+
 **AN EIGHTH GAP — found 2026-09-22. The regeneration dropped every BEHAVIOURAL trigger, and only
 the append-only ones came back.** Step 13 regenerated each migration set from the TypeScript schema,
 and a trigger has never been declarable in TypeScript, so every one of them lived in hand-written

@@ -262,9 +262,9 @@ describe("transferLines — whole line", () => {
   // test above passes even with the lock loop deleted, because moveTabLines' own status read throws
   // tab.not_open for a missing working_orders row too. A PARKED walk-up is the discriminating case: it
   // IS an open working order (moveTabLines would happily move lines INTO it), but NO dining_tables row
-  // points at it, so it is not a TAB — only lockOpenTab's back-pointer check rejects it. Delete the lock
-  // loop and THIS test fails (the café line lands in the parked order); keep it and the transfer is
-  // refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
+  // points at it, so it is not a TAB — only assertAnchoredTabOpen's back-pointer check rejects it.
+  // Delete that check loop and THIS test fails (the café line lands in the parked order); keep it and
+  // the transfer is refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
   it("refuses transferring INTO an open order no table points at — a parked walk-up (tab.not_open)", async () => {
     const { cfg, cafeId, aguaId, tableAId } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
@@ -572,7 +572,7 @@ describe("transferLines — extras children (FIX 2 cascade / FIX 4 split)", () =
     return list.id;
   }
 
-  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`lockOpenTab` needs
+  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`assertAnchoredTabOpen` needs
    *  the back-pointer). `openTab` does not thread `extras`, so build the tab directly here. No fire. */
   async function openExtrasTab(
     cfg: TillConfig,

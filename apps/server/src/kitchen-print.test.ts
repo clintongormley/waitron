@@ -475,7 +475,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     // The no-kitchen-printer venue's common case: a station fires but nothing is mapped to it. The mapping
     // read runs FIRST and comes back empty, so enqueueKitchenTickets RETURNS before the three
     // line/station/order detail SELECTs — proven by counting the `tx.select` calls it issues (one mapping
-    // read, not four). It enqueues nothing and takes no printer-row lock. This distinguishes the reordered
+    // read, not four). It enqueues nothing. This distinguishes the reordered
     // code (1 select) from the old order (4 selects); the zero-jobs assertion holds for both, so it is the
     // select count that pins the early return (CLAUDE.md §4: a test must fail with the guard removed).
     const { cfg, catalogueId } = await setupVenue();

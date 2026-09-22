@@ -572,7 +572,8 @@ describe("markLineServed / unmarkLineServed", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    // Settled order → not open. lockOpenTab's STATUS check refuses it — but strip that check and the DB
+    // Settled order → not open. assertAnchoredTabOpen's STATUS check refuses it — but strip that
+    // check and the DB
     // `require_open_parent` trigger still rejects a served write on a non-open parent (a different wrong
     // shape, but a refusal). So this branch alone does NOT isolate the domain guard; the next test does.
     await db.execute(
@@ -584,14 +585,14 @@ describe("markLineServed / unmarkLineServed", () => {
     });
   });
 
-  it("refuses an open order no table points at, carrying a real line — lockOpenTab's back-pointer is the sole gate (tab.not_open)", async () => {
+  it("refuses an open order no table points at, carrying a real line — the back-pointer check is the sole gate (tab.not_open)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
     // Orphan the tab: clear the dining_tables back-pointer while the order stays OPEN and keeps line 1.
     // No DB trigger fires (the parent is still open) and the UPDATE would match a real row, so
-    // lockOpenTab's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
+    // assertAnchoredTabOpen's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
     // deletion-proof for it. Strip that check and the served write silently succeeds (verified: the
     // guard-removed run resolves instead of rejecting). The zero-line walk-up used elsewhere cannot
     // isolate it — a guard-removed UPDATE there matches 0 rows and errors tab.line_not_found regardless.

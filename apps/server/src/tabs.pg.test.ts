@@ -67,6 +67,16 @@ import "./errors.js";
 // than skipping when Docker is absent, so a vanished suite fails loudly instead of reporting a green
 // that proves nothing.
 //
+// STANDING NOTE — the product code these cases exercise no longer takes row locks. Every
+// `select … for update` in `working-order.ts` is gone: one write transaction runs on the venue
+// file at a time, which is wider than any of them (`assertAnchoredTabOpen` in
+// `apps/server/src/working-order.ts` carries the chain and the receipt). What each case below
+// describes as a lock is therefore a description of the PostgreSQL code it was written against.
+// The cases still stage two PostgreSQL backends, so they are not evidence about the venue file at
+// all; converting them — a contention test becomes a test that the write queue serialises writers,
+// the shape `racePair` in `packages/catalogue/test/fixtures.ts` uses — is its own step and is not
+// done here.
+//
 // This scaffolding (`useTemplateDb` `suite`, `nextNif`, `tillConfigFromVenue`, `setupVenue`) is
 // verb-agnostic (owner-read SQL + venue setup), a sibling of `working-order.pg.test.ts`. Each task
 // adds only the verb imports and owner-read helpers IT uses — this task imports `openTab` +
@@ -194,10 +204,11 @@ async function seedTable(
 }
 
 /**
- * How many OPEN working orders exist for the tenant — owner read. With the per-table FOR UPDATE
- * lock, a race yields exactly ONE (the loser refuses BEFORE creating its order); without the
- * lock, both create one → 2, and the table's single tab_id points at only one, orphaning the
- * other.
+ * How many OPEN working orders exist for the tenant — owner read. Two openTabs that serialise
+ * yield exactly ONE (the loser refuses BEFORE creating its order); two that interleave both
+ * create one → 2, and the table's single tab_id points at only one, orphaning the other. What
+ * made them serialise on PostgreSQL was the per-table `FOR UPDATE`; see the file's standing note
+ * for what does now, and for why this suite is not evidence about it.
  */
 async function openOrderCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: string }>(

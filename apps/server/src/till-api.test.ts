@@ -2661,7 +2661,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // A REAL open tab, so `markLineServed`'s `lockOpenTab` passes and the malformed :lineNo genuinely
+    // A REAL open tab, so `markLineServed`'s `assertAnchoredTabOpen` passes and the malformed :lineNo genuinely
     // reaches the `where line_no = $n` UPDATE in the RED (screen-removed) state — the witness that the
     // route screen, not the verb, is what refuses it. "abc"/"1.5"/NaN and "9999999999" (which clears
     // `Number.isInteger` but exceeds int4's max) would raise `22P02`/`22003` → an opaque 500 there;
@@ -2727,7 +2727,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
     // A valid uuid naming no open tab a table points at (never opened, or settled/abandoned/foreign):
-    // clears the route's isUuid screen, reaches `markLineServed`, whose `lockOpenTab` matches no row →
+    // clears the route's isUuid screen, reaches `markLineServed`, whose `assertAnchoredTabOpen` matches no row →
     // tab.not_open (409).
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/served`, {
       method: "POST",

@@ -159,8 +159,20 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   };
   const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
-    // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
-    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
+    // Local mutations decide from this row, so Enable cannot race a committed unpair. On PostgreSQL
+    // the read took `for update`, which kept the row still between the read and the caller's own
+    // UPDATE in the same transaction. One write transaction runs on the venue file at a time
+    // (`packages/store/src/write-queue.ts`, reached through `withTransaction` in
+    // `packages/db/src/tenancy.ts`, which is what `gated` above opens), so no OTHER write transaction
+    // can run in that gap — and there is no lock to take: SQLite has none, and drizzle's SQLite query
+    // builder has no `.for()`. Stated once for the whole tree, with its measurement and its control, on
+    // `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+    //
+    // The unpair route is the one caller this never covered and still does not: it reads here in one
+    // `gated` transaction, calls the provider, then writes in a THIRD. The lock was released at the
+    // first commit, before the network call — so that route's decision was always taken on a row it
+    // no longer held.
+    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
     if (reader === undefined) throw new AppError("reader.not_found", { id });
     return reader;
   };
@@ -368,7 +380,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         counts: await tx
           .select({
             readerId: deviceCardReaders.readerId,
-            n: sql<number>`count(*)::int`,
+            n: sql<number>`cast(count(*) as int)`,
           })
           .from(deviceCardReaders)
           .groupBy(deviceCardReaders.readerId),

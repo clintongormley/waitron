@@ -1,3 +1,44 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `for update` this suite staged its race on is gone, in BOTH places it lived.
+ *
+ * Two clauses went, and they were the suite's staging mechanism rather than its subject. One was
+ * `fakeCore`'s `SELECT … FOR UPDATE` on the dining table (`./testing/fake-core.js`), which is what
+ * the seating backend parked on. The other was this file's own `.for("update")` at the top of
+ * `connBWork`, which is what held it. Both are deleted, not translated: SQLite has no row locks and
+ * drizzle's SQLite query builder has no `.for()`, so each was a compile error
+ * (`error TS2339: Property 'for' does not exist`, from `pnpm --filter @waitron/bookings typecheck`
+ * on this branch). What serialises writers instead is the venue file's write queue — one write
+ * transaction on the file at a time — stated once, with its measurement and its control, on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ *
+ * WHAT THIS SUITE NO LONGER DEMONSTRATES. Its subject was the compare-and-swap in `seatBooking`'s
+ * terminal UPDATE: that a cancel COMMITTING between the lock-free `getBooking` read and that write
+ * is caught, leaving `booking.invalid_transition` and no orphan tab. Staging that needs two
+ * transactions interleaved mid-flight, which is the one thing this engine does not admit — the
+ * second `withTransaction` does not begin until the first has committed. The first test cannot be
+ * rewritten into something that proves its subject; it can only be rewritten into something that
+ * passes, which is what CLAUDE.md §4's "treat 'there is a test' as an unfinished sentence" is
+ * about. So it is left.
+ *
+ * WHAT IT REPORTS TODAY. It does not COLLECT at all: `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest `globalSetup` to a file
+ * that calls `startSharedContainer` and `provide("sharedPg", handle).` — the real-PostgreSQL
+ * harness this branch removed. Measured 2026-09-22 on `pnpm --filter @waitron/bookings test`,
+ * where it reports `2 tests | 2 skipped` and then fails the FILE. Every `pg_backend_pid()`,
+ * `pg_blocking_pids()` and `suite.pg.connect()` below is PostgreSQL-only and goes with that
+ * harness, so no assertion in this file has run on this branch.
+ *
+ * WHY IT IS LEFT RATHER THAN DELETED. The second test's subject survives the engine change
+ * untouched — the CAS predicate `status = 'booked'` must still match zero rows against a booking
+ * that has left `booked`, and its proof-by-deletion is timing-free, so it is re-runnable the day
+ * this package has a database again. And the first test's subject — a concurrent cancel must not
+ * be seated — is still a requirement even where a genuine interleave cannot be staged; the CAS is
+ * what enforces it, and nothing else in this package asserts it.
+ *
+ * The recorded proofs-by-deletion below belong to the PostgreSQL shape they were taken against and
+ * have not been re-run. CLAUDE.md §4: a proof-by-deletion belongs to the shape of the code it was
+ * taken against.
+ */
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -48,7 +89,8 @@ function asApp<T>(d: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> 
 
 /** A tenant + location + till + node. `seatBooking` opens a real TS-1 tab via `core.openTab`, so the
  * seat cfg is a plain `BookingConfig` and the till + node the tab row needs are captured by `fakeCore`
- * (its `SELECT … FOR UPDATE` on the table is what makes the two-backend race below stage). */
+ * (whose `SELECT … FOR UPDATE` on the table used to be what made the two-backend race below stage;
+ * it is gone — see this file's banner). */
 async function setupVenue(): Promise<{
   cfg: VenueCfg;
   core: CoreServices;
@@ -148,11 +190,13 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       let cancelCommitted = false;
 
       const connBWork = asApp(connB, async (tx) => {
+        // `.for("update")` was here: this is what held the table so the seating backend below
+        // parked on it. Deleted with the clause (see this file's banner); nothing replaces it, so
+        // the barrier that follows can no longer stage.
         await tx
           .select({ id: diningTables.id })
           .from(diningTables)
-          .where(eq(diningTables.id, tableId))
-          .for("update");
+          .where(eq(diningTables.id, tableId));
         resolveLockHeld();
         await waitUntilLockBlocked(pidA); // connA is now parked at openTab, past its `booked` read
         await cancelBooking(tx, cfg, bookingId);

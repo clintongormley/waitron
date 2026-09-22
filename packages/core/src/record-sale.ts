@@ -200,10 +200,13 @@ export async function recordSale(
     }
   }
 
-  // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
-  // node's chain-head row lock as its own first statement and holds it until commit, so
-  // art. 7.i verification runs against exactly the state this transaction is about to extend
-  // rather than a snapshot another writer may already have moved past.
+  // Steps 1 and 2, one call and deliberately so. Art. 7.i verification must run against exactly
+  // the state this transaction is about to extend, not a snapshot another writer has already moved
+  // past. On PostgreSQL a real backend's `checkIntegrity` arranged that by taking the node's
+  // chain-head row lock as its first statement and holding it to commit; it takes no lock now
+  // (`packages/fiscal-verifactu/src/chain.ts`'s `selectHead`), and what arranges it is the
+  // transaction itself — one write transaction runs on the venue file at a time
+  // (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`).
   const verification = await backend.checkIntegrity(tx, input.nodeId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a

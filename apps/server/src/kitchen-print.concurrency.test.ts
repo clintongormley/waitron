@@ -1,3 +1,29 @@
+/**
+ * RED ON THIS BRANCH, AND NOT BY OVERSIGHT — the `for("share", { of: printers })` on
+ * `kitchen-print.ts`'s station→printer mapping read, which is this whole suite's subject, is gone.
+ *
+ * The clause is deleted, not translated: SQLite has no row locks and drizzle's SQLite query builder
+ * has no `.for()`. What keeps a `deactivatePrinter` out of the gap between the mapping read and
+ * `enqueuePrintJob`'s own `active = true` re-check instead is the venue file's write queue — one
+ * write transaction on the file at a time — stated once, with its measurement and its control, on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ *
+ * The proof below cannot be re-run to say whether it still discriminates, because this suite does
+ * not COLLECT: `useTemplateDb` throws
+ * `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a file
+ * that calls startSharedContainer and provide("sharedPg", handle).` — the real-PostgreSQL harness
+ * this branch removed. Measured 2026-09-22 by running this file alone. It is left in place rather
+ * than deleted because its behavioural subject — a fire COMPLETES rather than aborting with
+ * `printer.not_found` when an admin deactivates the same printer at the same moment — still has to
+ * hold on this engine, and nothing asserts it yet. Its MECHANISM sentences are false about the
+ * current code, and the ones in `kitchen-print.ts` have been corrected.
+ *
+ * Two things in here have no SQLite form at all and should not be rewritten: the `pg_locks` probe
+ * (`waitForABlockedBackend`), and the three separate backends, which exist because PGlite serialises
+ * every query onto one. On this engine the corresponding question is whether the write queue admits
+ * the second transaction, and `racePair` (`packages/catalogue/test/fixtures.ts`) is the shape that
+ * asks it.
+ */
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

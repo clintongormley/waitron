@@ -261,8 +261,8 @@ describe("splitOffCheck", () => {
   it("refuses a DETACHED CHECK as the split origin (tab.not_open) — origin must be an open TAB", async () => {
     // The origin of a split must be an open TAB (table-anchored, spec §3 + the `/api/tabs/:id/split`
     // route). A detached check — a table-LESS open order minted BY a prior split — is a payment unit,
-    // not a seat, and must not itself be a split origin. `lockOpenTab` adds the is-a-tab back-pointer
-    // assertion that `lockOpenTabRow` (status-only) lacks; a check has no `dining_tables.tab_id`
+    // not a seat, and must not itself be a split origin. `assertAnchoredTabOpen` adds the is-a-tab back-pointer
+    // assertion that `assertTabOpen` (status-only) lacks; a check has no `dining_tables.tab_id`
     // pointing at it, so it fails closed to `tab.not_open`.
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>

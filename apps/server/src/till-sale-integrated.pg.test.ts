@@ -1074,11 +1074,19 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         label: "Mesa 7",
       });
 
-      // Two DISTINCT app-role connections, each its own reader, drive the SAME parked order id. P1's
-      // FOR UPDATE serialises them; both reach `collect` and capture, and P3's `sales_working_order_id_key`
-      // 23505 backstop makes exactly one file — the loser replays the winner's ticket. (The one-CHARGE
+      // Two DISTINCT app-role connections, each its own reader, drive the SAME parked order id. Each
+      // P1 is serialised against the other, but P1 COMMITS before the network `collect`, so both reach
+      // `collect` and capture, and P3's `sales_working_order_id_key` duplicate backstop makes exactly
+      // one file — the loser replays the winner's ticket. That is one of the two backstops in
+      // `till-sale.ts` the engine change does not narrow (see `finalizeCapture`'s doc comment, which
+      // derives both from the three-transaction split). (The one-CHARGE
       // guarantee across the network sub-window is the Stripe idempotency key, proven in the sandbox,
       // Task 1 — not the FakeStripe here, which captures per-reader.)
+      //
+      // UNCONVERTED: the staging below is two PostgreSQL connections, and this suite does not run on
+      // this branch — on 2026-09-22 `pnpm --filter @waitron/server test` reported this file as 30
+      // tests, 30 skipped, erroring `useTemplateDb: no shared container in scope`. Converting it
+      // belongs with the other contention suites, not with the comments above.
       const { deps: depsA } = integratedDeps(cfg, appA);
       const { deps: depsB } = integratedDeps(cfg, appB);
       const req = { id, lines: [] };
@@ -1112,9 +1120,10 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) and dispatch to
-      // recovery; finalizeRecovery's FOR UPDATE fully serialises them (the order always exists), so one
-      // files + associates the existing row + settles, and the other blocks, re-reads `settled`, and
-      // REPLAYS — the recovery path's own idempotency, with no double-file and no double-associate.
+      // recovery; `finalizeRecovery` is ONE transaction and one write transaction runs on the venue
+      // file at a time, so one files + associates the existing row + settles, and the other runs after
+      // that commit, reads `settled`, and REPLAYS — the recovery path's own idempotency, with no
+      // double-file and no double-associate. (Same staging caveat as the concurrent-pays case above.)
       const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
 
       const { deps: depsA } = integratedDeps(cfg, appA);
@@ -1451,9 +1460,10 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         await seedLostCaptureOnPlaced(id, "1.50");
 
         // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) with an outstanding
-        // invoice → recover-settle; finalizeSettleRecovery's FOR UPDATE fully serialises them, so one
-        // settles + associates + moves placed → settled, and the other blocks, re-reads `settled`, and
-        // REPLAYS — one settlement, no double-associate.
+        // invoice → recover-settle; `finalizeSettleRecovery` is ONE transaction and one write
+        // transaction runs on the venue file at a time, so one settles + associates + moves
+        // placed → settled, and the other runs after that commit, reads `settled`, and REPLAYS — one
+        // settlement, no double-associate. (Same staging caveat as the concurrent-pays case above.)
         const { deps: depsA } = integratedDeps(cfg, appA);
         const { deps: depsB } = integratedDeps(cfg, appB);
         const req = { id, lines: [] };

@@ -178,9 +178,11 @@ export async function recordCorrection(
 
   // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing
   // original, or a wrong/absent corrective series, still returns its own code and never
-  // leaks an authz error) and BEFORE the chain work below — `checkIntegrity`'s chain-head lock and
-  // `allocateInvoiceNumber`'s series-row lock — so a rejected correction consumes NO number and does
-  // NO chain work, leaving no permanent series gap. `authorization.authorizedBy` is the person to
+  // leaks an authz error) and BEFORE the chain work and the number allocation below, so a rejected
+  // correction consumes NO number and does NO chain work, leaving no permanent series gap. That
+  // ordering is what matters and it is engine-independent; the two row locks this note used to name
+  // are gone (`allocate-number.ts` and `packages/fiscal-verifactu/src/chain.ts` each say what
+  // replaced theirs). `authorization.authorizedBy` is the person to
   // record on the corrective sale below (the operator's own role held `sale.rectify`, or a
   // supervisor `override` supplied it).
   const authorization = await authorize(tx, {
@@ -221,11 +223,14 @@ export async function recordCorrection(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  // Step 5. Allocation takes the series row lock and comes AFTER `checkIntegrity`'s chain-head lock,
-  // never before: both stay held until commit, so every write path must take them chain-then-series
-  // or two concurrent writers on one node deadlock — the chain-head lock is the per-node `cadenas`
-  // row, which spans that node's tills (node-id rekey, 2026-08-03). The guard SELECTs above take no
-  // persistent lock, so they do not affect that order.
+  // Step 5. Allocation comes AFTER the chain work, and on PostgreSQL that order was mandatory:
+  // both steps took a row lock and held it to commit — the per-node `cadenas` row, which spans
+  // that node's tills (node-id rekey, 2026-08-03), then the series row — so a write path taking
+  // them series-then-chain deadlocked against one taking them the other way. There are no locks
+  // left to order (`allocate-number.ts` and `packages/fiscal-verifactu/src/chain.ts` each say what
+  // replaced theirs), and one write transaction runs on the venue file at a time, so two writers
+  // on one node cannot interleave at all. The order is kept because the step numbering is the
+  // spec's; nothing now depends on it.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // The corrective's VAT breakdown, resolved ONCE so the SAME value feeds both the `sales` row below

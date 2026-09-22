@@ -22,29 +22,34 @@ import type { DailyClose } from "./types.js";
 
 /**
  * The single active writer's path for one frozen daily close (cierre Z, design §"The close
- * operation"), run inside the caller's transaction. It locks the node's chain head, computes
+ * operation"), run inside the caller's transaction. It reads the node's chain head, computes
  * the VAT-exact close (8a), reconciles the physical cash counts against it per till, and appends one
- * immutable, hash-chained `daily_closes` row — advancing the head under the same lock.
+ * immutable, hash-chained `daily_closes` row — advancing the head in the same transaction.
  *
- * Single-writer by a `SELECT … FOR UPDATE` on the chain head, exactly like the workforce time-entry
- * chain (`packages/workforce/src/chain.ts`) and the fiscal huella chain: two closers cannot both read
- * the same head and assign the same sequence number. There is NO retry loop — unlike those chains,
- * whose head must be CREATED on first use and so is briefly raced. Here a create race resolves the
- * same way (`insert … on conflict do nothing` then a locking re-select), and every later close finds
- * the row and locks it; a collision that survives the lock is a real bug, not something a retry fixes.
- * The immutability (restricted app-role grants and append-only triggers) is the table's
- * — `packages/db`'s 0033 migration and its `daily-closes.test.ts` — not this function's.
+ * Still single-writer, but no longer by a `SELECT … FOR UPDATE` on the chain head: one write
+ * transaction runs on the venue file at a time, so two closers cannot both read the same head and
+ * assign the same sequence number ({@link selectHead}, and `assertExtraListForWrite` in
+ * `packages/catalogue/src/extras.ts` for the measurement and its control). The workforce time-entry
+ * chain (`packages/workforce/src/chain.ts`) and the fiscal huella chain
+ * (`packages/fiscal-verifactu/src/chain.ts`) made the same change. There is NO retry loop — unlike
+ * those two, whose head must be CREATED on first use and so was briefly raced; a collision here is a
+ * real bug, not something a retry fixes.
+ *
+ * The immutability is the table's, not this function's: `daily_closes` is declared
+ * `appendOnly("daily_closes", "ledger", LEDGER)` in `packages/db/src/classification.ts`, which
+ * `applyMigrations` turns into the refusing trigger pair (`packages/migrations/src/apply.ts`, its
+ * `installAppendOnlyTriggers` call).
  */
 export async function recordDailyClose(
   tx: Transaction,
   input: RecordDailyCloseInput,
 ): Promise<DailyCloseRecord> {
-  // 1. Validate the supplied cash counts up front — fail before taking the chain lock or reading.
+  // 1. Validate the supplied cash counts up front — fail before reading the chain head.
   const counts = validateCashCounts(input.cashCounts);
 
-  // 2. Serialise this node's closes on the chain head. FOR UPDATE, not FOR SHARE: two
-  //    closers must not both read the same head and then both assign the same next sequence number.
-  const head = await lockChainHead(tx, input.nodeId);
+  // 2. Read this node's chain head. What keeps two closers from reading the same head and then
+  //    assigning the same next sequence number is the write queue, not a clause here — selectHead.
+  const head = await readChainHead(tx, input.nodeId);
 
   // 3. Compute the VAT-exact close (8a): a deterministic read over the day's immutable records.
   const close = await computeDailyClose(tx, {
@@ -91,7 +96,7 @@ export async function recordDailyClose(
     snapshot,
   });
 
-  // 7. Advance the head under the lock taken in step 2.
+  // 7. Advance the head, in the same transaction as the read in step 2.
   await tx
     .update(dailyCloseChain)
     .set({ sequenceNo, lastEntryHash: entryHash })
@@ -236,31 +241,50 @@ interface ChainHead {
   lastEntryHash: string;
 }
 
-async function selectHeadForUpdate(
-  tx: Transaction,
-  nodeId: NodeId,
-): Promise<ChainHead | undefined> {
+/**
+ * This node's chain head, or `undefined` when it has none yet.
+ *
+ * This was `selectHeadForUpdate` and it took `for update` on the head row: the sequence number read
+ * here decides the NEXT one several statements later (step 5 in `recordDailyClose`), so a second
+ * close reading the same head would compute the same position. There is no second close to overlap
+ * with — one write transaction runs on the venue file at a time, and the pattern is stated once,
+ * with its measurement and its control, on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). Drizzle's SQLite query builder has no `.for()` at all.
+ * Renamed with the clause: a function named for a lock it does not take is a false claim, the same
+ * rename `packages/workforce/src/chain.ts` and `packages/fiscal-verifactu/src/chain.ts` made.
+ *
+ * The lock was never the only thing keeping two closes off one sequence number. Both unique
+ * indexes survive on this engine — `daily_closes_sequence_key` on `(node_id, sequence_no)` and
+ * `daily_closes_business_day_key` on `(node_id, business_day)`, declared at
+ * `packages/db/drizzle/0000_baseline.sql:665-666`. That they are DECLARED is what I checked; no
+ * suite in this package could be run to see one refuse a duplicate, because every one of them
+ * currently dies in `seedVenue` on raw PostgreSQL SQL the storage swap has not reached.
+ */
+async function selectHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead | undefined> {
   const [row] = await tx
     .select({
       sequenceNo: dailyCloseChain.sequenceNo,
       lastEntryHash: dailyCloseChain.lastEntryHash,
     })
     .from(dailyCloseChain)
-    .where(eq(dailyCloseChain.nodeId, nodeId))
-    .for("update");
+    .where(eq(dailyCloseChain.nodeId, nodeId));
   return row;
 }
 
 /**
- * Takes the chain-head row lock, creating the head if this node has none yet. `insert … on conflict
- * do nothing` then a locking re-select, not an upsert-returning: when a concurrent transaction has
- * inserted the head but not committed, this transaction's speculative insert waits on it and then does
- * nothing on the conflict, so the re-select observes the COMMITTED row rather than one that might roll
- * back. Same shape as workforce's chain head, keyed by node — which is now `readChainHead` and
- * takes no lock (`packages/workforce/src/chain.ts`). This one has not been converted yet.
+ * This node's chain head, creating it if it has none yet.
+ *
+ * `insert … on conflict do nothing` then a re-select, not an upsert-returning. On PostgreSQL that
+ * shape was about a concurrent uncommitted insert; here it is the plain read-back of whichever row
+ * exists, and it is still two statements because a single `… returning` gives nothing back for a
+ * conflicting row and would leave the caller with no head to act on.
+ *
+ * This was `lockChainHead` and it took no lock of its own — {@link selectHead} did, and that clause
+ * is gone for the reason stated there. Renamed with it, the same way
+ * `packages/workforce/src/chain.ts` renamed its own.
  */
-async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, nodeId);
+async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
+  const existing = await selectHead(tx, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
@@ -268,11 +292,11 @@ async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead
     .values({ nodeId })
     .onConflictDoNothing({ target: [dailyCloseChain.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, nodeId);
+  const created = await selectHead(tx, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
-    // Unreachable: the insert commits a fresh row or a concurrent insert wins the conflict and
-    // commits one; the re-select then locks whichever exists.
+    // Unreachable: the insert above writes a fresh row, or the conflict arm finds one already
+    // there; the re-select then reads whichever exists.
     throw new Error("daily_close_chain: head row missing immediately after insert-on-conflict");
   }
   /* v8 ignore stop */
@@ -299,9 +323,10 @@ interface CloseRow {
  * (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not need"), so
  * here it confines this attempt's own writes rather than rescuing the transaction. Only a
  * `daily_closes_business_day_key` collision — a second close of the same day — is
- * translated to `close.already_closed`; anything else (an impossible-under-the-lock
- * `daily_closes_sequence_key` collision, an FK violation) propagates raw, because masking it as
- * "already closed" would hide a genuine single-writer bug for a day that is NOT closed.
+ * translated to `close.already_closed`; anything else (a `daily_closes_sequence_key` collision,
+ * which the write queue's one-writer-at-a-time should make unreachable, or an FK violation)
+ * propagates raw, because masking it as "already closed" would hide a genuine single-writer bug for
+ * a day that is NOT closed.
  */
 async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
   try {
@@ -328,9 +353,9 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
  *
  * Why the question needs both the SQLSTATE and the key is `refusalOn`'s own doc
  * (`packages/db/src/constraint-target.ts`). What is specific to this caller: the sibling the
- * SQLSTATE alone would let through is `daily_closes_sequence_key`, and a sequence collision is
- * impossible under the single-writer lock, so reporting one as "already closed" would hide a
- * single-writer bug for a day that is NOT closed.
+ * SQLSTATE alone would let through is `daily_closes_sequence_key`, and a sequence collision should
+ * be unreachable while one write transaction runs on the venue file at a time, so reporting one as
+ * "already closed" would hide a single-writer bug for a day that is NOT closed.
  *
  * Exported for the crafted-error unit tests, not from the barrel.
  */

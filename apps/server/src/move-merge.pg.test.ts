@@ -40,6 +40,17 @@ import "./errors.js";
 // than skipping when Docker is absent, so a vanished suite fails loudly instead of a green that proves
 // nothing. The `manifest` template already carries the full CORE schema (dining_tables,
 // table_service_statuses, the reset trigger) plus the cluster roles — nothing is migrated here.
+//
+// STANDING NOTE — the verbs these cases exercise no longer take row locks. Every
+// `select … for update` in `working-order.ts` is gone, `mergeTabs`'s four-lock class order with
+// them: one write transaction runs on the venue file at a time, which is wider than any of them
+// (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain and the
+// receipt). A merge and a pay on the same tabs cannot overlap, so there is no pair of holders to
+// order and no `40P01` class to defend against. Everything each case below says about lock order
+// therefore describes the PostgreSQL code it was written against. The cases still stage two
+// PostgreSQL backends, so they are not evidence about the venue file at all; converting them — a
+// contention test becomes a test that the write queue serialises writers, the shape `racePair` in
+// `packages/catalogue/test/fixtures.ts` uses — is its own step and is not done here.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -250,7 +261,7 @@ beforeAll(() => {
   });
 });
 
-describe("moveTab concurrency (the target FOR UPDATE lock IS the guard)", () => {
+describe("moveTab concurrency (two movers onto one free table, one refused)", () => {
   it("two backends racing to move DIFFERENT tabs onto the SAME free table → one wins, the other gets table.occupied", async () => {
     const { cfg, cafe } = await setupVenue();
     const srcA = await seedTable(cfg, "RA");
@@ -390,7 +401,7 @@ function isDeadlock(e: unknown): boolean {
   return code === "40P01";
 }
 
-describe("concurrent merge deadlock-safety (working_orders-first lock order matches the sale path)", () => {
+describe("concurrent merge deadlock-safety (see the file's standing note — the lock order is retired)", () => {
   it("mergeTabs(into=X) racing payWorkingOrder settling X → NO 40P01; pay is never the deadlock victim", async () => {
     // The MATERIAL deadlock the reorder fixes (finish-branch Finding 1). mergeTabs(into=X, from=Y) and
     // payWorkingOrder(X) both touch X's working_orders row AND X's dining_tables row — pay via the 0050

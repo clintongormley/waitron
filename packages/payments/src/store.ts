@@ -195,7 +195,7 @@ async function resolveAttempting(
 /** Reverse a captured payment in full — a same-day void, distinct from a refund (which records a
  * refund movement instead). Valid only from `captured`; anything else throws `payment.not_voidable`. */
 export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentRow> {
-  const row = await requireRowForUpdate(tx, params);
+  const row = await requireRow(tx, params);
   if (row.state !== "captured") {
     throw new AppError("payment.not_voidable", { paymentRef: params.paymentRef, state: row.state });
   }
@@ -211,7 +211,7 @@ export async function recordRefund(
   tx: Transaction,
   params: Key & { amount: Decimal; authorizedBy?: string },
 ): Promise<PaymentRow> {
-  const row = await requireRowForUpdate(tx, params);
+  const row = await requireRow(tx, params);
   if (row.state !== "captured" && row.state !== "partially_refunded") {
     throw new AppError("payment.not_refundable", {
       paymentRef: params.paymentRef,
@@ -249,8 +249,9 @@ export async function recordRefund(
 
 /** Record a refund the processor REFUSED — a `payment_refunds` row with `state='failed'`. The
  * payment's own state is unchanged (nothing was returned), and this refund is excluded from
- * `recordRefund`'s balance sum, so a later succeeded refund of the same amount is still allowed. No
- * `FOR UPDATE` needed: it neither reads a running total nor transitions the payment. */
+ * `recordRefund`'s balance sum, so a later succeeded refund of the same amount is still allowed.
+ * It reads no running total and transitions no payment, so it goes through `getPaymentByRef`
+ * rather than `requireRow`; the two differ only in what they do when the payment is absent. */
 export async function recordFailedRefund(
   tx: Transaction,
   params: Key & { amount: Decimal; authorizedBy?: string },
@@ -478,12 +479,14 @@ export async function claimAcceptedOffline(
   return rows.map(withDecimalAmount);
 }
 
-/** Like `claimAcceptedOffline` but WITHOUT the row lock — the T1 read a real adapter's `forward` uses
- * to list its pending offline payments before the (device) network sync, so it never holds a lock
- * across the network call (T1/T2). Concurrency safety comes instead from the idempotent, state-guarded
- * `settleForwarded`/`declineForwarded` advances in T2 (each matches only a row still `accepted_offline`)
- * plus the race-safe incident dedup — two concurrent forwards listing the same refs is harmless. The
- * fake's single-transaction `forward` keeps using the locking `claimAcceptedOffline`. */
+/** Like `claimAcceptedOffline` but NOT called a claim — the T1 read a real adapter's `forward` uses
+ * to list its pending offline payments before the (device) network sync, so nothing of this
+ * transaction is held across the network call (T1/T2). Concurrency safety comes from the idempotent,
+ * state-guarded `settleForwarded`/`declineForwarded` advances in T2 (each matches only a row still
+ * `accepted_offline`) plus the race-safe incident dedup — two concurrent forwards listing the same
+ * refs is harmless. The fake's single-transaction `forward` keeps using `claimAcceptedOffline`.
+ * On this engine the two statements are identical; what differs is which one's transaction the
+ * caller goes on to write in — see `claimAcceptedOffline`. */
 export async function listAcceptedOffline(
   tx: Transaction,
   provider: string,
@@ -507,8 +510,8 @@ export interface AttemptingPayment {
   createdAt: string;
 }
 
-/** This provider's `attempting` rows, oldest first, unlocked — the T1 read of a
- * `resolvePending` pass. Unlocked for the same reason `listAcceptedOffline` is: the processor
+/** This provider's `attempting` rows, oldest first — the T1 read of a
+ * `resolvePending` pass. Not called a claim, for the same reason `listAcceptedOffline` is not: the processor
  * lookup that follows is a network call, and the T2 advances (`captureAttempting` /
  * `failAttempting`) each match only a row still `attempting`, so two concurrent passes are
  * harmless. */
@@ -661,9 +664,15 @@ function keyWhere(params: Key) {
 
 /** Read-only reversibility pre-check for integrated adapters: validates a payment can be reversed the
  * requested way BEFORE the adapter issues the processor's (irreversible) refund, so an invalid local
- * state fails fast without moving money. Mirrors the checks `recordVoid`/`recordRefund` enforce under
- * FOR UPDATE — this is the pre-network read; those stay the authoritative locked checks (a concurrent
- * reversal slipping between this read and the write is bounded by their lock and audited by reconcile).
+ * state fails fast without moving money. Mirrors the checks `recordVoid`/`recordRefund` enforce —
+ * this is the pre-network read, and those stay the authoritative ones.
+ *
+ * What bounds a concurrent reversal slipping between this read and the write is no longer a row
+ * lock, because `recordVoid`/`recordRefund` no longer take one (`requireRow`). The window is
+ * unchanged in SHAPE and it was never closed by that lock either: this pre-check commits its own
+ * transaction, the processor round-trip happens outside every transaction, and the reversal opens
+ * a second one afterwards — `packages/payments-stripe/src/reverse.ts:85-101` is that sequence
+ * written out. Reconcile still audits it.
  * Throws the same `payment.not_found`/`payment.not_voidable`/`payment.not_refundable`/
  * `payment.refund_exceeds_capture` those functions do. */
 export async function assertReversible(
@@ -908,23 +917,28 @@ export async function tillsForWorkingOrders(
   return tills;
 }
 
-/** Locking row fetch for the reversal paths. Selects the payment row `FOR UPDATE` so concurrent
- * `recordVoid`/`recordRefund` calls against the same payment serialise: the second reversal blocks
- * until the first commits, then re-reads the updated state (and, for refund, the updated
- * `payment_refunds` total) instead of racing on a stale snapshot. Throws `payment.not_found` when
- * absent. Read-only callers (`getPaymentByRef`/`findPaymentByRef`) stay UNLOCKED.
+/**
+ * The reversal paths' row fetch — the read `recordVoid` and `recordRefund` decide on before they
+ * write. Throws `payment.not_found` when the payment is absent.
  *
- * The clause is still here and this engine has no such thing — drizzle's SQLite query builder has
- * no `.for()` at all, so this is one of the row-lock sites the storage swap has not reached yet.
- * It used to say it mirrored the fiscal layer's `lockChainHead`; that function is
- * `readChainHead` now and takes no lock, for the reason stated on
- * `packages/fiscal-verifactu/src/chain.ts`'s `selectHead`. */
-async function requireRowForUpdate(tx: Transaction, params: Key): Promise<PaymentRow> {
-  const [row] = await tx
-    .select(PAYMENT_COLUMNS)
-    .from(payments)
-    .where(keyWhere(params))
-    .for("update");
+ * This was `requireRowForUpdate` and it took `for update` on the payment row. What that arranged
+ * was: two reversals of the SAME payment run one after the other rather than overlapping, so the
+ * second one re-reads the state `recordVoid` checks and the `payment_refunds` total `recordRefund`
+ * sums, instead of deciding on a snapshot the first reversal has already invalidated.
+ *
+ * There is no second reversal to overlap with. One write transaction runs on the venue file at a
+ * time, so a read a write path takes is still true when its later statements run — the pattern is
+ * stated once, with its measurement and its control, on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). SQLite has no row locks to take instead, and drizzle's
+ * SQLite query builder has no `.for()` at all. Renamed with the clause: a function named for a
+ * lock it does not take is a false claim, the same rename `packages/workforce/src/chain.ts` and
+ * `packages/fiscal-verifactu/src/chain.ts` made for their chain heads.
+ *
+ * It stays a separate function from the read-only `getPaymentByRef`/`findPaymentByRef` because it
+ * is the one that throws rather than returning `undefined`, which is all its two callers want.
+ */
+async function requireRow(tx: Transaction, params: Key): Promise<PaymentRow> {
+  const [row] = await tx.select(PAYMENT_COLUMNS).from(payments).where(keyWhere(params));
   if (row === undefined) {
     throw new AppError("payment.not_found", {
       provider: params.provider,

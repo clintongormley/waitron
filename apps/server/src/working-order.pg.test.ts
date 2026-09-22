@@ -69,6 +69,17 @@ import "./errors.js";
 // backend via `suite.pg.connect()`, and the shared-container globalSetup (`testing/global-setup.ts`)
 // THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
 // fails loudly instead of reporting a green that proves nothing.
+//
+// STANDING NOTE — the working-order verbs these cases exercise no longer take row locks. Every
+// `select … for update` in `working-order.ts` is gone: one write transaction runs on the venue
+// file at a time, which is wider than any of them (`assertAnchoredTabOpen` in
+// `apps/server/src/working-order.ts` carries the chain and the receipt). So what each case below
+// calls a lock describes the PostgreSQL code it was written against, and the cases still stage two
+// PostgreSQL backends, which is not evidence about the venue file at all. Converting them — a
+// contention test becomes a test that the write queue serialises writers, the shape `racePair` in
+// `packages/catalogue/test/fixtures.ts` uses — is its own step and is not done here. The cases that
+// race `payWorkingOrder` or `collectOrder` reach `till-sale.ts`, whose conversion is its own step
+// too; their comments describe that file, not this one.
 const LOCALE = "es-ES";
 // A filed line freezes the unit's ABBREVIATION as its printed label, not the unit's name — so the
 // legacy `each` unit files as its short form (`ea`/`ud`/`u`), matching `seedLegacySellingUnits`.
@@ -1291,8 +1302,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
     expect(await readAmendments(id)).toHaveLength(1);
 
-    // An ABSENT id — the FOR UPDATE locks nothing — is the same fail-closed code (the undefined branch),
-    // and opens no log.
+    // An ABSENT id — the status read returns no row — is the same fail-closed code (the undefined
+    // branch), and opens no log.
     const missing = randomUUID();
     await expect(
       placeOrder({ db: suite.admin, backend, clock }, cfg, missing, OPERATOR, cfg.tillId),
@@ -1406,7 +1417,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       params: { workingOrderId: settledId },
     });
 
-    // An ABSENT id — the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    // An ABSENT id — the status read returns no row (the undefined branch), same fail-closed code.
     const missing = randomUUID();
     await expect(
       cancelPlacedOrder(
@@ -1644,7 +1655,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await paymentCount(cashId)).toBe(0);
   });
 
-  it("Mode I: a double-tap place issues exactly ONE deferred invoice (FOR UPDATE serialises)", async () => {
+  it("Mode I: a double-tap place issues exactly ONE deferred invoice (the two placements serialise)", async () => {
     const { cfg, cafe } = await modeVenue("invoice_first");
     const id = randomUUID();
     await parkOrder({ db: suite.admin }, cfg, {
@@ -1652,10 +1663,11 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
       lines: [{ productId: cafe.id, quantity: "1" }],
     });
 
-    // TWO distinct backends racing to place the SAME order. Load-bearing: distinct backend PROCESSES —
-    // on PGlite they collapse onto one and the race never happens (a false pass). The FOR UPDATE lock
-    // serialises them: the winner files the deferred invoice and moves the row to `placed`; the loser
-    // blocks, re-reads `placed`, and is refused `working_order.not_open` BEFORE it files.
+    // TWO distinct backends racing to place the SAME order. Distinct backend PROCESSES matter here —
+    // on PGlite they collapse onto one and the race never happens (a false pass). They serialise: the
+    // winner files the deferred invoice and moves the row to `placed`; the loser re-reads `placed` and
+    // is refused `working_order.not_open` BEFORE it files. On PostgreSQL it was `placeOrder`'s
+    // `FOR UPDATE` that made it wait; see the file's standing note for what does now.
     const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
     try {
       const results = await Promise.allSettled([
@@ -2298,9 +2310,11 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 
 // Coursing editing verbs (Task B1) — the two-backend properties PGlite CANNOT show for the tab verbs
 // `setLineCourse`/`sendLines`/`recallLines`. PGlite proved their LOGIC (working-order.test.ts) on a
-// single backend; the cases below prove that a `sendLines` racing a `recallLines` (or a `fireCourse`)
-// on the SAME line serialises via `lockOpenTab`'s FOR UPDATE into one clean serial outcome with no
-// lost update. Every write runs through `withTransaction` + `asAppUser`, as `app_user`; the owner reads
+// single backend; the cases below prove that a `sendLines` racing a `recallLines` (or a
+// `fireCourse`) on the SAME line ends in one clean serial outcome with no lost update. What made
+// that true on PostgreSQL was the tab row's `FOR UPDATE` (and, for the `fireCourse` pair, the
+// ticket item's); see the file's standing note for what does now. Every write runs through
+// `withTransaction` + `asAppUser`, as `app_user`; the owner reads
 // below use `suite.admin` (superuser) deliberately, to witness the committed state from outside.
 
 /** Insert an active dining table under `cfg`'s location as the owner and return its id — the
@@ -2370,7 +2384,7 @@ async function recalledSlipsSince(before: Set<string>): Promise<number> {
 }
 
 describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-backend)", () => {
-  it("concurrent sendLines + recallLines on the same held line serialise via FOR UPDATE — one clean winner, no lost update", async () => {
+  it("concurrent sendLines + recallLines on the same held line serialise — one clean winner, no lost update", async () => {
     const { cfg, cafe } = await setupVenue();
 
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
@@ -2414,10 +2428,10 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
       );
       expect(new Set(pids).size).toBe(2);
 
-      // `sendLines` fires the held line; `recallLines` un-fires a fired-and-queued line. `lockOpenTab`
-      // takes the tab's `working_orders` row FOR UPDATE, so the two cannot interleave: whichever wins the
-      // lock runs to completion and commits first, then the other runs against its committed result. Both
-      // verbs are legal on this line in either order, so BOTH succeed.
+      // `sendLines` fires the held line; `recallLines` un-fires a fired-and-queued line. The two
+      // cannot interleave: whichever goes first runs to completion and commits, then the other runs
+      // against its committed result. Both verbs are legal on this line in either order, so BOTH
+      // succeed. (On PostgreSQL the tab row's `FOR UPDATE` is what made the second wait.)
       const results = await Promise.allSettled([
         withTransaction(connA, async (tx) => {
           await asAppUser(tx);
@@ -2439,21 +2453,21 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     expect(after).toHaveLength(1);
     expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" });
 
-    // NO-LOST-UPDATE INVARIANT, order-independent (holds for BOTH legal lock orders):
-    //  • send wins the last write  → line FIRED (fired true), send enqueued a kitchen ticket, recall found
-    //    the line still held and enqueued NO recalled slip.
-    //  • recall wins the last write → line HELD (fired false); because recall read the fired line UNDER THE
-    //    LOCK it MUST have enqueued a RECALLED slip.
+    // NO-LOST-UPDATE INVARIANT, order-independent (holds whichever verb goes first):
+    //  • send goes last  → line FIRED (fired true), send enqueued a kitchen ticket, recall found the
+    //    line still held and enqueued NO recalled slip.
+    //  • recall goes last → line HELD (fired false); because recall read the fired line after the send
+    //    had committed, it MUST have enqueued a RECALLED slip.
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the lost
-    // update the FOR UPDATE prevents (recall un-firing off a stale pre-send read, the paper kitchen never
-    // told to pull the printed line) — this assertion fails on that torn state.
+    // update serialisation prevents (recall un-firing off a stale pre-send read, the paper kitchen
+    // never told to pull the printed line) — this assertion fails on that torn state.
     const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });
 
 describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #191, two-backend)", () => {
-  it("concurrent setLineCourse + fireCourse on the same held line never re-courses a fired line — the ticket-item FOR UPDATE serialises them", async () => {
+  it("concurrent setLineCourse + fireCourse on the same held line never re-courses a fired line", async () => {
     const { cfg, cafe } = await setupVenue();
 
     // A printer on the venue's default station so a fire enqueues a kitchen ticket (the fired line's
@@ -2492,9 +2506,10 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // TWO distinct backends racing `setLineCourse` (move the held line to `otros`) against `fireCourse`
     // (fire `postres`, which the held line is in). Load-bearing: distinct backend PROCESSES — on PGlite
     // they collapse onto one and the serialisation never happens (a false pass), exactly as the
-    // concurrent-pay and sendLines/recallLines races above note. `fireCourse` deliberately does NOT take
-    // `lockOpenTab`; `setLineCourse`'s `FOR UPDATE` on the line's held ticket-item row is what serialises
-    // the two here.
+    // concurrent-pay and sendLines/recallLines races above note. `fireCourse` deliberately makes no
+    // open-tab check, so on PostgreSQL what serialised the two here was `setLineCourse`'s
+    // `FOR UPDATE` on the line's held ticket-item row; see the file's standing note for what does
+    // now.
     const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
     let scStatus: "fulfilled" | "rejected";
     let scReason: unknown;
@@ -2529,13 +2544,13 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     const after = (await tabSnapshot(tabId))[0]!;
     expect(after.state).toBe("queued"); // neither verb moves the kitchen state
 
-    // THE INVARIANT (order-independent, holds for BOTH lock orders): a line that FIRED never ends up with a
-    // course changed after firing. Exactly two outcomes, and the ticket-item FOR UPDATE forbids any third:
-    //  • fireCourse won the lock → line FIRED, still in `postres` (course NOT moved), and setLineCourse read
-    //    `fired_at` set UNDER THE LOCK and threw `ticket.already_fired`.
-    //  • setLineCourse won the lock → line re-coursed to `otros` and still HELD; fireCourse then re-read the
+    // THE INVARIANT (order-independent, holds whichever verb goes first): a line that FIRED never ends
+    // up with a course changed after firing. Exactly two outcomes, and serialisation forbids any third:
+    //  • fireCourse went first → line FIRED, still in `postres` (course NOT moved), and setLineCourse read
+    //    `fired_at` set and threw `ticket.already_fired`.
+    //  • setLineCourse went first → line re-coursed to `otros` and still HELD; fireCourse then re-read the
     //    moved row, its `course_id = postres` predicate no longer matched, and it fired nothing.
-    // A fired line sitting in `otros` (course moved post-fire) is precisely the torn state the lock
+    // A fired line sitting in `otros` (course moved post-fire) is precisely the torn state serialisation
     // prevents — this assertion fails on it.
     if (after.fired) {
       expect(after.lineCourse).toBe(postres.id);
@@ -2554,7 +2569,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
 });
 
 describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191, two-backend)", () => {
-  it("concurrent recallLines + fireCourse on the same held line never un-fires a printed line without a RECALLED slip — the ticket-item FOR UPDATE serialises them", async () => {
+  it("concurrent recallLines + fireCourse on the same held line never un-fires a printed line without a RECALLED slip", async () => {
     const { cfg, cafe } = await setupVenue();
 
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
@@ -2589,9 +2604,10 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
 
     // TWO distinct backends racing `recallLines([1])` (un-fire the line) against `fireCourse(postres)`
     // (fire it). Load-bearing: distinct backend PROCESSES — on PGlite they collapse onto one and the
-    // serialisation never happens (a false pass). `fireCourse` deliberately does NOT take `lockOpenTab`;
-    // `recallLines`' `FOR UPDATE` on the line's held ticket-item row is what serialises the two here. Both
-    // are legal on this line in either order, so BOTH succeed.
+    // serialisation never happens (a false pass). `fireCourse` deliberately makes no open-tab check, so
+    // on PostgreSQL what serialised the two here was `recallLines`' `FOR UPDATE` on the line's held
+    // ticket-item row; see the file's standing note for what does now. Both are legal on this line in
+    // either order, so BOTH succeed.
     const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
     try {
       const pids = await Promise.all(
@@ -2621,17 +2637,17 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     expect(after).toHaveLength(1);
     expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" }); // neither verb moves the kitchen state
 
-    // THE INVARIANT (order-independent, holds for BOTH lock orders): a line that FIRED (and PRINTED) is
-    // never un-fired by recall WITHOUT a RECALLED slip. Exactly two outcomes, and the ticket-item FOR
-    // UPDATE forbids any third:
-    //  • recall won the lock → it read the line HELD, un-fired a no-op, enqueued NO slip; `fireCourse` then
+    // THE INVARIANT (order-independent, holds whichever verb goes first): a line that FIRED (and
+    // PRINTED) is never un-fired by recall WITHOUT a RECALLED slip. Exactly two outcomes, and
+    // serialisation forbids any third:
+    //  • recall went first → it read the line HELD, un-fired a no-op, enqueued NO slip; `fireCourse` then
     //    fired the still-held line and PRINTED it → line FIRED (fired true), no recalled slip (correct: the
     //    printed ticket stands, nothing to pull).
-    //  • fireCourse won the lock → line FIRED + PRINTED; recall then read it as previously-fired UNDER THE
-    //    LOCK, un-fired it AND enqueued a RECALLED slip → line HELD (fired false) with ≥1 recalled slip.
+    //  • fireCourse went first → line FIRED + PRINTED; recall then read it as previously-fired, un-fired
+    //    it AND enqueued a RECALLED slip → line HELD (fired false) with ≥1 recalled slip.
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the torn state
-    // the lock prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to pull
-    // the ticket `fireCourse` printed) — this assertion fails on it.
+    // serialisation prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to
+    // pull the ticket `fireCourse` printed) — this assertion fails on it.
     const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });

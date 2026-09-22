@@ -31,7 +31,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the FKs)
+// prove here). The table/tab verbs' own real-PG proofs (the FKs, and the concurrency properties
+// that predate the venue file's write queue)
 // live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
@@ -485,8 +486,9 @@ describe("table + tab routes", () => {
   });
 
   it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
-    // Open a REAL tab so `voidTabLine`'s `lockOpenTab` passes and the delete query is actually reached
-    // — a random uuid would be shielded by `lockOpenTab` (tab.not_open, 409) before the query. With a
+    // Open a REAL tab so `voidTabLine`'s `assertAnchoredTabOpen` passes and the delete query is
+    // actually reached — a random uuid would be shielded by `assertAnchoredTabOpen` (tab.not_open,
+    // 409) before the query. With a
     // real open tab: `9999999999` IS a `Number.isInteger`, so the bare integer check let it through; it
     // would then bind as `$n` into `where line_no = $n` on the int4 `line_no` column and PostgreSQL
     // would raise `22003 (out of range for integer)`, a non-AppError the boundary turns into an opaque

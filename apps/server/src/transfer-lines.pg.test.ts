@@ -39,9 +39,22 @@ import "./errors.js";
 // its own via `suite.pg.connect()`, and the shared container globalSetup (`testing/global-setup.ts`)
 // THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
 // fails loudly instead of a green that proves nothing.
-// `transferLines` locks `working_orders` ONLY (`lockOpenTab`'s `dining_tables` read is UNLOCKED), so — unlike
-// the mergeTabs↔pay path in move-merge.pg.test.ts — it has no `dining_tables`↔`working_orders` deadlock
-// class; the concurrency hazard here is transfer-vs-transfer, covered below.
+// `transferLines` locked `working_orders` ONLY (its `dining_tables` read was a plain SELECT), so —
+// unlike the mergeTabs↔pay path in move-merge.pg.test.ts — it had no
+// `dining_tables`↔`working_orders` deadlock class; the concurrency hazard here is
+// transfer-vs-transfer, covered below.
+//
+// STANDING NOTE — the verb this suite exercises no longer takes row locks. Every
+// `select … for update` in `working-order.ts` is gone: one write transaction runs on the venue
+// file at a time, which is wider than any of them (`assertAnchoredTabOpen` in
+// `apps/server/src/working-order.ts` carries the chain and the receipt). Two transfers cannot
+// overlap, so there is no lock order to keep and no `40P01` class. The `.sort()` in
+// `transferLines` survives for a different, smaller effect, stated on the function. What the case
+// below says about lock order describes the PostgreSQL code it was written against; it still
+// stages two PostgreSQL backends, so it is not evidence about the venue file at all, and
+// converting it — a contention test becomes a test that the write queue serialises writers, the
+// shape `racePair` in `packages/catalogue/test/fixtures.ts` uses — is its own step, not done
+// here.
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
@@ -253,7 +266,7 @@ beforeAll(() => {
   });
 });
 
-describe("concurrent transferLines on the same pair serialise (ascending-id lock order — no deadlock)", () => {
+describe("concurrent transferLines on the same pair serialise (the lock order is retired — see the file's standing note)", () => {
   it("two reverse-orientation transfers over the SAME two tabs → NO 40P01; both fulfilled (one waits)", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs();
     const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
@@ -280,7 +293,7 @@ describe("concurrent transferLines on the same pair serialise (ascending-id lock
       //
       // PROVEN LOAD-BEARING BY DELETION (receipt in task-6-report.md, NOT committed): dropping the
       // `.sort()` in transferLines so each locks in transfer DIRECTION made this exact reverse-orientation
-      // pair raise `40P01 deadlock detected` on `lockOpenTab`'s `working_orders ... for update` in all 12
+      // pair raise `40P01 deadlock detected` on the tab check's `working_orders ... for update` in all 12
       // looped iterations (connA holds A waiting on B while connB holds B waiting on A); restoring the sort
       // returns it to the green below. A GREEN with the sort in place is meaningless without that RED
       // control (CLAUDE.md §1).

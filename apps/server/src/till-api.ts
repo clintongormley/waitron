@@ -1680,8 +1680,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   //
   // A till with NO receipt printer set has nothing to kick, refused `drawer.no_printer` (400, errors.ts)
   // — the resolve + throw is at this route layer (which imports errors.js), so `receipt-print.ts` stays
-  // throw-free. `resolveReceiptPrinter` takes the same `active = true` + `FOR SHARE` posture the sale hook
-  // uses, so an absent/inactive printer is the no-printer case. Returns 200 with an empty body.
+  // throw-free. `resolveReceiptPrinter` takes the same `active = true` posture the sale hook uses (its
+  // row lock is gone with the engine — see that function), so an absent/inactive printer is the
+  // no-printer case. Returns 200 with an empty body.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
@@ -1991,8 +1992,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Read ONE open tab's lines for the table-order screen (design §3b, FP-1) — per line: `lineNo`,
   // `productId`, `quantity`, the LOCKED gross unit price (`unitPriceGross`) and the `servedAt` marker.
-  // SESSION-GUARDED. A READ, so no FOR UPDATE lock (`readTabLines` uses `assertTabOpen`, not
-  // `lockOpenTab`). Malformed :id → `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
+  // SESSION-GUARDED. A READ, so it makes only the status check (`readTabLines` uses `assertTabOpen`,
+  // not `assertAnchoredTabOpen`, so a tab no table points at still reads). Malformed :id →
+  // `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
   // screen the served routes use; `readTabLines` throws `tab.not_open` for a non-open/absent tab. Returns
   // `TabLine[]`. A tab does NOT re-price — the STORED locked gross rides back verbatim (see `readTabLines`).
   app.get("/api/working-orders/:id/lines", (c) =>
