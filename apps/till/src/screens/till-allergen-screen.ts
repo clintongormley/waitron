@@ -9,7 +9,7 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
 import { customerProductName, productName } from "../widgets/product-name.js";
 import type { TillProduct } from "../api/client.js";
-import type { AllergenCode } from "@waitron/catalogue";
+import type { AllergenCode } from "@waitron/catalogue/src/allergens.js";
 
 /**
  * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order — the matrix's column

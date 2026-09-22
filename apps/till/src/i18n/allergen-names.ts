@@ -1,4 +1,4 @@
-import type { AllergenCode } from "@waitron/catalogue";
+import type { AllergenCode } from "@waitron/catalogue/src/allergens.js";
 import { pickLocale } from "./t.js";
 
 // Canonical display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II).
