@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { isUniqueViolation, type Database, withTransaction } from "@waitron/db";
+import { isUniqueViolation, nowIso, type Database, withTransaction } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -146,14 +146,20 @@ export async function runBreakGlassReset(deps: {
         await tx.execute(sql`delete from webauthn_credentials where person_id=${targetId}`);
         await tx.execute(sql`delete from recovery_codes where person_id=${targetId}`);
         await tx.execute(sql`delete from totp_enrollments where person_id=${targetId}`);
+        // One clock reading for the three stamps, so the reset lands as one moment. `nowIso`
+        // rather than `now` because raw SQL never reaches a column's own write mapping, and all
+        // three of these columns are `tsString` — the spelling `@waitron/identity`'s own writers
+        // use, which is what makes a later `<` on them a correct time ordering
+        // (`packages/printing/src/runtime.ts` has the four-way measurement).
+        const revokedAt = nowIso();
         await tx.execute(
-          sql`update management_account_actions set used_at=now() where person_id=${targetId} and used_at is null`,
+          sql`update management_account_actions set used_at=${revokedAt} where person_id=${targetId} and used_at is null`,
         );
         await tx.execute(
-          sql`update management_sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
+          sql`update management_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
         await tx.execute(
-          sql`update sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
+          sql`update sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
 
         const resets = resetPin ? "password, pin" : "password";

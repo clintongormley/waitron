@@ -8,6 +8,26 @@ import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
 
 const ENTRY = "configuration.json";
+
+/**
+ * A location's `invoice_locales` as read by RAW SQL — the JSON text the column stores.
+ *
+ * The column is a JSON list on this engine and a raw select bypasses its read mapping, so the value
+ * arrives as `["es"]` rather than as `["es"]` the array. Anything else is an artifact this code did
+ * not write, and is refused rather than guessed at.
+ */
+function parseLocaleList(value: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new AppError("setup.request_invalid", { field: "venue" });
+  }
+  if (!Array.isArray(parsed) || parsed.some((locale) => typeof locale !== "string")) {
+    throw new AppError("setup.request_invalid", { field: "venue" });
+  }
+  return parsed as string[];
+}
 const MAX_ROWS_PER_TABLE = 100_000;
 
 export interface PreparedVenue {
@@ -52,7 +72,10 @@ export async function buildConfigurationBundle(
   moduleVersions: Record<string, number>,
 ): Promise<ConfigurationBundle> {
   const venue = await db.execute<
-    PreparedVenue["location"] & {
+    Omit<PreparedVenue["location"], "invoiceLocales"> & {
+      // A raw read never reaches a column's read mapping, so this arrives as the JSON TEXT the
+      // column stores rather than as the list. Parsed below.
+      invoiceLocales: string;
       country: string;
       taxId: string;
       legalName: string;
@@ -67,7 +90,7 @@ export async function buildConfigurationBundle(
       l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
       l.postal_code as "postalCode", l.city, l.province, l.time_zone as "timeZone",
-      l.day_cutover::text as "dayCutover", l.order_flow as "orderFlow", l.bump_mode as "bumpMode",
+      l.day_cutover as "dayCutover", l.order_flow as "orderFlow", l.bump_mode as "bumpMode",
       l.fire_control as "fireControl", l.receipt_print_mode as "receiptPrintMode",
       l.drawer_open_policy as "drawerOpenPolicy", l.catalogue_id as "catalogueId",
       till.name as "tillName",
@@ -84,8 +107,20 @@ export async function buildConfigurationBundle(
   if (row === undefined || row.seriesCode === null || row.rectificativeSeriesCode === null) {
     throw new AppError("setup.request_invalid", { field: "venue" });
   }
-  const { country, taxId, legalName, tillName, seriesCode, rectificativeSeriesCode, ...location } =
-    row;
+  const {
+    country,
+    taxId,
+    legalName,
+    tillName,
+    seriesCode,
+    rectificativeSeriesCode,
+    invoiceLocales,
+    ...rest
+  } = row;
+  // `day_cutover` lost its `::text` cast in the select above: the column is TEXT on this engine, so
+  // the cast is both unnecessary and a syntax error here (`unrecognized token: ":"`) — the same
+  // change, for the same reason, as `packages/provisioning/src/venue-apply.ts`.
+  const location = { ...rest, invoiceLocales: parseLocaleList(invoiceLocales) };
   const transferred = await exportConfigurationTables(db, modules);
   return {
     version: 1,
@@ -110,10 +145,11 @@ export async function applyPreparedLocation(
   target: { locationId: string },
   location: PreparedVenue["location"],
 ): Promise<void> {
-  const invoiceLocales = sql`array[${sql.join(
-    location.invoiceLocales.map((locale) => sql`${locale}`),
-    sql`, `,
-  )}]::text[]`;
+  // The column holds a JSON list as TEXT, checked by `locations_invoice_locales_len`
+  // (`json_array_length(...) between 1 and 2`). A raw write never reaches the column's own encoder,
+  // so the list is serialised here; the PostgreSQL `array[...]::text[]` constructor it replaces has
+  // no equivalent on this engine.
+  const invoiceLocales = JSON.stringify(location.invoiceLocales);
   await tx.execute(sql`
     update locations set
       invoice_locales = ${invoiceLocales},
@@ -185,14 +221,18 @@ export async function exportConfigurationTables(
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
   for (const declaration of declarations(modules)) {
-    const result = await db.execute<{ row: Record<string, unknown> }>(sql`
-      select to_jsonb(t) as row
-      from ${sql.identifier(declaration.name)} t
+    // `select *`, not PostgreSQL's `to_jsonb(t)`: this engine has no such function, and a raw read
+    // already hands back one plain object per row. The values are the driver's — a JSON column
+    // arrives as its TEXT and a flag as 0 or 1 — and `importConfigurationTables` writes those same
+    // values straight back, so the round trip carries the stored bytes rather than a re-rendering
+    // of them.
+    const result = await db.execute<Record<string, unknown>>(sql`
+      select * from ${sql.identifier(declaration.name)}
     `);
     if (result.rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
     }
-    tables[declaration.name] = result.rows.map(({ row }) => {
+    tables[declaration.name] = result.rows.map((row) => {
       const copy = { ...row };
       for (const field of declaration.omit ?? []) delete copy[field];
       return copy;
@@ -352,10 +392,15 @@ export async function importConfigurationTables(
   const checked = checkedRows(bundle, modules);
   const columns = new Map<string, Set<string>>();
   for (const [declaration] of checked) {
+    // This engine has no `information_schema`; a table's columns come from the PRAGMA function.
+    // The table-valued `pragma_table_info(?)` BINDS its argument — measured 2026-09-22 on Node
+    // v26.7.0 against `node:sqlite`, with a literal-argument control returning the same two rows
+    // and an unknown name returning none. That is not the same call as the `pragma table_info(?)`
+    // STATEMENT, which is refused at prepare with `near "?": syntax error`
+    // (`packages/db/src/deployment.ts` records that one). An unknown table yields no rows, which
+    // the empty check below already treats as a refusal.
     const result = await tx.execute<{ column_name: string }>(sql`
-      select column_name
-      from information_schema.columns
-      where table_schema = 'public' and table_name = ${declaration.name}
+      select name as column_name from pragma_table_info(${declaration.name})
     `);
     const allowed = new Set(result.rows.map((row) => row.column_name));
     if (allowed.size === 0) {
@@ -380,6 +425,15 @@ export async function importConfigurationTables(
     where id = ${target.locationId}
   `);
 
+  // The declared tables hold at least one FK CYCLE — `zone_menus.zone_id` points at
+  // `zone_service_policies`, whose `(zone_id, default_menu_id)` points back at `zone_menus` — so no
+  // delete order satisfies a per-statement check, and this engine refused the `zone_menus` delete
+  // with `FOREIGN KEY constraint failed` (measured on this branch, with the pragma removed as the
+  // control). The pragma moves the check to COMMIT, where every table in the cycle is already
+  // empty; it holds only until this transaction ends, and the caller's commit still validates the
+  // final state. `packages/db/src/testing/venue-db.ts` empties a whole venue the same way and
+  // carries the mechanism.
+  await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
       await tx.execute(sql`
@@ -427,12 +481,21 @@ export async function importConfigurationTables(
         row.active = false;
       }
       if (declaration.name === "printers") row.active = false;
+      // An explicit column list with each value bound, in place of PostgreSQL's
+      // `jsonb_populate_record`, which this engine does not have. Every key was checked against
+      // `pragma_table_info` above, so `sql.identifier` names a real column of a real table and
+      // nothing here is concatenated; the values bind, exactly as the jsonb document's did.
+      const fields = Object.keys(row);
       await tx.execute(sql`
         insert into ${sql.identifier(declaration.name)}
-        select * from jsonb_populate_record(
-          null::${sql.identifier(declaration.name)},
-          ${JSON.stringify(row)}::jsonb
-        )
+        (${sql.join(
+          fields.map((field) => sql.identifier(field)),
+          sql`, `,
+        )})
+        values (${sql.join(
+          fields.map((field) => sql`${row[field]}`),
+          sql`, `,
+        )})
       `);
     }
   }

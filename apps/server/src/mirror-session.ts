@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
-import { sql } from "drizzle-orm";
-import { withTransaction, type Database, type DeploymentMode } from "@waitron/db";
+import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { nowIso, withTransaction, type Database, type DeploymentMode } from "@waitron/db";
+import { managementSessions, persons } from "@waitron/identity";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -21,6 +22,15 @@ export const MIRROR_VIEWER_SESSION_ID = "acce55ed-0000-4000-8000-000000000002";
 const UNUSABLE_PIN_HASH = "mirror-viewer-never-logs-in";
 
 /**
+ * How stale the ambient session's `last_seen_at` has to be before a request refreshes it.
+ *
+ * It was the SQL literal `interval '1 minute'`; it is a named millisecond count because the cutoff
+ * is computed in JavaScript and bound now, not built in SQL — see the keepalive in
+ * {@link mirrorSession}.
+ */
+const KEEPALIVE_INTERVAL_MS = 60_000;
+
+/**
  * Ensures the mirror's ambient read-only viewer exists: one `admin` person (every permission, so every
  * gated dashboard read passes `authorizeManager` — the §5 gate is what enforces read-only, not this
  * role) and one live management session for it. Idempotent — safe to call on every boot. Runs under the
@@ -28,16 +38,32 @@ const UNUSABLE_PIN_HASH = "mirror-viewer-never-logs-in";
  */
 export async function ensureMirrorViewer(db: Database): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await tx.execute(sql`
-      insert into persons (id, display_name, pin_hash, role, status)
-      values (${MIRROR_VIEWER_PERSON_ID}, 'mirror viewer', ${UNUSABLE_PIN_HASH}, 'admin', 'active')
-      on conflict (id) do nothing
-    `);
-    await tx.execute(sql`
-      insert into management_sessions (id, person_id)
-      values (${MIRROR_VIEWER_SESSION_ID}, ${MIRROR_VIEWER_PERSON_ID})
-      on conflict (id) do update set last_seen_at = now(), ended_at = null
-    `);
+    // Both rows are written through their table definitions rather than as raw SQL, so each
+    // column's own generator runs: `persons.created_at` and `management_sessions.created_at` /
+    // `last_seen_at` are `$defaultFn` values on this engine, and a raw insert reaches none of them
+    // (`NOT NULL constraint failed`). Same change, and the same reason, as
+    // `packages/db/src/testing/seed.ts`.
+    await tx
+      .insert(persons)
+      .values({
+        id: MIRROR_VIEWER_PERSON_ID,
+        displayName: "mirror viewer",
+        pinHash: UNUSABLE_PIN_HASH,
+        role: "admin",
+        status: "active",
+      })
+      .onConflictDoNothing({ target: persons.id });
+    await tx
+      .insert(managementSessions)
+      .values({ id: MIRROR_VIEWER_SESSION_ID, personId: MIRROR_VIEWER_PERSON_ID })
+      .onConflictDoUpdate({
+        target: managementSessions.id,
+        // The revive: the clock is read in JavaScript and bound, because `now()` is a PostgreSQL
+        // function this engine does not have. `nowIso` is the one spelling every writer of these
+        // text timestamp columns uses, which is what makes the `<` comparison in the keepalive
+        // below a correct time ordering (`packages/printing/src/runtime.ts` has the measurement).
+        set: { lastSeenAt: nowIso(), endedAt: null },
+      });
   });
 }
 
@@ -80,8 +106,15 @@ export function mirrorSession(
       // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
       if (readManagementSessionId(c) === MIRROR_VIEWER_SESSION_ID) {
         await withTransaction(db, (tx) =>
-          tx.execute(sql`update management_sessions set ended_at = now()
-                         where id = ${MIRROR_VIEWER_SESSION_ID} and ended_at is null`),
+          tx
+            .update(managementSessions)
+            .set({ endedAt: nowIso() })
+            .where(
+              and(
+                eq(managementSessions.id, MIRROR_VIEWER_SESSION_ID),
+                isNull(managementSessions.endedAt),
+              ),
+            ),
         );
         clearManagementCookie(c);
       }
@@ -91,11 +124,31 @@ export function mirrorSession(
     // ended (`ended_at is not null`). Clearing `ended_at` must NOT be gated behind the last_seen_at
     // throttle alone — a stamped `ended_at` with a still-fresh `last_seen_at` would otherwise keep the
     // session dead and 401 the next dashboard request.
+    //
+    // The clock is read once, so the stamp written and the staleness cutoff are the same moment —
+    // which is what PostgreSQL's `now()`, being transaction-start time, gave for free. `last_seen_at`
+    // is a text column here, so `<` on it compares SPELLINGS; `nowIso` is the spelling every writer
+    // of it uses, and the measurement of the three that sort wrong is in
+    // `packages/printing/src/runtime.ts`.
+    const seenAt = nowIso();
+    const staleBefore = new Date(Date.parse(seenAt) - KEEPALIVE_INTERVAL_MS).toISOString();
     await withTransaction(db, (tx) =>
-      tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
-                     where id = ${MIRROR_VIEWER_SESSION_ID}
-                       and (last_seen_at is null or last_seen_at < now() - interval '1 minute'
-                            or ended_at is not null)`),
+      tx
+        .update(managementSessions)
+        .set({ lastSeenAt: seenAt, endedAt: null })
+        .where(
+          and(
+            eq(managementSessions.id, MIRROR_VIEWER_SESSION_ID),
+            or(
+              // `last_seen_at` is NOT NULL in the schema, so the null arm can never fire — it is
+              // kept because the raw statement this replaced carried it, and dropping a condition
+              // is a behaviour change this conversion is not making.
+              isNull(managementSessions.lastSeenAt),
+              lt(managementSessions.lastSeenAt, staleBefore),
+              isNotNull(managementSessions.endedAt),
+            ),
+          ),
+        ),
     );
     // Inject the ambient cookie whenever the request does NOT already carry it — absent, corrupted, a
     // non-UUID, or a forged/foreign session id. A mirror is unauthenticated and holds only this one

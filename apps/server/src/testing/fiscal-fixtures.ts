@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import type { Database, Transaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  sales,
+  tenants,
+  tills,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 
 // Shared fiscal seeding for the fiscal-record suites. It lives under apps/server/src/testing/ because
 // its consumers do (boot.mirror's fidelity seeding). Coverage-excluded (this package's vitest.config.ts
@@ -8,6 +17,26 @@ import type { Database, Transaction } from "@waitron/db";
 //
 // Column shapes are the current migrated schema (the one taxpayer row keyed 1, vat_breakdown on
 // sales, node-keyed series/sif/registro).
+//
+// Every row here is written through its TABLE DEFINITION rather than as raw SQL, so each column's
+// own generator runs — `created_at`, `registrado_en`, `creado_en`, `actualizado_en` and
+// `proximo_intento_en` are `$defaultFn` values on this engine, which a raw insert never reaches, and
+// a raw insert stopped at `NOT NULL constraint failed: tenants.created_at`. It is also what encodes
+// the JSON and list columns, whose `::jsonb` casts and `array[...]` constructors were PostgreSQL
+// syntax this engine refuses (`unrecognized token: ":"`). Same change, and the same reason, as
+// `packages/db/src/testing/seed.ts`.
+
+/**
+ * The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records.
+ *
+ * `sales.issued_at` is a `tsString` column, so it stores this spelling verbatim. The registro's
+ * `fecha_hora_huso_gen_registro` is a `ts` column, so the same instant goes in as a `Date` and is
+ * stored as the UTC `toISOString()` form — which is what PostgreSQL's `timestamptz` already did to
+ * this literal, and the one timestamp spelling that compares correctly on this engine
+ * (`packages/printing/src/runtime.ts` has the four-way measurement). The offset itself survives in
+ * `offset_minutos`, which is why the huella can still be recomputed.
+ */
+const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 /** Deployment-environment stamp carried on a registro (stored verbatim, never HASHED — CLAUDE.md §5). */
 export type Entorno = "production" | "preproduction";
@@ -69,16 +98,21 @@ export interface SeedParentsOptions {
  * {@link seedFiscalParents} so a test can plant the sale AFTER a registro has already parked on the absent `sale_id` FK, the parent-arrives half of the FK-defer gate (Task 8).
  */
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
-  await db.execute(sql`
-    insert into sales (
-      id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes, total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${ids.saleId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
-      '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )`);
+  await db.insert(sales).values({
+    id: ids.saleId,
+    tillId: ids.tillId,
+    nodeId: ids.nodeId,
+    seriesId: ids.seriesId,
+    invoiceNumber: 1,
+    issuedAt: ISSUED_AT,
+    issuedOffsetMinutes: 60,
+    total: 0,
+    vatBreakdown: [],
+    locale: "es",
+    invoiceLocales: ["es"],
+    fiscalBackend: "verifactu",
+    fiscalState: "recorded",
+  });
 }
 
 /**
@@ -101,27 +135,28 @@ export async function seedFiscalParents(
   if (opts.reuseExistingParents !== true) {
     // The taxpayer row is a singleton keyed 1, so repeated seeding in one database is a no-op
     // rather than a second taxpayer.
-    await db.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name)
-      values (1, 'ES', ${taxId}, 'Waitron SL')
-      on conflict (id) do nothing`);
-    await db.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description)
-      values (${ids.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
-    await db.execute(sql`
-      insert into tills (id, location_id, name)
-      values (${ids.tillId}, ${ids.locationId}, 'Caja 1')`);
-    await db.execute(sql`
-      insert into nodes (id, location_id, name)
-      values (${ids.nodeId}, ${ids.locationId}, 'Node 1')`);
-    await db.execute(sql`
-      insert into invoice_series (id, node_id, code)
-      values (${ids.seriesId}, ${ids.nodeId}, 'A')`);
+    await db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId, legalName: "Waitron SL" })
+      .onConflictDoNothing({ target: tenants.id });
+    await db.insert(locations).values({
+      id: ids.locationId,
+      name: "Local principal",
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    });
+    await db.insert(tills).values({ id: ids.tillId, locationId: ids.locationId, name: "Caja 1" });
+    await db.insert(nodes).values({ id: ids.nodeId, locationId: ids.locationId, name: "Node 1" });
+    await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });
   }
   if (!opts.skipSale) await insertFiscalSale(db, ids);
-  await db.execute(sql`
-    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${ids.sifId}, ${ids.nodeId}, '89890001K', 'WAITRON01', ${numeroInstalacion})`);
+  await db.insert(registroSif).values({
+    id: ids.sifId,
+    nodeId: ids.nodeId,
+    nif: "89890001K",
+    idSistemaInformatico: "WAITRON01",
+    numeroInstalacion,
+  });
   return ids;
 }
 
@@ -178,25 +213,39 @@ export async function insertFiscalRegistro(
   const numSerie = opts.numSerie ?? `A/${secuencia}`;
   const registroId = opts.id ?? randomUUID();
   const a = opts.anterior;
-  const { rows } = await conn.execute<{ id: string }>(sql`
-    insert into registros_facturacion (
-      id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-      tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
-      primer_registro, sistema_informatico,
-      anterior_id_emisor_factura, anterior_num_serie_factura,
-      anterior_fecha_expedicion_factura, anterior_huella,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (
-      ${registroId}, ${ids.tillId}, ${ids.nodeId}, ${ids.sifId}, ${ids.saleId}, ${secuencia}, 'alta',
-      '89890001K', ${numSerie}, '2026-07-20', 'Waitron SL',
-      'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
-      ${a === undefined}, '{}'::jsonb,
-      ${a?.idEmisorFactura ?? null}, ${a?.numSerieFactura ?? null},
-      ${a?.fechaExpedicionFactura ?? null}, ${a?.huella ?? null},
-      '2026-07-20T19:20:30+01:00', 60, '01', ${huella}, ${entorno}
-    ) returning id`);
-  return { registroId: rows[0]!.id, huella, entorno, secuencia };
+  const [row] = await conn
+    .insert(registrosFacturacion)
+    .values({
+      id: registroId,
+      tillId: ids.tillId,
+      nodeId: ids.nodeId,
+      sifId: ids.sifId,
+      saleId: ids.saleId,
+      secuencia,
+      tipoRegistro: "alta",
+      idEmisorFactura: "89890001K",
+      numSerieFactura: numSerie,
+      fechaExpedicionFactura: "2026-07-20",
+      nombreRazonEmisor: "Waitron SL",
+      tipoFactura: "F2",
+      descripcionOperacion: "Venta en establecimiento",
+      desglose: [],
+      cuotaTotal: "12.35",
+      importeTotal: "123.45",
+      primerRegistro: a === undefined,
+      sistemaInformatico: {},
+      anteriorIdEmisorFactura: a?.idEmisorFactura ?? null,
+      anteriorNumSerieFactura: a?.numSerieFactura ?? null,
+      anteriorFechaExpedicionFactura: a?.fechaExpedicionFactura ?? null,
+      anteriorHuella: a?.huella ?? null,
+      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+      offsetMinutos: 60,
+      tipoHuella: "01",
+      huella,
+      entorno,
+    })
+    .returning({ id: registrosFacturacion.id });
+  return { registroId: row!.id, huella, entorno, secuencia };
 }
 
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
@@ -222,16 +271,17 @@ export async function seedFiscalRegistro(
   const registro = await insertFiscalRegistro(db, ids, opts);
 
   if (opts.cadena) {
-    await db.execute(sql`
-      insert into cadenas (node_id, secuencia, ultimo_registro_id, ultima_huella)
-      values (${ids.nodeId}, ${registro.secuencia}, ${registro.registroId}, ${registro.huella})`);
+    await db.insert(cadenas).values({
+      nodeId: ids.nodeId,
+      secuencia: registro.secuencia,
+      ultimoRegistroId: registro.registroId,
+      ultimaHuella: registro.huella,
+    });
   }
   if (opts.envio) {
     const estado =
       typeof opts.envio === "object" ? (opts.envio.estado ?? "pendiente") : "pendiente";
-    await db.execute(sql`
-      insert into envios (registro_id, estado)
-      values (${registro.registroId}, ${estado})`);
+    await db.insert(envios).values({ registroId: registro.registroId, estado });
   }
 
   return { ...ids, ...registro };

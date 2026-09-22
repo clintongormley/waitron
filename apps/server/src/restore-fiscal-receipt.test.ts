@@ -158,10 +158,18 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
       //    UPDATE and DELETE, and a page copy is neither — but that is the claim, so it is run.
       await suite.db.archiveTo(archivePath);
       const sourceTriggers = triggersOf(suite.db);
-      expect(sourceTriggers.map((t) => t.name)).toEqual([
-        `${LEDGER_TABLE}_append_only_delete`,
-        `${LEDGER_TABLE}_append_only_update`,
-      ]);
+      // The ledger's own pair is PRESENT — a containment check, not an exhaustive list of every
+      // trigger in the database. The exhaustive form was only ever true because nothing else
+      // created one; the core set's twelve behavioural triggers
+      // (`packages/db/drizzle/0001_behavioural_triggers.sql`) are legitimately here too, and a
+      // list that grows with them says nothing about this ledger. What this case is for is
+      // unchanged, and step 4 below still compares the WHOLE set across the restore.
+      expect(sourceTriggers.map((t) => t.name)).toEqual(
+        expect.arrayContaining([
+          `${LEDGER_TABLE}_append_only_delete`,
+          `${LEDGER_TABLE}_append_only_update`,
+        ]),
+      );
 
       // 2. The archive is placed exactly as a cold restore places it.
       await restoreDatabase({

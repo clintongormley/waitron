@@ -139,9 +139,12 @@ async function countOpenTables(
   tx: Transaction,
   nodeId: NodeId,
 ): Promise<{ open: number; total: number }> {
+  // `cast(x as text)` in place of `x::text`: this engine has no cast OPERATOR and refuses the
+  // colons with `unrecognized token: ":"`. The text is what keeps both counts one type for the
+  // `Number()` below, whatever width the engine returns them at.
   const { rows } = await tx.execute<{ total: string; open: string }>(sql`
-    select count(*)::text as total,
-           count(*) filter (where dt.tab_id is not null)::text as open
+    select cast(count(*) as text) as total,
+           cast(count(*) filter (where dt.tab_id is not null) as text) as open
     from dining_tables dt
     join nodes n on n.location_id = dt.location_id
     where n.id = ${nodeId} and dt.active = true

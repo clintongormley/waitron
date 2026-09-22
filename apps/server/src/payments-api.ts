@@ -10,7 +10,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, devices, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  devices,
+  nowIso,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -265,7 +272,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             .update(cardReaders)
             .set({
               active: action === "enable",
-              disabledAt: action === "enable" ? null : sql`now()`,
+              // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this
+              // engine does not have. `nowIso` because `disabled_at` is a `tsString` column, the
+              // spelling `packages/payments/src/store.ts` stamps every other column here with.
+              disabledAt: action === "enable" ? null : nowIso(),
             })
             .where(readerWhere(id));
         });
@@ -477,10 +487,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, (tx) => requireConnected(tx, seat));
       // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
       await seat.readers.remove(runtimeDeps(), reader.providerRef);
+      // One clock reading for both stamps, so the unpair lands as one moment — which is what
+      // PostgreSQL's `now()`, being transaction-start time, gave the two calls for free.
+      const unpairedAt = nowIso();
       await gated(sessionId, (tx) =>
         tx
           .update(cardReaders)
-          .set({ active: false, disabledAt: sql`now()`, unpairedAt: sql`now()` })
+          .set({ active: false, disabledAt: unpairedAt, unpairedAt })
           .where(readerWhere(id)),
       );
       return c.body(null, 204);

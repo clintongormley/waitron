@@ -736,15 +736,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx, deps.cfg);
         // Aggregate the full tenant history: the queue includes only bounded completed history.
+        // `cast(x as int)` in place of `x::int`: this engine has no cast operator and refuses the
+        // colons with `unrecognized token: ":"`.
+        //
+        // `last_print_at` comes back as the stored TEXT rather than as epoch milliseconds.
+        // `delivered_at` is a text column here, `extract(epoch from ...)` is a PostgreSQL function
+        // this engine does not have, and `max()` over the canonical `toISOString()` spelling every
+        // writer of that column uses picks the latest instant — that spelling is what makes a
+        // string comparison a time ordering, and `packages/printing/src/runtime.ts` carries the
+        // measurement of the three spellings that sort wrong. The instant reaches the caller as an
+        // ISO string either way; only the conversion moved out of SQL.
         const summaries = await tx.execute<{
           printer_id: string;
           pending_jobs: number;
-          last_print_at: number | null;
+          last_print_at: string | null;
         }>(sql`
           select printer_id,
-            count(*) filter (where status in ('queued', 'printing')
-              or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))::int as pending_jobs,
-            (extract(epoch from max(delivered_at)) * 1000)::double precision as last_print_at
+            cast(count(*) filter (where status in ('queued', 'printing')
+              or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS})) as int) as pending_jobs,
+            max(delivered_at) as last_print_at
           from print_jobs
           group by printer_id`);
         const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));

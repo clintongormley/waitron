@@ -43,6 +43,7 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
+  nowIso,
   products,
   sales,
   ticketItems,
@@ -1192,8 +1193,16 @@ export async function fireLines(
     .select({
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
-      anyFired: sql<boolean>`bool_or(${ticketItems.firedAt} is not null)`,
-      itemCount: sql<number>`count(${ticketItems.id})::int`,
+      // `max(...)` over 0/1 in place of PostgreSQL's `bool_or`, which this engine does not have.
+      // `is not null` yields 1 or 0 here, so a group's maximum is 1 exactly when one of its items
+      // is fired. Measured 2026-09-22 on Node v26.7.0 over this same LEFT JOIN shape: a course with
+      // a fired item reads 1, one with only unfired items reads 0, and one with no items at all
+      // reads 0 rather than null — so the truthiness test below sorts all three the way `bool_or`
+      // did. The value arrives as a number; nothing here compares it with `===`.
+      anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null)`,
+      // `cast(x as int)` in place of `x::int`: this engine has no cast OPERATOR and refuses the
+      // colons with `unrecognized token: ":"`.
+      itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)
     .leftJoin(
@@ -1231,9 +1240,13 @@ export async function fireLines(
       ? new Map<string, PreparationRoute>()
       : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
+  // One clock reading for the whole round, so every item of it carries the same `fired_at` — which
+  // is what PostgreSQL's `now()`, being transaction-start time, gave for free. `nowIso` because
+  // these are `tsString` columns, and that spelling is what makes a later comparison on them a
+  // correct time ordering (`packages/printing/src/runtime.ts` has the measurement).
+  const firedAt = nowIso();
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
-  // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
-  // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
+  // to go.
   const values = lines
     .map((line) => {
       const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
@@ -1277,7 +1290,7 @@ export async function fireLines(
         // ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
         // afterwards never moves this fired ticket.
         note: line.note,
-        firedAt: fired ? sql`now()` : null,
+        firedAt: fired ? firedAt : null,
         state: "queued" as const,
       };
     })
@@ -1329,7 +1342,9 @@ export async function fireCourse(
   await requireCourse(tx, cfg, courseId);
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: sql`now()` })
+    // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does
+    // not have. `nowIso` because `fired_at` is a `tsString` column.
+    .set({ firedAt: nowIso() })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1379,9 +1394,12 @@ export async function sendLines(
               ),
             ),
         );
+  // ONE clock reading for both stamps: `now()` was transaction time, so the two calls it replaces
+  // could not disagree, and `queued_at` is what every age on the boards is measured from.
+  const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: sql`now()`, queuedAt: sql`now()` })
+    .set({ firedAt: firedNow, queuedAt: firedNow })
     .where(
       and(
         eq(ticketItems.workingOrderId, tabId),
@@ -1526,7 +1544,8 @@ export async function markCourseAway(
   await requireCourse(tx, cfg, courseId);
   await tx
     .update(ticketItems)
-    .set({ awayAt: sql`now()` })
+    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+    .set({ awayAt: nowIso() })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1581,7 +1600,7 @@ export async function addTabRound(
   // The next line_no. Two concurrent rounds cannot both read this max, because they cannot both be
   // running (the docstring's concurrency note).
   const [{ maxLineNo }] = await tx
-    .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .select({ maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
   // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
@@ -1797,7 +1816,8 @@ async function setLineServed(
   await assertAnchoredTabOpen(tx, cfg, tabId);
   const updated = await tx
     .update(workingOrderLines)
-    .set({ servedAt: served ? sql`now()` : null })
+    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+    .set({ servedAt: served ? nowIso() : null })
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
     .returning({ lineNo: workingOrderLines.lineNo });
   if (updated.length === 0) {
@@ -1921,7 +1941,7 @@ export async function moveTabLines(
   // The next free line_no on the destination. Nothing can append to it between this read and the
   // updates below (the docstring's concurrency note).
   const [agg] = await tx
-    .select({ next: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .select({ next: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
@@ -2585,7 +2605,9 @@ async function carveOffLines(
   // write transaction runs on the venue file at a time ({@link assertAnchoredTabOpen}).
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
-      .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+      .select({
+        maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)`,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, toTabId));
     for (let i = 0; i < partials.length; i++) {
@@ -2909,10 +2931,11 @@ export async function listHeldOrders(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
-        itemCount: sql<number>`count(${workingOrderLines.id})::int`,
-        // A count of whole cents read raw, cast `::text` and converted by `rawCentsToDecimal` —
-        // see its doc comment.
-        total: sql<string>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::text`,
+        itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
+        // A count of whole cents read raw, cast to text and converted by `rawCentsToDecimal` — see
+        // its doc comment for why it is text and not an integer cast. `cast(x as text)` is the
+        // spelling because this engine has no cast operator.
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -3645,9 +3668,44 @@ export async function markCollected(
     // predicate keeps a concurrent double-collect a no-op for the loser rather than a trigger RAISE.
     await tx
       .update(workingOrders)
-      .set({ collectedAt: sql`now()` })
+      // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+      .set({ collectedAt: nowIso() })
       .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
   });
+}
+
+/** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
+interface UnservedLine {
+  queuedAt: string;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
+}
+
+/**
+ * The `tab_unserved_lines` aggregate, parsed.
+ *
+ * It arrives as JSON TEXT because `json_group_array` returns a string and a raw read reaches no
+ * column mapping. An empty tab carries the literal `'[]'` the query coalesces to.
+ */
+function parseUnservedLines(value: string): UnservedLine[] {
+  return JSON.parse(value) as UnservedLine[];
+}
+
+/**
+ * Whole minutes from a stored ISO stamp to `nowMs`, floored — what
+ * `floor(extract(epoch from (now() - stamp)) / 60)::int` computed in SQL.
+ *
+ * It moved out of SQL because this engine has neither `now()` nor `extract`, and because a
+ * timestamp column here is TEXT rather than a point in time. The reason the SQL version existed —
+ * that the DATABASE's clock and the app server's could skew — is gone with the swap: the engine
+ * runs inside this process (`node:sqlite`), so there is one clock, the same conclusion
+ * `packages/printing/src/runtime.ts` reaches for the print-job lease. Callers read that clock ONCE
+ * per query and pass it in, so every row of one board is aged against one instant, which is what
+ * `now()` gave for free by being transaction time.
+ */
+function minutesSince(stamp: string, nowMs: number): number {
+  return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
 }
 
 /** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
@@ -3674,13 +3732,17 @@ const TICKET_TRANSITIONS = {
 >;
 
 /** The typed `.set()` payload for a forward move: the new state plus the stamp column the transition
- *  names, set to `now()`. A ternary on the (two-valued) stamp column keeps each branch a concrete object
- *  Drizzle infers against `ticket_items`' update shape — a computed key would widen it to a string index
- *  and drop the typing the per-verb switch/ternary existed to hold. */
+ *  names, stamped from this process's clock. A ternary on the (two-valued) stamp column keeps each
+ *  branch a concrete object Drizzle infers against `ticket_items`' update shape — a computed key would
+ *  widen it to a string index and drop the typing the per-verb switch/ternary existed to hold.
+ *
+ *  The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does not
+ *  have. `nowIso` because both stamp columns are `tsString`. */
 function advanceSet(to: Exclude<TicketState, "queued">) {
+  const at = nowIso();
   return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
-    ? { state: to, preparingAt: sql`now()` }
-    : { state: to, readyAt: sql`now()` };
+    ? { state: to, preparingAt: at }
+    : { state: to, readyAt: at };
 }
 
 /**
@@ -4011,11 +4073,6 @@ export async function listStationQueue(
       // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
       // guaranteed by the WHERE, so this is the only remaining collectability signal.
       status: workingOrders.status,
-      // KDS order-timing alerts (design §3/§6): this line's age on the DB clock, in whole minutes since
-      // `queued_at` — the same `now()`-based idiom `listExpoQueue`'s `openedMinutes` uses, so the band
-      // classification below is immune to any app-server/DB clock skew (reconstructed as an offset from
-      // `Date.now()`, never by parsing `queued_at` with the app clock).
-      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -4054,6 +4111,10 @@ export async function listStationQueue(
     rows.map((row) => row.workingOrderLineId),
   );
 
+  // KDS order-timing alerts (design §3/§6): the clock is read ONCE here, so every item on this board
+  // is aged against one instant — which is what `now()`, being transaction time, gave the SQL this
+  // replaced. See {@link minutesSince}.
+  const nowMs = Date.now();
   // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
   // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
   const groups = new Map<string, StationQueueGroup>();
@@ -4118,10 +4179,10 @@ export async function listStationQueue(
       // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
       queuedAt: row.queuedAt,
-      // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
-      // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
-      // this keeps the classification anchored to the DB clock exactly as `ageMinutes` was computed.
-      band: classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds),
+      // Still a whole-minute offset reconstructed from the age, not `Date.parse(row.queuedAt)`
+      // straight: only where the age is COMPUTED moved (see {@link minutesSince}), and rounding the
+      // age to the minute first is what the bands were tuned against.
+      band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
     });
   }
   return [...groups.values()];
@@ -4284,7 +4345,6 @@ export async function listExpoQueue(
       // its OWN station's thresholds — an order's items can span several stations, so unlike
       // `listStationQueue` (one station per call) these ride per item, not per order.
       queuedAt: ticketItems.queuedAt,
-      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -4295,9 +4355,9 @@ export async function listExpoQueue(
       courseDisplayOrder: kitchenCourses.displayOrder,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      // Minutes since the order opened — the pass's urgency clock. `::int` so pg/PGlite hand back a
-      // number; `now()` is transaction time, so an order opened earlier in this same tx reads 0.
-      openedMinutes: sql<number>`floor(extract(epoch from (now() - ${workingOrders.openedAt})) / 60)::int`,
+      // Minutes since the order opened — the pass's urgency clock, computed from this column below
+      // rather than in SQL (see {@link minutesSince}).
+      openedAt: workingOrders.openedAt,
       // The dining-table label, resolved by a FAN-OUT-PROOF scalar subquery (a LEFT JOIN could multiply
       // an order's item rows if two tables pointed at it — tab_id carries no DB unique, only an app lock).
       // Covers both directions a table binds an order: a TAB (`dining_tables.tab_id` back-points at the
@@ -4364,6 +4424,9 @@ export async function listExpoQueue(
     rows.map((row) => row.lineId),
   );
 
+  // Read ONCE, so every order and item on this board is aged against one instant — what `now()`,
+  // being transaction time, gave the SQL this replaced. See {@link minutesSince}.
+  const nowMs = Date.now();
   const orders = new Map<string, ExpoOrder>();
   const courseMaps = new Map<string, Map<string, ExpoCourse>>();
   for (const row of rows) {
@@ -4372,7 +4435,7 @@ export async function listExpoQueue(
       order = {
         orderId: row.orderId,
         orderNumber: row.orderNumber,
-        openedMinutes: Number(row.openedMinutes),
+        openedMinutes: minutesSince(row.openedAt, nowMs),
         courses: [],
         // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
@@ -4405,9 +4468,13 @@ export async function listExpoQueue(
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Reconstructed from the DB-computed age (not `Date.parse(row.queuedAt)`) so the classification is
-    // immune to app-server/DB clock skew — the same idiom `listStationQueue` uses.
-    const band = classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds);
+    // Still a whole-minute offset reconstructed from the age rather than `Date.parse(row.queuedAt)`
+    // straight — the same idiom, and the same reason, as `listStationQueue`.
+    const band = classifyBand(
+      nowMs - minutesSince(row.queuedAt, nowMs) * 60_000,
+      nowMs,
+      thresholds,
+    );
     course.items.push({
       id: row.itemId,
       // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
@@ -4547,14 +4614,13 @@ export async function listTablesWithState(
     ready_to_serve: number;
     en_route: number;
     // KDS order-timing alerts (design §3/§6): one entry per unserved, fired line on the open tab, each
-    // carrying its DB-clock age plus its OWN station's thresholds — the raw material `classifyBand`/
+    // carrying its `queued_at` plus its OWN station's thresholds — the raw material `classifyBand`/
     // `worstBand` reduce in JS below (never classified in SQL, so server and client share one classifier).
-    tab_unserved_lines: {
-      ageMinutes: number;
-      warmAfterMinutes: number;
-      overdueAfterMinutes: number;
-      forgottenAfterMinutes: number;
-    }[];
+    //
+    // JSON TEXT, not a parsed array: `json_group_array` returns a string and a raw read reaches no
+    // column mapping, so it is parsed at the row below. The age is no longer computed in SQL —
+    // see {@link minutesSince}.
+    tab_unserved_lines: string;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -4568,42 +4634,51 @@ export async function listTablesWithState(
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
       tab.id as tab_id,
-      coalesce(tab.line_count, 0)::int as tab_line_count,
+      cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
-      coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
-      coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
-      coalesce(tab.en_route, 0)::int as en_route,
+      cast(coalesce(tab.pending_to_serve, 0) as int) as pending_to_serve,
+      cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
+      cast(coalesce(tab.en_route, 0) as int) as en_route,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
-      coalesce(del.pending, 0)::int as pending_deliveries,
+      cast(coalesce(del.pending, 0) as int) as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
-    left join lateral (
+    -- A GROUPED derived table joined on the tab id, not a LEFT JOIN LATERAL ... ON TRUE: this
+    -- engine has no LATERAL and refuses it at prepare with near "select": syntax error (measured
+    -- 2026-09-22 on Node v26.7.0). The LATERAL form's only correlation was wo.id = dt.tab_id, which is
+    -- an ordinary join key, so every open order is aggregated once and matched by id. Same shape,
+    -- same rows; the engine does more grouping work and the answer is unchanged.
+    left join (
       select wo.id,
-             count(wol.id)::int as line_count,
-             (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
+             cast(count(wol.id) as int) as line_count,
+             cast(count(wol.id) filter (where wol.served_at is null) as int) as pending_to_serve,
              -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
              -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
              -- (working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
-             (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
+             cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
              -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
              -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
              -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
              -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
              -- en-camino > listos precedence off the two counts.
-             (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
-             -- A count of whole cents read raw, cast ::text and converted by rawCentsToDecimal in
-             -- the mapping below -- see its doc comment.
-             coalesce(sum(wol.line_total), 0)::text as tab_total,
-             -- KDS order-timing alerts (design §3/§6): the raw age + thresholds of each unserved, FIRED
-             -- (ti.id is not null) line, one JSON object per line -- the age is computed here on the DB
-             -- clock (never a band label; §3's "authoritative on the DB clock, classified in JS" split),
-             -- reduced with classifyBand/worstBand in JS below. An unfired line (no ticket_items row) has
-             -- not reached a station yet, so it carries no age and is excluded, same as a served one.
-             json_agg(
-               json_build_object(
-                 'ageMinutes', floor(extract(epoch from (now() - ti.queued_at)) / 60)::int,
+             cast(count(*) filter (where ti.away_at is not null and wol.served_at is null) as int) as en_route,
+             -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
+             -- the mapping below -- see its doc comment for why it is text and not an integer cast.
+             cast(coalesce(sum(wol.line_total), 0) as text) as tab_total,
+             -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved,
+             -- FIRED (ti.id is not null) line, one JSON object per line -- never a band label (§3's
+             -- raw-material-in-SQL, classified-in-JS split), reduced with classifyBand/worstBand in
+             -- JS below. An unfired line (no ticket_items row) has not reached a station yet, so it
+             -- carries no stamp and is excluded, same as a served one.
+             --
+             -- json_group_array(json_object(...)) in place of PostgreSQL's aggregate pair:
+             -- those two are PostgreSQL names and this engine does not have them. The result is
+             -- JSON TEXT here rather than a value the driver parses, so the row mapping parses it.
+             json_group_array(
+               json_object(
+                 'queuedAt', ti.queued_at,
                  'warmAfterMinutes', ks.warm_after_minutes,
                  'overdueAfterMinutes', ks.overdue_after_minutes,
                  'forgottenAfterMinutes', ks.forgotten_after_minutes
@@ -4614,30 +4689,37 @@ export async function listTablesWithState(
         on wol.working_order_id = wo.id
       left join ticket_items ti
         on ti.working_order_line_id = wol.id
-      -- The unserved line's OWN station thresholds, for the json_agg above. LEFT (not INNER): a row
+      -- The unserved line's OWN station thresholds, for the JSON aggregate above. LEFT (not INNER): a row
       -- with no ticket item (ti null) must survive so line_count/tab_total/the other aggregates above
       -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
       left join kitchen_stations ks
         on ks.id = ti.station_id
-      where wo.id = dt.tab_id and wo.status = 'open'
+      where wo.status = 'open'
       group by wo.id
-    ) tab on true
-    left join lateral (
-      select count(*)::int as pending
+    ) tab on tab.id = dt.tab_id
+    -- The delivery count, grouped the same way: the LATERAL form's correlation was
+    -- d.delivery_table_id = dt.id, so it becomes the join key. A NULL delivery_table_id groups
+    -- to a row nothing joins to, which is the LATERAL form's no-rows answer.
+    left join (
+      select d.delivery_table_id, cast(count(*) as int) as pending
       from working_orders d
-      where d.delivery_table_id = dt.id
-        and d.status <> 'abandoned' and d.collected_at is null
+      where d.status <> 'abandoned' and d.collected_at is null
         and exists (
           select 1 from ticket_items ti
           where ti.working_order_id = d.id
         )
-    ) del on true
+      group by d.delivery_table_id
+    ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);
 
+  // Read ONCE, so every table on this floor plan is aged against one instant — what `now()`, being
+  // transaction time, gave the SQL this replaced. NOT the `now` parameter above, which is the VENUE
+  // clock the module annotators take and can be supplied by a caller.
+  const nowMs = Date.now();
   const states = result.rows.map((r) => {
     const hasOpenTab = r.tab_id !== null;
     const pendingDeliveries = Number(r.pending_deliveries);
@@ -4650,8 +4732,10 @@ export async function listTablesWithState(
     // read-model and the client's `TickingClock` share one classifier), then worst-wins across the open
     // tab. `worstBand([])` is `"fresh"`, covering a free table or one whose lines are all still fresh.
     const timingBand = worstBand(
-      r.tab_unserved_lines.map((line) =>
-        classifyBand(Date.now() - Number(line.ageMinutes) * 60_000, Date.now(), {
+      parseUnservedLines(r.tab_unserved_lines).map((line) =>
+        // Still a whole-minute offset reconstructed from the age, the same idiom the two kitchen
+        // boards use — only where the age is COMPUTED moved (see {@link minutesSince}).
+        classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, {
           warmAfterMinutes: line.warmAfterMinutes,
           overdueAfterMinutes: line.overdueAfterMinutes,
           forgottenAfterMinutes: line.forgottenAfterMinutes,

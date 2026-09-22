@@ -792,10 +792,12 @@ async function readOutstandingSaleForOrder(
     .select({
       id: sales.id,
       total: sales.total,
-      // The subquery is a count of whole cents read raw, cast `::text` and converted by
-      // `rawCentsToDecimal` — see its doc comment. `sales.total` above is a typed drizzle column
-      // and needs no cast.
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
+      // The subquery is a count of whole cents read raw, cast to text and converted by
+      // `rawCentsToDecimal` — see its doc comment for why it is text and not an integer cast.
+      // `cast(x as text)` is the spelling here because this engine has no cast operator; the same
+      // fragment in `packages/core/src/settle-sale.ts` is written the same way. `sales.total`
+      // above is a typed drizzle column and needs no cast.
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
     })
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));
