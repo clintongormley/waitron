@@ -4768,6 +4768,18 @@ both, do not delete them — the dev stack is how the product is run from a work
 working developer path with no successor is the defect class `CLAUDE.md` §1 is about.
 
 
+**GAP SIX IS DONE — 2026-09-22, commit `cd2838e4`.** Both scripts take a venue directory, the
+reset moved from `docker compose down -v` to removing that directory, and the command RUNS
+end to end. Four blockers outside the dev scripts were converted with it, each named in the ledger.
+
+**A NINTH GAP — found 2026-09-22. Seven more `apps/server/scripts` entry points are still on
+PostgreSQL.** `catalogue-demo.ts`, `integrated-card-demo.ts`, `park-retrieve-demo.ts`,
+`till-demo.ts`, `record-one-sale.ts`, `register-till.ts` and `settle-invoice-first.ts` each read
+`DATABASE_URL` or call the removed `createPostgresDb`. **The last three are BUILT INTO `dist/` by
+`apps/server`'s build script**, so they ship and cannot run on this branch — this is not a
+demo-only gap. **Step:** convert the three shipped ones at least, following `dev-setup.ts`;
+`questions.md` carries the options and the recommended default (convert all seven).
+
 **A SEVENTH GAP — found 2026-09-22. No step converts the tree's remaining ROW LOCKS.**
 `grep -n 'row lock\|\.for("update")'` over this file returns nothing. Two sites have been
 converted so far, each with its own commit and each reasoned from the write queue rather than
