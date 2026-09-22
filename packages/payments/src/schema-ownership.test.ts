@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableName, is } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
+import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
@@ -23,6 +23,13 @@ const CORE = ["working_orders", "sales", "tenants", "tenders", "invoice_series",
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
+/** How drizzle-kit writes a table name in this package's generated SQL. SQLite quotes an
+ * identifier with backticks where PostgreSQL used double quotes, measured by reading this
+ * package's own `drizzle/*.sql` on 2026-09-22. */
+function createTable(table: string): string {
+  return `create table \`${table}\``;
+}
+
 function generatedSql(): string {
   return readdirSync(drizzleDir)
     .filter((f) => f.endsWith(".sql"))
@@ -38,7 +45,7 @@ describe("the payments schema entrypoint owns exactly its own tables", () => {
     // A textual grep for `export ... from "@waitron/db"` would miss `export const sales = ...`
     // and every aliased form.
     const exported = Object.values(schema)
-      .filter((v) => is(v, PgTable))
+      .filter((v) => is(v, SQLiteTable))
       .map((t) => getTableName(t))
       .sort();
     expect(exported).toEqual([...OWNED].sort());
@@ -49,14 +56,14 @@ describe("the payments schema entrypoint owns exactly its own tables", () => {
     // string — the exact vacuous shape that let seven tests through in fiscal-verifactu's plan 1.
     const sqlText = generatedSql();
     for (const table of OWNED) {
-      expect(sqlText).toContain(`create table "${table}"`);
+      expect(sqlText).toContain(createTable(table));
     }
   });
 
   it("emits no CREATE TABLE for any core table", () => {
     const sqlText = generatedSql();
     for (const table of CORE) {
-      expect(sqlText).not.toContain(`create table "${table}"`);
+      expect(sqlText).not.toContain(createTable(table));
     }
   });
 
@@ -64,8 +71,11 @@ describe("the payments schema entrypoint owns exactly its own tables", () => {
     // Importing core tables is not merely allowed, it is required — and this asserts the import
     // actually produced something, so a future "fix" that deletes the imports to silence the
     // re-export test is caught.
+    // SQLite has no schema namespace, so the `"public".` qualifier PostgreSQL emitted is gone. The
+    // referenced COLUMN takes its place, which keeps this at least as specific as it was: it still
+    // fails if the key stops being emitted, and now also if it moves to another column.
     const sqlText = generatedSql();
-    expect(sqlText).toContain(`references "public"."working_orders"`);
-    expect(sqlText).toContain(`references "public"."sales"`);
+    expect(sqlText).toContain("references `working_orders`(`id`)");
+    expect(sqlText).toContain("references `sales`(`id`)");
   });
 });

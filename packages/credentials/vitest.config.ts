@@ -28,11 +28,12 @@ export default defineConfig({
         "drizzle/**",
         // Test-only plumbing: src/testing/captured.ts, shared by this package's suites.
         "src/testing/**",
-        // The process entry point: argv, env, stdin, stdout and a real connection, and nothing
-        // else. Every decision it could get wrong lives in `cli.ts`, which is injected and fully
-        // tested; what remains here is the wiring that can only be exercised by running the built
-        // bundle. Excluded on the same grounds as packages/payments-stripe's `stripe-client.ts` —
-        // a thin boundary whose logic belongs to something else.
+        // The process entry point. `runBin` inside it is NOT beyond reach — `bin.test.ts` drives
+        // it against a real venue directory, which is the only thing that can catch it opening the
+        // wrong one of the two SQLite files. What stays unreachable without spawning a process is
+        // the shim below it: the direct-invocation guard and the real stdin/stdout/stderr. The file
+        // is excluded whole rather than split, on the same grounds as packages/payments-stripe's
+        // `stripe-client.ts` — a thin boundary whose logic belongs to something else.
         "src/bin.ts",
         // Re-export barrels: manifests with no imperative code, on which v8 reports phantom
         // uncovered branches. Their surface is asserted structurally by index.test.ts and
