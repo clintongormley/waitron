@@ -4,12 +4,13 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "./client.js";
-import { constraintTarget, refusalOn, sameTarget } from "./constraint-target.js";
+import { constraintTarget, refusalOn, sameTarget, triggerRaised } from "./constraint-target.js";
 import {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
   NOT_NULL_VIOLATION,
   RESTRICT_VIOLATION,
+  TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";
 import { isPgError, isUniqueViolation } from "./unique-violation.js";
@@ -146,5 +147,86 @@ describe("reading a SQLite refusal", () => {
     // thing telling them apart — which is why `refusalOn` asks for both.
     expect(refusalOn(error, NOT_NULL_VIOLATION, { table: "parent", columns: ["name"] })).toBe(true);
     expect(refusalOn(error, UNIQUE_VIOLATION, { table: "parent", columns: ["name"] })).toBe(false);
+  });
+});
+
+/**
+ * A trigger's own `RAISE(ABORT, …)` — how this schema's hand-written guards refuse a write, and the
+ * one refusal whose wording the migration, not the engine, chooses.
+ *
+ * The hand-built cases live here rather than in `constraint-target.test.ts` because that file
+ * crafts PostgreSQL shapes (`code`, `table`, `detail`) that this engine never produces; the fields
+ * these read are the ones `open()` above drives for real.
+ */
+// Deliberately NOT one of the product's own trigger messages
+// (`packages/db/src/trigger-refusals.ts`): what is under test here is the PREDICATE, against a
+// trigger this suite creates itself, and borrowing a real refusal's wording would suggest a
+// binding between the two that does not exist.
+const RAISED = "this suite's own guard refused the row";
+
+describe("reading a trigger's raise", () => {
+  it("matches the text a trigger raised, and declines a RESTRICT refusal carrying the same code", async () => {
+    const db = await open();
+    db.run(
+      sql`create trigger child_guard before insert on child for each row when new.code = 'STOP'
+          begin select raise(abort, 'this suite''s own guard refused the row'); end`,
+    );
+    const raised = await refusal(
+      db,
+      sql`insert into child (id, parent_id, code) values ('c4', 1, 'STOP')`,
+    );
+    expect(isPgError(raised, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(raised, RAISED)).toBe(true);
+
+    // The control, and the whole reason the predicate reads the message: SQLite implements
+    // `ON DELETE RESTRICT` with an internal trigger, so a restricted delete arrives under the SAME
+    // result code as the raise above. Only the words separate them.
+    const restricted = await refusal(db, sql`delete from parent where id = 1`);
+    expect(isPgError(restricted, TRIGGER_ABORT)).toBe(true);
+    expect(triggerRaised(restricted, RAISED)).toBe(false);
+  });
+
+  it("declines a raise whose text merely contains the one asked for", async () => {
+    const db = await open();
+    db.run(
+      sql`create trigger child_wider before insert on child for each row when new.code = 'WIDE'
+          begin select raise(abort, 'this suite''s own guard refused the row, and then some'); end`,
+    );
+    const error = await refusal(
+      db,
+      sql`insert into child (id, parent_id, code) values ('c5', 1, 'WIDE')`,
+    );
+    // Equality, not containment: the text is a literal one migration owns, and a guard that raised
+    // a longer sentence is a different guard.
+    expect(triggerRaised(error, RAISED)).toBe(false);
+  });
+
+  it("declines every other class of refusal, however it is worded", async () => {
+    const db = await open();
+    const error = await refusal(db, sql`insert into parent (id, name) values (2, 'one')`);
+    expect(triggerRaised(error, "UNIQUE constraint failed: parent.name")).toBe(false);
+  });
+
+  // No engine can produce this: the result code on one layer and the wording on another. It is the
+  // shape that separates the same-layer rule from asking the two questions separately.
+  it("does not join a result code on one layer to a message on another", () => {
+    const split = new Error("outer", {
+      cause: Object.assign(new Error("some other refusal"), {
+        errcode: 1811,
+        cause: new Error(RAISED),
+      }),
+    });
+    expect(triggerRaised(split, RAISED)).toBe(false);
+  });
+
+  // Crafted for the same reason: SQLite never raises a trigger's words under another class's code.
+  it("does not accept the right wording under the wrong result code", () => {
+    expect(triggerRaised(Object.assign(new Error(RAISED), { errcode: 2067 }), RAISED)).toBe(false);
+  });
+
+  it("is false for anything that is not a refusal at all", () => {
+    expect(triggerRaised(new Error(RAISED), RAISED)).toBe(false);
+    expect(triggerRaised(undefined, RAISED)).toBe(false);
+    expect(triggerRaised(RAISED, RAISED)).toBe(false);
   });
 });

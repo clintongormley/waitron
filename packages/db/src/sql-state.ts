@@ -35,6 +35,21 @@ export const FOREIGN_KEY_VIOLATION = [787] as const;
  */
 export const RESTRICT_VIOLATION = [1811] as const;
 
+/**
+ * A trigger's own `RAISE(ABORT, 'text')` (1811) — how this schema's hand-written guards refuse a
+ * write, and a refusal whose wording a MIGRATION chooses rather than the engine.
+ *
+ * **The same number as {@link RESTRICT_VIOLATION}, and that is the thing a reader must not have to
+ * discover alone.** Both are `SQLITE_CONSTRAINT_TRIGGER`, because SQLite implements `ON DELETE
+ * RESTRICT` with an internal trigger, so the result code cannot tell a deliberate raise from a
+ * restricted delete. Only the MESSAGE separates them: a raise arrives with its own text verbatim, a
+ * RESTRICT refusal with `FOREIGN KEY constraint failed`. Measured 2026-09-22 against `node:sqlite`
+ * on Node v26.7.0 — one real refusal of each, both re-driven in `constraint-target.sqlite.test.ts`,
+ * where the RESTRICT case is the control. That is why the predicate reading this class
+ * (`./constraint-target.ts`'s `triggerRaised`) asks for the text as well.
+ */
+export const TRIGGER_ABORT: RefusalClass = [1811] as const;
+
 /** A CHECK constraint (275). */
 export const CHECK_VIOLATION = [275] as const;
 

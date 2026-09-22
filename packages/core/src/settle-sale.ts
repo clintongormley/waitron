@@ -2,12 +2,13 @@
 import "./errors.js";
 import { eq, sql } from "drizzle-orm";
 import {
-  isPgError,
   isUniqueViolation,
+  POST_SETTLEMENT_REFUSAL,
   saleSettlements,
   saleVoids,
   sales,
   tenders,
+  triggerRaised,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -27,22 +28,6 @@ export interface SettleSaleInput {
   saleId: SaleId;
   tenders: RecordSaleTender[];
 }
-
-/**
- * SQLSTATE raised by the `tenders_reject_post_settlement` trigger when a tender INSERT lands after
- * the sale is already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
- *
- * **THAT TRIGGER DOES NOT EXIST ON THIS ENGINE, and this constant is dead until it does.** The
- * storage switch's regeneration dropped every hand-written trigger; only the append-only ones came
- * back. Measured: `grep -ci "create trigger"` over each of the twelve packages' own
- * `drizzle/0000_baseline.sql` returns 0. So the `isPgError` call below can never
- * be true, and it does not even typecheck — a refusal class is a list of numeric result codes on
- * SQLite, not a five-character string. Left in place rather than invented around: what replaces the
- * trigger is a decision, recorded as the EIGHTH GAP in
- * `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` with the other seven this
- * trigger keeps company with.
- */
-const POST_SETTLEMENT_VIOLATION = "WT002";
 
 /**
  * The deferred half of the sale write path, and the single implementation of
@@ -85,7 +70,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // Clean `already_settled` for the sequential retry. The concurrent race is caught by the
   // constraints below, not by this SELECT: two callers both pass it (the other's uncommitted
   // settlement is invisible), and whichever the loser reaches first arbitrates — the `tenders`
-  // post-settlement trigger (WT002) when the winner has already committed, otherwise the
+  // post-settlement trigger when the winner has already committed, otherwise the
   // `sale_settlements` UNIQUE. Both are translated to `sale.already_settled` below; the loser's
   // whole transaction, tenders included, rolls back.
   const [existing] = await tx
@@ -162,13 +147,13 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       );
     } catch (error) {
       // The other concurrent-loser interleaving. When the winner has already COMMITTED its
-      // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger, which raises
-      // SQLSTATE WT002 (`packages/db/drizzle/0001_db_baseline_sql.sql`). That trigger fires iff a
-      // `sale_settlements` row already exists for the sale, so WT002 here ALWAYS means "already
-      // settled" — translate it to the same code the `sale_settlements` UNIQUE path maps to below,
-      // so a retry/idempotency caller keying on `sale.already_settled` recognises the loser
-      // whichever insert it reached.
-      if (isPgError(error, POST_SETTLEMENT_VIOLATION)) {
+      // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger. That trigger
+      // fires iff a `sale_settlements` row already exists for the sale, so its refusal here ALWAYS
+      // means "already settled" — translate it to the same code the `sale_settlements` UNIQUE path
+      // maps to below, so a retry/idempotency caller keying on `sale.already_settled` recognises
+      // the loser whichever insert it reached. Every other failure of this INSERT is rethrown as it
+      // arrived.
+      if (triggerRaised(error, POST_SETTLEMENT_REFUSAL)) {
         throw new AppError("sale.already_settled", { saleId: input.saleId });
       }
       throw error;

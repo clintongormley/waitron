@@ -127,6 +127,36 @@ function seedOneRowEverywhere(connection) {
 }
 
 /**
+ * Takes off every trigger that is NOT one of the append-only pair.
+ *
+ * `applyMigrations` leaves two kinds of trigger on a venue file: the append-only pair this suite is
+ * about, and the eight BEHAVIOURAL rules `packages/db/drizzle/0001_behavioural_triggers.sql`
+ * restores — a settlement's tender coverage, a tender after settlement, a working order's status
+ * transitions, and the rest. The seeding below writes one generic row into EVERY table in
+ * alphabetical order, and those rules refuse some of those rows: measured on this tree, the
+ * `sale_settlements` row lands before the `tenders` one, so the tender is refused with "tender
+ * rejected: the sale is already settled" and the whole suite fails to load.
+ *
+ * Dropping them here rather than seeding around them, because seeding around them would mean this
+ * suite encoding another suite's rules and re-encoding them every time one changes. Nothing is lost:
+ * the behavioural triggers are proven, name by name and refusal by refusal, in
+ * `scripts/behavioural-triggers.test.ts` beside this file, and removing a trigger can only make an
+ * append-only refusal harder to observe, never easier.
+ *
+ * Derived from the catalogue rather than listed, so a new behavioural trigger needs no edit here.
+ */
+function dropNonAppendOnlyTriggers(connection) {
+  const triggers = connection
+    .prepare(`select name from sqlite_master where type = 'trigger'`)
+    .all()
+    .map((row) => String(row.name))
+    .filter(
+      (name) => !name.endsWith("_append_only_update") && !name.endsWith("_append_only_delete"),
+    );
+  for (const name of triggers) connection.exec(`drop trigger "${name}"`);
+}
+
+/**
  * A venue file migrated by `applyMigrations`, reopened raw, with one row in every table.
  *
  * Raw `node:sqlite` rather than the store's handle, because the seeding needs two pragmas the
@@ -145,6 +175,7 @@ async function migratedDatabase() {
   connection.exec("pragma recursive_triggers = on");
   connection.exec("pragma foreign_keys = off");
   connection.exec("pragma ignore_check_constraints = on");
+  dropNonAppendOnlyTriggers(connection);
   seedOneRowEverywhere(connection);
   const seeded = new Map(
     realTables(connection).map((table) => [

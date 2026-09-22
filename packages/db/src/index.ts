@@ -146,13 +146,24 @@ export {
   constraintTarget,
   refusalOn,
   sameTarget,
+  triggerRaised,
   type ConstraintTarget,
 } from "./constraint-target.js";
+export {
+  COVERAGE_REFUSAL,
+  FORM_FACTOR_REFUSAL,
+  LOCALES_REFUSAL,
+  OPEN_PARENT_REFUSAL,
+  POST_SETTLEMENT_REFUSAL,
+  TRANSITION_REFUSAL,
+  VARIANT_LOCALES_REFUSAL,
+} from "./trigger-refusals.js";
 export {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
   NOT_NULL_VIOLATION,
   RESTRICT_VIOLATION,
+  TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";
 export { CORE_MIGRATIONS } from "./migrations.js";

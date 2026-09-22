@@ -1,4 +1,5 @@
 import { MAX_CAUSE_DEPTH } from "@waitron/shared";
+import { TRIGGER_ABORT } from "./sql-state.js";
 import type { RefusalClass } from "./sql-state.js";
 
 /** The table and columns a database refusal named. */
@@ -181,6 +182,33 @@ export function refusalOn(
     if (typeof layer.errcode !== "number" || !refusal.includes(layer.errcode)) continue;
     if (typeof layer.message !== "string") continue;
     if (sameTarget(keyColumns(layer.message), expected)) return true;
+  }
+  return false;
+}
+
+/**
+ * Did one of OUR triggers raise this refusal, saying exactly `raised`?
+ *
+ * The question a write path asks when the control it translates is a hand-written trigger rather
+ * than a constraint — `refusalOn`'s counterpart for a refusal that names no key at all. A trigger's
+ * `RAISE(ABORT, 'text')` reports the text and nothing else: no table, no column, no constraint
+ * name. The text is therefore the whole identity, and the migration owns it.
+ *
+ * Both halves are needed, and each rules out a different wrong answer. The CLASS alone also accepts
+ * an `ON DELETE RESTRICT` refusal, which arrives under the same result code (`./sql-state.ts`'s
+ * {@link TRIGGER_ABORT}). The MESSAGE alone also accepts any error that happens to carry those
+ * words. They are matched on ONE layer of the cause chain for the reason {@link refusalOn} states:
+ * a chain carrying a result code at one depth and a message at another must never read as a refusal
+ * that was never raised.
+ *
+ * Compared by EQUALITY rather than containment. A guard that raised a longer sentence beginning
+ * with this one is a different guard, and a caller translating it to a domain error would be
+ * translating a refusal it cannot have read.
+ */
+export function triggerRaised(error: unknown, raised: string): boolean {
+  for (const layer of causeLayers(error)) {
+    if (typeof layer.errcode !== "number" || !TRIGGER_ABORT.includes(layer.errcode)) continue;
+    if (layer.message === raised) return true;
   }
   return false;
 }

@@ -154,11 +154,12 @@ declare module "@waitron/shared" {
      * condition, and must not be confused with a chain-verification failure. */
     "sale.already_voided": { saleId: string };
     /** Thrown by `settleSale` when the sale is already settled. Three sources converge on this one
-     * code (`packages/db/drizzle/0001_db_baseline_sql.sql`): the sequential retry is caught by the
+     * code: the sequential retry is caught by the
      * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
      * `sale_settlements` `UNIQUE (sale_id)` violation (`sale_settlements_sale_key`,
-     * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`
-     * post-settlement trigger (SQLSTATE `WT002`, detected via `isPgError`) when it inserts a
+     * detected via `isUniqueViolation`) when it collides on the settlement row, OR the
+     * `tenders_reject_post_settlement` trigger's own raise (matched by `triggerRaised` on the text
+     * it raises, which is the whole identity of a trigger refusal) when it inserts a
      * tender after the winner has committed. A constraint, not a prior SELECT, is the control for
      * the concurrent paths: two settlements both pass the check-then-insert and only one wins. The
      * UNIQUE case mirrors how `sale.already_voided` translates `sale_voids_sale_id_key` in

@@ -4934,6 +4934,59 @@ nothing else makes (`device_profile_form_factor_locked`) has no application half
 decision is recorded where the trigger's own test can read it, and a trigger that becomes nothing
 takes its test with it, stated, per step 25's rule that nothing is deleted silently.
 
+**GAP EIGHT IS DONE — 2026-09-22.** All eight come back as SQLite triggers, in one hand-written
+custom migration, `packages/db/drizzle/0001_behavioural_triggers.sql` (generated with
+`pnpm db:generate:custom`, journal entry and snapshot committed with it; `0000_baseline.sql`
+untouched). None becomes an application check and none becomes a recorded loss: each is a backstop
+that survives ANY caller, SQLite expresses all eight, and restoring them preserves the behaviour
+rather than moving a refusal into one code path and leaving every other path — a repair script, a
+future route, a restore — unguarded. That matches the owner's verdict of the same day
+(`questions.md`, "recreate all eight triggers as SQLite triggers").
+
+**Twelve trigger names for eight rules.** SQLite takes exactly one event per trigger, so the three
+that covered more than one are split with an event suffix. The split is the engine's, not a
+behaviour change, and the migration's header says so.
+
+What the restoration measured, none of it taken from a reading:
+
+- **A trigger's `RAISE(ABORT, 'text')` arrives at `node:sqlite` as errcode 1811
+  (`SQLITE_CONSTRAINT_TRIGGER`) with `message` equal to the text.** An `ON DELETE RESTRICT` refusal
+  carries the SAME code with the message `FOREIGN KEY constraint failed`, so the code alone cannot
+  tell a deliberate raise from a restricted delete — only the message can. That is why
+  `packages/db`'s new `triggerRaised` asks for the class AND the words, on one layer of the cause
+  chain, and why `settleSale`'s translation of the post-settlement refusal (PostgreSQL's `WT002`,
+  which had no successor on this engine and did not typecheck) now matches the wording.
+- **The refusal wording is declared once**, in `packages/db/src/trigger-refusals.ts`. The migration
+  is SQL and cannot import it, so what binds the two is `scripts/behavioural-triggers.test.ts`,
+  which reads those constants and asserts them against a database the PRODUCT migrated. Proven both
+  ways: rewording the constant alone reddens it, and rewording the SQL alone reddens it. Without
+  that binding a reworded trigger would stop being translated SILENTLY, because `triggerRaised`
+  compares by equality.
+- **The coverage trigger's `exists (select 1 from sales …)` clause is inert.** Deleted, the guard
+  still passes 35 of 35: with no sale row the total subquery is NULL, `<>` against NULL is not
+  true, and the WHERE is not satisfied. It is kept as a statement of the intent
+  `sales_assert_tenders_cover` wrote out loud ("the sale itself was rolled back"), and the
+  migration says plainly that no test can tell it apart from its absence.
+- **SQLite does not fix the order in which several triggers on one event fire.** A line inserted
+  under an order that does not exist is refused by BOTH `require_open_parent` and `check_locales`
+  (an order that does not exist has no resolvable location either), so which message comes back is
+  not pinnable — measured as the locale one on SQLite 3.53.4. The guard asserts the write is
+  refused with one of the two, and reaches `require_open_parent`'s missing-parent branch through a
+  separate DELETE case where no other trigger can interfere.
+- **The locale checks compare two SETS with `not exists` in both directions, never an ordered
+  `group_concat`** — SQLite does not guarantee that an inner `ORDER BY` fixes the order
+  `group_concat` accumulates in, and this file can make no version claim. PostgreSQL's second,
+  distinct "no resolvable location" message folds into the same refusal, because `raise` takes a
+  literal and a second message would mean a second trigger; the migration states that rather than
+  leaving a reader to assume two messages survive.
+
+**A COLLISION worth carrying, because the shape will recur.** `scripts/append-only-triggers.test.ts`
+seeds one generic row into every table in ALPHABETICAL order, so its `sale_settlements` row lands
+before its `tenders` row and the restored post-settlement trigger refused the seed — a guard broken
+by another guard's fixture, not by product code. It now drops the non-append-only triggers (derived
+from `sqlite_master`, no hardcoded list) before seeding, and that filter was proven still to bite by
+widening it to drop an append-only trigger and watching the suite go to 20 failures.
+
 - [ ] **Step 29: Run the whole workspace once**
 
 This is the one place in this plan a whole-workspace run is justified: the engine changed under everything.

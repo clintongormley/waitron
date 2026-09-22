@@ -4,6 +4,7 @@ import {
   asAppUser,
   captureError,
   pgErrorCode,
+  POST_SETTLEMENT_REFUSAL,
   sales,
   saleSettlements,
   saleVoids,
@@ -312,7 +313,7 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
     // concurrency suites use (async-settle, reversal, incident-dedup): the holder pauses AFTER
     // `settleSale` has inserted its tenders and its `sale_settlements` row but BEFORE its
     // transaction commits, so its UNIQUE key is held-but-invisible. Left ungated, the loser could
-    // instead insert its tenders after the winner had already committed, and the WT002
+    // instead insert its tenders after the winner had already committed, and the
     // post-settlement trigger — not `isUniqueViolation` — would fire, surfacing a raw error rather
     // than `sale.already_settled`. The gate keeps the loser on the intended UNIQUE-violation path.
     const seed = await seedTenant(postgres.admin);
@@ -349,8 +350,8 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
       await acquired; // do not start the waiter before the key is actually held
 
       // Waiter: the real path, unmodified. Its pre-check passes (the holder's row is uncommitted and
-      // invisible), it inserts its own tenders (WT002 sees no committed settlement), then BLOCKS on
-      // the sale_settlements UNIQUE key.
+      // invisible), it inserts its own tenders (the trigger sees no committed settlement), then
+      // BLOCKS on the sale_settlements UNIQUE key.
       let waiterDone = false;
       waiterRun = settle(waiter, input)
         .then(() => undefined)
@@ -437,17 +438,22 @@ describe("settleSale — error propagation", () => {
     expect(pgErrorCode(error)).toBe("53100");
   });
 
-  it("translates the tenders post-settlement guard (WT002) to sale.already_settled", async () => {
+  it("translates the tenders post-settlement guard to sale.already_settled", async () => {
     // The OTHER concurrent-loser interleaving, driven directly. The real-PG race above forces the
     // loser onto the `sale_settlements` UNIQUE; here the winner has already COMMITTED, so the
-    // loser's tender INSERT trips the `tenders_reject_post_settlement` trigger (SQLSTATE WT002)
-    // instead. That trigger fires iff a settlement row already exists for the sale, so WT002 on the
-    // tender insert always means "already settled" and must surface as `sale.already_settled` — the
-    // same code the UNIQUE path maps to — rather than a raw driver error a retry/idempotency caller
+    // loser's tender INSERT trips the `tenders_reject_post_settlement` trigger instead. That
+    // trigger fires iff a settlement row already exists for the sale, so its refusal on the tender
+    // insert always means "already settled" and must surface as `sale.already_settled` — the same
+    // code the UNIQUE path maps to — rather than a raw driver error a retry/idempotency caller
     // would not recognise. A hand-built Transaction stub (like the rethrow test above): the
     // deterministic post-commit interleaving is awkward to force on a live DB, and this drives
     // settleSale's own tenders-insert catch/translate branch directly. Tenders are PRESENT (unlike
-    // the €0 rethrow test) so the tenders INSERT — the one WT002 fires on — is actually reached.
+    // the €0 rethrow test) so the tenders INSERT — the one the trigger fires on — is reached.
+    //
+    // The refused error carries what a `RAISE(ABORT, …)` really arrives with on this engine: the
+    // raise text as the message, and `errcode` 1811. Measured 2026-09-22 against `node:sqlite` on
+    // Node v26.7.0; the refusal is driven for real in
+    // `packages/db/src/constraint-target.sqlite.test.ts`.
     let selects = 0;
     const fakeTx = {
       select: () => ({
@@ -465,8 +471,10 @@ describe("settleSale — error propagation", () => {
       insert: () => ({
         values: () =>
           Promise.reject(
-            Object.assign(new Error("tender for sale rejected: the sale is already settled"), {
-              code: "WT002",
+            // The trigger's own words, read from the one place that declares them, so this case
+            // cannot pass against a wording the migration no longer raises.
+            Object.assign(new Error(POST_SETTLEMENT_REFUSAL), {
+              errcode: 1811,
             }),
           ),
       }),
@@ -485,14 +493,21 @@ describe("settleSale — error propagation", () => {
     });
   });
 
-  it("rethrows a non-WT002 error from the tenders insert, untranslated", async () => {
+  it("rethrows a refusal the post-settlement predicate declines, untranslated", async () => {
     // The tenders insert's OTHER failure path, mirroring the settlement-insert rethrow above. Only
-    // the post-settlement guard's WT002 means "already settled"; ANY other failure on the tenders
-    // insert (a transport error, a future constraint) must reach the caller as-is rather than be
-    // mislabelled `sale.already_settled`. This also exercises `isPgError` walking a non-matching
-    // error's cause chain to the end and returning false. Tenders are present so the
-    // tenders INSERT is the one reached; a WT002-free `.code` so the predicate declines it.
+    // the post-settlement guard's own raise means "already settled"; ANY other failure on the
+    // tenders insert (a transport error, another constraint) must reach the caller as-is rather
+    // than be mislabelled `sale.already_settled`.
+    //
+    // The refusal below is the sharp version of that, not an arbitrary error: `errcode` 1811 is the
+    // SAME result code the post-settlement trigger's raise arrives under, because SQLite implements
+    // `ON DELETE RESTRICT` with an internal trigger of its own. Only the wording separates the two,
+    // so this case fails unless the translation reads the message and not just the code. Control
+    // run 2026-09-22: with the message replaced by the trigger's exact words and nothing else
+    // changed, it fails on `expected AppError: sale.already_settled to not be an instance of
+    // AppError`. Tenders are present so the tenders INSERT is the one reached.
     let selects = 0;
+    const refused = Object.assign(new Error("FOREIGN KEY constraint failed"), { errcode: 1811 });
     const fakeTx = {
       select: () => ({
         from: () => ({
@@ -505,7 +520,7 @@ describe("settleSale — error propagation", () => {
         }),
       }),
       insert: () => ({
-        values: () => Promise.reject(Object.assign(new Error("disk full"), { code: "53100" })),
+        values: () => Promise.reject(refused),
       }),
     } as unknown as Transaction;
 
@@ -516,12 +531,14 @@ describe("settleSale — error propagation", () => {
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("53100");
+    // The very object the insert rejected with, unwrapped and unreplaced.
+    expect(error).toBe(refused);
+    expect((error as { errcode?: number }).errcode).toBe(1811);
   });
 });
 
 // Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
-// coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
+// coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement
 // rejects a tender once a settlement row exists.
 async function settleDirect(db: Database, saleId: SaleId, amount: string): Promise<void> {
   await withTransaction(db, async (tx) => {
