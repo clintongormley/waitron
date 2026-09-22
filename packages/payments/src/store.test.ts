@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, captureError, pgErrorMessage } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  nodes,
+  pgErrorMessage,
+  tills,
+  workingOrders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
+import { cardReaders } from "./schema/card-readers.js";
+import { payments } from "./schema/payments.js";
 import {
   assertReversible,
   associatePaymentWithSale,
@@ -38,7 +47,12 @@ import type { Seeded } from "../test/seed.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await pg.db.execute(sql`truncate payment_refunds, payments cascade`);
+  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
+  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
+  // before parent, because deleting `payments` while a `payment_refunds` row still points at it is
+  // refused with `FOREIGN KEY constraint failed`. Receipt: `src/reconcile.test.ts`'s own hook.
+  await pg.db.execute(sql`delete from payment_refunds`);
+  await pg.db.execute(sql`delete from payments`);
 });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
@@ -77,18 +91,27 @@ async function getRow(key: { provider: string; paymentRef: string }) {
  * two real sales, and `seedSale` always plants its `invoice_series` at code "A" for the node it is
  * given — the series is keyed `(node_id, code)`, so calling it twice against the same node would
  * collide on `invoice_series_node_code_key`. A second node side-steps that without touching
- * `../test/seed.ts`. */
+ * `../test/seed.ts`.
+ *
+ * Written through the table definitions rather than as raw SQL, here and everywhere else in this
+ * file that plants a row directly: `id` and `created_at` are `$defaultFn` generators only the
+ * insert BUILDER runs, so the raw-SQL version was refused `NOT NULL constraint failed: tills.id`.
+ * `../test/seed.ts` carries the full receipt. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
       sql`select location_id from tills where id = ${seeded.tillId}`,
     )
   ).rows;
-  const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
-  const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
-  return seedSale(pg.db, { ...seeded, tillId: till2.rows[0].id, nodeId: node2.rows[0].id });
+  const [till2] = await pg.db
+    .insert(tills)
+    .values({ locationId: till.location_id, name: "Till 2" })
+    .returning({ id: tills.id });
+  const [node2] = await pg.db
+    .insert(nodes)
+    .values({ locationId: till.location_id, name: "Node 2" })
+    .returning({ id: nodes.id });
+  return seedSale(pg.db, { ...seeded, tillId: till2!.id, nodeId: node2!.id });
 }
 
 describe("insertCapturedPayment", () => {
@@ -335,10 +358,11 @@ describe("associatePaymentWithSale", () => {
     const seeded = await seedTenant();
     const key = await capture(seeded, "p12r");
     const saleId = await seedSale(pg.db, seeded);
-    const reader = await pg.db.execute<{ id: string }>(sql`
-      insert into card_readers (provider, provider_ref, name)
-      values ('stripe', 'tmr_stamp', 'Front counter') returning id`);
-    const readerId = reader.rows[0]!.id;
+    const [reader] = await pg.db
+      .insert(cardReaders)
+      .values({ provider: "stripe", providerRef: "tmr_stamp", name: "Front counter" })
+      .returning({ id: cardReaders.id });
+    const readerId = reader!.id;
     await pg.db.transaction((tx) => associatePaymentWithSale(tx, { ...key, saleId, readerId }));
     const [row] = (
       await pg.db.execute<{ reader_id: string | null }>(sql`
@@ -494,20 +518,33 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   });
 
   it("prefers a genuinely settled row over a captured row with settled_at NULL", async () => {
-    // Postgres sorts `DESC` as NULLS FIRST by default, so a plain `desc(payments.settledAt)` would
-    // rank a NULL-settled_at captured row ahead of a really-settled one — backwards from "most
-    // recent". `settled_at` is always set for captured/accepted_offline "by construction", never by
-    // a DB constraint (see the doc comment on CapturedPaymentForOrder), so a NULL row is otherwise
+    // `settled_at` is always set for captured/accepted_offline "by construction", never by a DB
+    // constraint (see the doc comment on CapturedPaymentForOrder), so a NULL row is otherwise
     // unreachable through the store's own insert helpers (insertCapturedPayment requires
-    // `settledAt: Date`) — this seeds one with a raw insert to exercise the defensive case and
-    // proves `NULLS LAST` earns its place: delete it from the query's `orderBy` and this test fails,
-    // returning "null-settled" instead of "real-settled".
+    // `settledAt: Date`). This seeds one directly to exercise the defensive case: the row with a
+    // real settlement time must win, whatever the NULL row does.
+    //
+    // It does NOT prove `desc nulls last` in `findCapturedPaymentForWorkingOrder` earns its place,
+    // and the claim that it did has been retired. That claim was taken against PostgreSQL, which
+    // sorts DESC as NULLS FIRST, so dropping the clause there ranked the NULL row first and reddened
+    // this case. This engine sorts NULL as the smallest value, so a plain `desc` already puts NULLs
+    // last and the clause is a no-op. Both measured 2026-09-22 on Node v26.7.0: a two-row probe
+    // returned `real-settled,null-settled` for `desc` and for `desc nulls last` alike, and removing
+    // `nulls last` from the store left this very case PASSING. The clause stays because it states
+    // the intent the ordering depends on, but nothing checks it any more — an ordering this engine
+    // gives by default is not one a test can distinguish.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const key = { provider: "stripe", workingOrderId: s.workingOrderId };
-    await pg.db.execute(sql`
-      insert into payments (working_order_id, provider, payment_ref, amount, state, settled_at)
-      values (${key.workingOrderId}, ${key.provider}, 'null-settled', 300, 'captured', null)
-    `);
+    await pg.db.insert(payments).values({
+      workingOrderId: key.workingOrderId,
+      provider: key.provider,
+      paymentRef: "null-settled",
+      // A money column counts whole cents: 300 is 3.00, the same amount the raw insert this
+      // replaced wrote. The `settled_at: null` beside it is the whole point of the case.
+      amount: 300,
+      state: "captured",
+      settledAt: null,
+    });
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
@@ -784,12 +821,22 @@ describe("Mode 3 initiated lifecycle", () => {
   it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
     const seeded = await seedTenant();
     await initiate(seeded, HOSTED, "pay-1");
-    // `db.transaction`/`tx.insert` wrap the real Postgres error in a `DrizzleQueryError` whose own
+    // `db.transaction`/`tx.insert` wrap the driver error in a `DrizzleQueryError` whose own
     // `.message` is the generic "Failed query: ..." — the actual constraint-violation text lives on
     // `.cause` (see `@waitron/db`'s `pgErrorMessage`, used the same way throughout
     // packages/db/src/schema/*.test.ts for a unique/check-constraint assertion).
+    //
+    // This engine names the COLUMNS, never the index: the PostgreSQL text this replaced carried
+    // `payments_provider_external_ref_key`, so what an assertion can still see is the column PAIR.
+    // That is enough to tell this index's refusal from the other unique on the same table —
+    // `payments_provider_ref_key` on (provider, payment_ref) prints `payments.provider,
+    // payments.payment_ref` — which is the discrimination the case needs, and the reason this is
+    // `toBe` on the whole string rather than a loose match. Measured 2026-09-22 on Node v26.7.0
+    // against a two-row probe over this exact partial index: errcode 2067, `ERR_SQLITE_ERROR`.
     const error = await captureError(() => initiate(seeded, HOSTED, "pay-2"));
-    expect(pgErrorMessage(error)).toMatch(/payments_provider_external_ref_key|duplicate key/);
+    expect(pgErrorMessage(error)).toBe(
+      "UNIQUE constraint failed: payments.provider, payments.external_ref",
+    );
   });
 
   it("the partial unique index does NOT constrain manual/null external_ref rows", async () => {
@@ -1070,17 +1117,23 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
       sql`select location_id from tills where id = ${seeded.tillId}`,
     )
   ).rows;
-  const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
-  const tillId = till2.rows[0].id;
-  const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
-  const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
+  const [till2] = await pg.db
+    .insert(tills)
+    .values({ locationId: till.location_id, name: "Till 2" })
+    .returning({ id: tills.id });
+  const tillId = till2!.id;
+  const [node2] = await pg.db
+    .insert(nodes)
+    .values({ locationId: till.location_id, name: "Node 2" })
+    .returning({ id: nodes.id });
+  const [wo2] = await pg.db
+    .insert(workingOrders)
+    .values({ tillId, orderNumber: 1 })
+    .returning({ id: workingOrders.id });
   return {
     tillId,
-    nodeId: node2.rows[0].id,
-    workingOrderId: wo2.rows[0].id,
+    nodeId: node2!.id,
+    workingOrderId: wo2!.id,
   };
 }
 

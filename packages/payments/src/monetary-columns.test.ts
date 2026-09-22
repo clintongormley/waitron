@@ -6,12 +6,19 @@ import { describe, expect, it } from "vitest";
 import { paymentPolicy, paymentRefunds, payments } from "./schema/index.js";
 
 /**
- * Every money column this package owns must be `bigint` — a count of whole cents, the shape
- * `packages/db/src/schema/columns.ts`'s `money` helper emits, eight bytes wide so the whole
- * twelve-integer-digit range fits — and never `real`, `double precision`, or any other float
- * width. `payments.amount`/`payment_refunds.amount` carry currency and feed straight into the
- * captured-vs-refunded balance `payments.state` reflects; a binary float here reintroduces the
- * drift class exact amounts exist to remove.
+ * Every money column this package owns must be an `integer` — a count of whole cents, the shape
+ * `packages/db/src/schema/columns.ts`'s `money` helper emits — and never `real`, `double
+ * precision`, or any other float width. `payments.amount`/`payment_refunds.amount` carry currency
+ * and feed straight into the captured-vs-refunded balance `payments.state` reflects; a binary
+ * float here reintroduces the drift class exact amounts exist to remove.
+ *
+ * `integer` where this guard once said `bigint`, and with it goes the WIDTH half of the claim.
+ * Against PostgreSQL the declared type separated an eight-byte column from a four-byte one, so
+ * `PgBigInt53` was evidence that the whole twelve-integer-digit range fit. This engine has one
+ * integer type and it is 64-bit however the column is declared (`packages/db/src/schema/columns.ts`
+ * states this and `columns.test.ts` measures it), so there is no narrower width for a money column
+ * to be declared as and nothing here can distinguish one. What is still checked, and is the part
+ * that carries the drift class, is integer-versus-float.
  *
  * Whole cents rather than an exact decimal because the storage engine this column vocabulary is
  * being moved to has no exact decimal type. The decimal arithmetic itself did not move: it stays
@@ -46,7 +53,9 @@ function latestSnapshotColumnType(table: string, column: string): string | undef
   const parsed = JSON.parse(readFileSync(join(drizzleDir, "meta", latest), "utf8")) as {
     tables: Record<string, { columns: Record<string, { type: string }> }>;
   };
-  return parsed.tables[`public.${table}`]?.columns[column]?.type;
+  // Keyed by the bare table name: this engine has no schema qualifier, where the PostgreSQL
+  // snapshot this replaced keyed every table `public.<name>`.
+  return parsed.tables[table]?.columns[column]?.type;
 }
 
 describe("payments/payment_refunds monetary columns count whole cents, never float", () => {
@@ -60,17 +69,17 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
       expect(amountColumn).toBeDefined();
     });
 
-    it(`${tableName}.amount is bigint, read back as a number, in the Drizzle schema`, () => {
-      expect(amountColumn?.columnType).toBe("PgBigInt53");
-      expect(amountColumn?.getSQLType()).toBe("bigint");
+    it(`${tableName}.amount is integer, read back as a number, in the Drizzle schema`, () => {
+      expect(amountColumn?.columnType).toBe("SQLiteInteger");
+      expect(amountColumn?.getSQLType()).toBe("integer");
     });
   }
 
-  it("the migration set leaves every money column bigint", () => {
+  it("the migration set leaves every money column integer", () => {
     for (const tableName of Object.keys(OWNED_TABLES)) {
-      expect(latestSnapshotColumnType(tableName, "amount")).toBe("bigint");
+      expect(latestSnapshotColumnType(tableName, "amount")).toBe("integer");
     }
-    expect(latestSnapshotColumnType("payment_policy", "offline_amount_cap")).toBe("bigint");
+    expect(latestSnapshotColumnType("payment_policy", "offline_amount_cap")).toBe("integer");
   });
 
   it("has teeth: the snapshot read finds a column that is there and nothing that is not", () => {
@@ -96,12 +105,12 @@ describe("payments/payment_refunds monetary columns count whole cents, never flo
     expect(offendingSql.toLowerCase()).toMatch(/double precision/);
   });
 
-  it("payment_policy.offline_amount_cap is bigint in the Drizzle schema", () => {
+  it("payment_policy.offline_amount_cap is integer in the Drizzle schema", () => {
     const cap = Object.values(getTableColumns(paymentPolicy)).find(
       (c) => c.name === "offline_amount_cap",
     );
     expect(cap).toBeDefined(); // positive control
-    expect(cap?.columnType).toBe("PgBigInt53");
-    expect(cap?.getSQLType()).toBe("bigint");
+    expect(cap?.columnType).toBe("SQLiteInteger");
+    expect(cap?.getSQLType()).toBe("integer");
   });
 });
