@@ -291,6 +291,43 @@ describe("the node:sqlite adapter", () => {
     expect(rowCount(raw)).toBe(1);
   });
 
+  it("hands a rows object to a statement written as raw SQL inside a transaction", () => {
+    const { db } = open();
+    db.insert(rows).values({ id: 1, name: "a" }).run();
+    // Drizzle builds a FRESH transaction object for the body — it is not the database handle — so
+    // `execute` has to be put on that object too. Without this, every write path in the tree that
+    // runs raw SQL inside `db.transaction(...)` dies on `tx.execute is not a function`, which is
+    // what `packages/fiscal-verifactu`'s chain suite reported for all sixteen of its cases.
+    expect(db.transaction((tx) => tx.execute(sql`select id, name from t`))).toEqual({
+      rows: [{ id: 1, name: "a" }],
+    });
+  });
+
+  it("hands a rows object to raw SQL inside a NESTED transaction", () => {
+    const { db } = open();
+    db.insert(rows).values({ id: 1, name: "a" }).run();
+    // A savepoint gets its own object again, so the decoration has to survive one more level.
+    // `appendToChain` retries inside `tx.transaction(...)`, so this is the shape the fiscal chain
+    // actually runs.
+    expect(
+      db.transaction((tx) => tx.transaction((inner) => inner.execute(sql`select id from t`))),
+    ).toEqual({ rows: [{ id: 1 }] });
+  });
+
+  it("writes through a transaction's execute, and rolls it back with the transaction", () => {
+    const { db, raw } = open();
+    // Not only reads: the decorated `execute` must be the same statement path, so a write it runs
+    // is the transaction's write and goes with it when the body throws.
+    expect(() =>
+      db.transaction((tx) => {
+        tx.execute(sql`insert into t (id, name) values (7, 'g')`);
+        expect(rowCount(raw)).toBe(1);
+        throw new Error("deliberate");
+      }),
+    ).toThrow("deliberate");
+    expect(rowCount(raw)).toBe(0);
+  });
+
   it("closes the database it was handed", () => {
     const { raw } = open();
     adaptNodeSqlite(raw).close();

@@ -3,6 +3,7 @@ import { createTableRelationsHelpers, extractTablesRelationalConfig } from "driz
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core/dialect";
+import type { SQLiteTransactionConfig } from "drizzle-orm/sqlite-core";
 import type { DrizzleConfig } from "drizzle-orm/utils";
 import type { SQLWrapper } from "drizzle-orm";
 
@@ -185,10 +186,28 @@ export interface RawResult<TRow> {
  * which is not type-aware, so `await-thenable` is not in force).
  */
 export type NodeSqliteDatabase<TSchema extends Record<string, unknown> = Record<string, never>> =
-  BaseSQLiteDatabase<"sync", StatementResultingChanges, TSchema> & {
+  Omit<BaseSQLiteDatabase<"sync", StatementResultingChanges, TSchema>, "transaction"> & {
     execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
       query: SQLWrapper | string,
     ): RawResult<TRow>;
+    /**
+     * A transaction body is handed this same type, not Drizzle's bare `SQLiteTransaction`.
+     *
+     * Two reasons, and the first is not cosmetic: {@link addExecute} decorates the transaction
+     * object at runtime, so the value really does carry `execute`, and Drizzle's own signature
+     * would describe it wrongly. The second is that `@waitron/db` declares one `Transaction` type
+     * for both a database and a transaction on purpose, so that a write path taking a `tx` can be
+     * handed either; typing the body's parameter as anything narrower puts a cast at every call
+     * site in the tree.
+     *
+     * Structurally honest rather than a convenience: `SQLiteTransaction` extends
+     * `BaseSQLiteDatabase` and only ADDS `rollback`, so a decorated transaction satisfies
+     * everything this type requires.
+     */
+    transaction<T>(
+      body: (tx: NodeSqliteDatabase<TSchema>) => T,
+      config?: SQLiteTransactionConfig,
+    ): T;
   };
 
 /**
@@ -213,15 +232,51 @@ export function drizzleNodeSqlite<TSchema extends Record<string, unknown>>(
   };
   const session = new BetterSQLiteSession(adaptNodeSqlite(db), dialect, schema);
   const handle = new BaseSQLiteDatabase("sync", dialect, session, schema);
-  // `all` is what answers every statement kind on this driver, not only a selection: measured on
-  // node v26.7.0 against `node:sqlite`, `prepare(…).all()` returns `[]` for CREATE TABLE, for an
-  // INSERT without RETURNING and for a DELETE, and the rows for a SELECT, an INSERT … RETURNING
-  // and a PRAGMA. So one method covers what `execute()` covered on PostgreSQL.
-  return Object.assign(handle, {
+  // Through `unknown`: `Executable` names only the two members the decoration touches, so it does
+  // not overlap the full database type enough for a direct assertion.
+  return addExecute(handle as unknown as Executable) as unknown as NodeSqliteDatabase<TSchema>;
+}
+
+/**
+ * What {@link addExecute} needs of the object it decorates.
+ *
+ * Deliberately structural and loose: the two things it decorates — Drizzle's database and its
+ * transaction — do not share a public type that names both `all` and `transaction`, and the
+ * function only ever reads those two.
+ */
+type Executable = {
+  all: (query: SQLWrapper | string) => unknown;
+  transaction: (body: (tx: unknown) => unknown, config?: unknown) => unknown;
+};
+
+/**
+ * Puts `execute` on a database or transaction object, and on every transaction opened from it.
+ *
+ * `all` is what answers every statement kind on this driver, not only a selection: measured on
+ * node v26.7.0 against `node:sqlite`, `prepare(…).all()` returns `[]` for CREATE TABLE, for an
+ * INSERT without RETURNING and for a DELETE, and the rows for a SELECT, an INSERT … RETURNING and
+ * a PRAGMA. So one method covers what `execute()` covered on PostgreSQL.
+ *
+ * It has to RECURSE because Drizzle builds a fresh object for a transaction body rather than
+ * handing the body the database — `db.transaction(cb)` calls `cb` with a `SQLiteTransaction`, and
+ * that object's own `transaction` opens a savepoint with another one. Decorating only the database
+ * left every caller that runs raw SQL inside a transaction dying on `tx.execute is not a function`:
+ * all sixteen cases of `packages/fiscal-verifactu/src/chain.test.ts` did, through
+ * `src/testing/seed.ts`, and `appendToChain` retries inside `tx.transaction(...)`, so the savepoint
+ * level is reached by the product and not only by a test.
+ *
+ * The wrapped `transaction` is bound before the assignment, so the decoration cannot call itself.
+ */
+function addExecute<T extends Executable>(target: T): T {
+  const openTransaction = target.transaction.bind(target);
+  return Object.assign(target, {
     execute<TRow extends Record<string, unknown> = Record<string, unknown>>(
       query: SQLWrapper | string,
     ): RawResult<TRow> {
-      return { rows: handle.all<TRow>(query) };
+      return { rows: target.all(query) as TRow[] };
     },
-  }) as NodeSqliteDatabase<TSchema>;
+    transaction(body: (tx: unknown) => unknown, config?: unknown) {
+      return openTransaction((inner) => body(addExecute(inner as Executable)), config);
+    },
+  });
 }
