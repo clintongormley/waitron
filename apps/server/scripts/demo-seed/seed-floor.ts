@@ -3,8 +3,21 @@
 // Statuses are inserted directly because the management helper requires a session.
 
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import {
+  categories,
+  floorZones,
+  kitchenStations,
+  tableServiceStatuses,
+  type Transaction,
+} from "@waitron/db";
+import {
+  departmentHours,
+  departments,
+  preparationRoutes,
+  zoneMenus,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -76,14 +89,17 @@ export async function seedFloor(
     set name = ${restaurantName}, trading_name = ${restaurantTradingName},
         default_service_mode = 'table_tab'
     where id = ${defaultPolicy.department_id}`);
-  const { rows: deliRows } = await tx.execute<{ id: string }>(sql`
-    insert into departments
-      (location_id, name, trading_name, default_service_mode, active)
-    values (
-      ${locationId}, ${locale === "en" ? "Deli" : "Charcutería"},
-      ${locale === "en" ? "Casa Delgado Deli" : "Charcutería Casa Delgado"}, 'prepay', true
-    ) returning id`);
-  const deliDepartmentId = deliRows[0]?.id;
+  const [deliRow] = await tx
+    .insert(departments)
+    .values({
+      locationId,
+      name: locale === "en" ? "Deli" : "Charcutería",
+      tradingName: locale === "en" ? "Casa Delgado Deli" : "Charcutería Casa Delgado",
+      defaultServiceMode: "prepay",
+      active: true,
+    })
+    .returning({ id: departments.id });
+  const deliDepartmentId = deliRow?.id;
   if (deliDepartmentId === undefined)
     throw new Error("seedFloor: failed to create deli department");
 
@@ -106,20 +122,23 @@ export async function seedFloor(
         update zone_service_policies set service_mode = 'prepay'
         where zone_id = ${zoneId}`);
     } else {
-      await tx.execute(sql`
-        insert into zone_service_policies
-          (location_id, zone_id, department_id, service_mode, is_counter_default)
-        values (
-          ${locationId}, ${zoneId}, ${defaultPolicy.department_id}, null, false
-        )`);
+      await tx.insert(zoneServicePolicies).values({
+        locationId,
+        zoneId,
+        departmentId: defaultPolicy.department_id,
+        serviceMode: null,
+        isCounterDefault: false,
+      });
     }
     const restaurantMenus = menuIds === undefined ? [] : [menuIds.restaurant, menuIds.lunch];
     for (const [index, menuId] of restaurantMenus.entries()) {
-      await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id, display_order)
-        values (${zoneId}, ${menuId}, ${index})
-        on conflict (zone_id, menu_id)
-        do update set display_order = excluded.display_order`);
+      await tx
+        .insert(zoneMenus)
+        .values({ zoneId, menuId, displayOrder: index })
+        .onConflictDoUpdate({
+          target: [zoneMenus.zoneId, zoneMenus.menuId],
+          set: { displayOrder: index },
+        });
       if (index === 0) {
         await tx.execute(sql`
           update zone_service_policies set default_menu_id = ${menuId}
@@ -133,17 +152,18 @@ export async function seedFloor(
     name: locale === "en" ? "Upstairs bar" : "Bar de arriba",
     displayOrder: 3,
   });
-  await tx.execute(sql`
-    insert into zone_service_policies
-      (location_id, zone_id, department_id, service_mode, is_counter_default)
-    values (
-      ${locationId}, ${upstairsBarZone.id}, ${defaultPolicy.department_id}, 'prepay', false
-    )`);
+  await tx.insert(zoneServicePolicies).values({
+    locationId,
+    zoneId: upstairsBarZone.id,
+    departmentId: defaultPolicy.department_id,
+    serviceMode: "prepay",
+    isCounterDefault: false,
+  });
   if (menuIds !== undefined) {
     for (const [index, menuId] of [menuIds.restaurant, menuIds.lunch].entries()) {
-      await tx.execute(sql`
-        insert into zone_menus (zone_id, menu_id, display_order)
-        values (${upstairsBarZone.id}, ${menuId}, ${index})`);
+      await tx
+        .insert(zoneMenus)
+        .values({ zoneId: upstairsBarZone.id, menuId, displayOrder: index });
     }
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${menuIds.restaurant}
@@ -153,10 +173,15 @@ export async function seedFloor(
   if (menuIds !== undefined) {
     const downstairsBarZoneId = zoneIds.get("bar");
     if (downstairsBarZoneId === undefined) throw new Error("seedFloor: no downstairs bar zone");
-    const { rows: barStations } = await tx.execute<{ id: string; name: string }>(sql`
-      select id, name from kitchen_stations
-      where location_id = ${locationId}
-        and name in ('Downstairs bar', 'Upstairs bar')`);
+    const barStations = await tx
+      .select({ id: kitchenStations.id, name: kitchenStations.name })
+      .from(kitchenStations)
+      .where(
+        and(
+          eq(kitchenStations.locationId, locationId),
+          inArray(kitchenStations.name, ["Downstairs bar", "Upstairs bar"]),
+        ),
+      );
     const downstairsStationId = barStations.find(
       (station) => station.name === "Downstairs bar",
     )?.id;
@@ -164,49 +189,71 @@ export async function seedFloor(
     if (downstairsStationId === undefined || upstairsStationId === undefined) {
       throw new Error("seedFloor: bar preparation stations were not created");
     }
+    // Read the categories first and insert a row each, rather than `insert … select`: a route's id
+    // is generated by the insert BUILDER, and one statement cannot mint a distinct id per selected
+    // row.
+    const barCategories = await tx
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.stationId, downstairsStationId));
     for (const [zoneId, stationId] of [
       [downstairsBarZoneId, downstairsStationId],
       [upstairsBarZone.id, upstairsStationId],
     ] as const) {
-      await tx.execute(sql`
-        insert into preparation_routes
-          (location_id, zone_id, category_id, station_id, no_preparation)
-        select ${locationId}, ${zoneId}, id, ${stationId}, false
-        from categories
-        where station_id = ${downstairsStationId}`);
+      for (const category of barCategories) {
+        await tx.insert(preparationRoutes).values({
+          locationId,
+          zoneId,
+          categoryId: category.id,
+          stationId,
+          noPreparation: false,
+        });
+      }
     }
   }
 
-  const { rows: deliZoneRows } = await tx.execute<{ id: string }>(sql`
-    insert into floor_zones (location_id, name, display_order, active)
-    values (
-      ${locationId},
-      ${locale === "en" ? "Deli counter" : "Mostrador de charcutería"}, 4, true
-    ) returning id`);
-  const deliZoneId = deliZoneRows[0]?.id;
+  const [deliZoneRow] = await tx
+    .insert(floorZones)
+    .values({
+      locationId,
+      name: locale === "en" ? "Deli counter" : "Mostrador de charcutería",
+      displayOrder: 4,
+      active: true,
+    })
+    .returning({ id: floorZones.id });
+  const deliZoneId = deliZoneRow?.id;
   if (deliZoneId === undefined) throw new Error("seedFloor: failed to create deli service zone");
-  await tx.execute(sql`
-    insert into zone_service_policies
-      (location_id, zone_id, department_id, service_mode, is_counter_default)
-    values (${locationId}, ${deliZoneId}, ${deliDepartmentId}, null, false)`);
+  await tx.insert(zoneServicePolicies).values({
+    locationId,
+    zoneId: deliZoneId,
+    departmentId: deliDepartmentId,
+    serviceMode: null,
+    isCounterDefault: false,
+  });
   if (menuIds !== undefined) {
-    await tx.execute(sql`
-      insert into zone_menus (zone_id, menu_id, display_order)
-      values (${deliZoneId}, ${menuIds.deli}, 0)`);
+    await tx
+      .insert(zoneMenus)
+      .values({ zoneId: deliZoneId, menuId: menuIds.deli, displayOrder: 0 });
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${menuIds.deli}
       where zone_id = ${deliZoneId}`);
   }
 
   for (let weekday = 0; weekday < 7; weekday += 1) {
-    await tx.execute(sql`
-      insert into department_hours (department_id, weekday, opens_at, closes_at)
-      values (${defaultPolicy.department_id}, ${weekday}, '12:00', '01:00')`);
+    await tx.insert(departmentHours).values({
+      departmentId: defaultPolicy.department_id,
+      weekday,
+      opensAt: "12:00",
+      closesAt: "01:00",
+    });
   }
   for (let weekday = 1; weekday <= 6; weekday += 1) {
-    await tx.execute(sql`
-      insert into department_hours (department_id, weekday, opens_at, closes_at)
-      values (${deliDepartmentId}, ${weekday}, '09:00', '18:00')`);
+    await tx.insert(departmentHours).values({
+      departmentId: deliDepartmentId,
+      weekday,
+      opensAt: "09:00",
+      closesAt: "18:00",
+    });
   }
 
   for (const table of DEMO_TABLES) {
@@ -229,9 +276,10 @@ export async function seedFloor(
   }
 
   for (const [index, status] of DEMO_STATUSES.entries()) {
-    await tx.execute(
-      sql`insert into table_service_statuses (label, color, display_order)
-          values (${status.label[locale]}, ${status.color}, ${index})`,
-    );
+    await tx.insert(tableServiceStatuses).values({
+      label: status.label[locale],
+      color: status.color,
+      displayOrder: index,
+    });
   }
 }

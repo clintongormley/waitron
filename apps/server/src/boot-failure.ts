@@ -4,8 +4,9 @@ import "./errors.js";
 /**
  * Node socket-level failures. A refused connection is NOT a SQLSTATE — `sqlStateOf` returns null for
  * every one of these, because they are not five `[0-9A-Z]` characters — so this branch tests the
- * Node `code` itself. `waitForPostgres` already retries a refused connection for up to sixty
- * seconds, so reaching here means the failure outlasted that wait.
+ * Node `code` itself. Nothing retries ahead of it any more: the bounded connection wait these
+ * described went with the networked cluster, so a socket failure reaching here is a first failure,
+ * not one that outlasted a wait.
  */
 export const UNREACHABLE_SOCKET_CODES: readonly string[] = [
   "ECONNREFUSED",

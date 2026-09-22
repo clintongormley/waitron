@@ -1,7 +1,7 @@
-// Idempotent local-dev bootstrap: provision ONE preproduction venue into a local Postgres and
+// Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue DIRECTORY and
 // persist its identity to `apps/server/.env`, so `pnpm dev` boots the server against a real,
 // migrated, seeded venue. A trimmed `till-demo.ts` that stops after provisioning + seeding and
-// writes the ids down, plus a reuse guard that never re-provisions a live dev database.
+// writes the ids down, plus a reuse guard that never re-provisions a live dev venue.
 //
 // The generated `.env` carries `WAITRON_ENV=dev` (SP-C), so `pnpm dev` boots with the dev per-tab
 // device switcher ON (`config.devMode`, Task 1). This does NOT touch the fiscal side: `dev` is a
@@ -9,44 +9,29 @@
 // same AEAT endpoints, same Stripe mode, same per-record `entorno` — so the venue this script
 // provisions still BEHAVES AS `preproduction` throughout. Note this is a runtime mapping, not a
 // stored stamp: `devSetup` here never calls `stampDeployment` at all (unlike the `/setup-api/provision`
-// HTTP route or `waitron-provision instance`), so the database's `deployment` singleton is left
-// UNSTAMPED by this flow, and `assertDeploymentMatches` (boot.ts) treats an unstamped database as
-// matching any host environment.
+// HTTP route), so the database's `deployment` singleton is left UNSTAMPED by this flow, and
+// `assertDeploymentMatches` (boot.ts) treats an unstamped database as matching any host environment.
 //
 // FISCAL NOTE (CLAUDE.md §5): re-registering a till starts a NEW hash chain and mints a fresh
 // installation number. So this REUSES an already-provisioned venue (an existing `.env` naming a
-// till the database still holds) and REFUSES to provision when the database already holds a venue
-// this `.env` cannot account for — it never mints a second one into a live database. The only
-// sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
-// preproduction data); this script never deletes data itself.
+// till the venue still holds) and REFUSES to provision when the venue directory already holds a
+// venue this `.env` cannot account for — it never mints a second one into a live database. The only
+// sanctioned "start over" is `pnpm dev:reset`, which REMOVES the venue directory (throwaway
+// preproduction data); nothing else here deletes data.
 //
-// MIGRATOR-OWNED SHAPE: a fresh dev DB is bootstrapped to the SAME migrator-owned shape
-// `waitron-provision instance` produces, so a dev boot exercises the real provisioning rather than
-// hiding it behind the superuser. The migrations run AS `waitron_migrator` (a session `role=` option,
-// probe A) so every table is migrator-owned. The shared dev `postgres` database is not a
-// migrator-owned database like production, so the migrator is granted the `CREATE` privileges db
-// ownership would otherwise confer. The generated `.env` names the migrator connection.
-//
-// Run from the repo root via `pnpm dev:setup` (which brings the container up first); this script
-// only polls the connection and provisions. Never against a production database — it creates a
-// tenant and chains real fiscal records under `preproduction`.
+// Run from the repo root via `pnpm dev:setup`; it opens the venue directory, migrates it and
+// provisions. Never against a production directory — it creates a tenant and chains real fiscal
+// records under `preproduction`.
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
-import pg from "pg";
-import { and, eq } from "drizzle-orm";
-import { asAppUser, createPostgresDb, tills, withTransaction, type Database } from "@waitron/db";
+import { join } from "node:path";
+import { and, eq, sql } from "drizzle-orm";
+import { asAppUser, openVenueDatabase, tills, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  applyVenue,
-  planVenue,
-  quoteIdent,
-  withRole,
-  INSTANCE_MIGRATOR_ROLE,
-} from "@waitron/provisioning";
+import { applyVenue, planVenue } from "@waitron/provisioning";
 import { parseModuleConfig } from "@waitron/module";
 import {
   locationId as brandLocationId,
@@ -70,14 +55,15 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
 // itself is the shared, dependency-free `env-file.ts` one (split on the first `=`, skip blank/`#`).
 export { parseEnvFile };
 
-/** The container superuser + default database every demo uses — one place so the scripts agree. */
-export const DEV_DATABASE_URL = "postgres://postgres:pg@localhost:5432/postgres";
-
-/** The migrations connection: the dev superuser url with a `role=waitron_migrator` session option
- * (probe A), so `applyMigrations` runs AS the migrator and every table is migrator-owned — the shape
- * `waitron-provision instance` produces. Pure. */
-export function devMigrationsUrl(databaseUrl: string): string {
-  return withRole(databaseUrl, INSTANCE_MIGRATOR_ROLE);
+/**
+ * The venue directory a dev box uses when nothing names one: the same `<stateDir>/venue` default
+ * `apps/server/src/config.ts` resolves. Named here as a function of the state dir rather than as a
+ * constant path, because the state dir is itself resolved per run (`WAITRON_STATE_DIR`), and the
+ * tool and the server have to agree on ONE directory — a second spelling stands a venue up
+ * somewhere the server never opens. Pure.
+ */
+export function defaultDevVenueDir(stateDir: string): string {
+  return join(stateDir, "venue");
 }
 
 /** The dev venue's fiscal territory. Named once so the venue plan and the fiscal-slot `modules.json`
@@ -123,8 +109,7 @@ export function resolveSalesDays(): number {
 
 /** The exact env contract `apps/server` boots against (config.ts + till-config.ts), in write order. */
 export interface DevEnv {
-  DATABASE_URL: string;
-  WAITRON_MIGRATIONS_DATABASE_URL: string;
+  WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;
   WAITRON_ONBOARDING_INTENT: string;
   WAITRON_HTTP_PORT: string;
@@ -139,8 +124,7 @@ export interface DevEnv {
 
 /** Ordered so `renderEnvFile` emits a stable, reviewable `.env`. */
 const ENV_KEYS: readonly (keyof DevEnv)[] = [
-  "DATABASE_URL",
-  "WAITRON_MIGRATIONS_DATABASE_URL",
+  "WAITRON_VENUE_DIR",
   "WAITRON_ENV",
   "WAITRON_ONBOARDING_INTENT",
   "WAITRON_HTTP_PORT",
@@ -176,8 +160,8 @@ export function renderEnvFile(env: DevEnv): string {
 }
 
 export interface DevSetupOptions {
-  /** The database to provision into and to write as `DATABASE_URL`. */
-  databaseUrl: string;
+  /** The venue directory to migrate and provision into, and to write as `WAITRON_VENUE_DIR`. */
+  venueDir: string;
   /** Where to read/write the `.env`. */
   envPath: string;
   /** The box's state directory — where the fiscal-slot `modules.json` is written so the next `pnpm dev`
@@ -210,17 +194,14 @@ export interface DevVenueIds {
  * the real flow, not only via `resolveSeedLocale`, and `devSetup` builds its env here).
  */
 export function buildDevEnv(input: {
-  databaseUrl: string;
+  venueDir: string;
   credentialsKey: string;
   ids: DevVenueIds;
   seedLocale: SeedLocale;
 }): DevEnv {
-  const { databaseUrl, credentialsKey, ids, seedLocale } = input;
+  const { venueDir, credentialsKey, ids, seedLocale } = input;
   return {
-    DATABASE_URL: databaseUrl,
-    // The migrator connection (role=waitron_migrator session option) so a dev boot migrates AS the
-    // table owner, exactly as production does.
-    WAITRON_MIGRATIONS_DATABASE_URL: devMigrationsUrl(databaseUrl),
+    WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
     WAITRON_ONBOARDING_INTENT: "demo",
     WAITRON_HTTP_PORT: "8080",
@@ -242,61 +223,39 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
   });
 }
 
-/** Poll until Postgres accepts a connection. The root `dev:setup`/`dev:reset` scripts already pass
- * `docker compose up -d --wait db` (so Docker blocks on the healthcheck), but a direct
- * `pnpm --filter @waitron/server dev:setup` skips that gate, so this is the readiness net for the
- * standalone path — one immediate connect on the warm path. */
-export async function waitForPostgres(uri: string, log: (line: string) => void): Promise<void> {
-  const attempts = 60;
-  const delayMs = 1000;
-  for (let i = 1; i <= attempts; i++) {
-    const client = new pg.Client({ connectionString: uri });
-    try {
-      await client.connect();
-      await client.query("select 1");
-      return;
-    } catch (error) {
-      if (i === attempts) {
-        throw new Error(
-          `dev-setup: Postgres at the configured DATABASE_URL did not accept connections after ${attempts} attempts — is \`docker compose up -d db\` running?`,
-          { cause: error },
-        );
-      }
-      if (i === 1) log("dev-setup: waiting for Postgres…");
-      await delay(delayMs);
-    } finally {
-      await client.end().catch(() => {});
-    }
-  }
-}
-
 /**
- * Read whether the database contains the till this `.env` names, and whether it holds a venue at all.
- * The taxpayer row is the "any venue" signal because provisioning always writes it; the till is what
- * the `.env` can still name now that there is no tenant id to name. The connection needs SELECT on
- * both tables; the query enforces that privilege. Only an absent table means no venue; propagate
- * other query failures so a failed inspection cannot trigger provisioning over an existing venue.
+ * Read whether the venue directory contains the till this `.env` names, and whether it holds a venue
+ * at all. The taxpayer row is the "any venue" signal because provisioning always writes it; the till
+ * is what the `.env` can still name now that there is no tenant id to name.
+ *
+ * **A virgin directory OPENS** — `openVenueStore` creates it — so "there is no venue here" cannot be
+ * an open failure. It is the absence of the two TABLES, read off `sqlite_master` the way
+ * `packages/db/src/deployment.ts` reads its own, and that is what lets a fresh laptop fall through
+ * to the migrate rather than refuse. Probing, rather than running the select and catching the
+ * refusal, is also what keeps the other half honest: every other failure propagates, so a read this
+ * function could not complete never reports "empty" and never lets a second venue be provisioned
+ * over a live one (CLAUDE.md §5).
  */
 export async function inspectVenues(
-  uri: string,
+  venueDir: string,
   expectedTillId: string | null,
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
-  const client = new pg.Client({ connectionString: uri });
+  const store = await openVenueDatabase(venueDir);
   try {
-    await client.connect();
-
-    const { rows } = await client.query<{ has_expected: boolean; has_any: boolean }>(
-      "select exists(select 1 from tills where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
-      [expectedTillId],
+    const present = await store.venue.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name in (${"tills"}, ${"tenants"})`,
     );
-    return { hasExpected: rows[0]?.has_expected ?? false, hasAny: rows[0]?.has_any ?? false };
-  } catch (error) {
-    if (error !== null && typeof error === "object" && "code" in error && error.code === "42P01") {
-      return { hasExpected: false, hasAny: false };
-    }
-    throw error;
+    if (present.rows.length < 2) return { hasExpected: false, hasAny: false };
+
+    // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
+    // returned: handing a caller `0` where it expects `false` would make every `if` read true.
+    const { rows } = await store.venue.execute<{ has_expected: number; has_any: number }>(
+      sql`select exists(select 1 from tills where id = ${expectedTillId}) as has_expected,
+                 exists(select 1 from tenants) as has_any`,
+    );
+    return { hasExpected: rows[0]?.has_expected === 1, hasAny: rows[0]?.has_any === 1 };
   } finally {
-    await client.end().catch(() => {});
+    await store.close();
   }
 }
 
@@ -466,20 +425,6 @@ async function seedDemoDevices(
 }
 
 /**
- * The idempotent bootstrap, with a fiscal safety property: it provisions a venue ONLY into a database
- * that holds none. Three cases (CLAUDE.md §5 — a second venue is a second SIF and a second hash
- * chain):
- *
- *  - the `.env` names a tenant the database still holds → REUSE it, provision nothing;
- *  - the database already holds a venue the `.env` does NOT name (a lost/stale/mismatched `.env`
- *    against a live volume) → REFUSE, directing the operator to `pnpm dev:reset`;
- *  - the database holds no venue (first run, or a freshly wiped volume) → migrate, provision one
- *    preproduction venue, seed it, and write the `.env`.
- *
- * The only sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
- * preproduction data); this function never deletes data itself.
- */
-/**
  * Persist the fiscal-slot `modules.json` into the box's state dir so the next `pnpm dev` boot resolves
  * the slot to exactly one member. `ALL_MODULES` now carries TWO fiscal-slot members, so the default-on
  * set (an absent file) enables both and boot refuses `module.fiscal_slot_ambiguous`. Same mechanism the
@@ -500,107 +445,71 @@ async function writeFiscalModulesJson(
 }
 
 /**
- * Bootstrap the migrator-owned shape on a FRESH dev database, idempotently. Run as the container
- * superuser (the dev `DATABASE_URL`), which pg exposes as a full superuser — enough for `create role`.
- * The shared dev `postgres` database is superuser-owned (unlike production's per-instance
- * migrator-owned database), so the migrator is granted the `CREATE` privileges db ownership would
- * confer. Idempotent: the migrator role is guarded on the role's absence, so a re-run is a no-op.
+ * The idempotent bootstrap, with a fiscal safety property: it provisions a venue ONLY into a venue
+ * directory that holds none. Three cases (CLAUDE.md §5 — a second venue is a second SIF and a second
+ * hash chain):
+ *
+ *  - the `.env` names a till the venue still holds → REUSE it, provision nothing;
+ *  - the venue already holds a venue the `.env` does NOT name (a lost/stale/mismatched `.env`
+ *    against a live directory) → REFUSE, directing the operator to `pnpm dev:reset`;
+ *  - the directory holds no venue (first run, or a freshly removed one) → migrate, provision one
+ *    preproduction venue, seed it, and write the `.env`.
+ *
+ * The only sanctioned "start over" is `pnpm dev:reset`, which removes the venue directory (throwaway
+ * preproduction data); this function never deletes data itself.
  */
-export async function ensureDevMigratorShape(
-  superuserUrl: string,
-  log: (line: string) => void,
-): Promise<void> {
-  const url = new URL(superuserUrl);
-  const dbName = decodeURIComponent(url.pathname.replace(/^\//, ""));
-  const adminUser = decodeURIComponent(url.username);
-  const migrator = quoteIdent(INSTANCE_MIGRATOR_ROLE);
-  const client = new pg.Client({ connectionString: superuserUrl });
-  await client.connect();
-  try {
-    // The migrator role — `login createrole` because the migrate (run AS it) creates `app_user`.
-    // Guarded so a re-run does not error on an existing role.
-    const hasMigrator = await client.query("select 1 from pg_roles where rolname = $1", [
-      INSTANCE_MIGRATOR_ROLE,
-    ]);
-    if (hasMigrator.rowCount === 0) {
-      await client.query(`create role ${migrator} login createrole`);
-      log(`dev-setup: created ${INSTANCE_MIGRATOR_ROLE}`);
-    }
-    // The privileges production gets from db ownership, granted explicitly on the shared dev database:
-    // CREATE on schema public for the migrate's own tables (it runs AS the migrator); CREATE on the
-    // DATABASE because drizzle opens every run with `CREATE SCHEMA IF NOT EXISTS "public"`
-    // (`drizzle-orm@0.45.2/pg-core/dialect.js`, reached via `packages/db/src/migrate.ts`'s
-    // `migrationsSchema: "public"`) and PostgreSQL checks that privilege BEFORE the IF NOT EXISTS, so
-    // without it every migrate fails `42501 permission denied for database`, an already-migrated one
-    // included; and SET so the superuser can `set role` to the migrator via the `role=` option.
-    await client.query(`grant create on schema public to ${migrator}`);
-    if (dbName !== "") {
-      await client.query(`grant create on database ${quoteIdent(dbName)} to ${migrator}`);
-    }
-    await client.query(`grant ${migrator} to ${quoteIdent(adminUser)} with set true`);
-  } finally {
-    await client.end().catch(() => {});
-  }
-}
-
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
-  const { databaseUrl, envPath, stateDir, log = () => {} } = opts;
+  const { venueDir, envPath, stateDir, log = () => {} } = opts;
 
-  await waitForPostgres(databaseUrl, log);
-
-  // Read the existing `.env` (if any) and ask the database, in one connection, whether it holds the
-  // till that `.env` names and whether it holds any venue at all.
+  // Read the existing `.env` (if any) and ask the venue directory whether it holds the till that
+  // `.env` names and whether it holds any venue at all.
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
   const expectedTillId =
     existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_TILL_ID : null;
-  const { hasExpected, hasAny } = await inspectVenues(databaseUrl, expectedTillId);
+  const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedTillId);
 
-  // Reuse: the `.env` names a venue the database still holds.
+  // Reuse: the `.env` names a venue the directory still holds.
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
-    // Still (re)write the fiscal-slot modules.json: a dev DB provisioned before this file wrote one has
-    // no modules.json, and without it the reused venue's next boot would refuse fiscal_slot_ambiguous.
+    // Still (re)write the fiscal-slot modules.json: a dev venue provisioned before this file wrote one
+    // has no modules.json, and without it the reused venue's next boot would refuse fiscal_slot_ambiguous.
     await writeFiscalModulesJson(stateDir, log);
     return { reused: true, env: existing };
   }
 
-  // Refuse: the database already holds a venue this `.env` cannot account for. Provisioning would
+  // Refuse: the directory already holds a venue this `.env` cannot account for. Provisioning would
   // start a second fiscal chain, so fail loud rather than do it (CLAUDE.md §5).
   if (hasAny) {
     throw new Error(
-      "dev-setup: the database already holds a venue, but this apps/server/.env does not name it " +
-        "(missing, stale, or mismatched). Refusing to provision a second venue — it would start a new " +
-        "fiscal chain. Run `pnpm dev:reset` to wipe the dev volume and re-provision from scratch.",
+      "dev-setup: the venue directory already holds a venue, but this apps/server/.env does not name " +
+        "it (missing, stale, or mismatched). Refusing to provision a second venue — it would start a " +
+        "new fiscal chain. Run `pnpm dev:reset` to remove the venue directory and re-provision from " +
+        "scratch.",
     );
   }
 
-  // Bootstrap the migrator-owned shape BEFORE migrating: the migrator's default privileges (set here)
-  // then travel to every table the migrate creates.
-  await ensureDevMigratorShape(databaseUrl, log);
-
   // Fresh provision: migrate the full manifest from source (the same sets the server migrates at
   // boot — `boot.ts` uses `migrationOptionsFor(manifestSets(), config.migrationsRoot)`; `null` is
-  // the from-source root, resolved to each package's own `drizzle` dir). Migrate AS the migrator (the
-  // `role=` session option) so every table is migrator-owned.
+  // the from-source root, resolved to each package's own `drizzle` dir).
   log("dev-setup: migrating…");
-  await applyMigrations(devMigrationsUrl(databaseUrl), migrationOptionsFor(manifestSets(), null));
+  await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
   // Resolve the seed shape ONCE per run: the locale (English default, Spanish via WAITRON_SEED_LOCALE)
   // and the historical-sales horizon (WAITRON_SEED_SALES_DAYS, default 28; 0 skips sales entirely).
   const seedLocale = resolveSeedLocale();
   const salesDays = resolveSalesDays();
 
-  const db = await createPostgresDb(databaseUrl);
+  const store = await openVenueDatabase(venueDir);
   let ids;
   try {
     log("dev-setup: provisioning a preproduction venue + seeding the demo restaurant…");
-    ids = await provisionVenue(db, seedLocale, salesDays);
+    ids = await provisionVenue(store.venue, seedLocale, salesDays);
   } finally {
-    await db.close();
+    await store.close();
   }
 
   const env = buildDevEnv({
-    databaseUrl,
+    venueDir,
     credentialsKey: randomBytes(32).toString("base64"),
     ids,
     seedLocale,
@@ -613,22 +522,46 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   return { reused: false, env };
 }
 
-/** The CLI entrypoint: resolve `apps/server/.env`, run `devSetup`, print a human summary. */
+/**
+ * Remove the dev venue directory, so the next run provisions from scratch.
+ *
+ * This is what `pnpm dev:reset` used to get from `docker compose down -v`: the throwaway
+ * preproduction data lived in a Docker volume then and lives in this directory now, so the wipe had
+ * to move with it — without it, `devSetup` meets its own "already holds a venue" refusal forever and
+ * the developer has no sanctioned way to start over.
+ *
+ * `rm -rf` of the whole directory rather than of `venue.db`: the engine keeps write-ahead sidecars
+ * beside each file, and a venue file removed while its `-wal` stays behind is the shape
+ * `packages/db`'s restore surgery measured as a SILENT wrong answer (the reopen returns the old
+ * tail). `force` so a first-ever run, with no directory yet, is a no-op rather than an `ENOENT`.
+ */
+export function resetVenueDir(venueDir: string): void {
+  rmSync(venueDir, { recursive: true, force: true });
+}
+
+/**
+ * The CLI entrypoint: resolve `apps/server/.env` and the venue directory, run `devSetup`, print a
+ * human summary. `--reset` removes the venue directory first — see {@link resetVenueDir}.
+ */
 async function main(): Promise<void> {
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
-  const databaseUrl =
-    process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== ""
-      ? process.env.DATABASE_URL
-      : DEV_DATABASE_URL;
 
   // Resolve the state dir EXACTLY as boot does (`WAITRON_STATE_DIR` else `DEFAULT_STATE_ROOT`), so the
   // fiscal-slot modules.json lands where `pnpm dev` will read it. `DEFAULT_STATE_ROOT` is imported
   // dynamically so importing this module in tests does not pull the whole `boot.ts` graph.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
   const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  // And the venue dir exactly as `config.ts` does, off that same state dir — so the directory this
+  // run provisions is the one `pnpm dev` opens, by construction rather than by two settings agreeing.
+  const venueDir = resolveConfigDir(process.env.WAITRON_VENUE_DIR, defaultDevVenueDir(stateDir));
+
+  if (process.argv.includes("--reset")) {
+    resetVenueDir(venueDir);
+    console.log(`dev-setup: removed ${venueDir}`);
+  }
 
   const result = await devSetup({
-    databaseUrl,
+    venueDir,
     envPath,
     stateDir,
     log: (line) => void console.log(line),

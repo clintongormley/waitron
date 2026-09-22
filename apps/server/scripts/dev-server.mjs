@@ -15,9 +15,9 @@
 //      `<stateDir>/trading.env` WHEN THEY EXIST (onboarding slice 2b). A setup-mode box persists
 //      `trading.env` on `POST /setup-api/provision` (`trading-config.ts`) and then restarts itself
 //      (`requestRestart` in `boot.ts`); `tsx watch` picks the restart straight back up (or the
-//      operator re-runs `pnpm dev`), and sourcing the newly-written file is what carries the five
-//      `WAITRON_TILL_*_ID` + `DATABASE_URL`/`WAITRON_MIGRATIONS_DATABASE_URL`/`WAITRON_ENV` into the
-//      next boot so `tryLoadTillConfig` sees all five ids and enters TRADING mode
+//      operator re-runs `pnpm dev`), and sourcing the newly-written file is what carries the four
+//      `WAITRON_TILL_*_ID` + `WAITRON_ENV` into the next boot so `tryLoadTillConfig` sees all four
+//      ids and enters TRADING mode
 //      (`config.ts`/`till-config.ts`). Node's `--env-file` is ADDITIVE — a later file's keys override
 //      an earlier file's — and each flag REQUIRES its file to exist (a missing path is a hard error),
 //      which is why the two extra files are only added when `existsSync` finds them. The appliance

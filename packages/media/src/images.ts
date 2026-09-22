@@ -259,11 +259,22 @@ export async function updateImage(
   return readImage(tx, imageId);
 }
 
+/**
+ * Every distinct label in use, in order.
+ *
+ * The distinct-and-sort happens in JavaScript because `labels` is one text column holding a JSON
+ * array now, not an array column: there is no `unnest` to expand it and no per-element index to
+ * order by. That is the replacement `labelList` names for a query that wants one entry of a list
+ * (`packages/db/src/schema/columns.ts`).
+ *
+ * The order is by code point, which is the comparison the engine itself applies to text. It is not
+ * the collation the array query ordered by, so two labels differing only in an accent or in case
+ * can come back in a different order than they did — pinned for the ASCII labels the suite uses
+ * (`images.test.ts`), unmeasured beyond them.
+ */
 export async function listImageLabels(tx: Transaction): Promise<string[]> {
-  const result = await tx.execute<{ label: string }>(sql`
-    select distinct unnest(labels) as label from media_images order by label
-  `);
-  return result.rows.map((row) => row.label);
+  const rows = await tx.select({ labels: mediaImages.labels }).from(mediaImages);
+  return [...new Set(rows.flatMap((row) => row.labels))].sort();
 }
 
 export async function listImageTranslationGaps(

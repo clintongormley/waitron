@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { products, type Transaction } from "@waitron/db";
 import { uploadImage } from "@waitron/media";
 import { customerPresentationText, readContentLanguages } from "@waitron/catalogue";
 import { FALLBACK_LOCALE } from "@waitron/shared";
@@ -26,16 +26,18 @@ export async function seedMedia(
   // the one `uploadImage` requires an entry for.
   const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
   for (const [imageBasename, productId] of productsByImage) {
-    const { rows } = await tx.execute<{
-      name: string;
-      customer_name: Record<string, string> | null;
-    }>(sql`select name, customer_name from products where id = ${productId}`);
+    // Read through the table definition: `customer_name` is a JSON column, and a raw read hands
+    // back the stored TEXT, which `customerPresentationText` then treats as a whole name.
+    const rows = await tx
+      .select({ name: products.name, customerName: products.customerName })
+      .from(products)
+      .where(eq(products.id, productId));
     const product = rows[0];
     if (product === undefined) throw new Error("demo-seed: image product does not exist");
     const names = customerPresentationText(
       {
         name: product.name,
-        customerName: product.customer_name,
+        customerName: product.customerName,
         kitchenName: null,
         variantName: null,
         variantCustomerName: null,
@@ -49,6 +51,6 @@ export async function seedMedia(
       { bytes, names, altText: names, labels: [] },
       { maxUploadBytes: 5 * 1024 * 1024 },
     );
-    await tx.execute(sql`update products set image = ${image.filename} where id = ${productId}`);
+    await tx.update(products).set({ image: image.filename }).where(eq(products.id, productId));
   }
 }

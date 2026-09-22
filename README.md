@@ -57,7 +57,7 @@ sign-off and grant the project the right to relicense.
 Run the whole app — the two browser front-ends and the API server — against a locally-provisioned
 **preproduction** venue.
 
-**Prerequisites:** [Docker](https://www.docker.com/) (for the dev Postgres), Node ≥ 24, and
+**Prerequisites:** [Docker](https://www.docker.com/) (for the dev mail catcher), Node ≥ 24, and
 dependencies installed (`pnpm install`; a worktree made with `worktree.py` already does this).
 
 **First-time setup** (once per checkout):
@@ -66,10 +66,11 @@ dependencies installed (`pnpm install`; a worktree made with `worktree.py` alrea
 pnpm dev:setup
 ```
 
-This brings up a throwaway Postgres in Docker (`docker-compose.yml`), migrates it, provisions one
-venue (taxpayer, location, till, fiscal series), seeds a small catalogue and a cashier, and writes the
-ids to a gitignored `apps/server/.env`. It is idempotent: run it again and it reuses the same venue
-rather than minting a new fiscal chain.
+This creates a throwaway venue directory (two SQLite files under the box's state root, or wherever
+`WAITRON_VENUE_DIR` points), migrates it, provisions one venue (taxpayer, location, till, fiscal
+series), seeds a small catalogue and a cashier, and writes the ids to a gitignored
+`apps/server/.env`. It is idempotent: run it again and it reuses the same venue rather than minting a
+new fiscal chain.
 
 **Run it:**
 
@@ -92,7 +93,7 @@ The till enrols itself on first load in dev mode — no code, no approval step �
 in with the **cashier PIN 5555**; the dashboard owner login is **owner@demo.waitron.local /
 dashPass123** (`pnpm dev:setup` prints all three).
 
-To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` wipes the Docker
-volume and re-provisions. From a worktree, use `wa-wt demo <name>` for this seeded target or
+To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` removes the
+venue directory and re-provisions. From a worktree, use `wa-wt demo <name>` for this seeded target or
 `wa-wt onboarding <name>` for a fresh run through the shipping setup wizard. The launcher keeps one
 Compose database and preserves the shared development CA when you change target.

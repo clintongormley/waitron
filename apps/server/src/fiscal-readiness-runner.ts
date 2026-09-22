@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
+import { openVenueDatabase, runMigrations, withTransaction, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { migrationOptionsFor } from "@waitron/migrations";
@@ -51,7 +51,7 @@ export function fiscalReadinessInput(args: {
 }
 
 async function testVenue(
-  db: Awaited<ReturnType<typeof createPgliteDb>>,
+  db: Database,
   venue: VenueRequest,
   modules: readonly WaitronModule[],
 ): Promise<VenueResult> {
@@ -79,7 +79,11 @@ export async function submitFiscalReadiness(args: {
 }): Promise<FiscalTestStatus> {
   if (args.contribution.activationReadiness === "not-applicable") return "accepted";
   const testIdentity = fiscalReadinessDatabaseKey(args.readinessInput);
-  const db = await createPgliteDb(join(args.stateDir, `fiscal-readiness-db-${testIdentity}`));
+  // Its own venue DIRECTORY under the state root, retained between runs exactly as the single
+  // PGlite directory was: the readiness sample is a real preproduction sale on a real chain, so it
+  // must not share a file with the box's own venue and must survive a restart.
+  const store = await openVenueDatabase(join(args.stateDir, `fiscal-readiness-db-${testIdentity}`));
+  const db = store.venue;
   try {
     for (const migrations of migrationOptionsFor(
       orderedMigrationSets(args.modules),
@@ -92,7 +96,7 @@ export async function submitFiscalReadiness(args: {
     if (secret !== undefined) await secret.seal({ db, ring: args.ring }, args.secret);
 
     const existing = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sales
+      select count(*) as count from sales
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
@@ -140,6 +144,6 @@ export async function submitFiscalReadiness(args: {
     if (result.recordsHalted > 0) return "rejected";
     return "uncertain";
   } finally {
-    await db.close();
+    await store.close();
   }
 }

@@ -24,13 +24,20 @@ describe("development account email", () => {
     expect(installed).toContain("mailpit:/data");
   });
 
-  it.each(["dev:setup", "dev:reset", "dev:onboard"])("starts Mailpit in %s", (script) => {
-    expect(manifest.scripts[script]).toContain("docker compose up -d --wait db mailpit");
-  });
+  it.each(["dev:setup", "dev:reset", "dev:onboard", "dev:reset:onboard"])(
+    "starts Mailpit in %s",
+    (script) => {
+      expect(manifest.scripts[script]).toContain("docker compose up -d --wait db mailpit");
+    },
+  );
 
   it("can reset directly to a fresh onboarding target", () => {
-    expect(manifest.scripts["dev:reset:onboard"]).toBe(
-      "docker compose down -v && docker compose up -d --wait db mailpit && pnpm --filter @waitron/server dev:onboard",
+    // The RESET itself is no longer a Compose concern: the dev venue is a directory on the host, so
+    // `docker compose down -v` resets nothing and the server script owns the wipe
+    // (`dev-setup.ts`'s `--reset`). What this case still holds is the route — this entry reaches
+    // the onboarding reset and not the seeded one, which is the mix-up it was written for.
+    expect(manifest.scripts["dev:reset:onboard"]).toContain(
+      "pnpm --filter @waitron/server dev:reset:onboard",
     );
   });
 

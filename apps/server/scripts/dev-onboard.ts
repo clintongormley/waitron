@@ -1,51 +1,52 @@
-// Idempotent local-dev bootstrap for SETUP MODE: migrate a local Postgres and write a venue-less
-// `apps/server/.env`, so `pnpm dev` boots the server UNPROVISIONED and the slice-1b setup surface
-// (`/setup-api/status` + the placeholder page) is exercisable on a laptop. A trimmed `dev-setup.ts`
-// that STOPS after migrating — it never provisions a venue, so it mints no fiscal chain and writes
-// none of the four `WAITRON_TILL_*_ID`. Setup boot creates and loads its own key ring from the
-// persistent state directory so it can stage configuration and seal the first venue's credentials.
+// Idempotent local-dev bootstrap for SETUP MODE: migrate a local venue DIRECTORY and write a
+// venue-less `apps/server/.env`, so `pnpm dev` boots the server UNPROVISIONED and the slice-1b setup
+// surface (`/setup-api/status` + the placeholder page) is exercisable on a laptop. A trimmed
+// `dev-setup.ts` that STOPS after migrating — it never provisions a venue, so it mints no fiscal
+// chain and writes none of the four `WAITRON_TILL_*_ID`. Setup boot creates and loads its own key
+// ring from the persistent state directory so it can stage configuration and seal the first venue's
+// credentials.
 //
-// FISCAL NOTE (CLAUDE.md §5): a venue-bearing database is NOT a setup-mode target — provisioning a
+// FISCAL NOTE (CLAUDE.md §5): a venue-bearing directory is NOT a setup-mode target — provisioning a
 // second venue would start a second SIF and a second hash chain. So this REFUSES to run against a
-// database that already holds any venue (it never deletes data itself), directing the operator to
-// wipe the throwaway dev volume and re-run. The only setup-mode target is an UNPROVISIONED database:
-// a fresh/wiped volume, or one this script migrated but never provisioned. `pnpm dev:setup` /
-// `pnpm dev:reset` provision a venue, so a box that has run either is a TRADING target, not this one.
+// venue directory that already holds any venue (it never deletes data itself), directing the
+// operator to remove the throwaway dev venue and re-run. The only setup-mode target is an
+// UNPROVISIONED directory: a fresh/removed one, or one this script migrated but never provisioned.
+// `pnpm dev:setup` / `pnpm dev:reset` provision a venue, so a box that has run either is a TRADING
+// target, not this one.
 //
-// Run from the repo root via `pnpm dev:onboard` (which brings the container up first); this script
-// only polls the connection, migrates, and writes the `.env`.
+// Run from the repo root via `pnpm dev:onboard`; it opens the venue directory, migrates it, and
+// writes the `.env`.
 import { realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-// Reuse dev-setup's building blocks rather than re-implement them: the connection poll, the venue
-// probe, the keyed-`.env` renderer and the options shape are identical needs, and one copy keeps the
-// two scripts' behaviour from drifting.
+import { resolveConfigDir } from "../src/config.js";
+// Reuse dev-setup's building blocks rather than re-implement them: the venue probe, the
+// venue-directory default, the keyed-`.env` renderer and the options shape are identical needs, and
+// one copy keeps the two scripts' behaviour from drifting.
 import {
-  DEV_DATABASE_URL,
-  devMigrationsUrl,
-  ensureDevMigratorShape,
+  defaultDevVenueDir,
   inspectVenues,
   renderEnvFileLines,
-  waitForPostgres,
+  resetVenueDir,
 } from "./dev-setup.js";
 import type { DevSetupOptions } from "./dev-setup.js";
 
 /**
  * The env contract a SETUP-MODE box boots against — a deliberate SUBSET of `dev-setup`'s `DevEnv`.
- * DATABASE_URL + environment + port and nothing else: `boot.ts`'s setup branch (`config.till ===
+ * The venue directory + environment + port and nothing else: `boot.ts`'s setup branch (`config.till ===
  * undefined`) mounts only `/health` + the setup surface, so it reads no `WAITRON_TILL_*_ID` (their
  * absence is what SELECTS setup mode — `tryLoadTillConfig` returns undefined). The key ring is
  * generated in the persistent state directory by setup boot, outside this environment file.
  */
 export interface SetupEnv {
-  DATABASE_URL: string;
+  WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;
   WAITRON_HTTP_PORT: string;
 }
 
 /** Ordered so `renderSetupEnvFile` emits a stable, reviewable `.env`. */
 const SETUP_ENV_KEYS: readonly (keyof SetupEnv)[] = [
-  "DATABASE_URL",
+  "WAITRON_VENUE_DIR",
   "WAITRON_ENV",
   "WAITRON_HTTP_PORT",
 ];
@@ -59,7 +60,7 @@ export function renderSetupEnvFile(env: SetupEnv): string {
 
 /**
  * The options a setup-mode bootstrap takes — `dev-setup`'s `DevSetupOptions` MINUS `stateDir`, so the
- * shared fields (databaseUrl + envPath + optional log) cannot silently drift while the field only the
+ * shared fields (venueDir + envPath + optional log) cannot silently drift while the field only the
  * provisioning path needs is dropped. A setup-mode box provisions no venue and never resolves the fiscal
  * slot (boot's `config.till === undefined` branch), so it writes no `modules.json` and needs no state dir.
  */
@@ -80,40 +81,30 @@ export interface DevOnboardResult {
  *    wipes the throwaway dev volume and re-runs to start over.
  */
 export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardResult> {
-  const { databaseUrl, envPath, log = () => {} } = opts;
+  const { venueDir, envPath, log = () => {} } = opts;
 
-  await waitForPostgres(databaseUrl, log);
-
-  // Refuse a venue-bearing database BEFORE migrating: setup mode is for an UNPROVISIONED box.
+  // Refuse a venue-bearing directory BEFORE migrating: setup mode is for an UNPROVISIONED box.
   // The expected till id is `null` — there is no `.env` venue to match, so only `hasAny` matters here.
-  // An unmigrated database (no `tenants` table) reads as "no venue" (`inspectVenues` maps
-  // `42P01 undefined_table` → both-false), so a fresh volume falls straight through to migrate.
-  const { hasAny } = await inspectVenues(databaseUrl, null);
+  // An unmigrated directory (no `tenants` table) reads as "no venue", and a VIRGIN one opens rather
+  // than failing, so a fresh laptop falls straight through to migrate.
+  const { hasAny } = await inspectVenues(venueDir, null);
   if (hasAny) {
     throw new Error(
-      "dev-onboard: the database already holds a venue, so it is not a setup-mode target — setup " +
-        "mode is for an UNPROVISIONED box. Refusing to touch a database that holds a fiscal chain " +
-        "(a `dev:setup`/`dev:reset` box is a TRADING target). To exercise setup mode, wipe the " +
-        "throwaway dev volume and re-run: " +
-        "`docker compose down -v && pnpm dev:onboard`.",
+      "dev-onboard: the venue directory already holds a venue, so it is not a setup-mode target — " +
+        "setup mode is for an UNPROVISIONED box. Refusing to touch a venue that holds a fiscal chain " +
+        "(a `dev:setup`/`dev:reset` box is a TRADING target). To exercise setup mode, remove the " +
+        "throwaway dev venue and re-run: `pnpm dev:reset:onboard`.",
     );
   }
 
-  // Build the same migrator role as the seeded development target, then migrate the
-  // full manifest AS that migrator. This gives the onboarding database the table ownership and
-  // default privileges the installed provisioner creates. Then STOP — no venue is provisioned.
-  await ensureDevMigratorShape(databaseUrl, log);
-  log("dev-onboard: migrating as waitron_migrator…");
-  await applyMigrations(devMigrationsUrl(databaseUrl), migrationOptionsFor(manifestSets(), null));
+  // Migrate the full manifest into the venue directory. Then STOP — no venue is provisioned.
+  log("dev-onboard: migrating…");
+  await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
-  // `databaseUrl` also becomes the OWNER connection `POST /setup-api/provision` runs `applyVenue`
-  // over once the box boots (`.env.example`'s ONBOARDING/OWNER CONNECTION notes) — `applyVenue`
-  // INSERTs into `tenants`, a privilege `app_user` deliberately lacks but the table owner holds
-  // implicitly. `DEV_DATABASE_URL` is the container `postgres` superuser (owner-capable), so no
-  // separate admin connection is needed on the laptop; `WAITRON_MIGRATIONS_DATABASE_URL` is left
-  // unset here, which `config.ts` defaults to this same `DATABASE_URL`.
+  // `venueDir` is also what `POST /setup-api/provision` runs `applyVenue` over once the box boots:
+  // the server opens this same directory, so the setup surface and this script address one venue.
   const env: SetupEnv = {
-    DATABASE_URL: databaseUrl,
+    WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
     WAITRON_HTTP_PORT: "8080",
   };
@@ -122,16 +113,26 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   return { env };
 }
 
-/** The CLI entrypoint: resolve `apps/server/.env`, run `devOnboard`, print a human summary. */
+/**
+ * The CLI entrypoint: resolve `apps/server/.env` and the venue directory, run `devOnboard`, print a
+ * human summary. `--reset` removes the venue directory first, the same flag `dev-setup` takes.
+ */
 async function main(): Promise<void> {
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
-  const databaseUrl =
-    process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== ""
-      ? process.env.DATABASE_URL
-      : DEV_DATABASE_URL;
+
+  // The venue dir resolved exactly as `config.ts` and `dev-setup` resolve it, off the same state
+  // dir, so this script migrates the directory `pnpm dev` then opens.
+  const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
+  const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  const venueDir = resolveConfigDir(process.env.WAITRON_VENUE_DIR, defaultDevVenueDir(stateDir));
+
+  if (process.argv.includes("--reset")) {
+    resetVenueDir(venueDir);
+    console.log(`dev-onboard: removed ${venueDir}`);
+  }
 
   await devOnboard({
-    databaseUrl,
+    venueDir,
     envPath,
     log: (line) => void console.log(line),
   });

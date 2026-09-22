@@ -83,7 +83,7 @@ declare module "@waitron/shared" {
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
-    "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    "provisioning.invalid_identifier": { kind: "database"; value: string };
     /** The `venue --country` value is not two ASCII letters — the SHAPE of an ISO-3166-1 alpha-2
      * code such as `ES`, not a membership check against a country list. Refused in the CLI while
      * resolving options, before the admin credential is asked for (`cli.ts`'s `assertCountry`), so a

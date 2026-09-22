@@ -201,9 +201,11 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
-     * The cluster never accepted a connection within the entrypoint's bounded wait
-     * (`waitForPostgres`, `node-entry.ts`) — the container's database is down, still starting, or
-     * reachable at a different address.
+     * The cluster never accepted a connection within a bounded wait — the database is down, still
+     * starting, or reachable at a different address. NOTHING RAISES IT TODAY: the storage switch
+     * deleted both the connection retry this described (`waitForPostgres`) and the networked
+     * cluster it waited for. It survives as one of the two codes `classifyBootFailure`
+     * (`boot-failure.ts`) can still return, and the recovery page still has wording for it.
      *
      * `attempts` is the only param, and the driver's caught value is deliberately dropped: a `pg`
      * connection failure's `.message` can embed the host and the connection string it was built
