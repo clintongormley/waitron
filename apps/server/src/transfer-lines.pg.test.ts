@@ -58,21 +58,6 @@ import "./errors.js";
  *
  * The sibling `apps/server/src/transfer-lines.test.ts` never pays a tab, so it cannot see whether a
  * transferred café double-files. This is the only case that transfers and then settles both tabs.
- *
- * ## The surviving case is RED, and it is the PRODUCT that is broken
- *
- * Measured here 2026-09-22 on Node v26.7.0: paying a tab throws
- * `TypeError: desglose.map is not a function` at
- * `packages/fiscal-verifactu/src/backend.ts:360`, reached from `readReceiptIssuer`
- * (`apps/server/src/receipt-issuer.ts:12`) inside `fileImmediateSale`
- * (`apps/server/src/till-sale.ts:752`). `filedReceiptFor` reads the alta with
- * `tx.execute(sql`select * from registros_facturacion …`)`, and `execute` is
- * `prepare(…).all()` on the raw driver (`packages/store/src/node-sqlite-adapter.ts`), so no
- * drizzle column mapping runs — `desglose` is a `json()` column
- * (`packages/fiscal-verifactu/src/schema/registros.ts:98`) and comes back as the stored TEXT.
- * Nothing in this file can fix that, and editing the case to accept it would hide a live path: this
- * is the receipt every immediate sale prints. Same class as the drainer's raw
- * `facturas_sustituidas` read already recorded in the branch ledger.
  */
 const LOCALE = "es-ES";
 

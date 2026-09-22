@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -15,7 +16,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -27,33 +27,47 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { joinTable, mergeTabs, moveTab, openTab } from "./working-order.js";
+import { joinTable, mergeTabs, openTab } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The concurrency property under
-// test — two backends racing to move different tabs onto ONE free table, the loser serialising on the
-// target `dining_tables` FOR UPDATE lock and surfacing `table.occupied` — is exactly what PGlite CANNOT
-// show: it serialises every query onto ONE backend, so the race never happens (a FALSE pass, proven by
-// the distinct-pid assertion below). Each racing backend opens its own via `suite.pg.connect()`, and the
-// shared-container globalSetup (`testing/global-setup.ts`) THROWS its `dockerRequired` message rather
-// than skipping when Docker is absent, so a vanished suite fails loudly instead of a green that proves
-// nothing. The `manifest` template already carries the full CORE schema (dining_tables,
-// table_service_statuses, the reset trigger) plus the cluster roles — nothing is migrated here.
-//
-// STANDING NOTE — the verbs these cases exercise no longer take row locks. Every
-// `select … for update` in `working-order.ts` is gone, `mergeTabs`'s four-lock class order with
-// them: one write transaction runs on the venue file at a time, which is wider than any of them
-// (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain and the
-// receipt). A merge and a pay on the same tabs cannot overlap, so there is no pair of holders to
-// order and no `40P01` class to defend against. Everything each case below says about lock order
-// therefore describes the PostgreSQL code it was written against. The cases still stage two
-// PostgreSQL backends, so they are not evidence about the venue file at all; converting them — a
-// contention test becomes a test that the write queue serialises writers, the shape `racePair` in
-// `packages/catalogue/test/fixtures.ts` uses — is its own step and is not done here.
+/**
+ * Joining and merging tabs, through to what gets FILED — on the engine the box now runs.
+ *
+ * ## The four cases this file LOST, and what covers them now
+ *
+ * It held seven cases; four of them staged two PostgreSQL backends through `suite.pg.connect()` and
+ * asserted `pg_backend_pid()` was distinct. **There is no second connection to stage them on**: one
+ * venue file, one write transaction at a time, which is wider than any row lock those cases were
+ * written against — every `select … for update` in `working-order.ts` is gone, `mergeTabs`'s
+ * four-lock class order with it (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts`
+ * carries the chain and the receipt). Deleted:
+ *
+ * 1. **Two movers racing onto one free table**, the loser getting `table.occupied`. The REFUSAL is
+ *    covered sequentially by `move-merge.test.ts`, "refuses a target that already has an OPEN tab
+ *    (table.occupied)" (it appears once for `moveTab` and once for `joinTable`); the RACE is not.
+ * 2. **`mergeTabs(into=X)` racing `payWorkingOrder(X)` with no `40P01` and pay never the victim.**
+ * 3. **Two reverse-orientation merges over the same two tabs**, the loser getting `tab.not_open` —
+ *    the refusal survives in `move-merge.test.ts`, "refuses when either tab is not open
+ *    (tab.not_open)".
+ * 4. **The inverted-lock-order control that deliberately DID deadlock**, which existed only to show
+ *    2's hazard was real.
+ *
+ * **LOST and replaced by nothing: the lock-ORDER guarantee between `mergeTabs` and
+ * `payWorkingOrder`** — that a merge and a settle on the same tab cannot cross-lock. Nothing covers
+ * it and nothing here can, because the pair of holders it ordered no longer exists.
+ *
+ * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
+ * app_user` on a non-superuser connection; `asAppUser` is an empty body now
+ * (`packages/db/src/testing/roles.ts`), so nothing checks that role's grants are part of any
+ * refusal below.
+ */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -78,8 +92,10 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same shape `working-order.pg.test.ts` uses.
+// This counter was here because tenants accumulated for the life of the shared PostgreSQL
+// container. They do not now: the suite gets its own database file and the per-test reset empties
+// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
+// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -95,7 +111,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these move/merge PostgreSQL suites.
+    // No integrated card terminal for these move/merge suites.
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -147,11 +163,11 @@ async function setupVenue(): Promise<SeededVenue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.admin, async (tx) => {
+  const available = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -181,7 +197,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
@@ -193,39 +209,45 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
   });
 }
 
-/** The dining table's current tab_id — owner read. */
+/** The dining table's current tab_id. */
 async function tabIdOf(tableId: string): Promise<string | null> {
-  const { rows } = await suite.admin.execute<{ tab_id: string | null }>(
+  const { rows } = await suite.db.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
   );
   return rows[0]!.tab_id;
 }
 
-/** How many `sales` rows reference this working order — read as the superuser owner. */
+/** How many `sales` rows reference this working order. */
 async function saleCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
 
-/** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
-async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
-  const { rows } = await suite.admin.execute<{ status: string; settled: boolean }>(sql`
-    select status, (settled_at is not null) as settled from working_orders where id = ${id}
-  `);
-  return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+/**
+ * The working order's own state.
+ *
+ * It used to project `settled_at is not null` beside the status, for the deleted merge-vs-pay race.
+ * No case left here reads it, and a raw read of that projection returns 1/0 rather than a boolean
+ * on this engine, so it would be an unasserted value in the wrong shape.
+ */
+async function orderState(id: string): Promise<{ status: string }> {
+  const { rows } = await suite.db.execute<{ status: string }>(
+    sql`select status from working_orders where id = ${id}`,
+  );
+  return { status: rows[0]!.status };
 }
 
-/** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
+/** How many chained `registros_facturacion` rows exist for this working order's sale. */
 async function registroCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
@@ -235,13 +257,13 @@ async function registroCount(workingOrderId: string): Promise<number> {
 }
 
 /**
- * The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner. The
- * witness that a retrieved order files at the LOCKED price, not a re-price at pay.
+ * The IMMUTABLE filed `sales.total` for this working order's sale. The witness that a retrieved
+ * order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
   // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
   // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
-  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+  const { rows } = await suite.db.execute<{ total: string }>(sql`
     select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
   return rawCentsToDecimal(rows[0]!.total);
@@ -251,7 +273,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -261,69 +283,20 @@ beforeAll(() => {
   });
 });
 
-describe("moveTab concurrency (two movers onto one free table, one refused)", () => {
-  it("two backends racing to move DIFFERENT tabs onto the SAME free table → one wins, the other gets table.occupied", async () => {
-    const { cfg, cafe } = await setupVenue();
-    const srcA = await seedTable(cfg, "RA");
-    const srcB = await seedTable(cfg, "RB");
-    const target = await seedTable(cfg, "RT");
-    const tabA = await openTabOn(cfg, srcA, [{ productId: cafe.id, quantity: "1" }]);
-    const tabB = await openTabOn(cfg, srcB, [{ productId: cafe.id, quantity: "1" }]);
-
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        [connA, connB].map((d) =>
-          d
-            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-            .then((r) => r.rows[0]!.pid),
-        ),
-      );
-      expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
-
-      const attempt = (d: Database, tabId: string) =>
-        withTransaction(d, async (tx) => {
-          await asAppUser(tx);
-          return moveTab(tx, cfg, tabId, target);
-        });
-
-      const results = await Promise.allSettled([attempt(connA, tabA), attempt(connB, tabB)]);
-      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-      const rejected = results.filter((r) => r.status === "rejected");
-      expect(rejected).toHaveLength(1);
-      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
-        code: "table.occupied",
-        params: { tableId: target },
-      });
-      // Exactly one of the two tabs now covers the target (the winner's).
-      expect(await tabIdOf(target)).not.toBeNull();
-      // ...and exactly ONE source table was freed — the winner's (moveTab clears its old `tab_id` on the
-      // relocate); the loser threw before any write, so its source is UNTOUCHED and still points at its tab.
-      // Backend-agnostic: the winner is non-deterministic, so we assert only that ONE source turned over and
-      // the OTHER did not — never which.
-      const sources = await Promise.all([tabIdOf(srcA), tabIdOf(srcB)]);
-      expect(sources.filter((id) => id === null)).toHaveLength(1); // the winner's source turned over
-      expect(sources.filter((id) => id !== null)).toHaveLength(1); // the loser's source untouched
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
-  });
-});
-
 describe("joinTable → one bill", () => {
   it("a joined tab files ONE sale covering both tables on pay", async () => {
     const { cfg, cafe } = await setupVenue();
     const t1 = await seedTable(cfg, "JP1");
     const t2 = await seedTable(cfg, "JP2");
     const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await joinTable(tx, cfg, tabId, t2);
     });
     expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab (durable: settle clears status_id, not tab_id)
 
     // Pay the one tab (a retrieved open order files from its stored locked lines).
-    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -342,7 +315,7 @@ describe("mergeTabs → one registro (H2)", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
     });
@@ -352,7 +325,7 @@ describe("mergeTabs → one registro (H2)", () => {
     expect(await saleCount(fromTab)).toBe(0);
 
     // Pay the merged intoTab → exactly one sale + one chained registro for the combined bill.
-    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: intoTab,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
@@ -377,171 +350,18 @@ describe("mergeTabs join → one bill covering both tables", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
     });
     expect(await tabIdOf(tFrom)).toBe(intoTab);
 
-    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: intoTab,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
     });
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
-  });
-});
-
-/** True if `e` (or its cause) is a PostgreSQL deadlock (40P01). */
-function isDeadlock(e: unknown): boolean {
-  const code =
-    (e as { code?: string; cause?: { code?: string } })?.code ??
-    (e as { cause?: { code?: string } })?.cause?.code;
-  return code === "40P01";
-}
-
-describe("concurrent merge deadlock-safety (see the file's standing note — the lock order is retired)", () => {
-  it("mergeTabs(into=X) racing payWorkingOrder settling X → NO 40P01; pay is never the deadlock victim", async () => {
-    // The MATERIAL deadlock the reorder fixes (finish-branch Finding 1). mergeTabs(into=X, from=Y) and
-    // payWorkingOrder(X) both touch X's working_orders row AND X's dining_tables row — pay via the 0050
-    // settle trigger (UPDATE dining_tables WHERE tab_id = X). Pay locks working_orders(X) then
-    // dining_tables(X's table); mergeTabs now locks working_orders FIRST then dining_tables — the SAME
-    // order — so the two cannot cross-lock and 40P01. The OLD dining_tables-first order crossed the sale
-    // path and deadlocked; that RED result is proven by deletion in the finish-fix report. Here we ship
-    // the fixed order and assert it is clean, on two DISTINCT backends (PGlite would collapse them).
-    const { cfg, cafe, agua } = await setupVenue();
-    const tInto = await seedTable(cfg, "MP-into");
-    const tFrom = await seedTable(cfg, "MP-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
-
-    const [connMerge, connPay] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        [connMerge, connPay].map((d) =>
-          d
-            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-            .then((r) => r.rows[0]!.pid),
-        ),
-      );
-      expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
-
-      const doMerge = withTransaction(connMerge, async (tx) => {
-        await asAppUser(tx);
-        await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
-      });
-      const doPay = payWorkingOrder({ db: connPay, backend, clock }, cfg, {
-        id: intoTab,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      });
-      const [mergeRes, payRes] = await Promise.allSettled([doMerge, doPay]);
-
-      // No 40P01 in either outcome — the fixed lock order prevents the cross-lock entirely.
-      for (const r of [mergeRes, payRes]) {
-        if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
-      }
-      // Pay is NEVER aborted: mergeTabs abandons only its OWN `from` tab (Y), never intoTab (X), so X
-      // stays open whether pay wins or loses the working_orders(X) lock — pay always settles it exactly
-      // once (CLAUDE.md §5: nothing may transiently abort a sale).
-      expect(payRes.status).toBe("fulfilled");
-      expect(await orderState(intoTab)).toMatchObject({ status: "settled" });
-      expect(await saleCount(intoTab)).toBe(1);
-
-      // Exactly one of {merge, pay} saw the other's committed state — both orderings are correct and
-      // deadlock-free; which one wins the working_orders(X) lock is non-deterministic:
-      //  - merge won: it moved agua onto X and abandoned Y BEFORE pay acquired X, so pay settled the
-      //    MERGED bill (café 1.50 + agua 2.00 = 3.50) and Y is abandoned/unfiled.
-      //  - pay won:   X was already settled when merge acquired working_orders(X), so merge is refused
-      //    tab.not_open (naming intoTab), Y stays open, and the filed sale is café-only (1.50).
-      if (mergeRes.status === "fulfilled") {
-        expect(await filedSaleTotal(intoTab)).toBe("3.50");
-        expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
-      } else {
-        expect(mergeRes.reason).toMatchObject({ code: "tab.not_open", params: { tabId: intoTab } });
-        expect(await filedSaleTotal(intoTab)).toBe("1.50");
-        expect(await orderState(fromTab)).toMatchObject({ status: "open" });
-      }
-    } finally {
-      await Promise.all([connMerge.close(), connPay.close()]);
-    }
-  });
-
-  it("two reverse merges over the same two tabs serialise with NO 40P01 — one wins, the other gets tab.not_open", async () => {
-    const { cfg, cafe } = await setupVenue();
-    const tA = await seedTable(cfg, "DL-A");
-    const tB = await seedTable(cfg, "DL-B");
-    const tabA = await openTabOn(cfg, tA, [{ productId: cafe.id, quantity: "1" }]);
-    const tabB = await openTabOn(cfg, tB, [{ productId: cafe.id, quantity: "1" }]);
-
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const merge = (d: Database, into: string, from: string) =>
-        withTransaction(d, async (tx) => {
-          await asAppUser(tx);
-          await mergeTabs(tx, cfg, into, from, { freeSourceTable: true });
-        });
-
-      // Reverse orientations: A←B on one backend, B←A on the other. Both touch the SAME two working_orders
-      // rows and the SAME two dining_tables rows. What this proves TODAY: the two same-verb merges
-      // serialise cleanly — one wins, the other finds its DESTINATION (`into`) tab already abandoned and is
-      // refused `tab.not_open`, with no 40P01. (mergeTabs abandons its OWN `from` tab; under reverse
-      // orientation the winner's `from` IS the loser's `into`, so the loser trips on its `into` open-status
-      // check — error `tabId = intoTabId` — while its own source stays open.) mergeTabs now locks
-      // working_orders FIRST (ascending id, its PRIMARY KEY), so both backends contend on the lowest-id
-      // working_orders row and serialise there; the second (dining_tables) leg would serialise anyway
-      // because `dining_tables.tab_id` is UNINDEXED and both seq-scan the two rows in identical heap order.
-      // Neither leg's `.orderBy` is proven load-bearing by a same-verb race like this — the hazard control
-      // below covers the general inconsistent-order hazard, and the merge/pay race above covers the
-      // working_orders-before-dining_tables ordering that IS load-bearing.
-      const results = await Promise.allSettled([
-        merge(connA, tabA, tabB),
-        merge(connB, tabB, tabA),
-      ]);
-
-      // No 40P01 in either outcome — the two same-verb merges serialised cleanly.
-      for (const r of results) {
-        if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
-      }
-      // Exactly one merge committed; the loser found its DESTINATION (`into`) tab already abandoned → tab.not_open.
-      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-      const loser = results.find((r) => r.status === "rejected") as
-        PromiseRejectedResult | undefined;
-      expect(loser?.reason).toMatchObject({ code: "tab.not_open" });
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
-  });
-
-  it("PROVES the hazard is real: cross-locking the two tables in OPPOSITE order deadlocks (40P01)", async () => {
-    // A deterministic control proving the GENERAL hazard is real: two backends that lock the same two
-    // rows in INCONSISTENT (inverted) order deadlock. connA locks A then B; connB locks B then A; both
-    // first locks succeed, then each second lock closes the cycle → Postgres kills one (40P01). This is
-    // why the verbs impose a fixed ascending-id lock order — a defensive, plan-independent guarantee that
-    // no two ops ever invert. It does NOT show the positive test above "relies on" that order: that test
-    // passes identically with the `.orderBy` removed, because the unindexed seq-scan already fixes heap
-    // order for both backends — the order only becomes load-bearing if a schema/plan change lets scan
-    // orders diverge.
-    const { cfg } = await setupVenue();
-    const tA = await seedTable(cfg, "HZ-A");
-    const tB = await seedTable(cfg, "HZ-B");
-    const [lo, hi] = [tA, tB].sort(); // ascending by id, so the verbs would always lock `lo` first
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const begin = (d: Database) => d.execute(sql`begin`);
-      const lock = (d: Database, id: string) =>
-        d.execute(sql`select 1 from dining_tables where id = ${id} for update`);
-      await Promise.all([begin(connA), begin(connB)]);
-      await Promise.all([lock(connA, lo), lock(connB, hi)]); // first locks: no contention
-      const settled = await Promise.allSettled([lock(connA, hi), lock(connB, lo)]); // cross → deadlock
-      expect(settled.some((r) => r.status === "rejected" && isDeadlock(r.reason))).toBe(true);
-    } finally {
-      await Promise.all([
-        connA.execute(sql`rollback`).catch(() => {}),
-        connB.execute(sql`rollback`).catch(() => {}),
-      ]);
-      await Promise.all([connA.close(), connB.close()]);
-    }
   });
 });

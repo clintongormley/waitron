@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { devices, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import type { CanvasDef } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -12,32 +13,58 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Real Postgres, not PGlite: these routes wrap the device-profile CRUD store, and each verb both
-// AUTHORIZES (`authorizeManager` reads persons + management_sessions as the app role) and
-// reads/writes `device_profiles` as that same role — grants a PGlite superuser connection holds
-// unconditionally (CLAUDE.md §4). The same real-Postgres justification and harness as the
-// sibling `management-api.canvases.test.ts` (`applyVenue`/`planVenue` + password `login`).
+/**
+ * The device-profile CRUD routes end to end, over HTTP, with the manager and staff sessions a real
+ * sign-in mints.
+ *
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason was the deployment ROLE: every verb authorized (`authorizeManager`
+ * reading persons + management_sessions) and then read or wrote `device_profiles` as `app_user`,
+ * and a PGlite superuser connection would have held those grants unconditionally. SQLite has no
+ * roles and no grants; `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) and
+ * every call below runs on the one connection. Nothing here now says anything about which identity
+ * the routes reach the database as. The 403 and 401 gates are `authorizeManager` and
+ * `requireManagementSession` rather than privileges, so they are unaffected — and still pass.
+ *
+ * **One deletion receipt written into a case below is retired by the column types, and is flagged
+ * where it sits** (the malformed-`canvasId` screen in the POST body case). `device_profiles.canvas_id`
+ * is `text` with a foreign key to `canvases`
+ * (`packages/db/drizzle/0000_baseline.sql:492,:497`), so a non-UUID string reaching the column
+ * cannot raise the `22P02` that screen was recorded as forestalling. The screen still fires first,
+ * so the case still pins the response.
+ *
+ * The `device_profile.in_use` case is NOT in that category and keeps its subject: the
+ * `devices.device_profile_id` → `device_profiles.id` key survived the regeneration with `ON DELETE
+ * restrict`, the store opens with `pragma foreign_keys = on` (`packages/store/src/index.ts`), and
+ * `translateWriteError` already reads this engine's restrict code
+ * (`packages/layouts/src/device-profile-store.test.ts:79-91`).
+ */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — a distinct per-suite base from the sibling suites.
+// One NIF per provisioned venue: `resetPerTest` is off, so tenants accumulate for the life of the
+// file and the country + tax id pair is unique.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(75_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A profile (or canvas) name unique within the shared tenant, so tests are order-independent
- *  (CLAUDE.md §4) — the profile set accumulates across tests and `(name)` is unique, so a fixed
- *  name could collide across tests. */
+/** A profile (or canvas) name unique within the tenant, so tests are order-independent
+ *  (CLAUDE.md §4) — `resetPerTest` is off, so the profile set accumulates across tests and `(name)`
+ *  is unique, so a fixed name could collide across tests. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -82,17 +109,25 @@ async function setupTenant(): Promise<void> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')`);
+  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+  // NOT NULL (`packages/identity/src/schema/persons.ts`).
+  await withTransaction(suite.db, async (tx) => {
+    for (const [displayName, email, role] of [
+      ["The Manager", MANAGER_EMAIL, "manager"],
+      ["The Clerk", STAFF_EMAIL, "staff"],
+    ] as const) {
+      await tx.insert(persons).values({
+        displayName,
+        email,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role,
+      });
+    }
   });
 }
 
@@ -101,7 +136,7 @@ function mountApp(): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // nodeId sentinel: the device-profile management routes never read cfg.nodeId, but
       // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the sibling
       // management tests (management-api.canvases.test.ts, …-status/-passkey).
@@ -489,9 +524,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp();
-    // Create a profile, then bind a device to it as the owner (fixture setup), reusing the
-    // venue's provisioned location. The FK devices_device_profile_fk is ON DELETE RESTRICT, so
-    // the DELETE trips a 23001 the store translates to device_profile.in_use → the house 409.
+    // Create a profile, then bind a device to it (fixture setup), reusing the venue's provisioned
+    // location. The `device_profile_id` key is ON DELETE restrict, so the DELETE trips the engine's
+    // restrict refusal, which the store translates to device_profile.in_use → the house 409
+    // (`packages/layouts/src/device-profile-store.test.ts:79-91`).
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -505,15 +541,20 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as ProfileRow;
 
-    const location = await suite.admin.execute<{ id: string }>(
-      sql`select id from locations  limit 1`,
-    );
+    const location = await suite.db.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // The profile is a `till` form factor, so `device_binding_rule_insert / _update` requires the device to carry a
     // till_id (and no station) — bind the venue's provisioned till (fixture setup).
-    const till = await suite.admin.execute<{ id: string }>(sql`select id from tills  limit 1`);
-    await suite.admin.execute(sql`
-      insert into devices (location_id, till_id, label, token_hash, device_profile_id)
-      values (${location.rows[0]!.id}, ${till.rows[0]!.id}, ${uniqueName("Bound device")}, 'scrypt$00$00', ${id})`);
+    const till = await suite.db.execute<{ id: string }>(sql`select id from tills  limit 1`);
+    // Through the table definition: `devices.id`, `enrolled_at` and `created_at` are `$defaultFn`
+    // generators on NOT NULL columns, which a raw insert never reaches
+    // (`packages/db/src/schema/devices.ts`).
+    await suite.db.insert(devices).values({
+      locationId: location.rows[0]!.id,
+      tillId: till.rows[0]!.id,
+      label: uniqueName("Bound device"),
+      tokenHash: "scrypt$00$00",
+      deviceProfileId: id,
+    });
 
     const res = await app.request(`/management-api/device-profiles/${id}`, {
       method: "DELETE",
@@ -601,8 +642,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       error: { code: "management.request_invalid", params: { field: "canvasId" } },
     });
 
-    // A canvasId that is a string but NOT a UUID → the UUID-shape screen (`requireBodyUuid`), a clean
-    // 400 rather than a downstream `22P02` 500 on the `canvas_id` uuid column.
+    // A canvasId that is a string but NOT a UUID → the UUID-shape screen (`requireBodyUuid`).
+    // The downstream consequence this case recorded — a `22P02` 500 on a `uuid` column — is retired
+    // by `canvas_id` now being `text` (see the header). The screen still fires first.
     const malformedCanvas = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },

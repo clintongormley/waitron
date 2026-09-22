@@ -1,22 +1,24 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +
-// id/date screens, the permission-gate wiring and the STATUS map — end to end in-process, the same way
+// The purchase-invoice ROUTES end to end in-process: the request/response boundary, the body +
+// id/date screens, the permission-gate wiring and the STATUS map, the same way
 // `catalogue-api.test.ts` proves the catalogue routes. The purchase-invoice tables live in
-// CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs
-// `withTransaction` + `asAppUser` exactly as production does. The gate-by-DELETION proof, run as the
-// non-superuser app role, is the real-Postgres suite (`purchasing-api.pg.test.ts`); PGlite connects as
-// a superuser holding every grant (CLAUDE.md §4).
+// CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, so those two sets are
+// what this suite migrates rather than the whole manifest.
+//
+// There are no roles on this engine: `asAppUser` is an inert function
+// (`packages/db/src/testing/roles.ts`) and every call below runs on the one connection, so the
+// refusals here are the route gate alone and nothing checks that a deployment role's grants back
+// them up. The wider five-route sweep is `purchasing-api.pg.test.ts`, which says the same.
 const noopLog: Logger = () => {};
 
 let managerCookie: string;
@@ -29,23 +31,25 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     // Seed a MANAGER (role `manager`, holds `purchase.manage`) and a STAFF person (role `staff`, holds
-    // nothing) as the app role under the tenant, then mint a live management session for each so the
-    // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
-    // supplied even though these sessions are minted directly rather than via a PIN/password login.
+    // nothing) under the tenant, then mint a live management session for each so the route tests can
+    // drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is supplied even
+    // though these sessions are minted directly rather than via a PIN/password login.
+    //
+    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
+    // on a NOT NULL column (`packages/identity/src/schema/persons.ts`), which a raw insert never
+    // reaches — the refusal is `NOT NULL constraint failed: persons.id`.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-      const managerSession = await startManagementSession(tx, {
-        personId: mgr.rows[0]!.id,
-      });
-      const staffSession = await startManagementSession(tx, {
-        personId: stf.rows[0]!.id,
-      });
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const [stf] = await tx
+        .insert(persons)
+        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+        .returning({ id: persons.id });
+      const managerSession = await startManagementSession(tx, { personId: mgr!.id });
+      const staffSession = await startManagementSession(tx, { personId: stf!.id });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;

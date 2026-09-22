@@ -10,6 +10,7 @@ import {
   invoiceSeries,
   locations,
   nodes,
+  openVenueDatabase,
   readNodeMembership,
   readSingletonRole,
   stampDeployment,
@@ -18,12 +19,11 @@ import {
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
-import { roleUrl } from "./testing/postgres.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
@@ -43,12 +43,20 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //   boots differ only in whether the peer answers, so the read-only outcome above is the reconciliation
 //   working, not a box that was fenced anyway.
 //
-// Real Postgres, not PGlite: the fence persists `node_membership` and demotes `singleton_role` as the
-// non-superuser app/owner roles, so the GRANTS are enforced — a PGlite superuser holds every
-// privilege, so a missing one would pass (CLAUDE.md §4).
-
-const superseded = useTemplateDb({ template: "manifest", resetPerTest: false });
-const proceeds = useTemplateDb({ template: "manifest", resetPerTest: false });
+// ## What the move off PostgreSQL took out of this file
+//
+// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
+// mandatory because the fence persists `node_membership` and demotes `singleton_role` as the
+// non-superuser app and owner roles, so a missing grant would be caught here. There are no roles on
+// this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
+// (`packages/db/src/testing/roles.ts`). Every statement below, and every statement the booted
+// server issues, runs on the one connection `openVenueStore` hands out. Nothing here now shows that
+// the fence's two writes are reachable by the role that has to make them.
+//
+// **The suite keeps its own handle open while the server holds one, and only READS through it.**
+// Write-ahead mode admits a reader beside the writer, and both opens set `busy_timeout`
+// (`packages/store/src/index.ts:128-136`); the seeding writes all happen before `startServer` and
+// the read-backs after it, so the two handles never want the write lock at the same moment.
 
 // The box's own fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING + PRIMARY mode.
 const TILL_ENV = {
@@ -88,23 +96,26 @@ const BOX_CA_PEM = mintSelfSignedServerCert({
 }).caCertPem;
 
 let migrationsRoot: string;
-let supersededDatabaseUrl: string;
-let proceedsDatabaseUrl: string;
+let supersededVenueDir: string;
+let proceedsVenueDir: string;
+let supersededDb: Database;
+let proceedsDb: Database;
+const openStores: VenueDatabase[] = [];
 
 /** Seed the box's own fiscal identity (tenant/location/node/till/series) PLUS the peer node row carrying
  * the peer's public key (the trust anchor the fetched chart's signature verifies against). */
-async function seed(admin: Database): Promise<void> {
+async function seed(db: Database): Promise<void> {
   // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
   // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
   // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
   // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
   // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
   // narrowing it would be a behaviour change this conversion is not making.
-  await admin
+  await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90333333J", legalName: "Reconcile SL" })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(locations)
     .values({
       id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -113,7 +124,7 @@ async function seed(admin: Database): Promise<void> {
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -122,7 +133,7 @@ async function seed(admin: Database): Promise<void> {
     })
     .onConflictDoNothing();
   // The peer node, with its identity public key — this is what puts the peer's key in the box's trust set.
-  await admin
+  await db
     .insert(nodes)
     .values({
       id: PEER_NODE,
@@ -131,7 +142,7 @@ async function seed(admin: Database): Promise<void> {
       publicKey: PEER_KEY.publicKey,
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(tills)
     .values({
       id: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -139,7 +150,7 @@ async function seed(admin: Database): Promise<void> {
       name: "Till",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(invoiceSeries)
     .values({
       id: TILL_ENV.WAITRON_TILL_SERIES_ID,
@@ -150,9 +161,9 @@ async function seed(admin: Database): Promise<void> {
 }
 
 /** The box's OWN stale chart: it still names ITSELF serving-primary at `term`. */
-async function seedHeldChart(admin: Database, term: number): Promise<void> {
+async function seedHeldChart(db: Database, term: number): Promise<void> {
   await writeNodeMembership(
-    admin,
+    db,
     signedMembershipDoc(term, {
       signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       nodes: [
@@ -179,6 +190,20 @@ function peerFencingChart(term: number) {
   });
 }
 
+/**
+ * A fresh venue directory migrated through the manifest, plus a handle on it the suite keeps.
+ *
+ * The migration run is this suite's, not boot's, because the identity rows have to exist before
+ * boot reads them; boot's own `applyMigrations` over the same directory then finds nothing to do.
+ */
+async function migratedVenue(): Promise<[string, Database]> {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-reconcile-venue-"));
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(directory);
+  openStores.push(store);
+  return [directory, store.venue];
+}
+
 beforeAll(async () => {
   const fromSource = migrationOptionsFor(manifestSets(), null);
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-reconcile-migrations-"));
@@ -188,17 +213,25 @@ beforeAll(async () => {
     });
   }
 
-  await seed(superseded.admin);
-  await seed(proceeds.admin);
-  await stampDeployment(superseded.admin, "preproduction");
-  await stampDeployment(proceeds.admin, "preproduction");
-  // Both clones keep the default mode 'primary' — this is the returned box that believes it is primary.
-  supersededDatabaseUrl = roleUrl(superseded.pg.uri, "app_login", "app_pw");
-  proceedsDatabaseUrl = roleUrl(proceeds.pg.uri, "app_login", "app_pw");
+  // Both directories keep the default mode 'primary' — this is the returned box that believes it is
+  // primary.
+  [supersededVenueDir, supersededDb] = await migratedVenue();
+  [proceedsVenueDir, proceedsDb] = await migratedVenue();
+  for (const db of [supersededDb, proceedsDb]) {
+    await seed(db);
+    await stampDeployment(db, "preproduction");
+  }
 }, 180_000);
 
 afterAll(async () => {
+  // `pop()` returns `VenueDatabase | undefined`, so the `?.` is a real guard rather than a decorative
+  // one, and the array is left empty. Guard: `scripts/guarded-teardowns.test.ts`, which reads a
+  // teardown hook as TEXT.
+  while (openStores.length > 0) await openStores.pop()?.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
+  for (const directory of [supersededVenueDir, proceedsVenueDir]) {
+    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
+  }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -234,13 +267,13 @@ async function startPeer(document: unknown): Promise<{ url: string; stop: () => 
   };
 }
 
-describe("returned-box membership reconciliation at boot (real Postgres)", () => {
+describe("returned-box membership reconciliation at boot", () => {
   it("a reachable peer holding a higher-term fencing chart sends the returned box read-only — it cannot sell", async () => {
     // The box's stale chart (term 1, itself serving-primary) and a mirror_config pointing at the peer,
     // which holds the superseding chart (term 2, this box sell-only).
-    await seedHeldChart(superseded.admin, 1);
+    await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(superseded.admin, {
+    await writeMirrorConfig(supersededDb, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -250,8 +283,7 @@ describe("returned-box membership reconciliation at boot (real Postgres)", () =>
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: supersededDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: superseded.pg.uri,
+      WAITRON_VENUE_DIR: supersededVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -274,9 +306,9 @@ describe("returned-box membership reconciliation at boot (real Postgres)", () =>
 
       // The reconciliation PERSISTED the peer's superseding chart (term 2), and the boot demoted the
       // singleton axis off it — the durable evidence the fence engaged, not merely a per-request gate.
-      const held = await readNodeMembership(superseded.admin);
+      const held = await readNodeMembership(supersededDb);
       expect(held?.body.term).toBe(2);
-      expect(await readSingletonRole(superseded.admin)).toBe("secondary");
+      expect(await readSingletonRole(supersededDb)).toBe("secondary");
     } finally {
       await server.close();
       await peer.stop();
@@ -287,9 +319,9 @@ describe("returned-box membership reconciliation at boot (real Postgres)", () =>
     // The SAME seeded box, but its mirror_config points at a dead port: the best-effort fetch reads it as
     // unreachable and boot proceeds as primary (Ruling C7's accepted window). Without the peer answering,
     // the box keeps its own chart and sells — which is exactly what the reachable case above must prevent.
-    await seedHeldChart(proceeds.admin, 1);
+    await seedHeldChart(proceedsDb, 1);
     const deadPort = await freePort();
-    await writeMirrorConfig(proceeds.admin, {
+    await writeMirrorConfig(proceedsDb, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -299,8 +331,7 @@ describe("returned-box membership reconciliation at boot (real Postgres)", () =>
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: proceedsDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: proceeds.pg.uri,
+      WAITRON_VENUE_DIR: proceedsVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -316,9 +347,9 @@ describe("returned-box membership reconciliation at boot (real Postgres)", () =>
 
       // Its held chart is untouched (still term 1, itself serving-primary) and it stays singleton primary
       // — nothing was persisted, nothing demoted.
-      const held = await readNodeMembership(proceeds.admin);
+      const held = await readNodeMembership(proceedsDb);
       expect(held?.body.term).toBe(1);
-      expect(await readSingletonRole(proceeds.admin)).toBe("primary");
+      expect(await readSingletonRole(proceedsDb)).toBe("primary");
     } finally {
       await server.close();
     }

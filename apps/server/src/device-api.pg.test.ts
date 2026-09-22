@@ -1,17 +1,55 @@
 /**
- * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
- * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
- * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
- * `npx vitest run src/device-api.pg.test.ts` in `apps/server`, which reports `40 tests | 40 skipped`
- * and then fails the FILE. No assertion below has run on this branch; its SQL is converted anyway
- * so nothing has to be untangled twice.
+ * The device join, enrolment and management surface end to end, on the engine the box now runs.
+ *
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason for demanding a real cluster was `app_user`: every route ran as the
+ * non-owner deployment role so a missing GRANT showed up here rather than in production. SQLite has
+ * no roles and no grants — `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) —
+ * so every call below runs on the one connection and nothing here now says anything about which
+ * identity the routes reach the database as. No case was deleted for it: what each case names is a
+ * route's behaviour, and all forty are still driven.
+ *
+ * The stale `.pg.` in this file's own name, and the "(real Postgres)" in one describe below, are
+ * left for the branch's single rename sweep rather than changed here — the choice
+ * `device.pg.test.ts` records.
+ *
+ * ## Two cases are RED, and the reason is a BROKEN PRODUCT PATH, not this file
+ *
+ * `rejects a nonexistent or absent profile — device untouched` and `rejects a receiptPrinterId
+ * naming no printer of this tenant with device.binding_invalid` each expect a 400 carrying
+ * `device.binding_invalid`, and each gets a 500 carrying `server.internal`.
+ *
+ * **The disposition ledger's stated cause is wrong, and the measurement is the other way round.**
+ * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records these two as BLOCKER 2 on the ground
+ * that "the FKs do not exist … the update simply succeeds". Both halves are false here. The keys
+ * are in the SQLite baseline (`packages/db/drizzle/0000_baseline.sql`: `device_profile_id` and
+ * `receipt_printer_id`, both `REFERENCES … ON DELETE restrict`) and both are enforced. Measured
+ * 2026-09-22 in this file, driving each update directly and then the route: the update is REFUSED
+ * with errcode 787, message `FOREIGN KEY constraint failed`, and the device row is unchanged
+ * afterwards — read back through the table, `deviceProfileId` is still the profile the enrolment
+ * set. Control in the other direction: the sibling case `reassigns a device to another of this
+ * tenant's profiles` names a real profile, and passes.
+ *
+ * What is broken is the TRANSLATION. `bindingFkField` (`apps/server/src/device.ts`) asks
+ * `refusalOn(error, FOREIGN_KEY_VIOLATION, { table: "devices", columns: [...] })`, and SQLite's
+ * foreign-key message names no table and no column at all, so that can never be true — measured
+ * here, `bindingFkField` returns `undefined` for both refusals. `device-api.ts` then rethrows the
+ * driver error raw and the request ends as a 500. So the data-integrity hole the ledger inferred is
+ * NOT present: the refusal happens, it is the operator's error message that is lost.
+ *
+ * Both cases are kept and left red rather than deleted, because the routes they cover are live and
+ * a dashboard reassign to a deleted profile answers 500 today. `packages/db/src/constraint-target.ts`
+ * states the same gap from the other side and names this file's route module as a caller needing a
+ * pre-read instead.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { asAppUser, devices, deviceProfiles, printers, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
@@ -32,13 +70,12 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite — mandatory for THIS surface (CLAUDE.md §4). These routes read and write
-// as `app_user` (enrol INSERTs a device, requireDevice SELECTs+UPDATEs it, the management group
-// reads/revokes), so the table grants are enforced; PGlite connects as a superuser holding every
-// privilege, where a missing GRANT passes and fails only at runtime. Each test provisions its OWN
-// tenant, so its device/queue reads are that test's alone and order-independent across the shared
-// clone.
-const suite = useTemplateDb({ template: "manifest" });
+// Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
+// is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
 
 // The accountable operator every placing amendment is attributed to (a plain uuid, no FK — the shape
@@ -72,7 +109,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -84,7 +121,7 @@ beforeAll(() => {
  *  ticket item ids in `line_no` order (owner read). The per-line bump / foreign-station targets. */
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
   const orderId = randomUUID();
-  await parkOrder({ db: suite.admin }, venue.cfg, {
+  await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     lines: [
       { productId: venue.cafeId, quantity: "1" },
@@ -93,13 +130,13 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
     label: "Mesa 7",
   });
   await placeOrder(
-    { db: suite.admin, backend, clock },
+    { db: suite.db, backend, clock },
     venue.cfg,
     orderId,
     OPERATOR,
     venue.cfg.tillId,
   );
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+  const { rows } = await suite.db.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
     join working_order_lines wol on wol.id = ti.working_order_line_id
     where ti.working_order_id = ${orderId}
@@ -110,27 +147,48 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
 /** Move a ticket item to a DIFFERENT station (owner SQL, fixture setup) — manufactures a "foreign
  *  station" item the device bound to the default station may not bump. */
 async function moveItemToStation(itemId: string, stationId: string): Promise<void> {
-  await suite.admin.execute(
+  await suite.db.execute(
     sql`update ticket_items set station_id = ${stationId} where id = ${itemId}`,
   );
 }
 
-/** Seed a `cloud_poll` printer for the venue (owner SQL) — needs only a poll id, so no print agent has
- *  to be seeded to satisfy the transport CHECK. A real `(id)` a device binding can name. */
+/** Seed a `cloud_poll` printer for the venue — needs only a poll id, so no print agent has to be
+ *  seeded to satisfy the transport CHECK. A real `(id)` a device binding can name.
+ *  Through the table definition, never a raw insert: `printers.id` is a NOT NULL column with no SQL
+ *  default (`packages/db/drizzle/0000_baseline.sql`), its value coming from a `$defaultFn` a raw
+ *  statement never reaches. */
 async function seedPrinter(cfg: TillConfig): Promise<string> {
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into printers (location_id, name, transport, poll_id)
-    values (${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
-    returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(printers)
+    .values({
+      locationId: cfg.locationId,
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: "poll-abc",
+    })
+    .returning({ id: printers.id });
+  return row!.id;
 }
 
-/** The enrolled device row's binding columns, read as the superuser. */
-async function deviceBindings(deviceId: string): Promise<Record<string, unknown>> {
-  const { rows } = await suite.admin.execute<Record<string, unknown>>(sql`
-    select till_id, device_profile_id, receipt_printer_id, has_cash_drawer
-    from devices where id = ${deviceId}`);
-  return rows[0]!;
+/** The enrolled device row's binding columns, read straight off the row rather than through the
+ *  route. Through the table definition so the column mappings decode: `has_cash_drawer` is stored
+ *  as 0/1 and a raw read would hand back the integer. */
+async function deviceBindings(deviceId: string): Promise<{
+  tillId: string | null;
+  deviceProfileId: string;
+  receiptPrinterId: string | null;
+  hasCashDrawer: boolean;
+}> {
+  const [row] = await suite.db
+    .select({
+      tillId: devices.tillId,
+      deviceProfileId: devices.deviceProfileId,
+      receiptPrinterId: devices.receiptPrinterId,
+      hasCashDrawer: devices.hasCashDrawer,
+    })
+    .from(devices)
+    .where(eq(devices.id, deviceId));
+  return row!;
 }
 
 /** The window each mounted app was given. A fixture opens the door on the app it was handed, so the
@@ -150,7 +208,7 @@ function mountApp(
   // The window defaults to a FRESH shut holder, so a suite that never opens it cannot knock.
   mountDeviceApi(
     app,
-    { db: suite.admin, cfg, secureCookies: false, enrolRateLimiter, pairingMode },
+    { db: suite.db, cfg, secureCookies: false, enrolRateLimiter, pairingMode },
     noopLog,
   );
   return app;
@@ -164,11 +222,7 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   windows.set(app, pairingMode);
-  mountDeviceApi(
-    app,
-    { db: suite.admin, cfg, secureCookies: false, devMode, pairingMode },
-    noopLog,
-  );
+  mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, devMode, pairingMode }, noopLog);
   return app;
 }
 
@@ -199,7 +253,8 @@ function deviceCookieFrom(res: Response): string {
 }
 
 /** Seed a `device_profiles` row of the given FORM FACTOR (a device is DEFINED by its profile since Task
- *  7). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
+ *  7). A per-file counter keeps the unique name from colliding with the profiles a single test
+ *  seeds alongside it. */
 let profileCounter = 0;
 async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
@@ -211,7 +266,7 @@ async function seedProfile(
   // never reaches, and it is also what encodes `capabilities` — the list is handed over as an array
   // rather than pre-stringified, because the column's own write mapping is what serialises it, and
   // the `::jsonb` cast it used to carry is a syntax error to this parser.
-  const [row] = await suite.admin
+  const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities })
     .returning({ id: deviceProfiles.id });
@@ -219,7 +274,7 @@ async function seedProfile(
 }
 
 /**
- * Knock on `app` with an OPEN window, then accept the request directly on `suite.admin` with its own
+ * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` with its own
  * number — the two halves of production enrolment, the first through the real route (so the cookie
  * under test is the one the route set) and the second through the verb, because the accept ROUTE is
  * Task 8's. Returns the joiner's cookie jar and the id the accept carried onto the `devices` row.
@@ -233,7 +288,7 @@ async function knockAndAccept(
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string; verificationNumber: string };
-  const accepted = await withTransaction(suite.admin, async (tx) => {
+  const accepted = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       choice: knock.verificationNumber,
@@ -294,7 +349,7 @@ async function enrolHandheld(
 
 describe("POST /api/device/join", () => {
   it("refuses with device.pairing_closed when the window is shut, and touches NO row", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, undefined, mode);
     const res = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
@@ -307,7 +362,7 @@ describe("POST /api/device/join", () => {
     // No `::int` here or on the four sibling counts in this file: `count(*)` already comes back as
     // a JavaScript number, and the cast operator is a syntax error to this parser
     // (`unrecognized token: ":"`).
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
@@ -316,7 +371,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("mints a request, sets the cookie and returns the number when the window is open", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -334,7 +389,7 @@ describe("POST /api/device/join", () => {
     // The cookie's SELECTOR is the join request's id — the id accept carries onto the devices row.
     expect(deviceCookieFrom(res)).toContain(`${DEVICE_COOKIE}=${body.joinId as string}.`);
     // The row is this tenant's, pending, and carries the number that came back.
-    const { rows } = await suite.admin.execute<{ label: string; verification_number: string }>(
+    const { rows } = await suite.db.execute<{ label: string; verification_number: string }>(
       sql`select label, verification_number from join_requests
            where id = ${body.joinId as string}`,
     );
@@ -345,7 +400,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("requires a name", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -357,7 +412,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("refuses an EMPTY or MALFORMED body with 400 management.request_invalid, never a 500", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -382,7 +437,7 @@ describe("POST /api/device/join", () => {
   it("is rate limited BEFORE the window is consulted and before any DB work", async () => {
     // The window is SHUT, so a 403 would also be a plausible answer — the 429 is what proves the
     // limiter runs FIRST, and the absent `noteRefused` proves the window was never consulted.
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const limiter = createEnrolRateLimiter({ now: () => 1_000 });
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, limiter, mode);
@@ -394,21 +449,21 @@ describe("POST /api/device/join", () => {
       "device.join_rate_limited",
     );
     expect(mode.refusedRecently()).toBe(0);
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
 
   it("scopes the cookie Domain to the tenant host, host-only otherwise", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = new Hono();
     const mode = createPairingMode();
     mode.open();
     mountDeviceApi(
       app,
       {
-        db: suite.admin,
+        db: suite.db,
         cfg: venue.cfg,
         secureCookies: false,
         pairingMode: mode,
@@ -429,7 +484,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("refuses the (cap+1)th pending knock with device.join_full (429)", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -451,7 +506,7 @@ describe("devMode auto-accept", () => {
     // would 403. devMode holds it open and accepts the request in the same transaction with the venue's
     // provisioned default `till` profile, so the joiner's cookie is a working device cookie at once — no
     // window, no approval step.
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
     const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
     expect(res.status).toBe(200);
@@ -461,17 +516,17 @@ describe("devMode auto-accept", () => {
     expect(await me.json()).toMatchObject({ name: "Dev till", formFactor: "till" });
 
     // The request row is CONSUMED by the accept — it is now a device, not a pending join.
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
 
   it("404s device_profile.not_found when the venue has no default till profile, rolling the request back", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     // Remove the provisioned default `till` profile (no device references it yet, so the RESTRICT FK is
     // not tripped). Auto-accept then has no default to resolve.
-    await suite.admin.execute(sql`delete from device_profiles where form_factor = 'till'`);
+    await suite.db.execute(sql`delete from device_profiles where form_factor = 'till'`);
     const app = mountDevApp(venue.cfg, true);
     const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
     expect(res.status).toBe(404);
@@ -480,14 +535,14 @@ describe("devMode auto-accept", () => {
     );
     // The throw is inside the same transaction as the mint, so the just-created request is rolled back —
     // no orphan pending row nobody can approve.
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
 
   it("outside devMode the same knock still needs an open window (403)", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const res = await send(mountDevApp(venue.cfg, false), "POST", "/api/device/join", {
       body: { name: "x" },
     });
@@ -500,7 +555,7 @@ describe("devMode auto-accept", () => {
 
 describe("GET /api/device/join/status", () => {
   it("is pending, then approved once accepted, on the SAME cookie", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -517,7 +572,7 @@ describe("GET /api/device/join/status", () => {
     expect(await pending.json()).toEqual({ status: "pending" });
 
     const profileId = await seedProfile("till");
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
         choice: verificationNumber,
@@ -539,7 +594,7 @@ describe("GET /api/device/join/status", () => {
   });
 
   it("is not_approved after a deny, and for a cookie that names nothing", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, undefined, mode);
@@ -547,7 +602,7 @@ describe("GET /api/device/join/status", () => {
     const jar = deviceCookieFrom(knock);
     const { joinId } = (await knock.json()) as { joinId: string };
 
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return denyJoinRequest(tx, venue.cfg, joinId);
     });
@@ -565,7 +620,7 @@ describe("GET /api/device/join/status", () => {
   });
 
   it("401s without a cookie, and for a cookie that is not `<uuid>.<token>`", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const none = await send(app, "GET", "/api/device/join/status", { cookie: null });
     expect(none.status).toBe(401);
@@ -589,12 +644,12 @@ describe("GET /api/device/join/status", () => {
 
 describe("Device API over real Postgres — the device-guarded routes", () => {
   it("enrols, sets the cookie, auto-creates a till's register, and /me reports it", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja del bar");
 
     // The device row carries an auto-created register (a till device rings its own).
-    const tillId = (await deviceBindings(deviceId)).till_id;
+    const tillId = (await deviceBindings(deviceId)).tillId;
     expect(tillId).toEqual(expect.any(String));
 
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
@@ -609,10 +664,10 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
   });
 
   it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
 
-    const fria = await withTransaction(suite.admin, async (tx) => {
+    const fria = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, venue.cfg, { name: "Fría", isDefault: false });
     });
@@ -662,7 +717,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
   });
 
   it("the device routes refuse a missing / malformed cookie with 401 device.unauthorized", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const noCookie = await send(app, "GET", "/api/device/station", { cookie: null });
     expect(noCookie.status).toBe(401);
@@ -676,7 +731,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
   });
 
   it("advance refuses a bad transition and a malformed item id with 409 ticket.invalid_transition", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
     const { jar } = await enrolKds(app, venue, venue.defaultStationId);
@@ -698,7 +753,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
   });
 
   it("advance with an EMPTY, MALFORMED, or null body degrades to 409 ticket.invalid_transition, never a 500", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
     const { jar } = await enrolKds(app, venue, venue.defaultStationId);
@@ -726,7 +781,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
 
 describe("Device management routes (device.manage)", () => {
   it("require device.manage — 401 unauthenticated, 403 for a staff session", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const DUMMY = "00000000-0000-0000-0000-000000000000";
 
@@ -757,7 +812,7 @@ describe("Device management routes (device.manage)", () => {
   });
 
   it("GET /management-api/devices lists this tenant's devices, kind derived from the profile", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
     const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
@@ -780,7 +835,7 @@ describe("Device management routes (device.manage)", () => {
   });
 
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const unknown = randomUUID();
     const res = await send(app, "POST", `/management-api/devices/${unknown}/revoke`, {
@@ -799,7 +854,7 @@ describe("Device management routes (device.manage)", () => {
 
   describe("assign-device-profile (reassign only — the profile is NOT NULL since Task 7)", () => {
     it("reassigns a device to another of this tenant's profiles", async () => {
-      const venue = await setupVenue(suite.admin);
+      const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
       const target = await seedProfile("kds");
@@ -811,11 +866,11 @@ describe("Device management routes (device.manage)", () => {
         { cookie: venue.managerCookie, body: { deviceProfileId: target } },
       );
       expect(assign.status).toBe(204);
-      expect((await deviceBindings(deviceId)).device_profile_id).toBe(target);
+      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(target);
     });
 
     it("rejects a nonexistent or absent profile — device untouched", async () => {
-      const venue = await setupVenue(suite.admin);
+      const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
 
@@ -832,7 +887,7 @@ describe("Device management routes (device.manage)", () => {
         ).toMatchObject({
           error: { code: "device.binding_invalid", params: { field: "deviceProfileId" } },
         });
-        expect((await deviceBindings(deviceId)).device_profile_id).toBe(profileId);
+        expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
       }
 
       // An absent target is a request-shape 400 (the profile is required — it cannot be cleared).
@@ -851,7 +906,7 @@ describe("Device management routes (device.manage)", () => {
     });
 
     it("with an unknown or malformed device id → 404 device.not_found", async () => {
-      const venue = await setupVenue(suite.admin);
+      const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
       const profileId = await seedProfile("kds");
       const unknown = randomUUID();
@@ -876,7 +931,7 @@ describe("Device management routes (device.manage)", () => {
 
 describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   it("sets the receipt printer + cash drawer and returns the updated device", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja hw");
@@ -894,15 +949,15 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
       receiptPrinterId: printerId,
       hasCashDrawer: true,
     });
-    // The row itself carries the new bindings (read back as the superuser, bypassing the route).
+    // The row itself carries the new bindings, read straight off the row rather than the route.
     expect(await deviceBindings(deviceId)).toMatchObject({
-      receipt_printer_id: printerId,
-      has_cash_drawer: true,
+      receiptPrinterId: printerId,
+      hasCashDrawer: true,
     });
   });
 
   it("requires device.manage — 401 unauthenticated, 403 for a staff session", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja gate");
 
@@ -925,7 +980,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("404s an unknown or malformed device id", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const unknown = randomUUID();
     const res = await send(app, "PATCH", `/management-api/devices/${unknown}/hardware`, {
@@ -945,7 +1000,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
   });
 
   it("rejects a receiptPrinterId naming no printer of this tenant with device.binding_invalid", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja fk");
 
@@ -964,7 +1019,7 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
 
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
@@ -979,15 +1034,15 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("echoes the device's hardware bindings (set as the dashboard would)", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja hw");
-    await suite.admin.execute(sql`
+    await suite.db.execute(sql`
       update devices
          set receipt_printer_id = ${printerId}, has_cash_drawer = true
        where id = ${deviceId}`);
-    const tillId = (await deviceBindings(deviceId)).till_id;
+    const tillId = (await deviceBindings(deviceId)).tillId;
 
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
@@ -1003,7 +1058,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
@@ -1014,7 +1069,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   });
 
   it("GET /api/device/me 401s a request with no device cookie", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const res = await send(app, "GET", "/api/device/me", { cookie: null });
     expect(res.status).toBe(401);
@@ -1023,7 +1078,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
 
 describe("join rate limiter (spec §8)", () => {
   it("rate-limits the knock: the (cap+1)th is 429 BEFORE the DB, then the window resets", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     let fakeNow = 1_000;
     const limiter = createEnrolRateLimiter({ now: () => fakeNow });
     const mode = createPairingMode();
@@ -1045,7 +1100,7 @@ describe("join rate limiter (spec §8)", () => {
       error: { code: "device.join_rate_limited" },
     });
     // Refused before any DB work: only the two admitted knocks left rows.
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(2);
@@ -1059,7 +1114,7 @@ describe("join rate limiter (spec §8)", () => {
 
 describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
     // Enrol through a NON-dev mount: a devMode knock now auto-accepts as a till (this task), so the full
     // knock+accept helper — which enrols a KDS bound to a station — runs against a production mount. The
@@ -1085,7 +1140,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   });
 
   it("lists only ACTIVE devices — a revoked device is omitted", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
     // Enrol through a non-dev mount (a devMode knock auto-accepts as a till now); the dev list reads the
     // same tenant's devices.
@@ -1109,7 +1164,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   });
 
   it("is absent (404) when devMode is false / omitted", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     expect((await send(mountDevApp(venue.cfg, false), "GET", "/api/dev/devices")).status).toBe(404);
     expect((await send(mountApp(venue.cfg), "GET", "/api/dev/devices")).status).toBe(404);
   });
@@ -1117,7 +1172,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
 
 describe("deleted routes are gone (404)", () => {
   it("POST /api/dev/devices and POST /api/device/reset no longer exist, even under devMode", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const devApp = mountDevApp(venue.cfg, true);
     expect((await send(devApp, "POST", "/api/dev/devices", { body: {} })).status).toBe(404);
     expect((await send(devApp, "POST", "/api/device/reset", {})).status).toBe(404);
@@ -1133,7 +1188,7 @@ describe("deleted routes are gone (404)", () => {
     ["POST", "/api/device/enrol/verify"],
     ["POST", "/management-api/device-codes"],
   ])("%s %s", async (method, path) => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const res = await send(mountApp(venue.cfg), method as "POST", path, { body: {} });
     expect(res.status).toBe(404);
   });

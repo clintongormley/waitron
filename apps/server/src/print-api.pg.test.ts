@@ -5,16 +5,20 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
+  kitchenStations,
   locations,
   nowIso,
+  printAgents,
   printJobs,
   tenants,
+  tills,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
   CORE_CHANGE_SOURCES,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob } from "@waitron/printing";
 import {
@@ -31,15 +35,28 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-// Real Postgres (a manifest template clone), NOT PGlite — mandatory for THIS surface (CLAUDE.md §4).
-// These routes read and write as `app_user` (the agent guard + claim + report, the management
-// list/revoke/CRUD), and the properties this suite is FOR are the ones PGlite's all-superuser,
-// single-backend connection FALSE-passes: the table grants the routes need, the `printer.manage` gate
-// proven by DELETION, the claim COMMITTING within the request (observed cross-connection), and
-// revocation stopping the Bearer instantly under the real deployment role. What the claim does when
-// two agents contend is proven separately in packages/printing's runtime.race.test.ts, and the claim
-// statement's own behaviour under contention in packages/db's job-claim.pg.test.ts; the SERVER path
-// calls that same `claimPrintJobs`.
+/**
+ * The print agent, printer and till-configuration routes, on the engine the box now runs.
+ *
+ * ## Two things this file argued for that no longer exist
+ *
+ * Its old header said real PostgreSQL was MANDATORY here rather than PGlite, for two properties
+ * that a single-superuser-connection engine cannot show. Both are gone and neither is replaced.
+ *
+ * 1. **The GRANT half.** Every route below ran as `app_user`, and the header claimed the suite
+ *    proved the table grants those routes need. SQLite has no roles and no grants: one process
+ *    opens one file, and `asAppUser` is an empty function body
+ *    (`packages/db/src/testing/roles.ts:25`). The `asAppUser(tx)` calls below are kept where they
+ *    were because the product code still calls it, not because they check anything.
+ * 2. **The cross-connection commit boundary.** The first case read the claimed job back "from a
+ *    separate pooled backend" to show the claim's transaction had COMMITTED inside the request.
+ *    There is one connection now, so that read cannot distinguish a committed claim from an open
+ *    one, and the case's comment is rewritten to say what it still proves.
+ *
+ * What survives is everything the route layer decides for itself: the `printer.manage` gate proven
+ * by DELETION, the key-scoped claim eligibility, the mapping and configuration routes, the change
+ * events and the resend rules.
+ */
 const noopLog: Logger = () => {};
 
 interface Tenant {
@@ -50,10 +67,14 @@ let tenantA: Tenant;
 let managerCookie: string;
 let staffCookie: string;
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared clone and `tenants_country_tax_id_key` is unique, so
-// each needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
+// Tenants accumulate for the life of the database and `tenants_country_tax_id_key` is unique, so
+// each needs its own NIF — the per-suite counter the sibling suites use.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -65,10 +86,10 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
   // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
   // error here.
-  await suite.admin
+  await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.admin
+  const [loc] = await suite.db
     .insert(locations)
     .values({
       name: "Barra",
@@ -81,7 +102,7 @@ async function seedTenantWithLocation(): Promise<Tenant> {
 
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
-  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
@@ -118,9 +139,9 @@ function cfgOf(tenant: Tenant): TillConfig {
   };
 }
 
-/** The print API mounted over the REAL app-role pool (suite.admin), scoped to `tenant`. The pairing
- * window is OPEN so `joinAndAccept`'s knock is admitted; `readMembership` returns no chart (the pull's
- * `servers` are proven in the PGlite suite). */
+/** The print API mounted over the suite's venue database, scoped to `tenant`. The pairing window is
+ * OPEN so `joinAndAccept`'s knock is admitted; `readMembership` returns no chart (the pull's
+ * `servers` are proven in the sibling `print-api.test.ts`). */
 function mountApp(tenant: Tenant): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
@@ -128,7 +149,7 @@ function mountApp(tenant: Tenant): Hono {
   mountPrintApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: cfgOf(tenant),
       pairingMode,
       readMembership: async () => null,
@@ -171,7 +192,7 @@ async function joinAndAccept(
     verificationNumber: string;
   };
   const joinId = token.slice(0, token.indexOf("."));
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
       choice: verificationNumber,
@@ -201,41 +222,52 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
 }
 
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
   });
 }
 
-/** Seed one kitchen station for `tenant` directly (owner SQL) — the attach target the mapping routes
- * wire a printer to. A fresh unique name each call keeps `kitchen_stations_name_key` happy across the
- * shared clone. */
+/** Seed one kitchen station for `tenant` — the attach target the mapping routes wire a printer to. A
+ * fresh unique name each call keeps `kitchen_stations_name_key` happy across the suite's one
+ * database. */
 async function seedStation(tenant: Tenant, name: string): Promise<string> {
-  const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into kitchen_stations (location_id, name, is_default, active)
-    values (${tenant.locationId}, ${name}, false, true) returning id`);
-  return row.rows[0]!.id;
+  // Through the table definition: `id` and `created_at` are `$defaultFn` generators on NOT NULL
+  // columns here, which a raw `insert into kitchen_stations (...)` never reaches.
+  const [row] = await suite.db
+    .insert(kitchenStations)
+    .values({ locationId: tenant.locationId, name, isDefault: false, active: true })
+    .returning({ id: kitchenStations.id });
+  return row!.id;
 }
 
-/** Read a print agent's `active` flag directly (owner SQL) — the check the allow/revoke tests make on
- * the row itself, not through the API. */
+/** Read a print agent's `active` flag off the row itself rather than through the API — the check the
+ * allow/revoke tests make. Through the table definition so the `flag` column's read mapping turns
+ * SQLite's stored 0/1 back into a boolean. */
 async function agentActive(agentId: string): Promise<boolean> {
-  const row = await suite.admin.execute<{ active: boolean }>(
-    sql`select active from print_agents where id = ${agentId}`,
-  );
-  return row.rows[0]!.active;
+  const [row] = await suite.db
+    .select({ active: printAgents.active })
+    .from(printAgents)
+    .where(eq(printAgents.id, agentId));
+  return row!.active;
 }
 
-/** Seed one SELF-ENROLLED print agent directly (owner SQL) with a known `node_id` — the provenance the
- * list must surface. `joinAndAccept` mints only human-enrolled (node_id NULL) agents, so a row with a
- * node stamped on it is inserted here. A fresh `node_id` per call keeps `print_agents_tenant_node_key`
- * (unique on the non-NULL node) happy across the shared clone. */
+/** Seed one SELF-ENROLLED print agent with a known `node_id` — the provenance the list must surface.
+ * `joinAndAccept` mints only human-enrolled (node_id NULL) agents, so a row with a node stamped on it
+ * is inserted here. A fresh `node_id` per call keeps `print_agents_tenant_node_key` (unique on the
+ * non-NULL node) happy. */
 async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
-  const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (location_id, name, node_id, token_hash)
-    values (${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
-  return row.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(printAgents)
+    .values({
+      locationId: tenant.locationId,
+      name: "Self-enrolled",
+      nodeId,
+      tokenHash: "x",
+    })
+    .returning({ id: printAgents.id });
+  return row!.id;
 }
 
 describe("Print API over real Postgres (as the app role)", () => {
@@ -251,10 +283,11 @@ describe("Print API over real Postgres (as the app role)", () => {
       jobId,
     ]);
 
-    // COMMIT BOUNDARY (Ruling 6): a SEPARATE connection (suite.admin, a distinct pooled backend) sees
-    // the claimed job as `printing` the instant the response has returned — proof the claim's
-    // transaction COMMITTED within the request and the server holds no lock/tx across the agent's push.
-    const seen = await suite.admin.execute<{ status: string }>(
+    // The claimed job reads `printing` the instant the response has returned. This is NOT the
+    // commit-boundary proof the PostgreSQL version of this case claimed: there is one connection
+    // here, so the read cannot tell a committed claim from one still open on it. What it still
+    // shows is that the request wrote the status rather than only reporting it.
+    const seen = await suite.db.execute<{ status: string }>(
       sql`select status from print_jobs where id = ${jobId}`,
     );
     expect(seen.rows[0]!.status).toBe("printing");
@@ -264,7 +297,7 @@ describe("Print API over real Postgres (as the app role)", () => {
       body: { status: "done" },
     });
     expect(report.status).toBe(204);
-    const done = await suite.admin.execute<{ status: string; delivered_at: string | null }>(
+    const done = await suite.db.execute<{ status: string; delivered_at: string | null }>(
       sql`select status, delivered_at from print_jobs where id = ${jobId}`,
     );
     expect(done.rows[0]!.status).toBe("done");
@@ -289,7 +322,7 @@ describe("Print API over real Postgres (as the app role)", () => {
     });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { jobs: unknown[] }).jobs).toHaveLength(0);
-    const untouched = await suite.admin.execute<{ status: string }>(
+    const untouched = await suite.db.execute<{ status: string }>(
       sql`select status from print_jobs where id = ${jobId}`,
     );
     expect(untouched.rows[0]!.status).toBe("queued");
@@ -581,33 +614,35 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage)
   });
 });
 
-/** Seed one till for `tenant` directly (owner SQL) — the target the receipt-printer route configures. */
+/** Seed one till for `tenant` — the target the receipt-printer route configures. Through the table
+ * definition, for the same generator reason `seedStation` states. */
 async function seedTill(tenant: Tenant, name: string): Promise<string> {
-  const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${tenant.locationId}, ${name}) returning id`);
-  return row.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(tills)
+    .values({ locationId: tenant.locationId, name })
+    .returning({ id: tills.id });
+  return row!.id;
 }
 
-/** Read a till's currently-set receipt printer id (owner SQL, a distinct connection). */
+/** Read a till's currently-set receipt printer id, off the row rather than through the API. */
 async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
-  const row = await suite.admin.execute<{ receipt_printer_id: string | null }>(
+  const row = await suite.db.execute<{ receipt_printer_id: string | null }>(
     sql`select receipt_printer_id from tills where id = ${tillId}`,
   );
   return row.rows[0]!.receipt_printer_id;
 }
 
-/** Read a location's currently-set receipt print mode (owner SQL, a distinct connection). */
+/** Read a location's currently-set receipt print mode, off the row rather than through the API. */
 async function locationPrintMode(locationId: string): Promise<string> {
-  const row = await suite.admin.execute<{ receipt_print_mode: string }>(
+  const row = await suite.db.execute<{ receipt_print_mode: string }>(
     sql`select receipt_print_mode from locations where id = ${locationId}`,
   );
   return row.rows[0]!.receipt_print_mode;
 }
 
-/** Read a location's currently-set drawer-open policy (owner SQL, a distinct connection). */
+/** Read a location's currently-set drawer-open policy, off the row rather than through the API. */
 async function locationDrawerPolicy(locationId: string): Promise<string> {
-  const row = await suite.admin.execute<{ drawer_open_policy: string }>(
+  const row = await suite.db.execute<{ drawer_open_policy: string }>(
     sql`select drawer_open_policy from locations where id = ${locationId}`,
   );
   return row.rows[0]!.drawer_open_policy;
@@ -876,10 +911,10 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
 it("delivers enqueue and agent completion events with fresh printer aggregates", async () => {
   const app = mountApp(tenantA);
   const bus = new LiveEvents();
-  mountLiveApi(app, { db: suite.admin, bus, resourceTypes: ["printers", "print_jobs"] }, noopLog);
+  mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers", "print_jobs"] }, noopLog);
   const { agentId, token } = await joinAndAccept(app, "Live agent");
   const printerId = await createPrinter(app, agentId, "Live printer");
-  await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);
+  await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, noopLog));
   const url = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: printerId }]))}`;
   const response = await send(app, "GET", url, { cookie: managerCookie });
@@ -941,7 +976,7 @@ describe("print job resend as the deployment role", () => {
     );
     // `now()` has no equivalent here; the clock is read in JavaScript and bound. `delivered_at` is
     // a text column, and `nowIso()` is the canonical spelling every other writer of it uses.
-    await suite.admin
+    await suite.db
       .update(printJobs)
       .set({ status: "done", deliveredAt: nowIso() })
       .where(eq(printJobs.id, originalId));
@@ -956,7 +991,7 @@ describe("print job resend as the deployment role", () => {
     expect(response.status).toBe(202);
     const { jobId } = (await response.json()) as { jobId: string };
     expect(jobId).not.toBe(originalId);
-    const rows = await suite.admin.execute<{
+    const rows = await suite.db.execute<{
       id: string;
       status: string;
       payload: string;
@@ -981,7 +1016,7 @@ describe("print job resend as the deployment role", () => {
     });
     expect(pending.status).toBe(409);
     expect(await pending.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
-    await suite.admin.execute(sql`update print_jobs set kind = 'drawer' where id = ${originalId}`);
+    await suite.db.execute(sql`update print_jobs set kind = 'drawer' where id = ${originalId}`);
     const drawerResend = await send(app, "POST", path, { cookie: managerCookie });
     expect(drawerResend.status).toBe(409);
     expect(await drawerResend.json()).toMatchObject({

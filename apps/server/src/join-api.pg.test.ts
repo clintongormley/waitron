@@ -1,18 +1,30 @@
 /**
- * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
- * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
- * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
- * `npx vitest run src/join-api.pg.test.ts` in `apps/server`, which reports `34 tests | 34 skipped`
- * and then fails the FILE. No assertion below has run on this branch; its SQL is converted anyway
- * so nothing has to be untangled twice.
+ * The management-side join routes — the pairing window, the queue, the challenge, deny, accept and
+ * self-enrol — on the engine the box now runs.
+ *
+ * ## What went with PostgreSQL, and is replaced by nothing
+ *
+ * The old header argued this file needed real PostgreSQL rather than PGlite because every route
+ * runs as `app_user` under `withTransaction`, so the `join_requests` / `devices` / `tills` grants
+ * were enforced, where a superuser session would let a missing GRANT pass. SQLite has no roles and
+ * no grants: one process opens one file and `asAppUser` is an empty function body
+ * (`packages/db/src/testing/roles.ts:25`). Nothing here or elsewhere now checks that these routes
+ * reach only what the deployment role is allowed to reach.
+ *
+ * What every case below still proves is the ROUTE: its permission gate, its refusal codes, the
+ * shape of what it returns, and what it leaves in the tables — none of which the database enforced.
+ *
+ * The stale `.pg.` in this file's own name is left for the branch's single rename sweep, the choice
+ * `apps/server/src/device.pg.test.ts:24` records.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountJoinApi } from "./join-api.js";
 import { createJoinRequest, type JoinRequestKind, PENDING_CAP } from "./join-requests.js";
 import { createPairingMode, PAIRING_WINDOW_MS, type PairingMode } from "./pairing-mode.js";
@@ -21,16 +33,17 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTransaction`,
-// so the join_requests / devices / tills grants are enforced. PGlite connects as a superuser holding
-// every privilege, where a missing GRANT passes and fails only in production. Each test provisions
-// its OWN tenant, so its rows are that test's alone and order-independent across the shared clone.
-const suite = useTemplateDb({ template: "manifest" });
+// Each test provisions its OWN venue, and `useVenueDb` empties the data tables between tests, so
+// the rows each case reads back are its own.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 const noopLog: Logger = () => {};
 
 function mountApp(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
-  mountJoinApi(app, { db: suite.admin, cfg, pairingMode }, noopLog);
+  mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
   return app;
 }
 
@@ -66,7 +79,7 @@ async function knock(
   venue: Venue,
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
 ): Promise<{ joinId: string; verificationNumber: string }> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const made = await createJoinRequest(tx, venue.cfg, input);
     return { joinId: made.joinId, verificationNumber: made.verificationNumber };
@@ -80,17 +93,17 @@ async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promi
   // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
   // never reaches, and it is also what encodes `capabilities` — the `::jsonb` cast is a syntax
   // error to this parser (`unrecognized token: ":"`).
-  const [row] = await suite.admin
+  const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
     .returning({ id: deviceProfiles.id });
   return row!.id;
 }
 
-/** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
- *  table and not about what a route chose to show. */
+/** How many pending requests this venue holds — read straight from the table, so the assertion is
+ *  about what is stored and not about what a route chose to show. */
 async function pendingCount(): Promise<number> {
-  const { rows } = await suite.admin.execute<{ n: number }>(
+  const { rows } = await suite.db.execute<{ n: number }>(
     // No `::int` here or in the two sibling counts below: `count(*)` already comes back as a
     // JavaScript number, and the cast operator is a syntax error to this parser.
     sql`select count(*) as n from join_requests `,
@@ -100,7 +113,7 @@ async function pendingCount(): Promise<number> {
 
 describe("the pairing-mode control", () => {
   it("GET reports a shut window, with the refused count", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.noteRefused();
     mode.noteRefused();
@@ -113,7 +126,7 @@ describe("the pairing-mode control", () => {
   });
 
   it("POST opens the window and returns openUntil; a second POST extends rather than stacking", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     let clock = Date.parse("2026-09-08T10:00:00.000Z");
     const mode = createPairingMode({ now: () => clock });
     const app = mountApp(venue.cfg, mode);
@@ -139,7 +152,7 @@ describe("the pairing-mode control", () => {
   });
 
   it("GET reports the open window's lapse instant", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const clock = Date.parse("2026-09-08T10:00:00.000Z");
     const mode = createPairingMode({ now: () => clock });
     const app = mountApp(venue.cfg, mode);
@@ -155,7 +168,7 @@ describe("the pairing-mode control", () => {
   });
 
   it("DELETE closes it", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     mode.open();
     const app = mountApp(venue.cfg, mode);
@@ -169,7 +182,7 @@ describe("the pairing-mode control", () => {
   it.each([false, true])(
     "renews the window without extending the session (initially open: %s), while a manual open extends it",
     async (initiallyOpen) => {
-      const venue = await setupVenue(suite.admin);
+      const venue = await setupVenue(suite.db);
       const sessionId = venue.managerCookie.split("=")[1]!;
       let clock = Date.now();
       const mode = createPairingMode({ now: () => clock });
@@ -181,11 +194,11 @@ describe("the pairing-mode control", () => {
       // above is the PAIRING mode's injected clock and is deliberately not this value: what is
       // being aged here is the management session's own `last_seen_at`.
       const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
-      await suite.admin.execute(sql`
+      await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
       where id = ${sessionId}`);
       const session = () =>
-        withTransaction(suite.admin, (tx) =>
+        withTransaction(suite.db, (tx) =>
           resolveManagementSession(tx, sessionId, { touch: false }),
         );
       const before = await session();
@@ -207,12 +220,12 @@ describe("the pairing-mode control", () => {
   );
 
   it("refuses renewal after the management session expires without opening the window", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const sessionId = venue.managerCookie.split("=")[1]!;
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
-    await suite.admin.execute(sql`
+    await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
       where id = ${sessionId}`);
     const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
@@ -224,7 +237,7 @@ describe("the pairing-mode control", () => {
   });
 
   it("all window routes need device.manage — a staff session is 403 and the window is untouched", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     for (const [method, path] of [
@@ -244,7 +257,7 @@ describe("the pairing-mode control", () => {
   });
 
   it("all window routes need a management session at all", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (const [method, path] of [
       ["GET", "/management-api/pairing-mode"],
@@ -261,7 +274,7 @@ describe("the pairing-mode control", () => {
 
 describe("GET /management-api/join-requests", () => {
   it("lists only the asked-for kind, and never the number", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const device = await knock(venue, { kind: "device", label: "Bar till" });
     await knock(venue, { kind: "print_agent", label: "Cocina agent" });
@@ -283,7 +296,7 @@ describe("GET /management-api/join-requests", () => {
   });
 
   it("lists the print_agent kind under printer.manage, not device.manage", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     await knock(venue, { kind: "device", label: "Bar till" });
@@ -318,7 +331,7 @@ describe("GET /management-api/join-requests", () => {
   });
 
   it("refuses an absent or unknown kind", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (const path of [
       "/management-api/join-requests",
@@ -336,7 +349,7 @@ describe("GET /management-api/join-requests", () => {
 
 describe("GET /management-api/join-requests/:id/challenge", () => {
   it("returns three numbers, one of them the request's", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     const res = await send(app, "GET", `/management-api/join-requests/${made.joinId}/challenge`, {
@@ -351,7 +364,7 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
   });
 
   it("takes its permission from the row's kind", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     const ok = await send(app, "GET", `/management-api/join-requests/${agent.joinId}/challenge`, {
@@ -369,7 +382,7 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
   });
 
   it("is 404 for an unknown or malformed id", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (const id of [randomUUID(), "not-a-uuid"]) {
       const res = await send(app, "GET", `/management-api/join-requests/${id}/challenge`, {
@@ -383,7 +396,7 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
 
 describe("POST /management-api/join-requests/:id/deny", () => {
   it("deletes the request; a second deny is 404", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
     const first = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
@@ -399,7 +412,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
   });
 
   it("denies a print_agent request under printer.manage", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     const refused = await send(app, "POST", `/management-api/join-requests/${agent.joinId}/deny`, {
@@ -416,7 +429,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
   });
 
   it("answers 403 to a caller holding NEITHER permission, for a live id AND an unknown one", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const live = await knock(venue, { kind: "device", label: "Bar till" });
     // The status code must not be the oracle that tells an unauthorised caller which ids are live: a
@@ -434,7 +447,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
 
 describe("POST /management-api/device-join-requests/:id/accept", () => {
   it("enrols the device when the number matches, and the request is consumed", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
@@ -458,20 +471,21 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       formFactor: "kds",
     });
     expect(await pendingCount()).toBe(0);
-    const { rows } = await suite.admin.execute<{
-      label: string;
-      station_id: string;
-      active: boolean;
-    }>(sql`select label, station_id, active from devices where id = ${made.joinId}`);
+    // Through the table definition, not raw SQL: a raw read skips drizzle's decoding and hands a
+    // boolean column back as SQLite's 0/1, which `active: true` could never match.
+    const rows = await suite.db
+      .select({ label: devices.label, stationId: devices.stationId, active: devices.active })
+      .from(devices)
+      .where(eq(devices.id, made.joinId));
     expect(rows[0]).toMatchObject({
       label: "Pantalla Cocina",
-      station_id: venue.defaultStationId,
+      stationId: venue.defaultStationId,
       active: true,
     });
   });
 
   it("a wrong number is 400 device.join_mismatch AND the request is gone on a FRESH request", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const made = await knock(venue, {
@@ -515,7 +529,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("refuses a print_agent request with 404, which survives", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
@@ -536,14 +550,14 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect((await errorOf(res)).code).toBe("join_request.not_found");
     // The agent's ask is untouched: a device.manage holder cannot turn it into a device.
     expect(await pendingCount()).toBe(1);
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from devices where id = ${agent.joinId}`,
     );
     expect(rows[0]!.n).toBe(0);
   });
 
   it("needs device.manage", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
@@ -566,7 +580,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("a till profile auto-creates its register", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("till");
     const made = await knock(venue, { kind: "device", label: "Caja nueva" });
@@ -581,7 +595,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()) as Record<string, unknown>).toMatchObject({ formFactor: "till" });
-    const { rows } = await suite.admin.execute<{ name: string }>(sql`
+    const { rows } = await suite.db.execute<{ name: string }>(sql`
       select t.name from tills t
       join devices d on d.till_id = t.id
       where d.id = ${made.joinId}`);
@@ -589,7 +603,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("a kds profile with no station is 400, and the request survives for a genuine retry", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
@@ -609,7 +623,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("screens the body, and refuses the request before any of it is acted on", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
     const path = `/management-api/device-join-requests/${made.joinId}/accept`;
@@ -647,7 +661,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("an unknown profile is 404 and the request survives", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
     const res = await send(
@@ -665,7 +679,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("is 404 for a malformed id", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const res = await send(app, "POST", "/management-api/device-join-requests/nope/accept", {
       cookie: venue.managerCookie,
@@ -676,7 +690,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   });
 
   it("gates BEFORE it screens — an unauthorised caller learns nothing about its own input", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const live = await knock(venue, { kind: "device", label: "Bar till" });
     // Live id, unknown id, malformed id and a malformed BODY all answer 403 to a staff session. The
@@ -699,14 +713,14 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
 
 describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   async function agentCount(): Promise<number> {
-    const { rows } = await suite.admin.execute<{ n: number }>(
+    const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from print_agents `,
     );
     return rows[0]!.n;
   }
 
   it("enrols the agent when the number matches, and the request is consumed", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     const res = await send(
@@ -718,14 +732,16 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect(res.status).toBe(204);
     expect(await pendingCount()).toBe(0);
     // The real row carries the request's own id (so the agent's Bearer keeps working) and its label.
-    const { rows } = await suite.admin.execute<{ name: string; active: boolean }>(
-      sql`select name, active from print_agents where id = ${made.joinId}`,
-    );
+    // Through the table definition, for the reason the devices read-back above states.
+    const rows = await suite.db
+      .select({ name: printAgents.name, active: printAgents.active })
+      .from(printAgents)
+      .where(eq(printAgents.id, made.joinId));
     expect(rows[0]).toMatchObject({ name: "Cocina agent", active: true });
   });
 
   it("a wrong number is 400 device.join_mismatch, no print_agents row, and the request is gone on a FRESH retry", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, {
       kind: "print_agent",
@@ -754,7 +770,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   });
 
   it("this route 404s a DEVICE request, and the device accept route 404s a print_agent request (kind filtering)", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const device = await knock(venue, { kind: "device", label: "Bar till" });
     // The print accept route cannot consume a device request.
@@ -785,7 +801,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   });
 
   it("needs printer.manage — a staff session is 403 and the request survives", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     const res = await send(
@@ -801,7 +817,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   });
 
   it("is 404 for an unknown or malformed id, and screens a missing choice", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (const id of [randomUUID(), "not-a-uuid"]) {
       const res = await send(
@@ -833,7 +849,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
 describe("the pending cap is the list's bound", () => {
   it("lists at most the cap, because the knock verb refuses past it", async () => {
-    const venue = await setupVenue(suite.admin);
+    const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (let i = 0; i < PENDING_CAP; i++) {
       await knock(venue, { kind: "device", label: `Till ${i}` });

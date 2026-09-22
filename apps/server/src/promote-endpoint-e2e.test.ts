@@ -7,13 +7,14 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 import {
   asAppUser,
   deviceProfiles,
   devices,
   kitchenStations,
   locations,
+  openVenueDatabase,
   readDeploymentMode,
   readSingletonRole,
   readStandardSeriesId,
@@ -25,8 +26,8 @@ import {
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
 import {
@@ -37,7 +38,7 @@ import {
 } from "@waitron/catalogue";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
@@ -46,14 +47,11 @@ import { mountPromoteApi } from "./promote-api.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { parseEnvFile } from "./env-file.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { roleUrl } from "./testing/postgres.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 // Task 10 — the END-TO-END RECEIPT for the promote endpoint (spec §8/§9.1). No new production code: this
-// suite drives the whole arc over the real HTTP endpoint against REAL Postgres (mandatory, CLAUDE.md §4 —
-// the read-only gate is served through the non-superuser `app_login` pool, the promote's owner write runs
-// through the table-owner admin connection, and the promoted primary's fiscal drain runs as the
-// deployment role; every one of those is a false pass on a superuser-only, single-backend PGlite):
+// suite drives the whole arc over the real HTTP endpoint, each boot on its own venue DIRECTORY of
+// SQLite files:
 //
 //   1. HAPPY PATH (admin login): POST /management-api/promote with a valid admin credential +
 //      `oldNodeNeutralised:true` on a booted adopted mirror → 200 `{alreadyPrimary:false,
@@ -68,10 +66,42 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 //      reaches the handler while an ordinary write POST still gets 403 `node.read_only`; and, at the
 //      exemption-clause level, removing the `/management-api/promote` clause turns the same authorized
 //      promote into a 403 (the negative control), restoring it turns it green again (CLAUDE.md §4).
-//   5. ADMIN-CONNECTION FAIL-CLOSED: a node whose `WAITRON_ADMIN_DATABASE_URL` is a non-owner
-//      (`app_user`) role → the promote owner write fails closed `42501`, surfaced as 500
-//      `promotion.failed`, never a silent no-op; with the admin URL unset it falls back to the
-//      migrations URL and succeeds.
+//
+// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED.
+//
+// The container was justified by role separation: the read-only gate was served through a
+// non-superuser `app_login` pool, the promote's point-of-no-return write went through a separate
+// table-owner connection, and the promoted primary's fiscal drain ran as the deployment role. There
+// is no role on this engine — `pg.connectAs` has no counterpart and `asAppUser` is an inert function
+// (`packages/db/src/testing/roles.ts`) — and there is no second connection either: `PromoteDeps.db`
+// is ONE handle (`promote.ts:40-52`) and boot opens the venue directory once. Nothing below now
+// distinguishes a write the deployment role may make from one it may not.
+//
+// **Step 5, `non-owner WAITRON_ADMIN_DATABASE_URL → 500 promotion.failed, node unchanged; unset →
+// falls back and succeeds`, is DELETED: its subject no longer exists.** It booted a node whose
+// `WAITRON_ADMIN_DATABASE_URL` named the non-owner `app_login` role, so the promote's owner write
+// was refused `42501` and surfaced as a loud 500 rather than a silent no-op, and then booted the
+// same node with the variable unset to show the fallback to the migrations URL. That variable is
+// gone from the whole tree (`grep -rn WAITRON_ADMIN_DATABASE_URL` over the worktree, 2026-09-22:
+// no matches), `config.ts` reads no connection URL at all, and there is no second connection for a
+// promote to fail over to. **What is no longer covered:** that a promote whose point-of-no-return
+// write is refused fails CLOSED — a 500 with the deployment untouched — rather than reporting
+// success. The failure mode it guarded (a promote that half-succeeds) is not reachable through a
+// connection this box may not write with any more, but nothing has re-derived what else could
+// refuse that write on this engine.
+//
+// STEP 1 IS RED FROM ITS `awaitingFiscalCertificate` POLL ONWARD, AND A BROKEN PRODUCT FUNCTION IS
+// WHY — not this file. `drain`'s `workIsDue` (`packages/fiscal-verifactu/src/drain.ts:147-152`)
+// issues `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22 on this suite's
+// OWN venue directory, after the sale: the statement as written throws `unrecognized token: ":"` at
+// the cast, and with the cast removed `no such function: envios_work_due`. Nothing creates that
+// function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such thing. So
+// the promoted primary's fiscal pass fails outright (`duty.failed` with `fiscal.drain`, every pass)
+// instead of finding due work and skipping it for want of a certificate, and the awaiting-cert cell
+// never flips. This box is `WAITRON_ENV=production`, which is why the failure shows here and not in
+// a preproduction boot: `fiscalDrainEnabled` (`onboarding-policy.ts:12-16`) short-circuits a
+// preproduction pass to an empty result before any SQL runs. Everything up to that poll — the
+// promote, the restart, the sale, and the chained registro on the node's own reserved SIF — passes.
 
 // `undici`'s `fetch` is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` (a distinct module identity — see boot.promote.test.ts) still serves the probes.
@@ -118,8 +148,8 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// The mirror's OWN venue ids — one venue, seeded identically on each clone (each `useTemplateDb` clones
-// the manifest afresh, so the fixed ids never collide across clones).
+// The mirror's OWN venue ids — one venue, seeded identically on each venue directory (each is
+// migrated and seeded afresh, so the fixed ids never collide across them).
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // inert, must be overwritten
@@ -146,16 +176,35 @@ const DEVICE_TOKEN = "promote-e2e-device-token";
 const DEVICE_PROFILE_ID = "66666666-6666-4666-8666-666666666666";
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
 
-// Three clones: the main happy-path arc (which promotes destructively), the break-glass promote, and the
-// admin-connection fail-closed pair (which reboots the same clone twice). Each `useTemplateDb` call
-// clones the manifest afresh, so one test's deployment flip never leaks into another's.
-const mainSuite = useTemplateDb({ template: "manifest" });
-const breakGlassSuite = useTemplateDb({ template: "manifest" });
-const adminConnSuite = useTemplateDb({ template: "manifest" });
+// Two venue directories: the main happy-path arc (which promotes destructively) and the break-glass
+// promote. Each is migrated and seeded on its own, so one test's deployment flip never leaks into
+// another's. A directory is migrated through `applyMigrations` — the product's own entry point,
+// which installs each set's append-only triggers as well as its tables — and boot's own re-run over
+// the same directory is a no-op. The handle beside it stays open alongside the booted server's own
+// open of the same directory, which write-ahead mode and the store's `busy_timeout` allow
+// (`packages/store/src/index.ts`).
+const VENUES = ["main", "breakGlass"] as const;
+type VenueName = (typeof VENUES)[number];
+const venueDir = {} as Record<VenueName, string>;
+const stores = {} as Record<VenueName, VenueDatabase>;
+const db = {} as Record<VenueName, Database>;
 
 let migrationsRoot: string;
 
-/** Seed a fresh clone as a read-only adopted mirror holding its OWN dormant identity (R2/R3a), plus the
+// SAFETY (CLAUDE.md §4/§5): a promote's point of no return schedules a REAL
+// `process.kill(process.pid, "SIGTERM")` on the next macrotask (`boot.ts:2259`), and the manual
+// `startServer` in each case IS that restart.
+//
+// FILE-scoped, and restored only once every case has finished, because a per-case spy restored in a
+// `finally` does NOT cover it here: the reads a case takes between its promote and its own teardown
+// resolve without yielding to the macrotask queue on this engine, so the restore runs BEFORE the
+// timer fires and the signal reaches the vitest worker — which exits silently, taking the rest of
+// the file's results with it. Measured 2026-09-22 with a `process.on("SIGTERM")` probe on the
+// per-case shape: two signals arrived, both after the last per-case restore, and the run reported
+// `Tests 1 failed (4)` with three results lost.
+let killSpy: MockInstance<typeof process.kill>;
+
+/** Seed a fresh venue directory as a read-only adopted mirror holding its OWN dormant identity (R2/R3a), plus the
  * admin the promote endpoint + box-status authenticate — the shape boot.promote-endpoint.test.ts uses.
  * Returns the cloud's own nodeId + the reserved standard series id the promote must correct trading.env
  * to. Deployment is stamped production then mode='mirror'. */
@@ -234,12 +283,20 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
 
-  // The admin/manager the endpoint + box-status authenticate.
-  await admin.execute(sql`
-    insert into persons (id, display_name, email, pin_hash, password_hash, role)
-    values (${ADMIN_ID}, 'Promote Admin', ${ADMIN_EMAIL}, ${hashPin("1234")},
-            ${hashPassword(ADMIN_PW)}, 'admin')
-    on conflict do nothing`);
+  // The admin/manager the endpoint + box-status authenticate. Through the table definition, not raw
+  // SQL: `persons.created_at` is a `$defaultFn` generator on a NOT NULL column
+  // (`packages/identity/src/schema/persons.ts`), which a raw statement reaches no generator for.
+  await admin
+    .insert(persons)
+    .values({
+      id: ADMIN_ID,
+      displayName: "Promote Admin",
+      email: ADMIN_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(ADMIN_PW),
+      role: "admin",
+    })
+    .onConflictDoNothing();
 
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, "mirror");
@@ -247,7 +304,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
   return { nodeId: standby.nodeId, standardSeriesId };
 }
 
-/** Seed the venue-sale prerequisites onto the mirror clone (owner writes), so the PROMOTED primary can
+/** Seed the venue-sale prerequisites onto the mirror's venue directory, so the PROMOTED primary can
  * ring a real cash sale over HTTP that chains on its own reserved SIF: a till bound to the venue, a
  * catalogue with one sellable product, a staff operator on a known PIN, and an enrolled till device
  * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
@@ -327,9 +384,22 @@ beforeAll(async () => {
       recursive: true,
     });
   }
+  killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+  for (const name of VENUES) {
+    venueDir[name] = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-venue-${name}-`));
+    await applyMigrations(venueDir[name], fromSource);
+    stores[name] = await openVenueDatabase(venueDir[name]);
+    db[name] = stores[name].venue;
+  }
 }, 180_000);
 
 afterAll(async () => {
+  if (killSpy !== undefined) killSpy.mockRestore();
+  // Every file is closed before the directory holding it is removed, and each step is guarded on its
+  // own so a store that never opened does not stop the rest of the teardown.
+  for (const name of VENUES) if (stores[name] !== undefined) await stores[name].close();
+  for (const name of VENUES)
+    if (venueDir[name] !== undefined) await rm(venueDir[name], { recursive: true, force: true });
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
@@ -366,13 +436,12 @@ async function postPromote(base: string, body: unknown): Promise<Response> {
   });
 }
 
-/** The mirror boot env for `clone` at `port`, seeded venue overriding KEY_ENV's absence of till ids. */
+/** The mirror boot env for `dir` at `port`, seeded venue overriding KEY_ENV's absence of till ids. */
 function mirrorEnv(
-  clone: { pg: { uri: string } },
+  dir: string,
   port: number,
   nodeId: string,
   stateDir: string,
-  extra: Record<string, string> = {},
 ): Record<string, string> {
   return {
     ...KEY_ENV,
@@ -381,12 +450,10 @@ function mirrorEnv(
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
     WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
-    DATABASE_URL: roleUrl(clone.pg.uri, "app_login", "app_pw"),
-    WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
+    WAITRON_VENUE_DIR: dir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_STATE_DIR: stateDir,
-    ...extra,
   };
 }
 
@@ -394,35 +461,37 @@ function mirrorEnv(
 async function readEnvios(
   admin: Database,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }[]> {
-  const rows = await admin.execute<{ estado: string; intentos: number; incidencia: boolean }>(
-    sql`select estado, intentos, incidencia from envios  order by registro_id`,
+  // A RAW read skips drizzle's decoding, and this engine stores a boolean as 0/1 — so `incidencia`
+  // is read as the integer it is stored as and compared back to a boolean here, rather than the
+  // expectation being loosened to whatever came out.
+  const rows = await admin.execute<{ estado: string; intentos: number; incidencia: number }>(
+    sql`select estado, intentos, incidencia from envios order by registro_id`,
   );
-  return rows.rows;
+  return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () => {
+describe("promote endpoint e2e — the whole arc over HTTP", () => {
   // STEP 1 (+ its refusals and the real-boot gate control) — the headline receipt.
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
-    const seed = await seedMirror(mainSuite.admin);
-    await seedSaleVenue(mainSuite.admin, seed.nodeId);
-    await mintBreakGlassSecret(mainSuite.admin); // a verifier exists (an adopted mirror always has one)
+    const seed = await seedMirror(db.main);
+    await seedSaleVenue(db.main, seed.nodeId);
+    await mintBreakGlassSecret(db.main); // a verifier exists (an adopted mirror always has one)
 
     const mirrorPort = await freePort();
     const mirrorBase = `http://127.0.0.1:${mirrorPort}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-main-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
-    // SAFETY (CLAUDE.md §4): the promote schedules a real `process.kill(pid, "SIGTERM")` for the restart.
-    // Spy so it never fires at the vitest process; the manual `startServer` below IS the restart.
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+    // Cleared, not installed, here: the spy is file-scoped (see its declaration), so the assertion
+    // below is about THIS case's restart.
+    killSpy.mockClear();
 
-    const mirror = await startServer(mirrorEnv(mainSuite, mirrorPort, seed.nodeId, stateDir)).catch(
-      async (err: unknown) => {
-        await rm(stateDir, { recursive: true, force: true });
-        killSpy.mockRestore();
-        throw err;
-      },
-    );
+    const mirror = await startServer(
+      mirrorEnv(venueDir.main, mirrorPort, seed.nodeId, stateDir),
+    ).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
 
     let primary: StartedServer | undefined;
     try {
@@ -436,7 +505,7 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       });
       expect(wrongBg.status).toBe(401);
       expect((await wrongBg.json()).error.code).toBe("promotion.break_glass_invalid");
-      expect(await readDeploymentMode(mainSuite.admin)).toBe("mirror");
+      expect(await readDeploymentMode(db.main)).toBe("mirror");
 
       // A valid admin credential but `oldNodeNeutralised:false` → 400 fence_not_attested, node unchanged.
       const unattested = await postPromote(mirrorBase, {
@@ -446,7 +515,7 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       });
       expect(unattested.status).toBe(400);
       expect((await unattested.json()).error.code).toBe("promotion.fence_not_attested");
-      expect(await readDeploymentMode(mainSuite.admin)).toBe("mirror");
+      expect(await readDeploymentMode(db.main)).toBe("mirror");
 
       // STEP 4 (gate control, real boot): an ordinary write POST is refused by the read-only gate (403
       // node.read_only), so the promote POST reaching the handler above is the EXEMPTION's doing — not a
@@ -469,8 +538,8 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
 
       // The point-of-no-return committed: deployment flipped to (primary, primary), and the restart
       // SIGTERM was scheduled (into the spy, never fired for real).
-      expect(await readDeploymentMode(mainSuite.admin)).toBe("primary");
-      expect(await readSingletonRole(mainSuite.admin)).toBe("primary");
+      expect(await readDeploymentMode(db.main)).toBe("primary");
+      expect(await readSingletonRole(db.main)).toBe("primary");
       await delay(50);
       expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
 
@@ -480,8 +549,10 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
       expect(persisted.WAITRON_TILL_SERIES_ID).toBe(seed.standardSeriesId);
       expect(persisted.WAITRON_TILL_SERIES_ID).not.toBe(MIRROR_DESIGNATED_SERIES_ID);
 
-      // Restart into mode=primary: close the mirror and boot from the persisted trading.env (the box the
-      // supervisor would source).
+      // Restart into mode=primary: close the mirror and boot from the persisted trading.env (the box
+      // the supervisor would source). `trading.env` names NO storage — the venue directory reaches
+      // both processes through the supervisor's own environment (`trading-config.ts:15-20`) — so the
+      // directory is supplied here rather than read back out of the file.
       await mirror.close();
       const primaryPort = await freePort();
       const primaryBase = `http://127.0.0.1:${primaryPort}`;
@@ -492,8 +563,7 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
         WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
         WAITRON_TILL_SERIES_ID: persisted.WAITRON_TILL_SERIES_ID!, // the reserved series the promote wrote
         WAITRON_TILL_LOCATION_ID: persisted.WAITRON_TILL_LOCATION_ID!,
-        DATABASE_URL: persisted.DATABASE_URL!,
-        WAITRON_MIGRATIONS_DATABASE_URL: persisted.WAITRON_MIGRATIONS_DATABASE_URL!,
+        WAITRON_VENUE_DIR: venueDir.main,
         WAITRON_HTTP_PORT: String(primaryPort),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
@@ -542,10 +612,10 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
 
       // A GENUINE chained fiscal record exists for the promoted node, on its OWN reserved SIF: exactly
       // one registro, a 64-hex huella, keyed to the node's non-revoked reserved SIF.
-      const reservedSif = await mainSuite.admin.execute<{ id: string }>(
+      const reservedSif = await db.main.execute<{ id: string }>(
         sql`select id from registro_sif where node_id = ${seed.nodeId} and revocado_en is null`,
       );
-      const registros = await mainSuite.admin.execute<{
+      const registros = await db.main.execute<{
         huella: string;
         node_id: string;
         sif_id: string;
@@ -558,6 +628,12 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
 
       // DOES NOT FILE: the primary's real fiscal pass finds the due envío, has no `fiscal.aeat` cert, and
       // SKIPS it — so box-status flips awaitingFiscalCertificate:true and the envío is never submitted.
+      //
+      // RED FROM HERE ON, and it is the product that is broken, not these assertions: every pass's
+      // fiscal drain throws before it can find the due envío (the file header carries the two
+      // measurements), so the awaiting-cert cell never flips and the poll below times out. The
+      // assertions are left as they are — weakening them to something that passes would hide a
+      // fiscal duty that does not run at all.
       const mgmtLogin = await fetch(`${primaryBase}/management-api/session`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -575,118 +651,45 @@ describe("promote endpoint e2e — the whole arc over HTTP (real Postgres)", () 
 
       // The envío was never submitted — still pendiente, never attempted (a missing cert skips the
       // whole pass BEFORE the claim, so intentos stays 0).
-      expect(await readEnvios(mainSuite.admin)).toEqual([
+      expect(await readEnvios(db.main)).toEqual([
         { estado: "pendiente", intentos: 0, incidencia: false },
       ]);
     } finally {
       if (primary !== undefined) await primary.close().catch(() => undefined);
       await mirror.close().catch(() => undefined);
-      killSpy.mockRestore();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 120_000);
 
   // STEP 2 — the break-glass path: the offline fallback authorizes a promote with no login at all.
   it("break-glass secret → 200 promoted (no login)", async () => {
-    const seed = await seedMirror(breakGlassSuite.admin);
-    const breakGlass = await mintBreakGlassSecret(breakGlassSuite.admin);
+    const seed = await seedMirror(db.breakGlass);
+    const breakGlass = await mintBreakGlassSecret(db.breakGlass);
 
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-bg-state-"));
     writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
 
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
-    const server = await startServer(mirrorEnv(breakGlassSuite, port, seed.nodeId, stateDir)).catch(
-      async (err: unknown) => {
-        await rm(stateDir, { recursive: true, force: true });
-        killSpy.mockRestore();
-        throw err;
-      },
-    );
+    const server = await startServer(
+      mirrorEnv(venueDir.breakGlass, port, seed.nodeId, stateDir),
+    ).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      throw err;
+    });
     try {
       await poll(async () => server.health.lastPassAt ?? undefined);
 
       const res = await postPromote(base, { oldNodeNeutralised: true, breakGlass });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-      expect(await readDeploymentMode(breakGlassSuite.admin)).toBe("primary");
-      expect(await readSingletonRole(breakGlassSuite.admin)).toBe("primary");
+      expect(await readDeploymentMode(db.breakGlass)).toBe("primary");
+      expect(await readSingletonRole(db.breakGlass)).toBe("primary");
     } finally {
       await server.close();
-      killSpy.mockRestore();
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 90_000);
-
-  // STEP 5 — the admin-connection fail-closed: a non-owner WAITRON_ADMIN_DATABASE_URL makes the promote
-  // owner write raise 42501, surfaced as 500 promotion.failed with the node UNCHANGED (never a silent
-  // no-op); unset, it falls back to the migrations URL and succeeds.
-  it("non-owner WAITRON_ADMIN_DATABASE_URL → 500 promotion.failed, node unchanged; unset → falls back and succeeds", async () => {
-    const seed = await seedMirror(adminConnSuite.admin);
-    const breakGlass = await mintBreakGlassSecret(adminConnSuite.admin);
-    const appUrl = roleUrl(adminConnSuite.pg.uri, "app_login", "app_pw");
-
-    // --- Fail-closed boot: WAITRON_ADMIN_DATABASE_URL is the non-owner app_login role. ---
-    const failPort = await freePort();
-    const failBase = `http://127.0.0.1:${failPort}`;
-    const failStateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-adminfail-state-"));
-    writeFileSync(join(failStateDir, "modules.json"), FISCAL_NONE_OFF);
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
-    const failServer = await startServer(
-      mirrorEnv(adminConnSuite, failPort, seed.nodeId, failStateDir, {
-        WAITRON_ADMIN_DATABASE_URL: appUrl,
-      }),
-    ).catch(async (err: unknown) => {
-      await rm(failStateDir, { recursive: true, force: true });
-      killSpy.mockRestore();
-      throw err;
-    });
-    try {
-      await poll(async () => failServer.health.lastPassAt ?? undefined);
-      const failed = await postPromote(failBase, { oldNodeNeutralised: true, breakGlass });
-      // The owner write hit a role with no UPDATE on `deployment` → 42501, a non-AppError. The error
-      // boundary answers a 500 with the OPAQUE `server.internal` code (the connection string must never
-      // leak into a response, error-boundary.ts) and logs the `promotion.failed` tag with the classified
-      // errorCode — the fail-closed surface: a loud 500, never a silent no-op.
-      expect(failed.status).toBe(500);
-      expect((await failed.json()).error.code).toBe("server.internal");
-      // FAILED CLOSED: the deployment is untouched — still a mirror.
-      expect(await readDeploymentMode(adminConnSuite.admin)).toBe("mirror");
-      expect(await readSingletonRole(adminConnSuite.admin)).toBe("secondary");
-      // The restart was never scheduled (the promote threw before returning a non-alreadyPrimary result).
-      expect(killSpy).not.toHaveBeenCalled();
-    } finally {
-      await failServer.close();
-      await rm(failStateDir, { recursive: true, force: true });
-    }
-
-    // --- Fallback boot: WAITRON_ADMIN_DATABASE_URL unset → the owner write runs over the migrations URL
-    // (the superuser here) and the promote succeeds. ---
-    const okPort = await freePort();
-    const okBase = `http://127.0.0.1:${okPort}`;
-    const okStateDir = await mkdtemp(join(tmpdir(), "waitron-promote-e2e-adminok-state-"));
-    writeFileSync(join(okStateDir, "modules.json"), FISCAL_NONE_OFF);
-    const okServer = await startServer(
-      mirrorEnv(adminConnSuite, okPort, seed.nodeId, okStateDir),
-    ).catch(async (err: unknown) => {
-      await rm(okStateDir, { recursive: true, force: true });
-      killSpy.mockRestore();
-      throw err;
-    });
-    try {
-      await poll(async () => okServer.health.lastPassAt ?? undefined);
-      const ok = await postPromote(okBase, { oldNodeNeutralised: true, breakGlass });
-      expect(ok.status).toBe(200);
-      expect(await ok.json()).toEqual({ alreadyPrimary: false, restarting: true });
-      expect(await readDeploymentMode(adminConnSuite.admin)).toBe("primary");
-      expect(await readSingletonRole(adminConnSuite.admin)).toBe("primary");
-    } finally {
-      await okServer.close();
-      killSpy.mockRestore();
-      await rm(okStateDir, { recursive: true, force: true });
-    }
-  }, 120_000);
 });
 
 // STEP 4 — the read-only-gate hole, proven by DELETION at the exemption-clause level (CLAUDE.md §4). The
@@ -712,7 +715,7 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
       "*",
       readOnlyGate(() => true, exempt),
     ); // a read-only mirror (isReadOnly always true)
-    mountPromoteApi(app, { appDb: mainSuite.admin, run: alwaysRun });
+    mountPromoteApi(app, { appDb: db.main, run: alwaysRun });
     return app;
   }
 

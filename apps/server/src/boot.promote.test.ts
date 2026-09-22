@@ -17,6 +17,7 @@ import {
   readStandardSeriesId,
   setDeploymentMode,
   setSingletonRole,
+  openVenueDatabase,
   stampDeployment,
   tenants,
   tills,
@@ -24,30 +25,54 @@ import {
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import type { Endorsement, SignedMembershipDocument } from "@waitron/membership";
 // The same test-only entry point `packages/fiscal-verifactu`'s own drain suites use to seed a due
 // `envios` row (boot.test.ts's drain e2e reuses it identically) — no `exports` map restricts either
 // package, so the deep import resolves the way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { parseEnvFile } from "./env-file.js";
-import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 // The headline e2e for the promote action (promote runbook design §8): a booted LOCAL SECONDARY
 // (mode='primary', singleton_role='secondary') files NOTHING; an in-process promote flips
 // singleton_role live; and the running fiscal pass BEGINS draining on its next tick — with the
-// till surface answering 200 throughout (no restart). Real Postgres is mandatory (CLAUDE.md §4):
-// it drives the real wall-clock loop, the owner-role `setSingletonRole` write (app_user holds no
-// UPDATE on `deployment`), and a till route as the non-superuser `app_login` pool — PGlite cannot
-// check the privilege split and serialises every query onto one backend.
+// till surface answering 200 throughout (no restart).
+//
+// ## What the move off PostgreSQL took out of this file
+//
+// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
+// mandatory for the owner-role `setSingletonRole` write (app_user holding no UPDATE on
+// `deployment`) and for serving a till route as the non-superuser `app_login` pool. There are no
+// roles on this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
+// (`packages/db/src/testing/roles.ts`). Every statement below, and every statement each booted
+// server issues, runs on the one connection `openVenueStore` hands out. What the file still drives
+// for real is the wall-clock loop — which is why the polling below stays.
+//
+// **The suite keeps a handle open on each venue directory while a server holds one, and only READS
+// through it while a server is up.** Write-ahead mode admits a reader beside the writer and both
+// opens set `busy_timeout` (`packages/store/src/index.ts:128-136`); every write this file makes —
+// the seeding, and `cleanupFiscalWork` in each `finally` — happens with no server running.
+//
+// ## One case below is RED, and it is a PRODUCT path, not a test to edit
+//
+// `does not file as a secondary, then files on the next tick after a live promote` expects the
+// promoted primary's drain to have ATTEMPTED the submission — `intentos: 1, incidencia: true`.
+// Measured 2026-09-22 by running this file: the row is still `intentos: 0, incidencia: false`,
+// because the drain never reaches a submission. `workIsDue` (`packages/fiscal-verifactu/src/
+// drain.ts:147-152`) issues `select envios_work_due(<instant>::timestamptz)`, and no migration in
+// the tree creates that function — `grep -rn "create function" packages/*/drizzle` returns
+// nothing, and SQLite has no user-defined SQL functions. So every real `drain()` throws, which is
+// what the booted server's `duty.failed` line for `fiscal.drain` records. The secondary half of
+// the case — that a secondary files NOTHING — passes, so what is red is only the post-promote
+// half.
 //
 // `undici`'s `fetch` is module-mocked to REJECT so the AEAT submit the post-promote drain makes fails
 // fast: the seeded `envios` row transitions to an OBSERVABLE attempted state (`backoffBatch` sets
@@ -99,17 +124,15 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// A clone of the full-manifest template — this suite's own database (each `useTemplateDb` call clones
-// afresh), so the deployment stamp + singleton_role flips it performs are isolated to this file.
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
-
 let migrationsRoot: string;
-// The app pool the running box uses (`app_login`, an `app_user` member — created cluster-wide by
-// apps/server's globalSetup), exactly as a real trading box's pool is. The drain writes and the
-// till route's queries both resolve through this role. Migrations + the promote's owner write run
-// over the SUPERUSER uri (`suite.pg.uri`) instead, so this pool needs no CREATE /
-// UPDATE-on-deployment grant.
-let appDatabaseUrl: string;
+// Two venue directories, each with the handle this suite keeps on it. The local-secondary suite's
+// deployment stamp and singleton_role flips must never leak into the mirror suite's (primary,
+// primary) flip, and vice versa.
+let appVenueDir: string;
+let mirrorVenueDir: string;
+let appDb: Database;
+let mirrorDb: Database;
+const openStores: VenueDatabase[] = [];
 
 // The box key ring, built from the SAME credentials key boot loads from `KEY_ENV` — so the identity
 // this suite seals is the one the in-process promote unseals to sign the minted membership document.
@@ -119,24 +142,24 @@ const PROMOTE_RING = loadKeyRing({
 });
 
 /**
- * Seed the boot till's tenant + location + node as the container superuser, so boot's
+ * Seed the boot till's tenant + location + node, so boot's
  * `readOrderFlow` / `readVenueLocale` reads resolve — the same minimal identity boot.test.ts's
  * drain suite seeds — plus a node identity (sealed signing key + stamped `nodes.public_key`) so
  * the promote's membership-document mint has a key to sign with. `order_flow` defaults to
  * `prepay`.
  */
-async function seedTillIdentity(admin: Database): Promise<void> {
+async function seedTillIdentity(db: Database): Promise<void> {
   // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
   // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
   // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine;
   // and `array['en']::text[]` is a PostgreSQL array constructor plus a PostgreSQL cast operator,
   // both refused at prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it
   // replaces were — narrowing it would be a behaviour change this conversion is not making.
-  await admin
+  await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Till SL" })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(locations)
     .values({
       id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -145,7 +168,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -153,7 +176,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       name: "Promote node",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(tills)
     .values({
       id: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -161,10 +184,21 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       name: "Promote till",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity(
-    { ownerDb: admin, ring: PROMOTE_RING },
-    TILL_ENV.WAITRON_TILL_NODE_ID,
-  );
+  await establishNodeIdentity({ ownerDb: db, ring: PROMOTE_RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
+}
+
+/**
+ * A fresh venue directory migrated through the manifest, plus a handle on it the suite keeps.
+ *
+ * The migration run is this suite's, not boot's, because the identity rows have to exist before boot
+ * reads them; boot's own `applyMigrations` over the same directory then finds nothing to do.
+ */
+async function migratedVenue(): Promise<[string, Database]> {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-promote-venue-"));
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(directory);
+  openStores.push(store);
+  return [directory, store.venue];
 }
 
 beforeAll(async () => {
@@ -179,22 +213,28 @@ beforeAll(async () => {
     });
   }
 
-  await seedTillIdentity(suite.admin);
+  [appVenueDir, appDb] = await migratedVenue();
+  [mirrorVenueDir, mirrorDb] = await migratedVenue();
+  await seedTillIdentity(appDb);
 
   // Put the deployment into a local-secondary state: stamp production (matching WAITRON_ENV so the boot
   // guard passes; idempotent when the value already matches) then flip singleton_role to 'secondary'.
-  // Both are OWNER writes (app_user holds no UPDATE on `deployment`), so they run on the superuser
-  // admin. `mode` keeps its column default ('primary'). => (mode=primary, singleton_role=secondary).
-  await stampDeployment(suite.admin, "production");
-  await setSingletonRole(suite.admin, "secondary");
-  expect(await readDeploymentMode(suite.admin)).toBe("primary");
-  expect(await readSingletonRole(suite.admin)).toBe("secondary");
-
-  appDatabaseUrl = roleUrl(suite.pg.uri, "app_login", "app_pw");
+  // `mode` keeps its column default ('primary'). => (mode=primary, singleton_role=secondary).
+  await stampDeployment(appDb, "production");
+  await setSingletonRole(appDb, "secondary");
+  expect(await readDeploymentMode(appDb)).toBe("primary");
+  expect(await readSingletonRole(appDb)).toBe("secondary");
 }, 180_000);
 
 afterAll(async () => {
+  // `pop()` returns `VenueDatabase | undefined`, so the `?.` is a real guard rather than a decorative
+  // one, and the array is left empty. Guard: `scripts/guarded-teardowns.test.ts`, which reads a
+  // teardown hook as TEXT.
+  while (openStores.length > 0) await openStores.pop()?.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
+  for (const directory of [appVenueDir, mirrorVenueDir]) {
+    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
+  }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -232,10 +272,10 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
  * Seeds ONE due registro + its `envios` sidecar (estado='pendiente', intentos=0,
  * incidencia=false, due immediately) and seals a usable `fiscal.aeat` credential for that tenant,
  * so the drain ATTEMPTS the row (rather than skipping it for a missing credential) once this node
- * holds the singleton. Seeded against the SUPERUSER connection (as every setup here is).
+ * holds the singleton.
  */
 async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
-  const seeded = await seedPendingEnvios(suite.admin, {
+  const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
       tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -244,7 +284,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
     },
   });
   const material = mintMtlsMaterial();
-  await withTransaction(suite.admin, (tx) =>
+  await withTransaction(appDb, (tx) =>
     putCredential(tx, loadKeyRing(KEY_ENV), {
       purpose: "fiscal.aeat",
       value: {
@@ -257,23 +297,30 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   return { registroIds: seeded.registroIds };
 }
 
-/** Reads the seeded `envios` row's observable columns via the superuser connection. */
+/** Reads the seeded `envios` row's observable columns through this suite's own handle.
+ *
+ * `incidencia` is decided here rather than in the assertions: a raw statement reaches no drizzle
+ * column mapper, so a `flag` column arrives as the number 1 or 0 and `toEqual({incidencia: true})`
+ * fails on the type. Measured 2026-09-22 by running this file with the coercion removed:
+ * `expected { …, incidencia: 1 } to deeply equal { …, incidencia: true }`. */
 async function readEnvio(
   registroId: string,
 ): Promise<{ estado: string; intentos: number; incidencia: boolean }> {
-  const rows = await suite.admin.execute<{ estado: string; intentos: number; incidencia: boolean }>(
+  const rows = await appDb.execute<{ estado: string; intentos: number; incidencia: number }>(
     sql`select estado, intentos, incidencia from envios where registro_id = ${registroId}`,
   );
-  return rows.rows[0]!;
+  const row = rows.rows[0]!;
+  return { estado: row.estado, intentos: row.intentos, incidencia: row.incidencia === 1 };
 }
 
-/** Deletes the fiscal sidecar rows a test seeded so the clone stays order-independent (CLAUDE.md §4):
+/** Deletes the fiscal sidecar rows a test seeded so the shared venue directory stays order-independent
  * `envios` (keyed by registro id) is what keeps the drain perpetually due; `incidents` (which carries
  * no registro_id column, 0000_db_baseline.sql, so it is cleared wholesale) is defensive against a
- * failure path that raises one, matching boot.test.ts's own drain-cleanup convention. */
+ * failure path that raises one. Both run with no server up — every caller is in a `finally` after
+ * `server.close()` — so they never contend with boot's own handle for the write lock. */
 async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
-  await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
-  await suite.admin.execute(sql`delete from incidents `);
+  await appDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+  await appDb.execute(sql`delete from incidents `);
 }
 
 // Short ticks so both the Phase A empty pass and the post-flip drain pass land inside the poll budget:
@@ -286,11 +333,11 @@ const TICK_ENV = {
   WAITRON_SKIP_RETRY_MS: "250",
 };
 
-describe("promote (real Postgres): local secondary → primary, live", () => {
+describe("promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     // A fresh (mode=primary, singleton_role=secondary) starting point for this test (a prior test may
-    // have flipped the shared clone's singleton_role to 'primary').
-    await setSingletonRole(suite.admin, "secondary");
+    // have flipped the shared venue directory's singleton_role to 'primary').
+    await setSingletonRole(appDb, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -299,10 +346,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      DATABASE_URL: appDatabaseUrl,
-      // Superuser: the promote's short-lived owner pool opens from this URL to perform the
-      // `setSingletonRole` write, and boot re-runs the (idempotent) migrations over it too.
-      WAITRON_MIGRATIONS_DATABASE_URL: suite.pg.uri,
+      WAITRON_VENUE_DIR: appVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -329,7 +373,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
       // singleton_role to 'primary'; the holder refresh flips the running fiscal pass on its next tick.
       const result = await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
       expect(result).toEqual({ alreadyPrimary: false });
-      expect(await readSingletonRole(suite.admin)).toBe("primary");
+      expect(await readSingletonRole(appDb)).toBe("primary");
 
       // Phase B — now the singleton. The next drain pass claims the seeded row and attempts the submit;
       // the mocked `undici` fetch rejects, so `claimBatch` incremented intentos to 1 and `backoffBatch`
@@ -356,7 +400,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
 
   it("refuses an unattested promote and keeps filing off", async () => {
     // A fresh (mode=primary, singleton_role=secondary) starting point and its own seeded work.
-    await setSingletonRole(suite.admin, "secondary");
+    await setSingletonRole(appDb, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -364,8 +408,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      DATABASE_URL: appDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: suite.pg.uri,
+      WAITRON_VENUE_DIR: appVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -383,7 +426,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
       expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
 
       // The refusal left the node exactly as it was: still a secondary, still filing nothing.
-      expect(await readSingletonRole(suite.admin)).toBe("secondary");
+      expect(await readSingletonRole(appDb)).toBe("secondary");
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
@@ -399,12 +442,11 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
 // R3b — the in-process MIRROR→PRIMARY promote wired into boot (spec §4). A booted mirror exposes
 // `promoteMirrorToPrimary` (and NOT the local-secondary method); calling it runs the point-of-no-return
 // owner transaction (mode+singleton → primary, term-guarded endorsed document), rewrites `trading.env`
-// with the cloud's OWN reserved standard series id, and schedules a restart into mode=primary. Real
-// Postgres for the owner-role writes + the reserved-SIF reads (CLAUDE.md §4); a SEPARATE clone so the
-// mirror stamp + the (primary,primary) flip never leak into the local-secondary suite above.
-const mirrorSuite = useTemplateDb({ template: "manifest", resetPerTest: false });
+// with the cloud's OWN reserved standard series id, and schedules a restart into mode=primary. It
+// runs against its own venue directory (`mirrorVenueDir`, opened in `beforeAll`) so the mirror stamp
+// and the (primary,primary) flip never leak into the local-secondary suite above.
 
-// The mirror's OWN venue ids, distinct from TILL_ENV so the two clones' seeds never collide. The NODE id
+// The mirror's OWN venue ids, distinct from TILL_ENV so the two directories' seeds never collide. The NODE id
 // is the generated standby's own id (filled in at seed time), and WAITRON_TILL_SERIES_ID boots as the
 // primary's INERT designated series — the value the promote must OVERWRITE with the cloud's own reserved
 // standard series.
@@ -414,19 +456,19 @@ const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // i
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"; // the primary this mirror pulls
 const MIRROR_NUMERO_INSTALACION = 7;
 
-/** Seed a fresh clone as a read-only mirror holding its OWN dormant identity (R2/R3a): tenant + location,
+/** Seed a fresh venue directory as a read-only mirror holding its OWN dormant identity (R2/R3a): tenant + location,
  * a reserved standby identity (own node + sealed key + endorsement + reserved SIF + reserved standard
  * series), a held term-3 membership chart, the DB-stored mirror connection config + sealed sync token the
  * mirror boot reads, and deployment stamped production then mode='mirror'. Returns the cloud's own nodeId
  * + the reserved standard series id the promote corrects trading.env to. */
 async function seedMirrorIdentity(
-  admin: Database,
+  db: Database,
 ): Promise<{ nodeId: string; standardSeriesId: string }> {
-  await admin
+  await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Cloud SL" })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(locations)
     .values({
       id: MIRROR_LOCATION_ID,
@@ -435,7 +477,7 @@ async function seedMirrorIdentity(
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
+  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -449,7 +491,7 @@ async function seedMirrorIdentity(
     signature: "endorsement-sig",
   };
   await establishReservedStandbyIdentity(
-    { ownerDb: admin, ring: PROMOTE_RING },
+    { ownerDb: db, ring: PROMOTE_RING },
     {
       locationId: MIRROR_LOCATION_ID,
       standby,
@@ -484,12 +526,12 @@ async function seedMirrorIdentity(
     signature: "held-placeholder-sig",
     endorsements: [],
   };
-  await writeNodeMembership(admin, held);
+  await writeNodeMembership(db, held);
 
   // The mirror's DB-stored connection config + sealed sync token the mirror boot requires (owner writes).
   // The relay is a dead loopback port — the pull/tunnel workers dial it and back off in the background,
   // which never blocks boot and is aborted on close().
-  await writeMirrorConfig(admin, {
+  await writeMirrorConfig(db, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
@@ -497,15 +539,15 @@ async function seedMirrorIdentity(
   });
 
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
-  await stampDeployment(admin, "production");
-  await setDeploymentMode(admin, "mirror");
-  const standardSeriesId = await readStandardSeriesId(admin, standby.nodeId);
+  await stampDeployment(db, "production");
+  await setDeploymentMode(db, "mirror");
+  const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
   return { nodeId: standby.nodeId, standardSeriesId };
 }
 
-describe("promote (real Postgres): mirror → primary, in-process, restart-into-primary", () => {
+describe("promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary (not the local method), promotes, and rewrites trading.env to the cloud's own series", async () => {
-    const seed = await seedMirrorIdentity(mirrorSuite.admin);
+    const seed = await seedMirrorIdentity(mirrorDb);
     const port = await freePort();
     // A per-test state dir so the corrected `trading.env` lands somewhere isolated we can read back.
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-mirror-state-"));
@@ -522,8 +564,7 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       WAITRON_TILL_NODE_ID: seed.nodeId,
       WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
       WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
-      DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "app_login", "app_pw"),
-      WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
+      WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -547,8 +588,8 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       expect(result).toEqual({ alreadyPrimary: false, seriesId: seed.standardSeriesId });
 
       // The point-of-no-return committed: deployment flipped to (primary, primary).
-      expect(await readDeploymentMode(mirrorSuite.admin)).toBe("primary");
-      expect(await readSingletonRole(mirrorSuite.admin)).toBe("primary");
+      expect(await readDeploymentMode(mirrorDb)).toBe("primary");
+      expect(await readSingletonRole(mirrorDb)).toBe("primary");
 
       // The next-tick restart timer has fired into the spy — never a real SIGTERM.
       await delay(50);

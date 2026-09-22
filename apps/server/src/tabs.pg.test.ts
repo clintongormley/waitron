@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -31,67 +32,80 @@ import { addTabRound, openTab } from "./working-order.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import "./errors.js";
 
-// ── H2: the huella is independent of table/tab membership — the grep receipts (Task 7, TS-1) ──
-// The fiscal core is UNTOUCHED by table-service: pay reuses `payWorkingOrder`/`recordSale` verbatim,
-// and no table/tab column reaches the hash. Two static receipts, both re-run and verified 2026-08-18:
-//
-// Step 1 — neither the fiscal core (`recordSale`) nor the alta builder (`VerifactuBackend`) reads any
-//   table column. In the revised model the tab link is a back-pointer on `dining_tables.tab_id`, so
-//   the filed `working_orders` row carries no tab field at all; `delivery_table_id` is the ONLY table
-//   column on `working_orders` and nothing on this path reads it.
-//     $ grep -nE "table_id|delivery_table_id|tableId|deliveryTableId" \
-//         packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts
-//     → (no output; exit 1)
-//   `RecordSaleInput` carries `workingOrderId` but no table column, and `computeHuella`
-//   (`@waitron/verifactu`'s huella computation) hashes ONLY the eight AEAT alta fields — IDEmisorFactura
-//   (issuer NIF), NumSerieFactura, FechaExpedicionFactura, TipoFactura, CuotaTotal, ImporteTotal, the
-//   previous Huella, and FechaHoraHusoGenRegistro — none of which is a table column.
-//
-// Step 1b — a tab lives in `open` and settles straight to `settled`; it never enters `placed`, so it
-//   files nothing until pay (design §5/§10). `placed` under Mode I (`invoice_first`) would file a
-//   DEFERRED invoice, which a tab must never do.
-//     $ grep -n "invoice_first" apps/server/src/working-order.ts
-//     → 739: * ... `invoice_first` (Mode I): file `recordSale` DEFERRED here ...
-//     → 793:       if (cfg.orderFlow === "invoice_first") {
-//     $ grep -nE "placeOrder|status.*placed" apps/server/src/working-order.ts \
-//         | grep -iE "openTab|addTabRound|voidTabLine"
-//     → (no output; exit 1)   ← no tab verb transitions to `placed` or calls `placeOrder`
-//   A tab is created `open` (`createOpenOrder` sets `status: "open"`) and pay settles it open → settled
-//   via `payWorkingOrder`, so it is never at `placed`.
-//
-// Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The per-table `FOR UPDATE`
-// concurrency guard is exactly what PGlite CANNOT show: it runs every connection as a superuser and
-// serialises every query onto ONE backend, so a "two concurrent openTabs" test there is a FALSE pass,
-// not a weak one. The race below opens its own backend via `suite.pg.connect()`, and the
-// shared-container globalSetup (`testing/global-setup.ts`) THROWS its `dockerRequired` message rather
-// than skipping when Docker is absent, so a vanished suite fails loudly instead of reporting a green
-// that proves nothing.
-//
-// STANDING NOTE — the product code these cases exercise no longer takes row locks. Every
-// `select … for update` in `working-order.ts` is gone: one write transaction runs on the venue
-// file at a time, which is wider than any of them (`assertAnchoredTabOpen` in
-// `apps/server/src/working-order.ts` carries the chain and the receipt). What each case below
-// describes as a lock is therefore a description of the PostgreSQL code it was written against.
-// The cases still stage two PostgreSQL backends, so they are not evidence about the venue file at
-// all; converting them — a contention test becomes a test that the write queue serialises writers,
-// the shape `racePair` in `packages/catalogue/test/fixtures.ts` uses — is its own step and is not
-// done here.
-//
-// This scaffolding (`useTemplateDb` `suite`, `nextNif`, `tillConfigFromVenue`, `setupVenue`) is
-// verb-agnostic (owner-read SQL + venue setup), a sibling of `working-order.pg.test.ts`. Each task
-// adds only the verb imports and owner-read helpers IT uses — this task imports `openTab` +
-// `createTable` and reads `open` working-order counts; Tasks 5/7/8 extend it.
+/**
+ * Tabs end to end — opening, appending rounds, paying, and what the pay FILES.
+ *
+ * ## H2: the huella is independent of table/tab membership — the static receipts
+ *
+ * The fiscal core is UNTOUCHED by table-service: pay reuses `payWorkingOrder`/`recordSale`
+ * verbatim, and no table/tab column reaches the hash. Two receipts, both re-run 2026-09-22:
+ *
+ * Step 1 — neither the fiscal core (`recordSale`) nor the alta builder (`VerifactuBackend`) reads
+ *   any table column. The tab link is a back-pointer on `dining_tables.tab_id`, so the filed
+ *   `working_orders` row carries no tab field at all; `delivery_table_id` is the ONLY table column
+ *   on `working_orders` and nothing on this path reads it.
+ *     $ grep -nE "table_id|delivery_table_id|tableId|deliveryTableId" \
+ *         packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts
+ *     → (no output; exit 1)
+ *   `RecordSaleInput` carries `workingOrderId` but no table column, and `computeHuella`
+ *   (`@waitron/verifactu`'s huella computation) hashes ONLY the eight AEAT alta fields — IDEmisorFactura
+ *   (issuer NIF), NumSerieFactura, FechaExpedicionFactura, TipoFactura, CuotaTotal, ImporteTotal,
+ *   the previous Huella, and FechaHoraHusoGenRegistro — none of which is a table column.
+ *
+ * Step 1b — a tab lives in `open` and settles straight to `settled`; it never enters `placed`, so
+ *   it files nothing until pay (design §5/§10). `placed` under Mode I (`invoice_first`) would file
+ *   a DEFERRED invoice, which a tab must never do.
+ *     $ grep -n '"placed"' apps/server/src/working-order.ts
+ *     → six hits, every one inside `placeOrder` or its docstring — no other function writes the
+ *       status, and no tab verb calls `placeOrder`.
+ *   The narrower grep this receipt used to run — `grep -nE "placeOrder|status.*placed"` piped
+ *   through `grep -iE "openTab|addTabRound|voidTabLine"` — no longer returns nothing: it now
+ *   prints two COMMENT lines in the shared fire chokepoint that happen to name `placeOrder` and
+ *   `addTabRound` in one sentence. It is a text match on prose, so it was never the check it read
+ *   as; the grep above is.
+ *
+ * ## The two cases this file LOST
+ *
+ * Both staged several PostgreSQL backends through `suite.pg.connect()` and asserted
+ * `pg_backend_pid()` was distinct. **There is no second connection to stage them on**: one venue
+ * file, one write transaction at a time, which is wider than the per-table `select … for update`
+ * they were written against — every one of those in `working-order.ts` is gone
+ * (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain and the
+ * receipt). Deleted:
+ *
+ * 1. **Two backends racing `openTab` on ONE table**, the loser getting `tab.already_open` and
+ *    exactly one `open` working order surviving. The sequential refusal is covered by
+ *    `tabs.test.ts`, "refuses a second tab on a table that already has an OPEN one
+ *    (tab.already_open)"; the RACE and the one-open-order corruption observable are not.
+ * 2. **Ten backends each appending one round to ONE tab, landing at contiguous `line_no`s 1..10.**
+ *    The sequential append is covered by `tabs.test.ts`, "appends a round with the NEXT line_no,
+ *    without deleting or re-pricing existing lines"; the contiguity-under-load property is covered
+ *    by nothing.
+ *
+ * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
+ * app_user` on a non-superuser connection; `asAppUser` is an empty body now
+ * (`packages/db/src/testing/roles.ts`).
+ *
+ * ## Why there are still TWO databases
+ *
+ * The two H2 cases file two records carrying the IDENTICAL AEAT identity, and
+ * `registros_identidad_uq` is global — there is no tenant column to hold them apart. Each filing
+ * therefore needs its own database, which two `useVenueDb` calls give directly (see
+ * `secondVenueSharingNif`). Every other case uses `suite` alone.
+ */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
-// A SECOND, independent database (its own clone) for the H2 huella-comparison tests. Those file two
-// records carrying the IDENTICAL AEAT identity, which one-tenant-per-database keeps apart by putting
-// each in its own database (see `secondVenueSharingNif`). Every other test in this file uses `suite`
-// alone; the helpers below default to `suite.admin` and take `suiteB.admin` only on the H2 path.
-const suiteB = useTemplateDb({ template: "manifest" });
+const venueDbOptions = { migrations: migrationOptionsFor(manifestSets(), null), timeoutMs: 60_000 };
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same shape `working-order.pg.test.ts` uses.
+const suite = useVenueDb(venueDbOptions);
+// A SECOND, independent venue database for the H2 huella-comparison cases, for the reason the file
+// header states. The helpers below default to `suite.db` and take `suiteB.db` only on the H2 path.
+const suiteB = useVenueDb(venueDbOptions);
+
+// This counter was here because tenants accumulated for the life of the shared PostgreSQL
+// container. They do not now: each suite gets its own database file and the per-test reset empties
+// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
+// costs nothing — and the H2 cases read tenant A's NIF back rather than assuming it.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -107,7 +121,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these working-order PostgreSQL suites.
+    // No integrated card terminal for these tab suites.
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -126,7 +140,7 @@ interface SeededVenue {
  * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its counts are
  * order-independent (CLAUDE.md §4).
  */
-async function setupVenue(db: Database = suite.admin): Promise<SeededVenue> {
+async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -191,30 +205,12 @@ async function setupVenue(db: Database = suite.admin): Promise<SeededVenue> {
 }
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
-async function seedTable(
-  cfg: TillConfig,
-  label: string,
-  db: Database = suite.admin,
-): Promise<string> {
+async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db): Promise<string> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const { id } = await createTable(tx, cfg, { label });
     return id;
   });
-}
-
-/**
- * How many OPEN working orders exist for the tenant — owner read. Two openTabs that serialise
- * yield exactly ONE (the loser refuses BEFORE creating its order); two that interleave both
- * create one → 2, and the table's single tab_id points at only one, orphaning the other. What
- * made them serialise on PostgreSQL was the per-table `FOR UPDATE`; see the file's standing note
- * for what does now, and for why this suite is not evidence about it.
- */
-async function openOrderCount(): Promise<number> {
-  const { rows } = await suite.admin.execute<{ n: string }>(
-    sql`select cast(count(*) as text) as n from working_orders where status = 'open'`,
-  );
-  return Number(rows[0]!.n);
 }
 
 // The fiscal backend + clock the pay path files through — ported from `working-order.pg.test.ts`'s
@@ -256,29 +252,35 @@ beforeAll(() => {
       resolveClient: () =>
         Promise.reject(new Error("tabs.pg.test: resolveClient must never be called by recordSale")),
     });
-  backend = makeBackend(suite.admin);
-  backendB = makeBackend(suiteB.admin);
+  backend = makeBackend(suite.db);
+  backendB = makeBackend(suiteB.db);
 });
 
-/** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
+/**
+ * The working order's own state — status + whether settled_at is set (the biconditional's witness).
+ *
+ * The `is not null` projection is read RAW, so no drizzle mapper runs and SQLite hands the
+ * predicate back as the integer 1 or 0; the coercion is here in the READER, leaving every caller's
+ * `settledAtSet: true/false` expectation as it was.
+ */
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
-  const { rows } = await suite.admin.execute<{ status: string; settled: boolean }>(sql`
+  const { rows } = await suite.db.execute<{ status: string; settled: number }>(sql`
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
-  return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+  return { status: rows[0]!.status, settledAtSet: rows[0]!.settled === 1 };
 }
 
-/** How many `sales` rows reference this working order — read as the owner. */
+/** How many `sales` rows reference this working order. */
 async function saleCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
 }
 
-/** How many chained `registros_facturacion` rows exist for this working order's sale (owner read). */
+/** How many chained `registros_facturacion` rows exist for this working order's sale. */
 async function registroCount(workingOrderId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+  const { rows } = await suite.db.execute<{ count: string }>(sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
     join sales s on s.id = r.sale_id
@@ -287,98 +289,17 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-describe("openTab concurrency (one open tab per table; the per-table lock IS the guard)", () => {
-  it("two backends racing to open a tab on the SAME table → exactly one wins, the other gets tab.already_open", async () => {
-    const { cfg, cafe } = await setupVenue();
-    const tableId = await seedTable(cfg, "Race-1");
-
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const pids = await Promise.all(
-        [connA, connB].map((d) =>
-          d
-            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-            .then((r) => r.rows[0]!.pid),
-        ),
-      );
-      expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
-
-      const attempt = (d: Database) =>
-        withTransaction(d, async (tx) => {
-          await asAppUser(tx);
-          return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
-        });
-
-      const results = await Promise.allSettled([attempt(connA), attempt(connB)]);
-      const fulfilled = results.filter((r) => r.status === "fulfilled");
-      const rejected = results.filter((r) => r.status === "rejected");
-      expect(fulfilled).toHaveLength(1);
-      expect(rejected).toHaveLength(1);
-      expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
-        code: "tab.already_open",
-        params: { tableId },
-      });
-      // The corruption observable: exactly ONE open working order exists. Without the lock both would be
-      // created (the loser reads a stale tab_id=null) → 2, one orphaned by the single tab_id column.
-      expect(await openOrderCount()).toBe(1);
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
-  });
-});
-
-describe("addTabRound concurrency (distinct line_no under load)", () => {
-  const ROUNDS = 10;
-  it("N backends appending one line each to ONE tab all land with distinct contiguous line_nos", async () => {
-    const { cfg, cafe } = await setupVenue();
-    const tableId = await seedTable(cfg, "Race-2");
-    // Open the tab EMPTY (no initial round) so the appended line_nos are exactly 1..N.
-    const { tabId } = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return openTab(tx, cfg, { tableId });
-    });
-
-    const dbs = await Promise.all(Array.from({ length: ROUNDS }, () => suite.pg.connect()));
-    try {
-      const pids = await Promise.all(
-        dbs.map((d) =>
-          d
-            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-            .then((r) => r.rows[0]!.pid),
-        ),
-      );
-      expect(new Set(pids).size).toBe(ROUNDS); // distinct backends — the race is real.
-
-      await Promise.all(
-        dbs.map((d) =>
-          withTransaction(d, async (tx) => {
-            await asAppUser(tx);
-            return addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1" }]);
-          }),
-        ),
-      );
-
-      const { rows } = await suite.admin.execute<{ line_no: number }>(
-        sql`select line_no from working_order_lines where working_order_id = ${tabId} order by line_no`,
-      );
-      expect(rows.map((r) => r.line_no)).toEqual(Array.from({ length: ROUNDS }, (_, i) => i + 1));
-    } finally {
-      await Promise.all(dbs.map((d) => d.close()));
-    }
-  });
-});
-
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
   it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1");
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
-    const { tabId } = await withTransaction(suite.admin, async (tx) => {
+    const { tabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
     });
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
     });
@@ -397,7 +318,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
 
     // The table now reads free: its tab_id STILL points at the order (no settle-time write), but the
     // order is settled, so the "open tab" join finds nothing (occupancy — Task 9).
-    const { rows } = await suite.admin.execute<{ n: string }>(sql`
+    const { rows } = await suite.db.execute<{ n: string }>(sql`
       select cast(count(*) as text) as n
       from dining_tables dt join working_orders wo on wo.id = dt.tab_id
       where dt.id = ${tableId} and wo.status = 'open'`);
@@ -407,13 +328,13 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
   it("paying an EMPTY tab is refused sale.empty_basket (a domain 4xx), files nothing — not an opaque 500", async () => {
     const { cfg } = await setupVenue();
     const tableId = await seedTable(cfg, "Empty-pay");
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     // openTab with NO initial round → a lineless `open` working order (a first-class supported state,
     // tabs.test.ts "opens a tab with NO initial round"). Closing it before ordering routes
     // payWorkingOrder → priceStoredOrder → readLockedLines on a zero-line order — the exact
     // empty-tab-pay flow that used to throw a RAW Error → opaque `server.internal` 500.
-    const { tabId } = await withTransaction(suite.admin, async (tx) => {
+    const { tabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId });
     });
@@ -458,9 +379,9 @@ function fixedClock(instant: Date): TrustedClock {
 /**
  * Tenant A's NIF — its `tenants.tax_id` (for a Spanish tenant, tax_id IS the NIF). This is the
  * issuer identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings
- * must SHARE for their huellas to match. Owner read.
+ * must SHARE for their huellas to match.
  */
-async function nifOf(db: Database = suite.admin): Promise<string> {
+async function nifOf(db: Database = suite.db): Promise<string> {
   const { rows } = await db.execute<{ tax_id: string }>(
     sql`select tax_id from tenants where id = 1`,
   );
@@ -469,7 +390,7 @@ async function nifOf(db: Database = suite.admin): Promise<string> {
 
 /**
  * A SECOND, wholly separate venue whose node files under `nif` — tenant A's NIF — rather than its own,
- * provisioned in a SECOND database (`db`, defaulting to `suiteB.admin`). This is the crux of the H2
+ * provisioned in a SECOND database (`db`, defaulting to `suiteB.db`). This is the crux of the H2
  * proof, and it MUST be a second DATABASE, not a second tenant or node in one database:
  * `registros_identidad_uq` (packages/fiscal-verifactu/src/schema/registros.ts) is keyed on
  * (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) — record identity is
@@ -492,10 +413,7 @@ async function nifOf(db: Database = suite.admin): Promise<string> {
  * own-nif SIF, so its filing carries a DIFFERENT `IDEmisorFactura` and the two huellas diverge — it is
  * the shared NIF, not any tenant identity, that the matching huella depends on.
  */
-async function secondVenueSharingNif(
-  nif: string,
-  db: Database = suiteB.admin,
-): Promise<SeededVenue> {
+async function secondVenueSharingNif(nif: string, db: Database = suiteB.db): Promise<SeededVenue> {
   const venue = await setupVenue(db);
   await withTransaction(db, async (tx) => {
     await registerSif(tx, {
@@ -507,8 +425,8 @@ async function secondVenueSharingNif(
   return venue;
 }
 
-/** The filed huella for a working order's sale — owner read. */
-async function filedHuella(workingOrderId: string, db: Database = suite.admin): Promise<string> {
+/** The filed huella for a working order's sale. */
+async function filedHuella(workingOrderId: string, db: Database = suite.db): Promise<string> {
   const { rows } = await db.execute<{ huella: string }>(sql`
     select r.huella from registros_facturacion r
     join sales s on s.id = r.sale_id
@@ -524,8 +442,8 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
   it("the SAME basket filed walk-up and from a tab yields the identical huella", async () => {
     const at = new Date("2026-08-17T19:20:30+01:00");
     const clockFixed = fixedClock(at);
-    const depsA = { db: suite.admin, backend, clock: clockFixed };
-    const depsB = { db: suiteB.admin, backend: backendB, clock: clockFixed };
+    const depsA = { db: suite.db, backend, clock: clockFixed };
+    const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
     // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF (database `suite`).
     const { cfg: cfgA, cafe: cafeA } = await setupVenue();
@@ -542,8 +460,8 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // colliding on the (now global) `registros_identidad_uq`; the shared NIF makes IDEmisorFactura —
     // hence the huella input — identical (the receipt `secondVenueSharingNif` documents).
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
-    const tableId = await seedTable(cfgB, "H2-tab", suiteB.admin);
-    const { tabId } = await withTransaction(suiteB.admin, async (tx) => {
+    const tableId = await seedTable(cfgB, "H2-tab", suiteB.db);
+    const { tabId } = await withTransaction(suiteB.db, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
     });
@@ -555,13 +473,13 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
 
     // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's read-back): the
     // two orders GENUINELY differ in table-ness — the TAB order (in `suiteB`) is pointed at by a
-    // `dining_tables` row, the WALK-UP order (in `suite`) by none. Owner reads, each against the database
-    // its order lives in. Without this, a regression where `openTab` stopped setting `tab_id` would leave
+    // `dining_tables` row, the WALK-UP order (in `suite`) by none. Each read goes to the database its
+    // order lives in. Without this, a regression where `openTab` stopped setting `tab_id` would leave
     // both filings table-less and make the equality below vacuously true.
-    const tabPointers = await suiteB.admin.execute<{ n: string }>(
+    const tabPointers = await suiteB.db.execute<{ n: string }>(
       sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${tabId}`,
     );
-    const walkUpPointers = await suite.admin.execute<{ n: string }>(
+    const walkUpPointers = await suite.db.execute<{ n: string }>(
       sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${walkUpId}`,
     );
     expect(Number(tabPointers.rows[0]!.n)).toBe(1); // the tab IS a table's running tab
@@ -576,14 +494,14 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // equality would STILL hold. Column-independence is established SEPARATELY and dispositively by
     // (i) the UNTOUCHED fiscal core — this whole diff is test-only (`git diff --stat`) — and (ii) the
     // Step-1 grep-proof that `recordSale`/`computeHuella`/the alta builder never reference the column.
-    expect(await filedHuella(tabId, suiteB.admin)).toBe(await filedHuella(walkUpId, suite.admin));
+    expect(await filedHuella(tabId, suiteB.db)).toBe(await filedHuella(walkUpId, suite.db));
   });
 });
 
-/** The delivery_table_id stamped on a working order — owner read. */
+/** The delivery_table_id stamped on a working order. */
 async function deliveryTableOf(
   workingOrderId: string,
-  db: Database = suite.admin,
+  db: Database = suite.db,
 ): Promise<string | null> {
   const { rows } = await db.execute<{ d: string | null }>(
     sql`select delivery_table_id as d from working_orders where id = ${workingOrderId}`,
@@ -595,7 +513,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
   it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
     const { cfg, cafe } = await setupVenue();
     const tableId = await seedTable(cfg, "Del-1");
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     const id = randomUUID();
     const res = await recordTillSale(deps, cfg, {
@@ -608,7 +526,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await deliveryTableOf(id)).toBe(tableId);
     // A delivery is NOT a tab — no dining_tables row points at it.
-    const { rows } = await suite.admin.execute<{ n: string }>(
+    const { rows } = await suite.db.execute<{ n: string }>(
       sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${id}`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
@@ -616,12 +534,14 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
 
   it("a deliveryTableId naming no table is refused table.not_found (a domain 4xx, not a raw 500)", async () => {
     const { cfg, cafe } = await setupVenue();
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
     const orderId = randomUUID();
     const missingTableId = randomUUID(); // a well-formed uuid that names no dining table
 
-    // The FK `working_orders_delivery_table_fk` (23503) is the DB backstop; the app pre-check surfaces
-    // the actionable domain code instead of the opaque `server.internal` 500 a raw 23503 would become.
+    // The column's FOREIGN KEY to `dining_tables` is the database's own backstop
+    // (`packages/db/drizzle/0000_baseline.sql`, the `working_orders` table); what this case asserts is
+    // the app pre-check in front of it, which names an actionable domain code where a raw
+    // constraint error would surface as an opaque `server.internal` 500.
     await expect(
       recordTillSale(deps, cfg, {
         workingOrderId: orderId,
@@ -633,7 +553,7 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
 
     // Nothing was filed and no order was created — the guard fires before any write (the tx rolls back).
     expect(await saleCount(orderId)).toBe(0);
-    const { rows } = await suite.admin.execute<{ n: string }>(
+    const { rows } = await suite.db.execute<{ n: string }>(
       sql`select cast(count(*) as text) as n from working_orders where id = ${orderId}`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
@@ -650,8 +570,8 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
   it("two counter sales differing ONLY in delivery_table_id yield the identical huella", async () => {
     const at = new Date("2026-08-17T19:20:30+01:00");
     const clockFixed = fixedClock(at);
-    const depsA = { db: suite.admin, backend, clock: clockFixed };
-    const depsB = { db: suiteB.admin, backend: backendB, clock: clockFixed };
+    const depsA = { db: suite.db, backend, clock: clockFixed };
+    const depsB = { db: suiteB.db, backend: backendB, clock: clockFixed };
 
     // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF
     // (database `suite`).
@@ -679,16 +599,14 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     });
 
     // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A (in `suite`)
-    // carries the real table, B (in `suiteB`) carries NULL. Owner reads, each against its own database.
-    expect(await deliveryTableOf(deliveredId, suite.admin)).toBe(tableA);
-    expect(await deliveryTableOf(walkUpId, suiteB.admin)).toBe(null);
+    // carries the real table, B (in `suiteB`) carries NULL. Each read goes to its own database.
+    expect(await deliveryTableOf(deliveredId, suite.db)).toBe(tableA);
+    expect(await deliveryTableOf(walkUpId, suiteB.db)).toBe(null);
 
     // Same NIF + same "A/1" + same fixed timestamp + same amount + both primer_registro, differing ONLY
     // in delivery_table_id ⇒ identical huella. This is the EMPIRICAL proof — possible for the first time
     // now the column is settable — that the newly-threaded delivery_table_id does NOT leak into the hash:
     // two rows differing solely in it hash alike (the fiscal core never reads it, per the Step-1 grep).
-    expect(await filedHuella(deliveredId, suite.admin)).toBe(
-      await filedHuella(walkUpId, suiteB.admin),
-    );
+    expect(await filedHuella(deliveredId, suite.db)).toBe(await filedHuella(walkUpId, suiteB.db));
   });
 });

@@ -1,23 +1,60 @@
 /**
- * NOT COLLECTED ON THIS BRANCH, and it is the harness rather than anything here: `useTemplateDb`
- * throws `useTemplateDb: no shared container in scope. Wire the package's vitest globalSetup to a
- * file that calls `startSharedContainer` and `provide("sharedPg", handle).` Measured 2026-09-22 on
- * `npx vitest run src/management-api.pg.test.ts` in `apps/server`, which reports
- * `39 tests | 39 skipped` and then fails the FILE. No assertion below has run on this branch; its
- * SQL is converted anyway so nothing has to be untangled twice.
+ * The dashboard's sign-in and staff-administration surface end to end, on the engine the box now
+ * runs: login, logout and session reuse, the people roster and its gate, invitations and resends,
+ * password reset, the identical answers that hide whether an account exists, Google linking,
+ * degenerate bodies mapping to 4xx rather than 500, and receipt configuration.
  *
- * Two cases here ("refuses a duplicate…", "preserves one active admin…") stage a race by issuing
- * two requests with `Promise.all` on ONE database handle. Whether they still stage anything is NOT
- * established by this conversion: `withTransaction` now runs each body inside the venue file's
- * write queue, which admits one write transaction at a time (`assertExtraListForWrite`,
- * `packages/catalogue/src/extras.ts`), so the interleave they were written for may no longer occur.
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason for demanding a real cluster was `app_user`: every route dropped to the
+ * non-owner deployment role, so a person created here had to land under that role's grants. SQLite
+ * has no roles and no grants — `asAppUser` is an inert function
+ * (`packages/db/src/testing/roles.ts`) — so every call below runs on the one connection and nothing
+ * here now says anything about which identity the routes reach the database as. No case was deleted
+ * for it: each one names a route's behaviour, and all thirty-nine still run.
+ *
+ * ## TWO CASES KEPT THEIR ANSWERS AND CHANGED SUBJECT, which is worth more than a passing count
+ *
+ * `lets only one concurrent invitation claim a live display name` and `preserves one active admin
+ * when two admins concurrently demote themselves` each fire two requests with `Promise.all` and
+ * expect one success and one 409. Both still pass, and neither is staging a race any more.
+ *
+ * Measured here 2026-09-22, in three steps, with the control in the other direction each time.
+ *
+ * 1. **The two request bodies do not overlap.** Two `withTransaction` calls issued together logged
+ *    `in-A out-A in-B out-B`, never `in-A in-B`. `withTransaction` is `withWriteLock`
+ *    (`packages/db/src/tenancy.ts`), and SQLite admits one writer per file, so the second request's
+ *    whole transaction — its pre-check included — runs after the first has committed.
+ * 2. **The 409 now comes from the application pre-check, not from the unique index.** The
+ *    discriminating pair is two names differing only in the case of an ACCENTED letter, because
+ *    SQLite's `lower()` folds ASCII only while JavaScript's `toLocaleLowerCase` folds everything:
+ *    `persons_tenant_live_display_name_uq` indexes `lower(trim(display_name))` and so cannot see
+ *    such a pair, while `assertDisplayNameAvailable` (`packages/identity/src/staff.ts`) compares
+ *    that same SQL expression against the JavaScript-lowercased input and can. Inserting
+ *    `Ánxela uno` and `ánxela uno` straight into `persons` was NOT refused and stored two rows —
+ *    the index is blind to the pair. The same pair of names driven through the concurrent invitation
+ *    route still answered 201 and 409, with `person.display_name_taken`. Only the pre-check can
+ *    produce that.
+ * 3. `person.last_admin` has no index behind it at all — it is the `activeAdmins.length === 1`
+ *    branch in the same file — so with the bodies serialised the second demotion simply reads the
+ *    committed state.
+ *
+ * Both cases are kept: what they now pin is that the pre-checks refuse, which is the behaviour the
+ * dashboard depends on. What NOTHING in this repository now checks is the other half — that the
+ * unique index catches a pair of writers the pre-check let through. On one file with one writer
+ * there is no way to stage it here.
+ *
+ * The stale `.pg.` in this file's own name, and the "over real Postgres" in one describe below, are
+ * left for the branch's single rename sweep rather than changed here — the choice
+ * `device.pg.test.ts` records.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { encryptTotpSecret, hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEFAULT_RECEIPT } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -27,31 +64,28 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
-// Real Postgres, not PGlite: these routes are the dashboard's management surface, and everything they
-// do runs `withTransaction` + `asAppUser`, so every read and write is subject to app_user's grants.
-// PGlite connects as a superuser holding every privilege (CLAUDE.md §4), so it cannot show that the
-// created person actually lands as the app role — the whole point of this file. The
-// login path (`loginManager`) also needs a migrated DB (persons + management_sessions), which only the
-// container provides. No probe role is needed here (unlike `till-api.pg.test.ts`): the management API
-// wires no card provider, so every DB op goes through `withTransaction` + `asAppUser` from `suite.admin`.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
 // carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
-// database, so what makes one pair of constants safe for all 39 `setupTenant()` calls is this
-// suite's per-test reset (`useTemplateDb`'s `resetPerTest` default), which empties `persons`
-// between tests — not any per-tenant scoping.
+// database, so what makes one pair of constants safe for every `setupTenant()` call is this suite's
+// per-test reset (`useVenueDb`'s `resetPerTest` default), which empties `persons` between tests —
+// not any per-tenant scoping. `tenants` is a singleton row (id = 1), so the same reset is what lets
+// each test provision its own venue.
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 const ACCOUNT_ACTION_CODE_KEY = Buffer.alloc(32, 21);
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter `till-api.pg.test.ts` uses.
+// A per-file NIF counter, kept rather than fixed because `setupTenant` is called from several places
+// and `tenants_country_tax_id_key` is unique — the same shape `till-api.pg.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -107,20 +141,36 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
+  // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are NOT
+  // NULL columns whose values come from `$defaultFn` generators
+  // (`packages/identity/src/schema/persons.ts`), and a raw statement reaches no generator —
+  // `NOT NULL constraint failed: persons.id`.
+  const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
-      returning id`);
-    return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
+    const [manager] = await tx
+      .insert(persons)
+      .values({
+        displayName: "The Manager",
+        email: MANAGER_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+      })
+      .returning({ id: persons.id });
+    const [staff] = await tx
+      .insert(persons)
+      .values({
+        displayName: "The Clerk",
+        email: STAFF_EMAIL,
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "staff",
+      })
+      .returning({ id: persons.id });
+    return { managerId: manager!.id, staffId: staff!.id };
   });
   return { managerId, staffId };
 }
@@ -134,14 +184,13 @@ function mountApp(
 ): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
-  // `till-api.pg.test.ts`'s `apiDeps`). `deps.db` is the owner connection; the routes drop to
-  // `app_user` themselves via `withTransaction` + `asAppUser`. `rpId`/`origin` are the loopback passkey
-  // Relying Party values (these suites exercise the staff routes, not the passkey ceremonies — those
-  // are covered in Task 5 — but the widened `ManagementApiDeps` requires both).
+  // `till-api.pg.test.ts`'s `apiDeps`). `rpId`/`origin` are the loopback passkey Relying Party
+  // values (these suites exercise the staff routes, not the passkey ceremonies — those are covered
+  // in Task 5 — but the widened `ManagementApiDeps` requires both).
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // These cases do not assert sync attribution, so use the default all-zero origin.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
@@ -182,7 +231,7 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
 /** Count the persons named `displayName`, read back as the app role — the proof a real row
  * landed, not merely that a route returned a success status. */
 async function countPersonsNamed(displayName: string): Promise<number> {
-  const rows = await withTransaction(suite.admin, async (tx) => {
+  const rows = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ display_name: string }>(
       sql`select display_name from persons where display_name = ${displayName}`,
@@ -212,7 +261,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
     // No `::int` here or below: `count(*)` already comes back as a JavaScript number, and the cast
     // operator is a syntax error to this parser (`unrecognized token: ":"`).
-    const matching = await suite.admin.execute<{ count: number }>(sql`
+    const matching = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from persons
       where lower(display_name)='same till name'`);
     expect(matching.rows[0]!.count).toBe(1);
@@ -220,11 +269,11 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("preserves one active admin when two admins concurrently demote themselves", async () => {
     const { managerId } = await setupTenant();
-    await suite.admin.execute(sql`update persons set role='admin' where id=${managerId}`);
+    await suite.db.execute(sql`update persons set role='admin' where id=${managerId}`);
     const app = mountApp();
     const ownerCookie = await login(app, "owner@example.test", "dashPass123");
     const managerCookie = await login(app, MANAGER_EMAIL);
-    const owner = await suite.admin.execute<{ id: string }>(
+    const owner = await suite.db.execute<{ id: string }>(
       sql`select id from persons where email='owner@example.test'`,
     );
     const edit = (id: string, cookie: string, displayName: string, email: string) =>
@@ -246,7 +295,7 @@ describe("Management API staff + session routes over real Postgres", () => {
       edit(managerId, managerCookie, "The Manager", MANAGER_EMAIL),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
-    const remaining = await suite.admin.execute<{ count: number }>(sql`
+    const remaining = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from persons
       where role='admin' and status='active'`);
     expect(remaining.rows[0]!.count).toBe(1);
@@ -339,14 +388,19 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("does not count the expected authenticator transition as a failed password", async () => {
     await setupTenant();
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(sql`
-        insert into persons (display_name, email, pin_hash, password_hash, role, totp_secret)
-        values ('Factor Manager', 'factor@example.com', ${hashPin("1234")},
-          ${hashPassword(PASSWORD)}, 'manager',
-          ${encryptTotpSecret("JBSWY3DPEHPK3PXP", { version: 1, key: ACCOUNT_ACTION_CODE_KEY })})
-      `);
+      await tx.insert(persons).values({
+        displayName: "Factor Manager",
+        email: "factor@example.com",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(PASSWORD),
+        role: "manager",
+        totpSecret: encryptTotpSecret("JBSWY3DPEHPK3PXP", {
+          version: 1,
+          key: ACCOUNT_ACTION_CODE_KEY,
+        }),
+      });
     });
     const finish = vi.fn();
     const app = mountApp(undefined, { begin: vi.fn(() => finish) });
@@ -582,7 +636,7 @@ describe("Management API staff + session routes over real Postgres", () => {
   it("uses the same recovery acknowledgement for pending and unknown accounts", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
     const { staffId } = await setupTenant();
-    await suite.admin.execute(
+    await suite.db.execute(
       sql`update persons set status = 'pending', password_hash = null, pin_hash = null where id = ${staffId}`,
     );
     const app = mountApp(async (message) => {
@@ -707,8 +761,10 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(sent).toHaveLength(3);
     expect(sent[2]!.email).toBe("pending-resend@x.com");
     expect(sent[2]!.code).toBeUndefined();
-    const hiddenCodes = await suite.admin.execute<{ count: string }>(
-      sql`select count(*) as count from management_account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
+    // `cast(… as text)`, not `::text`: the cast operator is a syntax error to this parser, and a
+    // bare `count(*)` comes back as a JavaScript number rather than the string this case pins.
+    const hiddenCodes = await suite.db.execute<{ count: string }>(
+      sql`select cast(count(*) as text) as count from management_account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
     );
     expect(hiddenCodes.rows[0]!.count).toBe("0");
   });
@@ -821,7 +877,7 @@ describe("Management API staff + session routes over real Postgres", () => {
       headers: { cookie },
     });
     expect(resetPin.status).toBe(204);
-    const row = await suite.admin.execute<{ pin_hash: string | null }>(
+    const row = await suite.db.execute<{ pin_hash: string | null }>(
       sql`select pin_hash from persons where id = ${staffId}`,
     );
     expect(row.rows[0]!.pin_hash).toBeNull();
@@ -842,7 +898,7 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(await reset.json()).toEqual({ invitationSent: true });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ purpose: "invitation", email: STAFF_EMAIL });
-    const row = await suite.admin.execute<{
+    const row = await suite.db.execute<{
       status: string;
       pin_hash: string | null;
       password_hash: string | null;
@@ -1038,7 +1094,7 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 });
 
-// Exercise receipt configuration GET and PUT through PostgreSQL-backed manager authorization.
+// Exercise receipt configuration GET and PUT through the real manager authorization path.
 
 /** GET the current receipt trim as `cookie` (its own `tenant_receipts`-backed route, SP-B4), asserting
  * the 200 and returning the parsed `{ receipt }` a round-trip test reads back after a PUT. */

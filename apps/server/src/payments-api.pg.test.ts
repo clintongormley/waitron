@@ -1,13 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, locations, nowIso, tenants, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  asAppUser,
+  deviceProfiles,
+  devices,
+  locations,
+  nowIso,
+  tenants,
+  tills,
+  withTransaction,
+} from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
-import type { CardProviderContribution } from "@waitron/payments";
+import { cardReaders, type CardProviderContribution } from "@waitron/payments";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -21,11 +31,37 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-// Real Postgres (a manifest template clone), NOT PGlite — mandatory for THIS surface (CLAUDE.md §4).
-// These routes read and write as `app_user` (the credential vault put/delete, the card_readers +
-// device_card_readers writes, the payments.manage gate proven by DELETION), and the properties this
-// suite is FOR — the table grants and the gate — are exactly what PGlite's
-// all-superuser connection false-passes.
+/**
+ * The card-provider and card-reader management routes, on the engine the box now runs.
+ *
+ * ## The two properties this file was placed here for, and what is left of them
+ *
+ * Its old header said real PostgreSQL was MANDATORY rather than PGlite, for the table grants the
+ * routes need and for the `payments.manage` gate. **The grant half is gone and is replaced by
+ * nothing**: SQLite has no roles, one process opens one file, and `asAppUser` is an empty function
+ * body (`packages/db/src/testing/roles.ts:25`). The gate half is application logic in the route
+ * layer and is unaffected — `gates every new route before reaching the provider` still proves it.
+ *
+ * Two cases changed with the engine, each recorded where it sits:
+ *
+ * - `runs as non-superuser app_user` is **DELETED**. It read `current_user` and `rolsuper` out of
+ *   `pg_roles` to show the suite itself was not a superuser. There is no catalogue to ask and no
+ *   role to ask about, and nothing replaces what it checked.
+ * - `does not enable across a concurrent committed unpair` no longer stages a race; see the comment
+ *   on the case for what it proves now.
+ *
+ * ## One case is RED, and it is a BROKEN ROUTE rather than a test to edit
+ *
+ * `refuses local enable after unpair until the provider lists the reader for adoption again` fails
+ * because `GET /management-api/payments/readers` serves `canEnable` as a NUMBER. The route builds
+ * it as a raw expression — `apps/server/src/payments-api.ts:386`, `sql<boolean>`…is null`` — and
+ * that type parameter is a cast, not a read mapping, so SQLite's integer reaches the JSON body
+ * unconverted. Measured here 2026-09-22, both directions: with the reader unpaired the body carries
+ * `canEnable: 0` where the case expects `false`, and with it paired again (the second assertion,
+ * reached by temporarily accepting the first) it carries `1` where the case expects `true`. The
+ * dashboard reads this field, so the contract the case pins is the right one and the route is what
+ * has to change.
+ */
 const noopLog: Logger = () => {};
 
 const RING: KeyRing = loadKeyRing({
@@ -33,10 +69,13 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared clone and each unique key must not collide, so
-// per-suite counters stand in for the NIF, the reader ref and the profile/till names.
+// Each unique key must not collide within a test, so per-suite counters stand in for the NIF, the
+// reader ref and the profile/till names.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -60,16 +99,16 @@ interface Venue {
 }
 
 /** A fresh tenant + location + a manager and a staff person, each with a management session. Each
- * test seeds its OWN venue so reader/credential counts are order-independent across the shared clone. */
+ * test seeds its OWN venue so reader/credential counts are its own. */
 async function seedVenue(): Promise<Venue> {
   // Through the table definitions: `tenants.created_at` and `locations.id` are JavaScript
   // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
   // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
   // error here.
-  await suite.admin
+  await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.admin
+  const [loc] = await suite.db
     .insert(locations)
     .values({
       name: "Barra",
@@ -78,7 +117,7 @@ async function seedVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
@@ -101,21 +140,31 @@ async function seedVenue(): Promise<Venue> {
   };
 }
 
-/** A `till`-form-factor device in `venue` (owner SQL for setup) — the target the device-default-reader
- * routes point at a reader. A `till` device binds a register (till_id) and no station, per the
- * device_binding_rule trigger. */
+/** A `till`-form-factor device in `venue` — the target the device-default-reader routes point at a
+ * reader. A `till` device binds a register (till_id) and no station.
+ *
+ * Through the table definitions: each `id`, each `created_at` and `devices.enrolled_at` is a
+ * `$defaultFn` generator on a NOT NULL column here, which a raw `insert into ... ` never reaches. */
 async function seedDevice(venue: Venue): Promise<string> {
-  const profile = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor)
-    values (${nextName("Perfil caja")}, 'till') returning id`);
-  const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${venue.locationId}, ${nextName("Caja")}) returning id`);
-  const dev = await suite.admin.execute<{ id: string }>(sql`
-    insert into devices (location_id, till_id, device_profile_id, label, token_hash)
-    values (${venue.locationId}, ${till.rows[0]!.id}, ${profile.rows[0]!.id}, 'Registro', 'x')
-    returning id`);
-  return dev.rows[0]!.id;
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: nextName("Perfil caja"), formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
+  const [till] = await suite.db
+    .insert(tills)
+    .values({ locationId: venue.locationId, name: nextName("Caja") })
+    .returning({ id: tills.id });
+  const [dev] = await suite.db
+    .insert(devices)
+    .values({
+      locationId: venue.locationId,
+      tillId: till!.id,
+      deviceProfileId: profile!.id,
+      label: "Registro",
+      tokenHash: "x",
+    })
+    .returning({ id: devices.id });
+  return dev!.id;
 }
 
 /** A fake Stripe SDK: a good key answers with an account + an online reader; a key carrying `bad`
@@ -184,7 +233,7 @@ function mountApp(venue: Venue, providers: readonly CardProviderContribution[] =
   mountPaymentsApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: cfgOf(venue),
       ring: RING,
       environment: "preproduction",
@@ -239,7 +288,7 @@ async function addReader(
 }
 
 async function sealedStripe(): Promise<Record<string, string> | null> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tryGetCredential(tx, RING, {
       purpose: "payments.stripe",
@@ -259,7 +308,7 @@ describe("connect", () => {
     expect(body).toEqual({ merchantName: "Deli Stripe SL" });
     expect(evicted.slice(before)).toEqual(["stripe"]);
     // The sealed payload exists and is exactly the four declared fields.
-    const stored = await withTransaction(suite.admin, async (tx) => {
+    const stored = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return getCredential(tx, RING, {
         purpose: "payments.stripe",
@@ -453,7 +502,7 @@ describe("an injected fetch is threaded to the seat", () => {
     mountPaymentsApi(
       app,
       {
-        db: suite.admin,
+        db: suite.db,
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",
@@ -566,7 +615,7 @@ describe("add reader — races with a concurrent disconnect", () => {
     mountPaymentsApi(
       app,
       {
-        db: suite.admin,
+        db: suite.db,
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",
@@ -626,7 +675,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     mountPaymentsApi(
       app,
       {
-        db: suite.admin,
+        db: suite.db,
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",
@@ -669,16 +718,6 @@ describe("reader adoption and local management", () => {
   };
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
-  it("runs as non-superuser app_user", async () => {
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      const result = await tx.execute(
-        sql`select current_user as role, rolsuper from pg_roles where rolname = current_user`,
-      );
-      expect(result.rows).toEqual([{ role: "app_user", rolsuper: false }]);
-    });
-  });
-
   it("labels available, added and disabled and reuses the disabled id and device default", async () => {
     const venue = await seedVenue();
     const removed: string[] = [];
@@ -710,19 +749,30 @@ describe("reader adoption and local management", () => {
     ).toBe(204);
     expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
     expect(await available()).toEqual([{ ...vendor, status: "disabled" }]);
-    const disabled = await suite.admin.execute(
-      sql`select active, disabled_at is not null as dated from card_readers where id = ${id}`,
-    );
-    expect(disabled.rows).toEqual([{ active: false, dated: true }]);
+    // Read through the table definition, and `dated` derived in JavaScript: `active` is an integer
+    // column with a boolean read mapping here, and `disabled_at is not null` in SQL would come back
+    // as 0/1. The assertion below is the one this case has always made.
+    const disabled = (
+      await suite.db
+        .select({ active: cardReaders.active, disabledAt: cardReaders.disabledAt })
+        .from(cardReaders)
+        .where(eq(cardReaders.id, id))
+    ).map(({ active, disabledAt }) => ({ active, dated: disabledAt !== null }));
+    expect(disabled).toEqual([{ active: false, dated: true }]);
     const again = await send(app, "POST", `${base}/readers/adopt`, {
       ...opts,
       body: { ...adoption, name: "Terrace" },
     });
     expect(await again.json()).toEqual({ id, status: "paired" });
-    const stored = await suite.admin.execute(
-      sql`select id, name, active, disabled_at from card_readers`,
-    );
-    expect(stored.rows).toEqual([{ id, name: "Terrace", active: true, disabled_at: null }]);
+    const stored = await suite.db
+      .select({
+        id: cardReaders.id,
+        name: cardReaders.name,
+        active: cardReaders.active,
+        disabledAt: cardReaders.disabledAt,
+      })
+      .from(cardReaders);
+    expect(stored).toEqual([{ id, name: "Terrace", active: true, disabledAt: null }]);
     expect(await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json()).toEqual(
       { readerId: id },
     );
@@ -749,7 +799,7 @@ describe("reader adoption and local management", () => {
     expect(await result.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
-    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
     expect(removed).toEqual([]);
   });
 
@@ -776,17 +826,23 @@ describe("reader adoption and local management", () => {
     expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
     expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
     expect(
-      (
-        await suite.admin.execute(
-          sql`select name, active, disabled_at from card_readers where id = ${id}`,
-        )
-      ).rows,
-    ).toEqual([{ name: "Terrace", active: true, disabled_at: null }]);
+      await suite.db
+        .select({
+          name: cardReaders.name,
+          active: cardReaders.active,
+          disabledAt: cardReaders.disabledAt,
+        })
+        .from(cardReaders)
+        .where(eq(cardReaders.id, id)),
+    ).toEqual([{ name: "Terrace", active: true, disabledAt: null }]);
     expect(removed).toEqual([]);
     expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
     expect(removed).toEqual([vendor.providerRef]);
     expect(
-      (await suite.admin.execute(sql`select active from card_readers where id = ${id}`)).rows,
+      await suite.db
+        .select({ active: cardReaders.active })
+        .from(cardReaders)
+        .where(eq(cardReaders.id, id)),
     ).toEqual([{ active: false }]);
   });
 
@@ -832,7 +888,19 @@ describe("reader adoption and local management", () => {
     ]);
   });
 
-  it("does not enable across a concurrent committed unpair", async () => {
+  it("does not enable across a committed unpair the request never saw", async () => {
+    // WHAT THIS CASE PROVES NOW, AND WHAT IT LOST. It used to stage a race: an open transaction
+    // held the row while the enable request blocked on its lock, and a probe of `pg_stat_activity`
+    // asserted the request really was waiting before the hold was released. There is one
+    // connection and one writer per file here, so neither half can be staged — the probe has no
+    // counterpart and is deleted, and `withWriteLock` (`packages/store/src/write-queue.ts`)
+    // serialises the enable behind the unpair rather than making it wait on a lock.
+    //
+    // What survives is the OUTCOME, and it is not vacuous: the enable is issued while the unpair
+    // is still open, so the request cannot have read `unpaired_at` before it was written, and it
+    // still answers 422. The route re-reads the row inside its own transaction; that re-read is
+    // what the assertion catches. What is NO LONGER checked anywhere is what the route does when
+    // the two genuinely overlap.
     const venue = await seedVenue();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
@@ -847,11 +915,10 @@ describe("reader adoption and local management", () => {
     const ready = new Promise<void>((resolve) => {
       updated = resolve;
     });
-    const unpairWrite = withTransaction(suite.admin, async (tx) => {
+    const unpairWrite = withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      // ONE clock reading bound to BOTH stamps. PostgreSQL's `now()` is transaction-start time, so
-      // the two columns took the same value in this single statement; reading `nowIso()` once keeps
-      // that exact. Both are text columns, and this is their canonical spelling.
+      // ONE clock reading bound to BOTH stamps, so the two columns take the same value. Both are
+      // text columns, and `nowIso()` is their canonical spelling.
       const unpaired = nowIso();
       await tx.execute(
         sql`update card_readers set active = false, disabled_at = ${unpaired}, unpaired_at = ${unpaired} where id = ${id}`,
@@ -864,20 +931,15 @@ describe("reader adoption and local management", () => {
       const enabling = send(app, "POST", `${base}/readers/${id}/enable`, {
         cookie: venue.managerCookie,
       });
-      let waiting = false;
-      for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
-        const locks = await suite.admin.execute<{ waiting: boolean }>(
-          sql`select exists(select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like '%card_readers%') as waiting`,
-        );
-        waiting = locks.rows[0]!.waiting;
-        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      expect(waiting).toBe(true);
       release();
       await unpairWrite;
       expect((await enabling).status).toBe(422);
-      const rows = await suite.admin.execute(sql`select active from card_readers where id=${id}`);
-      expect(rows.rows).toEqual([{ active: false }]);
+      expect(
+        await suite.db
+          .select({ active: cardReaders.active })
+          .from(cardReaders)
+          .where(eq(cardReaders.id, id)),
+      ).toEqual([{ active: false }]);
     } finally {
       release();
       await unpairWrite;
@@ -949,7 +1011,7 @@ describe("reader adoption and local management", () => {
     expect(await response.json()).toEqual({
       error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
-    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
     expect(removes).toBe(0);
   });
 
@@ -1000,10 +1062,13 @@ describe("reader adoption and local management", () => {
     expect(await response.json()).toEqual({
       error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
-    const stored = await suite.admin.execute(
-      sql`select active, disabled_at is not null as dated from card_readers where id = ${id}`,
-    );
-    expect(stored.rows).toEqual([{ active: false, dated: true }]);
+    const stored = (
+      await suite.db
+        .select({ active: cardReaders.active, disabledAt: cardReaders.disabledAt })
+        .from(cardReaders)
+        .where(eq(cardReaders.id, id))
+    ).map(({ active, disabledAt }) => ({ active, dated: disabledAt !== null }));
+    expect(stored).toEqual([{ active: false, dated: true }]);
   });
 
   it.each(["available-readers", "adopt"])(

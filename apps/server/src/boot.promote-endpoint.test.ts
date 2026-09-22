@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   locations,
   nodes,
+  openVenueDatabase,
   readStandardSeriesId,
   setDeploymentMode,
   setSingletonRole,
@@ -18,8 +19,8 @@ import {
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import type {
@@ -27,12 +28,11 @@ import type {
   MembershipDocumentBody,
   SignedMembershipDocument,
 } from "@waitron/membership";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
-import { roleUrl } from "./testing/postgres.js";
 
 // Slice 2 Task 7 boot integration: the promote endpoint (`POST /management-api/promote`) is mounted on
 // BOTH deployment modes before the SPA catch-alls, and its path is exempt from the read-only gate — so a
@@ -42,10 +42,21 @@ import { roleUrl } from "./testing/postgres.js";
 //  - an unfenced PRIMARY: an admin login promotes and gets the idempotent `{alreadyPrimary,restarting}`;
 //  - a FENCED node: the gate IS mounted, yet the exempt POST reaches the handler, which returns the
 //    precise `promotion.node_fenced` (409), not a lying already-primary nor a generic gate 403.
-// Real Postgres is mandatory (CLAUDE.md §4): the read-only gate is served through the non-superuser
-// `app_login` pool, the mirror boot performs owner-role deployment writes, and the admin-login path
-// authenticates + mints a management session as `app_user` — all false passes on PGlite (every PGlite
-// connection is a superuser and serialises onto one backend).
+//
+// ## What the move off PostgreSQL took out of this file
+//
+// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
+// mandatory because the read-only gate is served through the non-superuser `app_login` pool, the
+// mirror boot performs owner-role deployment writes, and the admin login mints a session as
+// `app_user`. There are no roles on this engine: `pg.connectAs` has no counterpart and `asAppUser`
+// is an inert function (`packages/db/src/testing/roles.ts`). Every statement below, and every
+// statement each booted server issues, runs on the one connection `openVenueStore` hands out, so
+// nothing here now separates what the gate refuses from what a grant refuses.
+//
+// **The suite keeps a handle open on each venue directory while a server holds one.** Write-ahead
+// mode admits a second connection and both opens set `busy_timeout`
+// (`packages/store/src/index.ts:128-136`); every seeding write below happens while no server is
+// running, so the two handles never want the write lock at the same moment.
 
 // `undici`'s `fetch` is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` (a distinct module identity — see boot.promote.test.ts) still serves the probes.
@@ -109,20 +120,21 @@ const TILL_ENV = {
 const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 const ADMIN_PW = "correct-horse-battery-staple";
 
-// The mirror's OWN venue ids, distinct from TILL_ENV so the two clones' seeds never collide.
+// The mirror's OWN venue ids, distinct from TILL_ENV so the two directories' seeds never collide.
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
 
-// Separate clones: the non-mirror deployment stamps (primary/fenced) must never leak into the mirror
-// clone's (mirror, primary) flip, and vice versa (each `useTemplateDb` call clones the manifest afresh).
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
-const mirrorSuite = useTemplateDb({ template: "manifest", resetPerTest: false });
-
 let migrationsRoot: string;
-let appDatabaseUrl: string;
+// Separate venue directories: the non-mirror deployment stamps (primary/fenced) must never leak into
+// the mirror directory's (mirror, primary) flip, and vice versa.
+let appVenueDir: string;
+let mirrorVenueDir: string;
+let appDb: Database;
+let mirrorDb: Database;
+const openStores: VenueDatabase[] = [];
 
 /** A held membership document naming THIS node with `standing`. The fence read is UNVERIFIED
  * (`readNodeMembership` returns the blob whole), so the placeholder signature is fine — written directly
@@ -144,18 +156,18 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
  * `readVenueLocale` reads resolve and a promote has a key to sign with) plus the admin the endpoint
  * authenticates. `pin_hash` is NOT NULL, so a value is supplied even though the endpoint uses the
  * password. */
-async function seedTillIdentity(admin: Database): Promise<void> {
+async function seedTillIdentity(db: Database): Promise<void> {
   // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
   // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
   // generator, and `created_at` on `tenants`, `nodes` and `persons` is one of those on this engine;
   // and `array['en']::text[]` is a PostgreSQL array constructor plus a PostgreSQL cast operator,
   // both refused at prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it
   // replaces were — narrowing it would be a behaviour change this conversion is not making.
-  await admin
+  await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Endpoint Till SL" })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(locations)
     .values({
       id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -164,7 +176,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -172,7 +184,7 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(persons)
     .values({
       id: ADMIN_ID,
@@ -182,19 +194,19 @@ async function seedTillIdentity(admin: Database): Promise<void> {
       role: "admin",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: admin, ring: RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
 }
 
-/** Seed a fresh clone as a read-only mirror holding its OWN dormant identity (R2/R3a) — the shape
+/** Seed a fresh venue directory as a read-only mirror holding its OWN dormant identity (R2/R3a) — the shape
  * boot.promote.test.ts's mirror suite uses: tenant + location, a reserved standby identity, a held
  * term-3 chart, the DB-stored mirror connection config + sealed sync token the mirror boot reads, and
  * deployment stamped production then mode='mirror'. */
-async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> {
-  await admin
+async function seedMirrorIdentity(db: Database): Promise<{ nodeId: string }> {
+  await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222H", legalName: "Promote Endpoint Cloud SL" })
     .onConflictDoNothing();
-  await admin
+  await db
     .insert(locations)
     .values({
       id: MIRROR_LOCATION_ID,
@@ -203,7 +215,7 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
+  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -214,7 +226,7 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
     signature: "endorsement-sig",
   };
   await establishReservedStandbyIdentity(
-    { ownerDb: admin, ring: RING },
+    { ownerDb: db, ring: RING },
     {
       locationId: MIRROR_LOCATION_ID,
       standby,
@@ -248,21 +260,35 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
     signature: "held-placeholder-sig",
     endorsements: [],
   };
-  await writeNodeMembership(admin, held);
+  await writeNodeMembership(db, held);
 
-  await writeMirrorConfig(admin, {
+  await writeMirrorConfig(db, {
     relayUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,
   });
 
-  await stampDeployment(admin, "production");
-  await setDeploymentMode(admin, "mirror");
+  await stampDeployment(db, "production");
+  await setDeploymentMode(db, "mirror");
   // Prove the reserved series exists (the value a real promote would correct trading.env to) — not
   // asserted here (the mirror case never reaches the promote), but a cheap invariant on the seed.
-  await readStandardSeriesId(admin, standby.nodeId);
+  await readStandardSeriesId(db, standby.nodeId);
   return { nodeId: standby.nodeId };
+}
+
+/**
+ * A fresh venue directory migrated through the manifest, plus a handle on it the suite keeps.
+ *
+ * The migration run is this suite's, not boot's, because the identity rows have to exist before boot
+ * reads them; boot's own `applyMigrations` over the same directory then finds nothing to do.
+ */
+async function migratedVenue(): Promise<[string, Database]> {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-venue-"));
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(directory);
+  openStores.push(store);
+  return [directory, store.venue];
 }
 
 beforeAll(async () => {
@@ -277,15 +303,23 @@ beforeAll(async () => {
     });
   }
 
-  await seedTillIdentity(suite.admin);
+  [appVenueDir, appDb] = await migratedVenue();
+  [mirrorVenueDir, mirrorDb] = await migratedVenue();
+  await seedTillIdentity(appDb);
   // Stamp production (matching WAITRON_ENV so the boot guard passes); singleton_role keeps its column
   // default 'primary'. => (mode=primary, singleton_role=primary), the primary starting point.
-  await stampDeployment(suite.admin, "production");
-  appDatabaseUrl = roleUrl(suite.pg.uri, "app_login", "app_pw");
+  await stampDeployment(appDb, "production");
 }, 180_000);
 
 afterAll(async () => {
+  // `pop()` returns `VenueDatabase | undefined`, so the `?.` is a real guard rather than a decorative
+  // one, and the array is left empty. Guard: `scripts/guarded-teardowns.test.ts`, which reads a
+  // teardown hook as TEXT.
+  while (openStores.length > 0) await openStores.pop()?.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
+  for (const directory of [appVenueDir, mirrorVenueDir]) {
+    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
+  }
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -324,9 +358,9 @@ async function postPromote(base: string, body: unknown): Promise<Response> {
   });
 }
 
-describe("boot promote endpoint (real Postgres): mounted on both modes, exempt from the read-only gate", () => {
+describe("boot promote endpoint: mounted on both modes, exempt from the read-only gate", () => {
   it("a MIRROR serves the endpoint: a credential-less POST reaches the handler (401), not a gated 403 or 404", async () => {
-    const seed = await seedMirrorIdentity(mirrorSuite.admin);
+    const seed = await seedMirrorIdentity(mirrorDb);
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-endpoint-mirror-state-"));
@@ -340,8 +374,7 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
       WAITRON_TILL_NODE_ID: seed.nodeId,
       WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
       WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
-      DATABASE_URL: roleUrl(mirrorSuite.pg.uri, "app_login", "app_pw"),
-      WAITRON_MIGRATIONS_DATABASE_URL: mirrorSuite.pg.uri,
+      WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -375,8 +408,8 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
 
   it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
     // A fresh unfenced primary: singleton_role primary and a held self-doc that keeps it serving.
-    await setSingletonRole(suite.admin, "primary");
-    await writeNodeMembership(suite.admin, selfDoc("serving-primary"));
+    await setSingletonRole(appDb, "primary");
+    await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
 
@@ -400,8 +433,8 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
   it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
     // A returned ex-primary whose held document marks it sell-only — boot reconciles the singleton axis
     // to 'secondary' and mounts the read-only gate.
-    await setSingletonRole(suite.admin, "primary");
-    await writeNodeMembership(suite.admin, selfDoc("sell-only"));
+    await setSingletonRole(appDb, "primary");
+    await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
 
@@ -433,15 +466,13 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
   }, 60_000);
 });
 
-/** Boot a non-mirror trading server against the shared clone (superuser migrations URL for the promote's
- * short-lived owner pool + the idempotent migration re-run; the app pool is the non-superuser role). */
+/** Boot a non-mirror trading server against the shared venue directory. */
 async function bootTrading(port: number) {
   return startServer({
     ...KEY_ENV,
     ...TICK_ENV,
     ...TILL_ENV,
-    DATABASE_URL: appDatabaseUrl,
-    WAITRON_MIGRATIONS_DATABASE_URL: suite.pg.uri,
+    WAITRON_VENUE_DIR: appVenueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
   });
