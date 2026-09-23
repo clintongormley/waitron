@@ -2,13 +2,14 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateSecret, generateSync } from "otplib";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { codeOf, seedManager, seedPerson, seedPersonWithPassword } from "../test/fixtures.js";
 import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
+import { managementSessions } from "./schema/management-sessions.js";
 
 // Spy on verifyPassword while delegating to the real KDF, so the timing-equalization mitigation is
 // observable: the person-not-found branch must run one verifyPassword (against the dummy hash) before
@@ -224,5 +225,37 @@ describe("authorizeManager", () => {
       ),
     );
     expect(code).toBe("authorization.not_permitted");
+  });
+  it("leaves last-seen unchanged with touch: false, and still moves it by default", async () => {
+    await seedManager(suite.db, { email: "untouched@x.com", role: "manager" });
+    const session = await run((tx) =>
+      loginManager(tx, { email: "untouched@x.com", password: "correct horse" }),
+    );
+    const aged = new Date(Date.now() - 10 * 60_000).toISOString();
+    await run((tx) =>
+      tx.execute(
+        sql`update management_sessions set last_seen_at = ${aged} where id = ${session.id}`,
+      ),
+    );
+    const lastSeen = () =>
+      run(async (tx) => {
+        const [row] = await tx
+          .select({ lastSeenAt: managementSessions.lastSeenAt })
+          .from(managementSessions)
+          .where(eq(managementSessions.id, session.id));
+        return row!.lastSeenAt;
+      });
+    await run((tx) =>
+      authorizeManager(tx, {
+        managementSessionId: session.id,
+        permission: "person.manage",
+        touch: false,
+      }),
+    );
+    expect(await lastSeen()).toBe(aged);
+    await run((tx) =>
+      authorizeManager(tx, { managementSessionId: session.id, permission: "person.manage" }),
+    );
+    expect(await lastSeen()).not.toBe(aged);
   });
 });

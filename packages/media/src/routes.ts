@@ -1,7 +1,7 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { authorizeManager, withPassiveManagementRead } from "@waitron/identity";
+import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import {
@@ -117,13 +117,15 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       (c) =>
         run(c, log, async () => {
           const session = requireManagementSession(c);
-          // Authorised before the body is parsed or the photo decoded: a caller without
-          // `image.manage` costs no image work. A read, taking no write lock and not counting as
-          // activity. The decode runs outside the write lock, so the store is a second transaction,
-          // and permission is checked again inside it; that check is the one that admits the write.
-          await withPassiveManagementRead(() =>
-            authorizeManager(ctx.db, { managementSessionId: session, permission: "image.manage" }),
-          );
+          // Checked before the body is parsed, so a caller without `image.manage` costs no image
+          // work. A read outside any transaction, so it must write nothing: `touch: false`.
+          // The decode runs outside the write lock, so permission is checked again inside the
+          // transaction that stores the photo, and that check is the one that admits the write.
+          await authorizeManager(ctx.db, {
+            managementSessionId: session,
+            permission: "image.manage",
+            touch: false,
+          });
           let form: Awaited<ReturnType<typeof c.req.parseBody>>;
           try {
             form = await c.req.parseBody();
