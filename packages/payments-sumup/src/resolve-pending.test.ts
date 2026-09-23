@@ -21,13 +21,13 @@ const suite = useVenueDb({
 });
 const T0 = new Date("2026-09-11T10:00:00Z");
 
-async function setup() {
+async function setup(incidentRecorded = true) {
   const t = await seedWorkingOrder(suite.db, freshNif());
   const fake = new FakeSumUp();
   const raised: Parameters<IncidentSink>[1][] = [];
   const incidents: IncidentSink = (_tx, input) => {
     raised.push(input);
-    return Promise.resolve(true);
+    return Promise.resolve(incidentRecorded);
   };
   const provider = new SumUpCloudProvider({
     client: fake,
@@ -154,6 +154,28 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(raised[0]).toMatchObject({ tillId: t.tillId, severity: "error" });
     expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
     expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost", status: "not_found" });
+  });
+
+  it("a past-grace not-found the incident sink declines (already open) still fails the row but is not counted", async () => {
+    const { t, provider, state, raised } = await setup(false);
+    await withTransaction(suite.db, (tx) =>
+      insertAttempting(tx, {
+        workingOrderId: t.workingOrderId,
+        provider: "sumup",
+        paymentRef: "ghost-dup",
+        amount: decimal("7.00"),
+      }),
+    );
+    const later = new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000);
+    expect(await provider.resolvePending(later)).toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 1,
+      incidentsRaised: 0,
+    });
+    expect((await state("ghost-dup")).state).toBe("failed");
+    expect(raised).toHaveLength(1);
+    expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost-dup", status: "not_found" });
   });
 
   it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the till", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -424,6 +424,16 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
     expect(result.pairingStatus).toBeUndefined();
   });
 
+  it("status leaves pairingStatus undefined for a reader SumUp no longer knows (404), never reporting it as processing", async () => {
+    const fetch = routedFetch({
+      "GET /v0.1/merchants/MABC123/readers/rdr_x/status": () =>
+        json(200, { data: { status: "ONLINE", connection_type: "WIFI", state: "IDLE" } }),
+      "GET /v0.1/merchants/MABC123/readers/rdr_x": () => json(404, { message: "not found" }),
+    });
+    const result = await SUMUP_CARD_PROVIDER.readers.status(await readerDeps(fetch), "rdr_x");
+    expect(result).toEqual({ online: true, connection: "WIFI", activity: "IDLE" });
+  });
+
   it("remove unpairs the reader from the merchant account", async () => {
     const seen: Seen[] = [];
     const fetch = routedFetch(
@@ -435,6 +445,54 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
       method: "DELETE",
       path: "/v0.1/merchants/MABC123/readers/rdr_x",
     });
+  });
+});
+
+describe("SUMUP_CARD_PROVIDER without an injected fetch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("connect reaches SumUp through the global fetch", async () => {
+    const seen: Seen[] = [];
+    vi.stubGlobal(
+      "fetch",
+      routedFetch(
+        {
+          "GET /v0.1/memberships": memberships([
+            { resource_id: "MY2NPHDW", resource: { name: "Test restaurant" } },
+          ]),
+        },
+        seen,
+      ),
+    );
+    const result = await SUMUP_CARD_PROVIDER.connect({}, { apiKey: "sup_sk_x" });
+    expect(result.merchantName).toBe("Test restaurant");
+    expect(seen).toEqual([{ method: "GET", path: "/v0.1/memberships", body: "" }]);
+  });
+
+  it("the readers seat reaches SumUp through the global fetch", async () => {
+    await seedSumUp({
+      apiKey: "sup_sk_x",
+      merchantCode: "MABC123",
+      affiliateAppId: "-",
+      affiliateKey: "-",
+    });
+    const seen: Seen[] = [];
+    vi.stubGlobal(
+      "fetch",
+      routedFetch(
+        {
+          "GET /v0.1/merchants/MABC123/readers": () =>
+            json(200, { items: [{ id: "rdr_1", name: "Counter", status: "paired" }] }),
+        },
+        seen,
+      ),
+    );
+    expect(await SUMUP_CARD_PROVIDER.readers.list({ db: suite.db, ring })).toEqual([
+      { providerRef: "rdr_1", name: "Counter" },
+    ]);
+    expect(seen).toEqual([{ method: "GET", path: "/v0.1/merchants/MABC123/readers", body: "" }]);
   });
 });
 

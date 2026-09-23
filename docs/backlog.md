@@ -2037,7 +2037,10 @@ image constraints under *Detail → Box image*.
   99.23/99.65/98.4/97.83); `provisioning` (**PR #510**, 2026-09-23 — tests for the tenant and
   venue readers the one-taxpayer and one-venue guards consume, and for a same-taxpayer re-run
   refused when the database already holds two venues or its till, node or series differs from the
-  plan; 100/100/100/99.03).
+  plan; 100/100/100/99.03); `payments-sumup` (**PR #512**, 2026-09-23 — tests for the default
+  one-second poll, a reversal with no row or no SumUp key, a removed reader's status, a declined
+  duplicate incident, and the dashboard dialogs' single-flight, detach and dismiss paths;
+  99.24/99.71/98.03/98.93).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

@@ -56,4 +56,29 @@ describe("SumUpCloudProvider reversals", () => {
     expect(isAppError(error) && error.code).toBe("payment.not_voidable");
     expect(fake.lastRefund).toBeUndefined();
   });
+
+  it("a reversal of a ref with no payments row is payment.not_found, and SumUp is never called", async () => {
+    const { fake, provider } = await setup(suite);
+    const error = await provider.refund("no-such-ref").catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("payment.not_found");
+    expect(isAppError(error) && error.params).toEqual({
+      provider: "sumup",
+      paymentRef: "no-such-ref",
+    });
+    expect(fake.lastRefund).toBeUndefined();
+  });
+
+  it("a reversal of a row SumUp's key was never stamped on is payment.not_found, and SumUp is never called", async () => {
+    // A create whose response was lost leaves the row attempting with no external ref to address.
+    const { fake, provider, params, row } = await setup(suite, (f) => f.throwOnCreateNext());
+    const c = await provider.collect(params);
+    expect((await row(c.paymentRef)).externalRef).toBeNull();
+    const error = await provider.void(c.paymentRef).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("payment.not_found");
+    expect(isAppError(error) && error.params).toEqual({
+      provider: "sumup",
+      paymentRef: c.paymentRef,
+    });
+    expect(fake.lastRefund).toBeUndefined();
+  });
 });

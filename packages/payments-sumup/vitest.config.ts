@@ -71,13 +71,12 @@ export default defineConfig({
         "src/dashboard/index.ts",
         // Test-only mount/cleanup helper (the ui and bookings packages exclude their own the same way).
         "src/dashboard/test-helpers.ts",
-        // the real HTTP boundary — a thin fetch mapping exercised only by the live sandbox suite
-        // against the paired Solo, never the hermetic run; its logic is SumUp's
+        // The real HTTP boundary to SumUp. Its hermetic tests are in src/sumup-client.test.ts.
         "src/sumup-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
       ],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

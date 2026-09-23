@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
@@ -14,14 +15,19 @@ const READERS_PATH = "/management-api/payments/readers";
 const STATUS_PATH = "/management-api/payments/readers/r1/status";
 const UNPAIR_PATH = "/management-api/payments/readers/r1/unpair";
 
-/** A request stub over the three routes the dialog calls. `add` may resolve an {@link AddReaderResult}
- * or throw; `status` is called for every poll and returns the next {@link ReaderStatus}; `unpair`
- * resolves (the orphan cleanup) unless overridden. */
+/** A request stub over the three routes the dialog calls. `add` returns an {@link AddReaderResult}, a
+ * promise of one (which a test may leave pending), or throws; `status` is called for every poll and
+ * returns the next {@link ReaderStatus} or a promise of it; `unpair` resolves (the orphan cleanup)
+ * unless overridden. `addCalls`, `statusCalls` and `unpairCalls` count the requests on each route. */
 function stubRequest(opts: {
-  add?: () => AddReaderResult | never;
-  status?: () => ReaderStatus;
+  add?: () => AddReaderResult | Promise<AddReaderResult> | never;
+  status?: () => ReaderStatus | Promise<ReaderStatus>;
   unpair?: () => void | never;
-}): DashboardRequest & { statusCalls: () => number; unpairCalls: () => number } {
+}): DashboardRequest & {
+  addCalls: () => number;
+  statusCalls: () => number;
+  unpairCalls: () => number;
+} {
   const request = vi.fn(async (path: string, method: string) => {
     if (path === READERS_PATH && method === "POST") {
       return (opts.add ?? (() => ({ id: "r1", status: "processing" }) as AddReaderResult))();
@@ -34,13 +40,23 @@ function stubRequest(opts: {
     }
     throw new Error(`unexpected ${method} ${path}`);
   }) as unknown as DashboardRequest & {
+    addCalls: () => number;
     statusCalls: () => number;
     unpairCalls: () => number;
   };
   const calls = () => (request as unknown as { mock: { calls: [string, string][] } }).mock.calls;
+  request.addCalls = () => calls().filter(([p, m]) => p === READERS_PATH && m === "POST").length;
   request.statusCalls = () => calls().filter(([p, m]) => p === STATUS_PATH && m === "GET").length;
   request.unpairCalls = () => calls().filter(([p, m]) => p === UNPAIR_PATH && m === "POST").length;
   return request;
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 function q(el: SumUpAddReader, sel: string): HTMLElement | null {
@@ -327,5 +343,138 @@ describe("sumup-add-reader", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("sends one pair request when Pair is pressed again while the first is in flight", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({ add: () => add.promise });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      q(el, "[data-test=pair]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(request.addCalls()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts no poll when detached while the pair request is in flight", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({
+        add: () => add.promise,
+        status: () => ({ online: false, pairingStatus: "paired" }),
+      });
+      const onAdded = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request, onAdded });
+
+      await fillAndPair(el);
+      el.remove();
+      add.resolve({ id: "r1", status: "processing" });
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(request.statusCalls()).toBe(0);
+      expect(onAdded).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap a slow status read with the next poll tick", async () => {
+    vi.useFakeTimers();
+    try {
+      const slow = deferred<ReaderStatus>();
+      let reads = 0;
+      const request = stubRequest({
+        status: () =>
+          reads++ === 0 ? slow.promise : { online: false, pairingStatus: "processing" },
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(request.statusCalls()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(request.statusCalls()).toBe(1);
+
+      slow.resolve({ online: false, pairingStatus: "processing" });
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(request.statusCalls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a status read that resolves after the dialog was detached", async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = deferred<ReaderStatus>();
+      const request = stubRequest({ status: () => pending.promise });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(request.statusCalls()).toBe(1);
+
+      el.remove();
+      pending.resolve({ online: false, pairingStatus: "paired" });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(onAdded).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes without pairing when Cancel is pressed", async () => {
+    const request = stubRequest({});
+    const onAdded = vi.fn();
+    const onClose = vi.fn();
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+      request,
+      onAdded,
+      onClose,
+    });
+
+    q(el, "[data-test=cancel]")!.click();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onAdded).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("calls onClose when the dialog is dismissed with Escape", async () => {
+    const request = stubRequest({});
+    const onAdded = vi.fn();
+    const onClose = vi.fn();
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+      request,
+      onAdded,
+      onClose,
+    });
+    const dialog = q(el, "wt-dialog") as HTMLElement & { updateComplete: Promise<unknown> };
+    await dialog.updateComplete;
+    const native = dialog.shadowRoot!.querySelector("dialog")!;
+    expect(native.open).toBe(true);
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(native.open).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onAdded).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
   });
 });
