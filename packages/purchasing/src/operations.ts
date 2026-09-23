@@ -312,18 +312,16 @@ export async function updatePurchaseInvoice(
   }
   if (patch.lines !== undefined) validateLines(patch.lines);
 
-  // The two patch fields that are stored as a whole number cross here — `total` to cents and
-  // `deductibleProportion` to basis points; every other header field passes through as it stands.
-  // Each is spread in only when supplied, so an absent one leaves the stored value alone.
+  // `total` crosses to cents and `deductibleProportion` to basis points; the rest pass through.
+  // An absent field stays `undefined`, which drizzle's `set` leaves out of the statement.
   const { total, deductibleProportion, ...header } = patch.header ?? {};
   const updated = await tx
     .update(purchaseInvoices)
     .set({
       ...header,
-      ...(total === undefined ? {} : { total: decimalToCents(total) }),
-      ...(deductibleProportion === undefined
-        ? {}
-        : { deductibleProportion: decimalToBasisPoints(deductibleProportion) }),
+      total: total === undefined ? undefined : decimalToCents(total),
+      deductibleProportion:
+        deductibleProportion === undefined ? undefined : decimalToBasisPoints(deductibleProportion),
       updatedAt: now(),
     })
     .where(eq(purchaseInvoices.id, id))
