@@ -2074,30 +2074,28 @@ image constraints under *Detail → Box image*.
   holds an empty journal and no `.sql` file, so its set builds nothing. Each call site states the
   factory's blind spots that reach its own set.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
-  longer build — OPEN (2026-09-23).** In `packages/credentials`, `src/migrations.ts` says core
-  must migrate first because of "the baseline's `tenants` foreign key", and
-  `src/migrations.test.ts` that "the credentials baseline references `tenants`".
-  `drizzle/0000_baseline.sql` declares no foreign key at all, and the set's schema-conformance
-  suite, which reads the built keys with `pragma foreign_key_list`, finds none. The key,
-  `tenant_credentials_tenant_fk`, went with the tenant column in #378 (2026-09-16). The ORDER is
-  still right for a different reason — `credentialProvisioned` in `src/store.ts` reads `tenants` —
-  so the fix is to restate the reason, not to drop the ordering.
-  `packages/scheduler` carries the same stale reason twice: `src/migrations.ts` says core runs first
-  because "this set's baseline references core's `tenants` table", and `src/migrations.test.ts` says
-  the same. That baseline lost its key, `scheduled_runs_tenant_fk`, in the same #378, and `grep -rn
-  tenants packages/scheduler/src` finds no read of the table there — only those comments, a test
-  comment, `schema-ownership.test.ts`'s list of core names and the set's schema-conformance call
-  site, which records the next point. That grep cannot see `seedTenant`, which writes `tenants` from
-  four of the package's suites (`store.test.ts`, `run.test.ts`, `store.concurrency.test.ts`,
-  `resweep.test.ts`), so those suites do need core; it is the stated REASON in the two comments that
-  has to change. Further twins of the same reason, found by review of the scheduler's call site:
-  `packages/migrations/src/manifest.test.ts` names a test "puts core first, because every other set
-  has a tenants foreign key" — a grep for `` REFERENCES `tenants` `` across
-  `packages/*/drizzle/*.sql` matches no file; `packages/workforce-es/src/migrations.test.ts` and
-  `src/work-summary.test.ts` give "tenants/locations" foreign keys as core's reason, where that
-  baseline references `locations` alone; and `apps/server/scripts/daily-close-demo.ts` and
-  `modelo-303-demo.ts` say identity's `persons`/`sessions` carry a foreign key onto core's
-  `tenants`/`tills`, where identity's baseline references only its own `persons`.
+  longer build — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).** No set's SQL references
+  `tenants` (`` grep -ln 'REFERENCES `tenants`' packages/*/drizzle/*.sql `` matches no file), so each
+  site now says what an experiment showed. Two experiments, both undone afterwards. First,
+  `useVenueDb` was made to apply its sets in REVERSE, then with core REMOVED, and the whole suite of
+  `scheduler`, `identity`, `credentials` and `workforce-es` run each way: reversed, all four stayed
+  green (90, 278, 138 and 33 tests, a log confirming each set ran before core); without core they
+  failed `no such table: tenants` from `seedTenant` (all four), `no such table: locations` from
+  identity's `seedTill`, and `no such table: change_log` from the drain every `withTransaction`
+  runs (`packages/db/src/tenancy.ts`) — while scheduler's and credentials' own
+  `migrations.test.ts` stayed green without core. Second, `applyMigrations` over the real manifest
+  with core moved: every set migrated cleanly with core AFTER it except `media`, refused `no such
+  table: main.products`, because `media/drizzle/0001_image_references.sql` creates triggers ON
+  core's `products`. So: `scheduler` and `identity`'s `migrations.ts` say the set migrates before
+  core; `credentials`' says the same, plus that the code needs core present (`credentialProvisioned`
+  reads `tenants`, the drain reads `change_log`); the two `migrations.test.ts` comments say core is
+  not needed by their cases; the manifest test is now "puts core first, because media creates
+  triggers on core's `products` table"; the two `workforce-es` suites name the setup's seeds and
+  `convenio_config`'s `locations` key; and the two demo scripts say only that the filter keeps
+  manifest order. No production order changed. Left with the same shape and not touched: the "must
+  run before these" reasons in `packages/workforce/src/migrations.ts`,
+  `packages/workforce-es/src/migrations.ts` and `packages/payments/src/migrations.ts` — each of those
+  sets also migrated cleanly before core in the second experiment.
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,
@@ -3517,18 +3515,40 @@ it; and a correction must not decrement a count where it should drop it.
 - **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
   name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
   Nobody owns this yet; it is a rename-only change and wants its own item.
-- **`apps/server/src/join-requests.test.ts:102` and `apps/server/src/management-api.ts:500`** take a
-  `cfg` parameter they discard with `void cfg`. Verified pre-existing (#363, #378).
-- **Three dangling pointers #490 did not create**: `apps/server/src/testing/global-setup.ts`
-  (a deleted file), `apps/server/node-identity.ts` (missing its `/src`, cited at
-  `packages/db/src/schema/nodes.ts:43`), and `drizzle/0001_db_baseline_sql.sql`, which names no file
-  under `packages/db/drizzle/`.
-- **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`** say core
-  migrations must run first. After the grant clause came out neither carries a reason, and a
-  reviewer could not find one. The ordering may still be right; nothing now says why.
-- **One claim known to be false and left standing**:
-  `apps/server/src/promote-endpoint-e2e.test.ts:84` states a grep receipt returning "no matches"
-  that does not, when run as written.
+- **The discarded `cfg` parameters — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).**
+  `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
+  `apps/server/src/management-api.ts` no longer take one. Every route still calls
+  `requireVenueCfg`, because each verb it runs takes `cfg` itself. Other `void cfg` lines remain in
+  `apps/server/src` (`git grep -n 'void cfg;' apps/server/src`); nobody has looked at them.
+- **Three dangling pointers — DONE (2026-09-23, branch `chore/slice1-code-cleanups`), with one
+  left on purpose.** `apps/server/src/testing/global-setup.ts` was no longer cited anywhere under
+  `apps`, `packages` or `scripts`; the four `git show origin/main:…/testing/global-setup.ts`
+  pointers of the same kind (in `packages/core`, `packages/scheduler`, `packages/credentials`), and
+  credentials' pointer to its deleted `0001_credentials_baseline_sql.sql`, now read
+  `git show aabdde6a8^:…`, and each resolves. `nodes.ts` now cites `apps/server/src/node-identity.ts`.
+  `0001_db_baseline_sql.sql` was cited in five TypeScript files and one migration: the three `packages/db/src/schema` files
+  that told the story of the barrel lost that paragraph, `nodes.ts` points at the `deployment`
+  schema instead, and `apps/server/src/till-sale.ts` lost the sentence with it, which was also
+  false — `working_orders_enforce_transition` ACCEPTS a later stamp-only update on a settled order
+  (`scripts/behavioural-triggers.test.ts`, "accepts the kitchen-handover stamp on a settled
+  order"). LEFT: `packages/db/drizzle/0001_behavioural_triggers.sql` still points at
+  `origin/main` for the originals, because editing a shipped migration, even a comment, changes its
+  hash (measured with drizzle's `readMigrationFiles`: `fba827e45a74…` became `518ac94a3346…`), and
+  the boot path's ahead check reports a database hash the image does not ship
+  (`packages/provisioning/src/schema-ahead.ts`), so an already-migrated box would read as ahead —
+  traced, not run.
+  Other `origin/main:` pointers remain (`git grep -n 'origin/main:' -- apps packages`); nobody
+  has checked what each one resolves to today.
+- **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
+  claim — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).** Neither set needs core to have
+  run first; both now say so, with the experiment in the `tenants` foreign key entry above.
+- **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (2026-09-23, branch
+  `chore/slice1-code-cleanups`).** #492 had already reworded "no matches" to "only these three
+  comment lines", and that held when run: `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages
+  scripts deploy .github` printed the block's own three lines. The block is now only the gap it
+  leaves — nothing shows a refused promote write fails closed, and no test asserts
+  `promotion.failed` — so the same grep prints nothing and exits 1. The history around it, and the
+  "Step 1 was red" story below it, went too.
 
 What the preparation tasks left, with F1's own answers where it found them:
 
@@ -3586,8 +3606,10 @@ What the preparation tasks left, with F1's own answers where it found them:
   and `packages/identity/vitest.config.ts` carries two (a timeout comment positioned as if it guarded
   the boot, and a 2026-08-20 single-fork receipt the coverage runs now contradict). Each must be
   corrected against its own package's suites, read not run.
-- **Dead code and doc sweeps owed to the rollout's final sweep** — the exported `seedTenantWithSumUpKey`
-  in `apps/server/src/card-provider-pool.test.ts:86` is called by nothing; twelve plans hold a
+- **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
+  was deleted on 2026-09-23 (branch `chore/slice1-code-cleanups`). The file's real-SumUp case
+  seals no credential and passes, because the seat reads its credential only on first use; that
+  case's name and the file header had said otherwise and now do not. Twelve plans hold a
   `usePgliteDb` designating sketch with no `useVenueDb` pointer, and one twin
   (`superpowers/plans/2026-07-26-tenant-credential-vault.md:139`) a stale hookTimeout claim; the
   slice-1 spec carries a stale "211 files" in four more places; and

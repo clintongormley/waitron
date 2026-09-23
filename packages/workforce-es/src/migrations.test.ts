@@ -31,8 +31,9 @@ let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core first — the tenants/locations foreign keys. Ordering across packages is the runtime's job
-  // and nothing enforces it, so it is explicit here; this proves convenio_config applies core-first.
+  // Core for the setup, which seeds its `tenants` and `locations`, and for `convenio_config`'s
+  // foreign key onto `locations`. Listed in manifest order; every case here also passes with the two
+  // sets reversed (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);

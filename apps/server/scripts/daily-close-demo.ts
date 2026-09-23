@@ -162,9 +162,8 @@ async function seedVenue(db: Database): Promise<Venue> {
 
 async function main(): Promise<void> {
   // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
-  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; it applies identity AFTER
-  // core, the order the manifest states, because identity's `persons`/`sessions` carry a foreign
-  // key onto core's `tenants`/`tills` — recordCorrection's `sale.rectify` gate reads both.
+  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; the filter below keeps
+  // manifest order, core before identity.
   const venueDir = await mkdtemp(join(tmpdir(), "daily-close-demo-"));
   const sets = manifestSets().filter((set) => SETS.includes(set.name));
   await applyMigrations(venueDir, migrationOptionsFor(sets, null));

@@ -14,8 +14,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core first — the credentials baseline references `tenants`. Ordering across packages is the
-  // runtime's job and nothing enforces it, so it is explicit here.
+  // Core is not needed by these cases: every one passed with core removed from this list, and with
+  // the two sets reversed (measured 2026-09-23). It is listed first, in manifest order.
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
 });
 
@@ -154,7 +154,7 @@ describe("the credentials migration set", () => {
  *
  * Both also lost their subject. `credential_tenants(text)` was created by
  * `drizzle/0001_credentials_baseline_sql.sql` (`git show
- * origin/main:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which this branch
+ * aabdde6a8^:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which this branch
  * deleted, and this engine defines no SQL functions of its own. The whole set is now one
  * `CREATE TABLE` (`packages/credentials/drizzle/0000_baseline.sql`).
  *

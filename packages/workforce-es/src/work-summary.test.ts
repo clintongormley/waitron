@@ -14,9 +14,10 @@ const backend = new WorkforceBackend();
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core first (tenants/locations FKs), then identity (persons), then workforce
-  // (employments/time_entries, which FK persons) and workforce-es (convenio_config): the end-to-end
-  // path reads all four.
+  // Core (the setup seeds its `tenants`; `convenio_config` references its `locations`), identity
+  // (`persons`, which workforce's tables reference), workforce and workforce-es: the end-to-end path
+  // reads all four. Listed in manifest order; the suite also passes with the list reversed
+  // (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);

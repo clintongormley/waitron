@@ -15,8 +15,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  // Core first — this set's baseline migration references core's `tenants` table. Ordering across
-  // packages is the runtime's job and nothing enforces it, so it is explicit here.
+  // Core is not needed by these cases: every one passed with core removed from this list, and with
+  // the two sets reversed (measured 2026-09-23). It is listed first, in manifest order.
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
 });
 
