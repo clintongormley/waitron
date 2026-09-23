@@ -5862,7 +5862,7 @@ enforces it. That is Task 3a. Any later task that names the reset uses #513's na
 
 ### Task 4: The five measurements Litestream's behaviour decides (spec §8.1)
 
-**2026-09-24:** the probe code below was corrected after review (commit 5d8b77b55: the restart probe
+**2026-09-24:** the probe code below was corrected after review (the restart probe
 stops its daemon in its cleanup, the shrink check compares each sample with the one before, `report()`
 escapes `|`) and its comments narrowed; the files under `bench/sqlite-failover/src/probes/` are
 authoritative, not the copies here.
