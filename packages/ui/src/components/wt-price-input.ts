@@ -56,6 +56,10 @@ export class WtPriceInput extends LitElement {
         font: inherit;
       }
 
+      input::placeholder {
+        color: var(--wt-color-text-muted);
+      }
+
       input:disabled {
         ${disabledStyles}
       }
@@ -102,6 +106,7 @@ export class WtPriceInput extends LitElement {
   @property() label = "";
   @property() name = "";
   @property() unit = "";
+  @property() placeholder = "";
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
@@ -148,6 +153,7 @@ export class WtPriceInput extends LitElement {
           name=${this.name || nothing}
           .value=${this.value}
           inputmode="decimal"
+          placeholder=${this.placeholder || nothing}
           ?required=${this.required}
           ?disabled=${this.disabled}
           aria-invalid=${hasError}

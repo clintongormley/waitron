@@ -184,6 +184,38 @@ test("a price field created with nothing set is empty, unlabelled, unmarked and 
   expect(el.hasAttribute("required")).toBe(false);
 });
 
+test("shows its placeholder on the inner field only while the field is empty", async () => {
+  const el = await mount('<wt-price-input placeholder="4.50"></wt-price-input>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.placeholder).toBe("4.50");
+  expect(input.matches(":placeholder-shown")).toBe(true);
+
+  input.value = "5.00";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  expect(input.matches(":placeholder-shown")).toBe(false);
+
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  expect(input.matches(":placeholder-shown")).toBe(true);
+});
+
+test("a field given a value does not show its placeholder", async () => {
+  const el = await mount('<wt-price-input placeholder="4.50" value="5.00"></wt-price-input>');
+  expect(el.shadowRoot!.querySelector("input")!.matches(":placeholder-shown")).toBe(false);
+});
+
+test("a field with no placeholder carries no placeholder attribute", async () => {
+  const el = await mount("<wt-price-input></wt-price-input>");
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("placeholder")).toBe(false);
+});
+
+test("the placeholder paints from the muted-text token", async () => {
+  const el = await mount('<wt-price-input placeholder="4.50"></wt-price-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
+
 test("a named field submits under its own name, and an unnamed one carries no name at all", async () => {
   const named = await mount('<wt-price-input name="price"></wt-price-input>');
   expect(named.shadowRoot!.querySelector("input")!.getAttribute("name")).toBe("price");
