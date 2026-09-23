@@ -2046,7 +2046,7 @@ image constraints under *Detail → Box image*.
 - **Every migration set that builds a table now has a call site — LANDED (2026-09-23), one set per
   pull request:** `credentials` (**PR #497**), `scheduler` (**PR #499**), `identity` (**PR #501**),
   `bookings` (**PR #502**), `venue-service` (**PR #504**), `media` (**PR #505**) and
-  `fiscal-verifactu` (this entry's PR); none found drift. `fiscal-none` needs none — its `drizzle/`
+  `fiscal-verifactu` (**PR #507**); none found drift. `fiscal-none` needs none — its `drizzle/`
   holds an empty journal and no `.sql` file, so its set builds nothing. Each call site states the
   factory's blind spots that reach its own set.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
