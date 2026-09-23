@@ -190,6 +190,20 @@ describe("createClient — join", () => {
     });
   });
 
+  it("a 201 whose body is not JSON, or is a JSON non-object, is bad_reply", async () => {
+    for (const response of [
+      new Response("hello", { status: 201 }),
+      reply(201, "a1.secret"),
+      reply(201, null),
+    ]) {
+      const client = createClient({ fetch: vi.fn().mockResolvedValue(response) });
+      expect(await client.join(URL_A, "x")).toEqual({
+        ok: false,
+        failure: { kind: "bad_reply", detail: "invalid response body" },
+      });
+    }
+  });
+
   it("a body missing verificationNumber is bad_reply", async () => {
     const client = createClient({
       fetch: vi.fn().mockResolvedValue(reply(201, { token: "a1.secret" })),
@@ -229,6 +243,36 @@ describe("createClient — enrolSelf", () => {
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.failure.kind).toBe("refused"); // the loop only checks r.ok; kind is diagnostic
     }
+  });
+
+  it("enrolSelf folds a 201 without a usable token into a refusal", async () => {
+    for (const response of [
+      reply(201, {}),
+      reply(201, { token: 7 }),
+      new Response("created", { status: 201 }),
+    ]) {
+      const client = createClient({ fetch: vi.fn().mockResolvedValue(response) });
+      expect(await client.enrolSelf("https://127.0.0.1", "box")).toEqual({
+        ok: false,
+        failure: { kind: "refused" },
+      });
+    }
+  });
+
+  it("enrolSelf gives up at its deadline and reports unreachable", async () => {
+    const client = createClient({
+      fetch: vi.fn(
+        (_url: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
+      ),
+      timeoutMs: 10,
+    });
+    expect(await client.enrolSelf("https://127.0.0.1", "box")).toEqual({
+      ok: false,
+      failure: { kind: "unreachable", detail: "aborted" },
+    });
   });
 
   it("enrolSelf folds a network error into a Failure", async () => {
@@ -345,6 +389,51 @@ describe("createClient — pullJobs", () => {
     expect(init.headers["content-type"]).toBe("application/json");
     expect(init.headers.authorization).toBe("Bearer tok");
     expect(JSON.parse(init.body as string)).toEqual(inventory);
+  });
+
+  it("skips a server entry without a string url and keeps a url-only entry without a nodeId", async () => {
+    const client = createClient({
+      fetch: vi.fn().mockResolvedValue(
+        reply(200, {
+          nodeId: "n1",
+          servers: [null, "http://c.test", { nodeId: "n3" }, { url: 5 }, { url: "http://b.test" }],
+          jobs: [],
+        }),
+      ),
+    });
+    const result = await client.pullJobs(URL_A, "t", { visible: [], scanned: [] });
+    expect(result.ok && result.value.servers).toEqual([{ url: "http://b.test" }]);
+  });
+
+  it("a reply that is not a JSON object is bad_reply", async () => {
+    for (const response of [new Response("hello", { status: 200 }), reply(200, null)]) {
+      const client = createClient({ fetch: vi.fn().mockResolvedValue(response) });
+      expect(await client.pullJobs(URL_A, "t", { visible: [], scanned: [] })).toEqual({
+        ok: false,
+        failure: { kind: "bad_reply", detail: "invalid response body" },
+      });
+    }
+  });
+
+  it("a job entry that is not an object, or lacks a string field, makes the whole reply bad_reply", async () => {
+    const good = {
+      id: "j1",
+      printerId: "p1",
+      transport: "usb",
+      localKey: "SN-1",
+      payload: Buffer.from([1]).toString("base64"),
+    };
+    for (const bad of [null, "j2", { ...good, id: 2 }, { ...good, payload: undefined }]) {
+      const client = createClient({
+        fetch: vi
+          .fn()
+          .mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: [good, bad] })),
+      });
+      expect(await client.pullJobs(URL_A, "t", { visible: [], scanned: [] })).toEqual({
+        ok: false,
+        failure: { kind: "bad_reply", detail: "invalid response body" },
+      });
+    }
   });
 
   it("401 → unauthorized; a reply whose jobs is not an array is bad_reply", async () => {

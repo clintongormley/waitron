@@ -83,6 +83,33 @@ describe("createAgent — phases", () => {
     expect(c.join).toHaveBeenCalledTimes(2); // no halt — it keeps asking
   });
 
+  it("join fails for another reason → unreachable with that reason, token stays null", async () => {
+    const host = fakeHost({ config: CONFIG });
+    const c = client({ join: vi.fn(async () => failR({ kind: "rate_limited" })) });
+    await createAgent({ host, client: c }).runOnce();
+    expect(host.statuses.at(-1)).toMatchObject({
+      phase: "unreachable",
+      current: A,
+      lastError: "rate_limited",
+    });
+    expect(await host.token()).toBeNull();
+  });
+
+  it("join status cannot be read → unreachable with the failure detail, token kept, no pull", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const c = client({
+      joinStatus: vi.fn(async () => failR({ kind: "unreachable", detail: "status 503" })),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(host.statuses.at(-1)).toMatchObject({
+      phase: "unreachable",
+      current: A,
+      lastError: "unreachable: status 503",
+    });
+    expect(await host.token()).toBe("a1.s");
+    expect(c.pullJobs).not.toHaveBeenCalled();
+  });
+
   it("have token, status pending → phase pending, no pull", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("pending")) });
@@ -103,6 +130,22 @@ describe("createAgent — phases", () => {
     await agent.runOnce();
     expect(c.join).not.toHaveBeenCalled(); // halted: no re-join without a restart
     expect(c.joinStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("a denial drops the persisted verification number so a restart shows no stale code", async () => {
+    const pinned = { ...CONFIG, environment: "preproduction" };
+    const host = fakeHost({
+      config: { ...pinned, pendingVerificationNumber: "07" },
+      token: "a1.s",
+    });
+    const c = client({ joinStatus: vi.fn(async () => okR<JoinStatus>("not_approved")) });
+    await createAgent({ host, client: c }).runOnce();
+    expect((await host.config())?.pendingVerificationNumber).toBeUndefined();
+    expect(await host.config()).toEqual(pinned);
+    expect(host.statuses.at(-1)).toMatchObject({
+      phase: "unauthorized",
+      verificationCode: undefined,
+    });
   });
 
   it("status approved → pulls this same tick and reports running", async () => {
@@ -162,6 +205,50 @@ describe("createAgent — phases", () => {
     });
     await createAgent({ host, client: c }).runOnce();
     expect(c.join).toHaveBeenCalledWith(A, "kitchen-pi");
+  });
+
+  it("no in-environment primary names the pinned environment, or `unknown` before one is pinned", async () => {
+    const pinned = fakeHost({ config: { ...CONFIG, environment: "production" } });
+    await createAgent({ host: pinned, client: client() }).runOnce();
+    expect(pinned.statuses.at(-1)).toMatchObject({
+      phase: "unreachable",
+      lastError: "no accepting primary in environment production",
+    });
+
+    const unpinned = fakeHost({ config: CONFIG });
+    const c = client({
+      probeNode: vi.fn(async () => failR({ kind: "unreachable", detail: "ECONNREFUSED" })),
+    });
+    await createAgent({ host: unpinned, client: c }).runOnce();
+    expect(unpinned.statuses.at(-1)).toMatchObject({
+      phase: "unreachable",
+      current: A,
+      lastError: "no accepting primary in environment unknown",
+    });
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it("without an injected client, talks to the server through the host's fetch", async () => {
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === `${A}/api/node`) {
+        return new Response(JSON.stringify(primary), { status: 200 });
+      }
+      if (String(url) === `${A}/print-api/agent/join`) {
+        return new Response(JSON.stringify({ token: "a1.s", verificationNumber: "42" }), {
+          status: 201,
+        });
+      }
+      throw new Error("ECONNREFUSED");
+    });
+    const host = fakeHost({ config: CONFIG, fetch: fetchImpl as unknown as typeof fetch });
+    await createAgent({ host }).runOnce();
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
+      "http://127.0.0.1/api/node/enrol-self",
+      `${A}/api/node`,
+      `${A}/print-api/agent/join`,
+    ]);
+    expect(host.statuses.at(-1)).toMatchObject({ phase: "pending", verificationCode: "42" });
+    expect(await host.token()).toBe("a1.s");
   });
 
   it("persists the verification number so a restart while pending can still show it", async () => {
@@ -367,6 +454,22 @@ describe("createAgent — push and report", () => {
     expect(host.statuses.at(-1)?.lastError).toBe("no route"); // failed send stays visible
     await agent.runOnce();
     expect(host.statuses.at(-1)?.lastError).toBeUndefined(); // clean tick clears it
+  });
+
+  it("a send that rejects with a non-Error reports that value as the error text", async () => {
+    const transport = { send: vi.fn().mockRejectedValue("printer offline") };
+    const host = fakeHost({ config: CONFIG, token: "a1.s", transport });
+    const c = client({
+      pullJobs: vi.fn(async () =>
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [job("j1")], discoveryUntil: null }),
+      ),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(c.report).toHaveBeenCalledWith(A, "a1.s", "j1", {
+      status: "failed",
+      error: "printer offline",
+    });
+    expect(host.statuses.at(-1)?.lastError).toBe("printer offline");
   });
 
   it("a report that cannot be delivered is logged and dropped (the lease reclaims)", async () => {
@@ -694,6 +797,46 @@ describe("createAgent — inventory, discovery and resolve", () => {
     expect(host.statuses.at(-1)?.phase).toBe("running");
   });
 
+  it("logs a scan, address check or classification that throws a non-Error, and still pulls", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      scan: async () => {
+        throw "no adapter";
+      },
+      probeNetwork: async () => {
+        throw "no route";
+      },
+      markPagePrinters: async () => {
+        throw "ipp refused";
+      },
+    });
+    const pulls = vi.fn(async () =>
+      okR<PullReply>({
+        nodeId: "n1",
+        servers: [],
+        jobs: [],
+        discoveryUntil: 10_000_000_000,
+        networkProbes: [{ host: "10.0.0.1", port: 9100, expiresInMs: 30000 }],
+      }),
+    );
+    // Without a network device on the list the classifier is never asked, so one probe must succeed
+    // for its failure to be reached: the first tick probes and fails, the second classifies and fails.
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+    await agent.runOnce();
+    await agent.runOnce();
+    host.probeNetwork = async () => [{ transport: "network_tcp", host: "10.0.0.1", port: 9100 }];
+    await agent.runOnce();
+    expect(host.logs.filter((line) => line.startsWith("warn"))).toEqual([
+      'warn scan failed {"error":"no adapter"}',
+      'warn address probe failed {"error":"no route"}',
+      'warn scan failed {"error":"no adapter"}',
+      'warn office-printer check failed {"error":"ipp refused"}',
+    ]);
+    expect(pulls).toHaveBeenCalledTimes(3);
+    expect(host.statuses.at(-1)?.phase).toBe("running");
+  });
+
   it("resolves a usb job before sending", async () => {
     const resolved: PrinterTarget = {
       id: "p1",
@@ -789,6 +932,18 @@ describe("createAgent — start/stop and logging", () => {
     expect(pulls).toHaveBeenCalledTimes(3);
   });
 
+  it("stop during a tick ends start without sleeping", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const pulls = vi.fn(async () => {
+      agent.stop();
+      return okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null });
+    });
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+    await agent.start();
+    expect(pulls).toHaveBeenCalledTimes(1);
+    expect(host.sleeps).toEqual([]);
+  });
+
   it("logs on a phase change, not on every tick", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
     const agent = createAgent({ host, client: client() });
@@ -807,5 +962,20 @@ describe("createAgent — start/stop and logging", () => {
     });
     await expect(createAgent({ host, client: c }).runOnce()).resolves.toBeUndefined();
     expect(host.statuses.at(-1)?.phase).toBe("unreachable");
+  });
+
+  it("a client that throws a non-Error reports that value as the error, and logs it", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const c = client({
+      probeNode: vi.fn(async () => {
+        throw "socket hang up";
+      }),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(host.statuses.at(-1)).toMatchObject({
+      phase: "unreachable",
+      lastError: "socket hang up",
+    });
+    expect(host.logs).toContain('error tick failed {"error":"socket hang up"}');
   });
 });

@@ -33,8 +33,6 @@ export function fakeHost(
   statuses: AgentStatus[];
   logs: string[];
   sleeps: number[];
-  setToken(t: string | null): void;
-  setConfig(c: AgentConfig | null): void;
 } {
   let config = overrides.config === undefined ? null : overrides.config;
   let token = overrides.token ?? null;
@@ -49,12 +47,6 @@ export function fakeHost(
     statuses,
     logs,
     sleeps,
-    setToken: (t) => {
-      token = t;
-    },
-    setConfig: (c) => {
-      config = c;
-    },
     config: async () => config,
     saveConfig: async (c) => {
       config = c;
