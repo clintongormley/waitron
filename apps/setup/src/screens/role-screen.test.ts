@@ -38,4 +38,11 @@ describe("setup-role-screen", () => {
     q(el, "[data-test=choose-restore]")!.click();
     expect(events).toEqual([{ kind: "goto", detail: { screen: "restore" } }]);
   });
+
+  it("steps back to the mode screen", async () => {
+    const { el, host } = await mountWidget<SetupRoleScreen>("setup-role-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=back]")!.click();
+    expect(events).toEqual([{ kind: "goto", detail: { screen: "mode" } }]);
+  });
 });

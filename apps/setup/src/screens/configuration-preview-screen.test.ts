@@ -63,4 +63,25 @@ describe("SetupConfigurationPreviewScreen", () => {
     expect(el.shadowRoot!.querySelector("wt-card")).toBeNull();
     expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe("Review prepared configuration");
   });
+
+  it("says so when no hardware needs reconnecting", async () => {
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview: { ...preview, reconnect: [] } },
+    );
+    expect(el.shadowRoot!.textContent).toContain("No hardware reconnection is listed.");
+  });
+
+  it("steps back to the live source choice", async () => {
+    const { el, host } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview },
+    );
+    const goto = vi.fn();
+    host.addEventListener("setup-goto", goto);
+    el.shadowRoot!.querySelector<HTMLElement>(".actions wt-button[variant=ghost]")!.click();
+    expect(goto.mock.calls.map(([event]) => (event as CustomEvent).detail.screen)).toEqual([
+      "live-source",
+    ]);
+  });
 });

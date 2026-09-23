@@ -55,7 +55,7 @@ export default defineConfig({
       // startup (tokens, the mount) and is exercised only in a real browser, not under the runner;
       // src/widgets/test-helpers.ts is test-only mount/axe support (mirrors apps/dashboard).
       exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

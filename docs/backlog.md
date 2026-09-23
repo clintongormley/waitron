@@ -1305,6 +1305,24 @@ open:
   and watching a test fail, and no separate probe confirmed the trading app is untouched by the
   redirect. That is weaker evidence than this repository normally accepts for a guard.
 
+**Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
+seen in a throwaway test, since deleted, and none has a test pinning it:
+
+- *In Demo, a server refusal of a field Demo hides gives the operator no signal.* The shell routes a
+  refused `seriesCode` or `operationDescription` back to the venue screen whatever the mode
+  (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing), but Demo does not draw
+  those fields: nothing is marked, no alert shows and focus does not move. Whether the server ever
+  refuses Demo's fixed series codes is not established.
+- *In Demo with a draft country that has no venue-setup pack*, the error summary asks for the tax ID
+  and the invoice languages, neither of which Demo shows.
+- *A draft carrying a country with no venue-setup pack* (a configuration import can bring one) shows
+  España in the country select while the screen holds the other value, so "Check the country." sits
+  beside what looks like a valid choice.
+- *A fiscal test or a provision that answers after the wizard has been removed from the page leaves
+  it stuck when it is put back*: the Run button stays on "Running test…", or the screen stays on
+  "Provisioning…", with no retry. The connection check releases itself in the same case. The app
+  mounts the wizard once and never removes it, so this may be unreachable in use.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
@@ -2071,7 +2089,12 @@ image constraints under *Detail → Box image*.
   a certificate secret the verifactu slot turns into one; for the void and substitution refs and
   the node registration checked field by field, where an empty void or substitution record id
   had passed; and for a correction or substitution returning the new sale's id rather than the
-  replaced sale's; no source file changed; 100/100/100/100).
+  replaced sale's; no source file changed; 100/100/100/100); `setup` (**PR #523**, 2026-09-23 —
+  tests across the wizard shell, its API client and nine screens, among them answers arriving
+  after the wizard is removed, a newer connection check winning over a late boot read, a country
+  pack with no provinces, and a draft country with no pack; one bug fixed, going back to "Select
+  province" now clears the province where it had kept the old one and submitted it;
+  99.78/100/100/98.68).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

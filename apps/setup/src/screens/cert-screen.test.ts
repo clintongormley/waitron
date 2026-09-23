@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./cert-screen.js";
@@ -250,6 +251,32 @@ describe("setup-cert-screen", () => {
     });
   });
 
+  it("emits the default company-seal kind when the draft cert names none", async () => {
+    const draft: DeepPartial<ProvisionBody> = {
+      aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "seeded-pass" },
+    };
+    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
+    const events = collect(host);
+    q(el, "[data-test=next]")!.click();
+    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
+    expect(patch.aeatCert).toEqual({
+      pfxBase64: EXPECTED_BASE64,
+      passphrase: "seeded-pass",
+      certKind: "sello",
+    });
+  });
+
+  it("advances when Enter is pressed in the passphrase field", async () => {
+    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const events = collect(host);
+    await chooseFile(el, PFX_SOURCE);
+    await typePassphrase(el, "unlock-2026");
+    q(el, "[data-test=passphrase]")!.shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(events.map((event) => event.kind)).toEqual(["patch", "goto"]);
+    expect(events[1]!.detail).toEqual({ screen: "fiscal-test" });
+  });
+
   it("seeds only the fields a partial draft cert carries, leaving the rest at their defaults", async () => {
     const draft: DeepPartial<ProvisionBody> = {
       aeatCert: { certKind: "representante" }, // no pfxBase64, no passphrase
@@ -341,16 +368,21 @@ it.each([
   }
 });
 
-it("lists every guide, and says so, when the browser names no computer it knows", async () => {
-  const ua = vi
-    .spyOn(navigator, "userAgent", "get")
-    .mockReturnValue("Mozilla/5.0 (iPhone; CPU iPhone OS) Safari/605");
+it.each([
+  ["a phone", "Mozilla/5.0 (iPhone; CPU iPhone OS) Safari/605"],
+  ["a desktop it has no guide for", "Mozilla/5.0 (X11; Linux x86_64) Chrome/130"],
+])("lists every guide, and says so, when the browser is on %s", async (_, userAgent) => {
+  const ua = vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
   try {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const help = q(el, "[data-test=certificate-export-help]")!;
     expect(help.querySelector("[data-test=export-guide]")).toBeNull();
     expect(help.querySelector("[data-test=other-guides]")).toBeNull();
-    expect(help.querySelectorAll("details")).toHaveLength(3);
+    expect([...help.querySelectorAll("details > summary")].map((s) => s.textContent)).toEqual([
+      "Windows (Chrome)",
+      "macOS (Keychain Access)",
+      "Firefox",
+    ]);
     expect(help.querySelector("details[open]")).toBeNull();
     expect(help.textContent).toContain("another computer");
   } finally {

@@ -103,6 +103,17 @@ describe("SetupApi", () => {
     });
   });
 
+  it("getVenueDefaults GETs /setup-api/venue-defaults and returns the parsed defaults", async () => {
+    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(defaults));
+    const api = new SetupApi("", fetchImpl);
+    expect(await api.getVenueDefaults()).toEqual(defaults);
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/venue-defaults", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
   it("provision POSTs the body as JSON and returns the result", async () => {
     const result = { provisioned: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result));
@@ -276,6 +287,34 @@ describe("SetupApi", () => {
         "x-waitron-restore-environment": "production",
       },
       body: artifact,
+    });
+  });
+
+  it("rejects a refused restore with the envelope's code and the HTTP status", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "restore.environment_mismatch" } }, false, 400),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(
+      api.restore(new Blob([Uint8Array.from([1])]), "recovery-key", "production"),
+    ).rejects.toEqual({ code: "restore.environment_mismatch", params: undefined, status: 400 });
+  });
+
+  it("rejects a refused configuration export with the envelope's code and the HTTP status", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "setup.configuration_import_failed" } }, false, 422),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(
+      api.stageConfiguration(new Blob([Uint8Array.from([4])]), "a strong passphrase"),
+    ).rejects.toEqual({
+      code: "setup.configuration_import_failed",
+      params: undefined,
+      status: 422,
     });
   });
 

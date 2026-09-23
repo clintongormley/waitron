@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./connect-screen.js";
@@ -94,6 +95,25 @@ describe("setup-connect-screen", () => {
       primaryUrl: "https://waitron.local",
       credential: { personId: "op-1", password: "  correct horse  ", totp: "123456" },
     });
+  });
+
+  it("connects when Enter is pressed in a field", async () => {
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    const events = collect(host);
+    await fillValid(el);
+    q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(events).toEqual([
+      {
+        kind: "adopt",
+        detail: {
+          body: {
+            primaryUrl: "https://waitron.local",
+            credential: { personId: "op-1", password: "correct horse" },
+          },
+        },
+      },
+    ]);
   });
 
   it("renders the password field as a password input (never a plaintext one)", async () => {

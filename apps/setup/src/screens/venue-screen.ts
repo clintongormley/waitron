@@ -400,8 +400,8 @@ export class SetupVenueScreen extends LitElement {
     const pack = this.#pack();
     if (pack === undefined) return;
     const area = findAdministrativeArea(pack, (event.target as HTMLSelectElement).value);
+    this.values = { ...this.values, province: area?.name ?? "" };
     if (area === undefined) return;
-    this.values = { ...this.values, province: area.name };
     if (this.#invoiceLocalesFollowAreaDefault) {
       this.invoiceLocales = defaultInvoiceLocales(pack, area);
     }

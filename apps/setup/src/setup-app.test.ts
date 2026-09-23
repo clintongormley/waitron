@@ -134,6 +134,32 @@ function configurationRequest(el: SetupApp, artifact: File, passphrase: string):
   );
 }
 
+function fiscalTestRequest(el: SetupApp): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("fiscal-test-requested", { bubbles: true, composed: true }),
+  );
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Reads named private shell fields; used where the element is detached and renders nothing. */
+function readState(el: SetupApp, keys: string[]): Record<string, unknown> {
+  const state = el as unknown as Record<string, unknown>;
+  return Object.fromEntries(keys.map((key) => [key, state[key]]));
+}
+
 /** Reads a `[data-test]` element's trimmed text out of a mounted screen's own shadow root. */
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
@@ -1324,5 +1350,291 @@ describe("modal shell", () => {
     const el = await mountSetupApp();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     expect(modal.querySelector("[data-test^=screen-]")).not.toBeNull();
+  });
+});
+
+describe("connection checks", () => {
+  it("does not start a second check while one is still running", async () => {
+    const getStatus = vi
+      .fn()
+      .mockResolvedValueOnce({ environment: "preproduction", needs: ["venue"] })
+      .mockReturnValue(new Promise(() => {}));
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    const host = await screenHost(el, "connection");
+    host.dispatchEvent(new CustomEvent("connection-continue"));
+    host.dispatchEvent(new CustomEvent("connection-continue"));
+    await flush(el);
+    expect(getStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores a boot read that answers after a newer check already succeeded", async () => {
+    const boot = deferred<SetupStatus>();
+    const getStatus = vi
+      .fn()
+      .mockReturnValueOnce(boot.promise)
+      .mockResolvedValue({ environment: "preproduction", needs: ["venue"] });
+    const el = await mountSetupApp(stubApi({ getStatus }));
+    (await screenHost(el, "connection")).dispatchEvent(new CustomEvent("connection-continue"));
+    await flush(el);
+    boot.resolve({ provisioned: false, environment: "production", needs: ["venue"] });
+    await flush(el);
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
+      "preproduction",
+    );
+  });
+
+  it("writes nothing when the boot read answers after the element is detached", async () => {
+    const boot = deferred<SetupStatus>();
+    const el = await mountSetupApp(stubApi({ getStatus: vi.fn().mockReturnValue(boot.promise) }));
+    el.remove();
+    boot.resolve({ provisioned: false, environment: "production", needs: ["venue"] });
+    await flush(el);
+    expect(readState(el, ["screen", "environment"])).toEqual({
+      screen: "connection",
+      environment: undefined,
+    });
+  });
+});
+
+describe("venue defaults", () => {
+  it("keeps defaults that arrive after the element is detached off the element", async () => {
+    const defaults = deferred<unknown>();
+    const el = await mountSetupApp(
+      stubApi({ getVenueDefaults: vi.fn().mockReturnValue(defaults.promise) }),
+    );
+    el.remove();
+    defaults.resolve({ verifactu: { operationDescription: "Venta en establecimiento" } });
+    await flush(el);
+    expect(readState(el, ["venueDefaults"])).toEqual({ venueDefaults: {} });
+  });
+
+  it("reloads the defaults when the shop form asks again, without the request leaving the shell", async () => {
+    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+    const getVenueDefaults = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network"))
+      .mockResolvedValue(defaults);
+    const el = await mountSetupApp(stubApi({ getVenueDefaults }));
+    const leaked: Event[] = [];
+    el.parentElement!.addEventListener("setup-defaults-requested", (e) => leaked.push(e));
+    patch(el, { mode: "demo" });
+    goto(el, "venue");
+    await flush(el);
+    const venue = await screenHost(el, "venue");
+    expect(venue.shadowRoot!.querySelector("[data-test=defaults-error]")).not.toBeNull();
+    venue.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-defaults]")!.click();
+    await flush(el);
+    expect(getVenueDefaults).toHaveBeenCalledTimes(2);
+    expect(((await screenHost(el, "venue")) as unknown as { defaults: unknown }).defaults).toEqual(
+      defaults,
+    );
+    expect(leaked).toEqual([]);
+  });
+});
+
+describe("provision refusals that need a fiscal test", () => {
+  it("sends setup.fiscal_test_required back to the fiscal test, clearing an earlier acceptance", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.fiscal_test_required", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    fiscalTestRequest(el);
+    await flush(el);
+    provisionRequest(el);
+    await flush(el);
+    const screen = await screenHost(el, "fiscal-test");
+    expect(screen.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      "Run an accepted fiscal test before activating production.",
+    );
+    expect(screen.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=run]")).not.toBeNull();
+  });
+});
+
+describe("restore, configuration and fiscal-test outcomes", () => {
+  it("tells the operator to check the connection when a restore fails with no code", async () => {
+    const el = await mountSetupApp(
+      stubApi({ restore: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) }),
+    );
+    restoreRequest(el, {
+      artifact: new File(["encrypted"], "waitron.backup"),
+      recoveryKey: "recovery-key",
+      environment: "production",
+    });
+    await flush(el);
+    expect(await screenText(el, "restore", "[data-test=server-error]")).toBe(
+      "The backup could not be staged. Check the connection and try again.",
+    );
+  });
+
+  it("returns a configuration export that cannot be opened to the live-source form", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        stageConfiguration: vi
+          .fn()
+          .mockRejectedValue({ code: "setup.configuration_import_failed", params: {} }),
+      }),
+    );
+    configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+    await flush(el);
+    expect(await screenText(el, "live-source", "[role=alert]")).toBe(
+      "The configuration export could not be opened. Check the file and passphrase.",
+    );
+    expect(readDraft(el).configurationImport).toBeUndefined();
+  });
+
+  it("treats a fiscal test the regime does not need as accepted", async () => {
+    const el = await mountSetupApp(
+      stubApi({ runFiscalTest: vi.fn().mockResolvedValue({ status: "not-applicable" }) }),
+    );
+    goto(el, "fiscal-test");
+    fiscalTestRequest(el);
+    await flush(el);
+    const screen = await screenHost(el, "fiscal-test");
+    expect(screen.shadowRoot!.querySelector("[role=status]")?.textContent).toContain(
+      "AEAT accepted",
+    );
+    expect(screen.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+  });
+
+  it("reports a fiscal test that could not run and offers the run again", async () => {
+    const el = await mountSetupApp(
+      stubApi({ runFiscalTest: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) }),
+    );
+    goto(el, "fiscal-test");
+    fiscalTestRequest(el);
+    await flush(el);
+    const screen = await screenHost(el, "fiscal-test");
+    expect(screen.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
+      "The fiscal test could not run. Check the connection and try again.",
+    );
+    const run = screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-test=run]",
+    )!;
+    expect(run.disabled).toBe(false);
+  });
+});
+
+describe("an answer that arrives after the element is detached", () => {
+  const backup = {
+    artifact: new File(["encrypted"], "waitron.backup"),
+    recoveryKey: "recovery-key",
+    environment: "production" as const,
+  };
+  const configFile = new File(["encrypted"], "prepared.waitron-config");
+  const preview = {
+    venue: { legalName: "Prepared SL", location: { id: "source-location", name: "Prepared" } },
+    counts: {},
+    reconnect: [],
+  };
+
+  it.each([
+    {
+      name: "a provision success",
+      method: "provision",
+      fire: provisionRequest,
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.resolve({ provisioned: true, restarting: true }),
+      unchanged: { screen: "provisioning" },
+    },
+    {
+      name: "a provision refusal",
+      method: "provision",
+      fire: provisionRequest,
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.reject({ code: "setup.request_invalid", params: {} }),
+      unchanged: { screen: "provisioning", reviewError: undefined },
+    },
+    {
+      name: "an adopt success",
+      method: "adopt",
+      fire: (el: SetupApp) => adoptRequest(el),
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.resolve({ adopted: true, breakGlassSecret: "bg", restarting: true }),
+      unchanged: { screen: "provisioning", breakGlassSecret: undefined, mirrorJoin: false },
+    },
+    {
+      name: "an adopt refusal",
+      method: "adopt",
+      fire: (el: SetupApp) => adoptRequest(el),
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.reject({ code: "mirror.bundle_fetch_failed", params: {} }),
+      unchanged: { screen: "provisioning", connectError: undefined },
+    },
+    {
+      name: "a restore success",
+      method: "restore",
+      fire: (el: SetupApp) => restoreRequest(el, backup),
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.resolve({ restoreStaged: true, restarting: true }),
+      unchanged: { screen: "provisioning" },
+    },
+    {
+      name: "a restore refusal",
+      method: "restore",
+      fire: (el: SetupApp) => restoreRequest(el, backup),
+      settle: (d: ReturnType<typeof deferred>) => d.reject({ code: "server.internal", params: {} }),
+      unchanged: { screen: "provisioning", restoreError: undefined },
+    },
+    {
+      name: "a staged configuration",
+      method: "stageConfiguration",
+      fire: (el: SetupApp) => configurationRequest(el, configFile, "passphrase"),
+      settle: (d: ReturnType<typeof deferred>) => d.resolve(preview),
+      unchanged: { screen: "live-source", configurationPreview: undefined },
+    },
+    {
+      name: "a configuration refusal",
+      method: "stageConfiguration",
+      fire: (el: SetupApp) => configurationRequest(el, configFile, "passphrase"),
+      settle: (d: ReturnType<typeof deferred>) => d.reject({ code: "server.internal", params: {} }),
+      unchanged: { screen: "live-source", configurationError: undefined },
+    },
+    {
+      name: "a fiscal test result",
+      method: "runFiscalTest",
+      fire: fiscalTestRequest,
+      settle: (d: ReturnType<typeof deferred>) => d.resolve({ status: "accepted" }),
+      unchanged: { fiscalTestStatus: undefined },
+    },
+    {
+      name: "a fiscal test failure",
+      method: "runFiscalTest",
+      fire: fiscalTestRequest,
+      settle: (d: ReturnType<typeof deferred>) => d.reject(new TypeError("Failed to fetch")),
+      unchanged: { fiscalTestError: undefined },
+    },
+  ])("writes nothing for $name", async ({ method, fire, settle, unchanged }) => {
+    const pending = deferred();
+    const el = await mountSetupApp(stubApi({ [method]: vi.fn().mockReturnValue(pending.promise) }));
+    goto(el, "live-source");
+    fire(el);
+    await el.updateComplete;
+    el.remove();
+    settle(pending);
+    await flush(el);
+    expect(readState(el, Object.keys(unchanged))).toEqual(unchanged);
+    if (method === "stageConfiguration") expect(readDraft(el).configurationImport).toBeUndefined();
+  });
+});
+
+describe("screen fallback", () => {
+  it("shows the four-choice screen for a screen name outside the wizard's list", async () => {
+    const getStatus = vi.fn().mockResolvedValue({
+      provisioned: false,
+      environment: "production",
+      needs: ["venue"],
+    } satisfies SetupStatus);
+    const el = await mountSetupApp(stubApi({ getStatus }));
+    goto(el, "no-such-screen" as Screen);
+    await el.updateComplete;
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
+      "production",
+    );
   });
 });
