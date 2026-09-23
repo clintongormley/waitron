@@ -119,7 +119,7 @@ describe("startMtlsServer", () => {
     }
   });
 
-  it("records the first CN when the client certificate's subject repeats it", async () => {
+  it("records the first CN when the client certificate's subject has two CNs", async () => {
     const server = await startMtlsServer(oddCaMaterial, "<ok/>");
     try {
       const client = clientWithSubject([
