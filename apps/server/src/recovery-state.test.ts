@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -62,5 +62,28 @@ describe("readRecoveryState", () => {
       fs.stat(join(dir, "recovery.json")),
     );
     expect(mode & 0o777).toBe(0o600);
+  });
+
+  it.each([
+    ["a negative count", { failures: -2 }],
+    ["a count written as text", { failures: "5" }],
+  ])("reads %s as no failures", async (_label, stored) => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(join(dir, "recovery.json"), JSON.stringify(stored));
+    expect(await readRecoveryState(dir)).toEqual(FRESH);
+  });
+
+  it("drops fields of the wrong type and derives the level from the count, not the stored level", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(
+      join(dir, "recovery.json"),
+      JSON.stringify({ failures: 1, level: "recovery", lastErrorCode: 7, lastFailureAt: false }),
+    );
+    expect(await readRecoveryState(dir)).toEqual({
+      failures: 1,
+      level: "normal",
+      lastErrorCode: null,
+      lastFailureAt: null,
+    });
   });
 });

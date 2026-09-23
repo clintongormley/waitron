@@ -2360,3 +2360,170 @@ it("files an extras pick and an options answer through cash checkout and reprint
   });
   expect(recordCount).toHaveLength(1);
 });
+
+describe("card readers the till cannot drive, and readers named by id", () => {
+  it("GET /api/till maps a SumUp default reader and leaves out a reader whose provider it does not know", async () => {
+    const { cfg } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const sumup = await seedReader({ provider: "sumup", name: "SumUp Solo" });
+    await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
+    await setDefaultReader(deviceIdOf(deviceCookie), sumup.id);
+
+    const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cardProvider).toBe("sumup_cloud");
+    expect(body.defaultReaderId).toBe(sumup.id);
+    expect(body.activeReaders).toEqual([
+      { id: sumup.id, name: "SumUp Solo", provider: "sumup_cloud" },
+    ]);
+  });
+
+  it("GET /api/till reports no card provider for a device whose default reader's provider is unknown", async () => {
+    const { cfg } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const unknown = await seedReader({ provider: "carrier_pigeon", name: "Unknown" });
+    await setDefaultReader(deviceIdOf(deviceCookie), unknown.id);
+
+    const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.cardProvider).toBe("none");
+    expect(body.defaultReaderId).toBeUndefined();
+    expect(body.activeReaders).toEqual([]);
+  });
+
+  it("POST /api/pay naming a reader id that matches no active reader is reader.not_found", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    await connectStripe();
+    const readerId = randomUUID();
+
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        readerId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
+    expect(payRes.status).toBe(404);
+    expect(await payRes.json()).toMatchObject({
+      error: { code: "reader.not_found", params: { id: readerId } },
+    });
+  });
+
+  it("POST /api/pay without the provider seat list skips the sealed-credential pre-check", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    const withoutSeats: TillApiDeps = {
+      ...apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())),
+      providers: undefined,
+    };
+    mountTillApi(app, withoutSeats, noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    // No `connectStripe()`: with the seat list present this reader answers reader.provider_disconnected.
+    const reader = await seedReader();
+    await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
+
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
+    expect(payRes.status).toBe(200);
+    expect((await payRes.json()).outcome).toBe("captured");
+    expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
+  });
+});
+
+describe("POST /api/session from a kitchen display", () => {
+  it("refuses a device with no till as device.till_required", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const station = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: "Pase", isDefault: false }),
+    );
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Pantalla",
+      profileId: await seedProfileFF("kds"),
+      stationId: station.id,
+    });
+
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
+      },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
+  });
+});
+
+describe("POST /api/working-orders/:id/prep for a settled order nothing fired yet", () => {
+  it("fires the order to its station queue and answers 200 with an empty body", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
+    await suite.db.execute(
+      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
+    );
+    await suite.db.execute(sql`
+      update departments set default_service_mode = 'ticket_then_pay'
+      where location_id = ${cfg.locationId}`);
+    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(modeCfg), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg);
+
+    const workingOrderId = randomUUID();
+    const sale = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(sale.status).toBe(200);
+    const stations = (await (
+      await app.request("/api/stations", { headers: { cookie } })
+    ).json()) as { id: string; isDefault: boolean }[];
+    const defaultStation = stations.find((s) => s.isDefault)!;
+    const queue = async () =>
+      (await (
+        await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
+      ).json()) as { orderId: string }[];
+    expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeUndefined();
+
+    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(sent.status).toBe(200);
+    expect(await sent.text()).toBe("");
+    expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeDefined();
+  });
+});

@@ -257,16 +257,25 @@ describe("table CRUD", () => {
     expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 
-  // A LOSS, from the storage swap: `updateTable rethrows a NON-unique DB error raw` is deleted.
-  // It drove the false branch of `updateTable`'s catch by overflowing the int4 `capacity` column
-  // (10_000_000_000). SQLite's INTEGER is 64-bit whatever the declared type says, so that value is
-  // now stored without complaint (`packages/db/src/schema/columns.ts` lists the seven refusals the
-  // swap gave up, this one among them), and none of `updateTable`'s three inputs — `label`,
-  // `capacity`, `zoneId` — can make the UPDATE refuse for any reason but the label unique: there
-  // is no CHECK on the columns it writes, and `zoneId` is now settled by `requireZone` before the
-  // statement runs. What is no longer checked: that a refusal which is NOT a unique violation
-  // comes back raw from this verb instead of being relabelled `table.label_taken`. The sibling
-  // `createTable` case above still proves that shape, through the location FK it alone writes.
+  it("updateTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "5" }));
+    // None of updateTable's inputs can make the UPDATE refuse except on the label unique, so a
+    // temporary trigger supplies the other kind of refusal.
+    await db.execute(sql`
+      create trigger dining_tables_refuse_update before update on dining_tables
+      begin select raise(abort, 'table update refused'); end`);
+    try {
+      const err = await asApp(cfg, (tx) => updateTable(tx, cfg, id, { label: "6" })).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(AppError);
+      expect(String(err)).toMatch(/table update refused/);
+    } finally {
+      await db.execute(sql`drop trigger dining_tables_refuse_update`);
+    }
+  });
 });
 
 describe("zone CRUD", () => {
@@ -367,13 +376,24 @@ describe("zone CRUD", () => {
     expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
   });
 
-  // A LOSS, from the storage swap, the same one `updateTable` above records: `updateZone rethrows
-  // a NON-unique DB error raw` is deleted. It overflowed the int4 `display_order` column, which
-  // this engine's 64-bit INTEGER accepts, and none of `updateZone`'s inputs — `name`,
-  // `displayOrder`, `active` — can make the UPDATE refuse for any reason but the name unique
-  // (`floor_zones` declares no CHECK). What is no longer checked: that a refusal which is NOT a
-  // unique violation comes back raw from this verb instead of being relabelled `zone.name_taken`.
-  // The `createZone` case above still proves that shape, through the location FK.
+  it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    // `floor_zones` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
+    await db.execute(sql`
+      create trigger floor_zones_refuse_update before update on floor_zones
+      begin select raise(abort, 'zone update refused'); end`);
+    try {
+      const err = await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Patio" })).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(Error);
+      expect(err).not.toBeInstanceOf(AppError);
+      expect(String(err)).toMatch(/zone update refused/);
+    } finally {
+      await db.execute(sql`drop trigger floor_zones_refuse_update`);
+    }
+  });
 });
 
 // ONE LOSS, from the storage swap: the `isZoneFkViolation` crafted-error unit tests are deleted

@@ -310,6 +310,44 @@ describe("loadConfig", () => {
     });
   });
 
+  it("refuses a Google client secret configured without its client id, naming the id", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig({ ...MIN_ENV, WAITRON_GOOGLE_CLIENT_SECRET: "secret" }, ROOT, STATE_ROOT),
+      ),
+    );
+    expect(isAppError(error) && error.code).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_GOOGLE_CLIENT_ID",
+      reason: "google_requires_client_id_and_secret",
+    });
+  });
+
+  it.each(["restaurant.example/privacy", "ftp://restaurant.example/privacy", "mailto:dpo@x.test"])(
+    "refuses the privacy notice address %j, which is not an http(s) URL",
+    async (url) => {
+      const error = await captureError(() =>
+        Promise.resolve(
+          loadConfig({ ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: url }, ROOT, STATE_ROOT),
+        ),
+      );
+      expect(isAppError(error) && error.code).toBe("server.config_invalid");
+      expect(isAppError(error) && error.params).toEqual({
+        variable: "WAITRON_PRIVACY_NOTICE_URL",
+        reason: "not_an_http_url",
+      });
+    },
+  );
+
+  it("accepts a plain http privacy notice URL", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_PRIVACY_NOTICE_URL: "http://restaurant.example/privacy" },
+      ROOT,
+      STATE_ROOT,
+    );
+    expect(config.privacyNoticeUrl).toBe("http://restaurant.example/privacy");
+  });
+
   // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
   // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
   // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a

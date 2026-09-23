@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
@@ -214,5 +215,21 @@ describe("persistEvictionOrThrow", () => {
 
     await persistEvictionOrThrow(db, docAtTerm(4, "n1"));
     expect((await readNodeMembership(db))?.body.term).toBe(4); // the row moved to the newer term
+  });
+
+  it("reports a held term of -1 when the refused write leaves no chart held at all", async () => {
+    // Stands in for the held row vanishing under the write: the engine skips the insert.
+    await db.execute(
+      sql`create trigger retire_skip_membership before insert on node_membership begin select raise(ignore); end`,
+    );
+    let err: unknown;
+    try {
+      err = await captureError(() => persistEvictionOrThrow(db, docAtTerm(4, "n1")));
+    } finally {
+      await db.execute(sql`drop trigger retire_skip_membership`);
+    }
+    expect(isAppError(err) && err.code).toBe("node.retire_superseded");
+    expect(isAppError(err) && err.params).toEqual({ heldTerm: -1, mintedTerm: 4 });
+    expect(await readNodeMembership(db)).toBeNull();
   });
 });

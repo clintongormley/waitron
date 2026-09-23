@@ -129,6 +129,14 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
+  it("400s a GET /roster with no locationId (shared.invalid_id)", async () => {
+    const res = await send(mountApp(), "GET", "/management-api/roster?period=2026-03-02");
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
+
   it("400s a malformed period on POST (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
       body: { locationId, period: "not-a-date" },
@@ -238,6 +246,65 @@ describe("mountWorkforceApi — shift routes", () => {
       body: { role: "kitchen" },
     });
     expect(res.status).toBe(204);
+  });
+
+  it("PATCH …/roster/shifts/:shiftId moves the person and times it names and keeps the role", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-06-01");
+    const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: shiftBody("2026-06-01"),
+    });
+    const { shiftId } = (await add.json()) as { shiftId: string };
+    const [other] = await suite.db
+      .insert(persons)
+      .values({ displayName: "The Cover", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, {
+      body: {
+        personId: other!.id,
+        startsAt: "2026-06-01T10:00:00Z",
+        startsOffsetMinutes: 120,
+        endsAt: "2026-06-01T18:00:00Z",
+        endsOffsetMinutes: 60,
+      },
+    });
+    expect(res.status).toBe(204);
+    const roster = await send(
+      app,
+      "GET",
+      `/management-api/roster?locationId=${locationId}&period=2026-06-01`,
+    );
+    const shift = ((await roster.json()) as { shifts: Record<string, unknown>[] }).shifts.find(
+      (s) => s.id === shiftId,
+    );
+    expect(shift).toMatchObject({
+      personId: other!.id,
+      startsAt: "2026-06-01T10:00:00Z",
+      startsOffsetMinutes: 120,
+      endsAt: "2026-06-01T18:00:00Z",
+      endsOffsetMinutes: 60,
+      role: "bar",
+    });
+  });
+
+  it.each([
+    ["personId", "2026-06-08", { personId: "not-a-uuid" }],
+    ["endsAt", "2026-06-15", { endsAt: "nope" }],
+    ["endsOffsetMinutes", "2026-06-22", { endsOffsetMinutes: 900 }],
+    ["role", "2026-06-29", { role: 5 }],
+  ])("PATCH …/roster/shifts/:shiftId refuses a malformed %s", async (field, week, body) => {
+    const app = mountApp();
+    const versionId = await draftVersion(week);
+    const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: shiftBody(week),
+    });
+    expect(add.status).toBe(201);
+    const { shiftId } = (await add.json()) as { shiftId: string };
+    const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, { body });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
   });
 
   it("DELETE …/roster/shifts/:shiftId removes a shift (204)", async () => {
@@ -564,6 +631,18 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
       mountApp(),
       "GET",
       "/management-api/planned-vs-actual?locationId=not-a-uuid&from=2026-03-02&to=2026-03-09",
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
+
+  it("400s a request with no locationId (shared.invalid_id)", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
     );
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({

@@ -631,6 +631,38 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
   });
 });
 
+describe("correction slips for a station with no printer", () => {
+  it("sends a correction slip only for the lines whose station has an active printer", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, slips } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
+      const orderId = await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
+      const fired = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      expect(fired).toHaveLength(2);
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(tx, cfg, orderId, fired, "VOID");
+      const slips = (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+      return { printerId, slips };
+    });
+
+    expect(slips.map((slip) => slip.printerId)).toEqual([printerId]);
+    const slip = decodeTicket(slips[0]!.payload);
+    expect(slip).toContain("Chuleton");
+    expect(slip).not.toContain("Cerveza");
+  });
+});
+
 describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, child sub-text)", () => {
   it("fires a dish with two extras as ONE ticket_item (the parent), never one per child", async () => {
     const { cfg, catalogueId } = await setupVenue();

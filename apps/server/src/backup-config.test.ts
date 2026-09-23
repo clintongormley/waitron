@@ -125,6 +125,36 @@ describe("loadBackupConfig schedule + dual retention", () => {
     ).toThrow(/schedule_invalid/);
   });
 
+  function scheduleRefusal(env: Record<string, string>): unknown {
+    try {
+      loadBackupConfig({
+        WAITRON_BACKUP_DIR: "/mnt/usb",
+        WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(12),
+        ...env,
+      });
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected loadBackupConfig to refuse the schedule");
+  }
+
+  it.each(["7", "1.5", "-1", "mon"])("rejects the weekday %j as bad_day", (days) => {
+    expect(scheduleRefusal({ WAITRON_BACKUP_SCHEDULE_DAYS: days })).toMatchObject({
+      code: "backup.schedule_invalid",
+      params: { reason: "bad_day" },
+    });
+  });
+
+  it.each(["4am", "4:5", "04:00:00", "004:00"])(
+    "rejects the time %j, which is not HH:MM, as bad_time",
+    (at) => {
+      expect(scheduleRefusal({ WAITRON_BACKUP_AT: at })).toMatchObject({
+        code: "backup.schedule_invalid",
+        params: { reason: "bad_time" },
+      });
+    },
+  );
+
   it("carries an explicit keyRotatedAt through, undefined when unset", () => {
     const withRotation = loadBackupConfig({
       WAITRON_BACKUP_DIR: "/mnt/usb",

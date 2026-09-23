@@ -1086,3 +1086,159 @@ describe("reader adoption and local management", () => {
     },
   );
 });
+
+describe("screens and unknown ids", () => {
+  it("refuses a connect form value that is not a string, naming the field, and seals nothing", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
+      cookie: venue.managerCookie,
+      body: { ...GOOD_KEY, webhookSecret: 42 },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "webhookSecret" } },
+    });
+    expect(await sealedStripe()).toBeNull();
+  });
+
+  it.each([
+    ["PATCH", "", { name: "Nuevo" }],
+    ["POST", "/disable", undefined],
+    ["POST", "/enable", undefined],
+    ["POST", "/unpair", undefined],
+    ["GET", "/status", undefined],
+  ] as const)(
+    "404s %s on an unknown reader%s with reader.not_found",
+    async (method, suffix, body) => {
+      const venue = await seedVenue();
+      const app = mountApp(venue);
+      await connectStripe(app, venue);
+      const id = randomUUID();
+      const res = await send(app, method, `/management-api/payments/readers/${id}${suffix}`, {
+        cookie: venue.managerCookie,
+        ...(body === undefined ? {} : { body }),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: { code: "reader.not_found", params: { id } } });
+    },
+  );
+
+  it("hands the seat a pairing code without a reference when only a code is given", async () => {
+    const venue = await seedVenue();
+    const calls: unknown[] = [];
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async (_deps, input) => {
+          calls.push(input);
+          return { providerRef: nextRef(), status: "paired" as const };
+        },
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    await connectStripe(app, venue);
+    const res = await send(app, "POST", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+      body: { providerId: "stripe", name: "Barra 2", code: "PAIR-123" },
+    });
+    expect(res.status).toBe(201);
+    expect(calls).toEqual([{ name: "Barra 2", code: "PAIR-123" }]);
+  });
+
+  it("still refuses a mid-add disconnect when the best-effort vendor unpair itself fails", async () => {
+    const venue = await seedVenue();
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    let removeAttempts = 0;
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async () => {
+          entered();
+          await hold;
+          return { providerRef: nextRef(), status: "paired" as const };
+        },
+        remove: async () => {
+          removeAttempts += 1;
+          throw new Error("vendor unreachable");
+        },
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    const adding = send(app, "POST", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+      body: { providerId: "stripe", name: "Barra 1", reference: nextRef() },
+    });
+    await started;
+    const disconnected = await send(
+      app,
+      "POST",
+      "/management-api/payments/providers/stripe/disconnect",
+      { cookie: venue.managerCookie },
+    );
+    release();
+    const added = await adding;
+    expect(disconnected.status).toBe(204);
+    expect(added.status).toBe(409);
+    expect(await added.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    expect(removeAttempts).toBe(1);
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
+  });
+
+  it("refuses a default reader for an unknown device, or naming an unknown or disabled reader", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    await connectStripe(app, venue);
+    const readerId = ((await (await addReader(app, venue, nextRef())).json()) as { id: string }).id;
+    const device = await seedDevice(venue);
+    const put = (deviceId: string, body: unknown) =>
+      send(app, "PUT", `/management-api/payments/devices/${deviceId}/reader`, {
+        cookie: venue.managerCookie,
+        body,
+      });
+
+    const unknownDevice = randomUUID();
+    const noDevice = await put(unknownDevice, { readerId });
+    expect(noDevice.status).toBe(404);
+    expect(await noDevice.json()).toEqual({
+      error: { code: "device.not_found", params: { deviceId: unknownDevice } },
+    });
+
+    const unknownReader = randomUUID();
+    const noReader = await put(device, { readerId: unknownReader });
+    expect(noReader.status).toBe(404);
+    expect(await noReader.json()).toEqual({
+      error: { code: "reader.not_found", params: { id: unknownReader } },
+    });
+
+    expect(
+      (
+        await send(app, "POST", `/management-api/payments/readers/${readerId}/disable`, {
+          cookie: venue.managerCookie,
+        })
+      ).status,
+    ).toBe(204);
+    const disabled = await put(device, { readerId });
+    expect(disabled.status).toBe(404);
+    expect(await disabled.json()).toEqual({
+      error: { code: "reader.not_found", params: { id: readerId } },
+    });
+
+    const read = await send(app, "GET", `/management-api/payments/devices/${device}/reader`, {
+      cookie: venue.managerCookie,
+    });
+    expect(await read.json()).toEqual({ readerId: null });
+  });
+});

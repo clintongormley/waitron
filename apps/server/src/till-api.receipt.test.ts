@@ -1000,6 +1000,44 @@ describe("payment slip persisted capture facts", () => {
   });
 });
 
+describe("payment slip with nothing to print", () => {
+  it("prints nothing when the till has no receipt printer", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: null });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    await suite.db.execute(
+      sql`update payments set provider = 'sumup' where working_order_id = ${id}`,
+    );
+    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+
+  it("prints nothing for a capture that records no settlement instant", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    await suite.db.execute(
+      sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
+    );
+    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+});
+
 describe("persisted cash receipt facts", () => {
   it("replays and reprints the original cash handed over and change", async () => {
     const { cfg, each, operatorId } = await setupVenue();

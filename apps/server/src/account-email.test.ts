@@ -160,4 +160,28 @@ describe("account email", () => {
     expect(message.text).toContain("9 sept 2026");
     expect(message.text).toContain("UTC");
   });
+
+  it("gives a Spanish recipient the code for a replacement email in Spanish", async () => {
+    const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
+    const sender = createAccountEmailSender(
+      { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
+      { sendMail },
+    );
+    await sender({
+      purpose: "email_change",
+      email: "nuevo@example.test",
+      displayName: "Bea",
+      actionUrl: "https://dashboard.example.test/",
+      code: "654321",
+      codeExpiresAt: "2026-09-08T12:10:00.000Z",
+      expiresAt: "2026-09-08T12:30:00.000Z",
+      locale: "es-ES",
+    });
+    const message = sendMail.mock.calls[0]![0] as { subject: string; text: string; html: string };
+    expect(message.subject).toBe("Confirma tu nuevo correo de Waitron");
+    expect(message.text).toContain(
+      "Introduce 654321 en tu perfil de Waitron. Este código caduca el 8 sept 2026, 12:10 UTC.",
+    );
+    expect(message.html).toContain(">Abre tu perfil de Waitron</a>");
+  });
 });

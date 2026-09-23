@@ -33,6 +33,7 @@ import {
   restoreDatabase,
   restoreFromArtifact,
   restoreSecrets,
+  setAsideExistingIdentity,
   validateArtifact,
   writeValidated,
 } from "./restore.js";
@@ -1057,5 +1058,41 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     );
     const present = await readModuleConfig(stateDir);
     expect(fiscalSlot(enabledModules(ALL_MODULES, present), null).id).toBe("verifactu");
+  });
+});
+
+describe("restore steps — failures part-way", () => {
+  useTempDirs("waitron-step-fail-");
+
+  it("restoreDatabase removes its working file and rethrows when the old database cannot be removed", async () => {
+    // A venue path that is a non-empty DIRECTORY cannot be removed by a plain file removal.
+    await mkdir(join(venueFile(), "held"), { recursive: true });
+    const logged: string[] = [];
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: (_level, event) => logged.push(event),
+      }),
+    ).rejects.toMatchObject({ code: "ERR_FS_EISDIR" });
+
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await stat(join(venueFile(), "held"))).isDirectory()).toBe(true);
+    expect(logged).toEqual([]);
+  });
+
+  it("setAsideExistingIdentity rethrows a failure other than a missing identity, leaving the identity in place", async () => {
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    // A non-empty directory where the set-aside copy goes: the rename cannot replace it.
+    await mkdir(join(stateDir, "trading.env.replaced", "held"), { recursive: true });
+    const logged: string[] = [];
+
+    await expect(
+      setAsideExistingIdentity(stateDir, (_level, event) => logged.push(event)),
+    ).rejects.toMatchObject({ code: "EISDIR" });
+
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    expect(logged).toEqual([]);
   });
 });

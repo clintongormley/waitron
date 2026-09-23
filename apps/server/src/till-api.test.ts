@@ -1756,6 +1756,123 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 });
 
+describe("POST /api/session refusals that never reach the PIN check", () => {
+  it("refuses a personId that is no UUID in any spelling, or not a string, as person.not_found", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    for (const [personId, named] of [
+      ["ana", "ana"],
+      [42, "42"],
+    ] as const) {
+      const res = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: deviceCookie },
+        body: JSON.stringify({ personId, pin: "5555" }),
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({
+        error: { code: "person.not_found", params: { personId: named } },
+      });
+    }
+  });
+
+  it("does not count an unknown person's attempts toward the wrong-PIN back-off", async () => {
+    const now = 7_000_000;
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), pinThrottle: createPinThrottle({ now: () => now }) },
+      collect([]),
+    );
+    const deviceCookie = await enrolTillDeviceCookie(suite.db);
+    const nobody = randomUUID();
+    // Past the three free failures a wrong PIN would open the wait window; an unknown person must not.
+    for (let i = 0; i < 5; i++) {
+      const res = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: deviceCookie },
+        body: JSON.stringify({ personId: nobody, pin: "0000" }),
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "person.not_found" } });
+    }
+  });
+});
+
+describe("malformed zone ids and simulation outcomes on the sale routes", () => {
+  it("POST /api/sales with a malformed zoneId is 400 shared.invalid_id", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+        zoneId: "not-a-zone",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
+    });
+  });
+
+  it("POST /api/pay with a malformed zoneId is 400 shared.invalid_id", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        id: randomUUID(),
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+        zoneId: "not-a-zone",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
+    });
+  });
+
+  it("the practice simulator takes a captured or declined outcome and refuses any other", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cardProvider: { provider: "simulator" } as PaymentProvider },
+      collect([]),
+    );
+    const id = await openSession(suite.db);
+    const pay = (simulationOutcome: string) =>
+      app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+        body: JSON.stringify({
+          id: randomUUID(),
+          lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+          simulationOutcome,
+          // A malformed zone makes an ACCEPTED outcome stop at the next screen, before any sale.
+          zoneId: "not-a-zone",
+        }),
+      });
+
+    for (const accepted of ["captured", "declined"]) {
+      expect(await (await pay(accepted)).json()).toMatchObject({
+        error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId" } },
+      });
+    }
+    const refused = await pay("exploded");
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "simulationOutcome" } },
+    });
+  });
+});
+
 // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
 // module directly), so every assertion using it rides the route's own requireSession + run wrapper.
 // Module-scoped (not just `/api/working-orders`'s own describe) because Task 9's place/prep/cancel

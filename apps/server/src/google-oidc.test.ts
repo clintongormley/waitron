@@ -56,4 +56,41 @@ describe("Google authorization-code exchange", () => {
       exchangeGoogleCode(config, { code: "code", verifier: "verifier", nonce: "nonce" }),
     ).rejects.toThrow("did not match");
   });
+
+  it("refuses when Google answers the exchange with an error status, without verifying anything", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }),
+        ),
+    );
+    await expect(
+      exchangeGoogleCode(config, { code: "code", verifier: "verifier", nonce: "nonce" }),
+    ).rejects.toThrow("Google authorization-code exchange failed");
+    expect(jwtVerify).not.toHaveBeenCalled();
+  });
+
+  it("refuses a successful exchange whose answer carries no ID token", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ access_token: "a" }))),
+    );
+    await expect(
+      exchangeGoogleCode(config, { code: "code", verifier: "verifier", nonce: "nonce" }),
+    ).rejects.toThrow("Google response omitted its ID token");
+    expect(jwtVerify).not.toHaveBeenCalled();
+  });
+
+  it("refuses a token that matches the ceremony but names no subject", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ id_token: "signed-token" }))),
+    );
+    jwtVerify.mockResolvedValue({ payload: { nonce: "nonce" } });
+    await expect(
+      exchangeGoogleCode(config, { code: "code", verifier: "verifier", nonce: "nonce" }),
+    ).rejects.toThrow("did not match");
+  });
 });

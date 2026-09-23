@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
@@ -13,6 +13,7 @@ import {
   encryptTotpSecret,
   hashPassword,
   persons,
+  verifyPin,
 } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
@@ -963,4 +964,247 @@ describe("mountMeApi — set your own locale", () => {
       error: { code: "locale.unsupported" },
     });
   });
+});
+
+describe("mountMeApi — own credentials and second factor", () => {
+  const PASSWORD = "current password";
+  let personCount = 0;
+
+  async function personWithPassword(
+    extra: Partial<typeof persons.$inferInsert> = {},
+  ): Promise<string> {
+    personCount += 1;
+    const [row] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: `Credential User ${personCount}`,
+        pinHash: hashPin("5555"),
+        role: "staff",
+        passwordHash: hashPassword(PASSWORD),
+        ...extra,
+      })
+      .returning({ id: persons.id });
+    return row!.id;
+  }
+
+  async function personRow(personId: string) {
+    const [row] = await suite.db.select().from(persons).where(eq(persons.id, personId));
+    return row!;
+  }
+
+  function capturingApp(overrides: Partial<MeApiDeps> = {}) {
+    const lines: Array<[string, string, Record<string, unknown> | undefined]> = [];
+    const log: Logger = (level, message, fields) => void lines.push([level, message, fields]);
+    const app = new Hono();
+    mountMeApi(
+      app,
+      {
+        db: suite.db,
+        cfg: { nodeId: NODE_ID },
+        venueLocale: VENUE_LOCALE,
+        modules: MODULES,
+        credentialKeyRing: PROFILE_KEY_RING,
+        ...overrides,
+      },
+      log,
+    );
+    return { app, lines };
+  }
+
+  it("changes the person's own PIN once the current password is confirmed", async () => {
+    const personId = await personWithPassword();
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
+      cookie: await cookieFor(personId),
+      body: { currentPassword: PASSWORD, pin: "8642" },
+    });
+    expect(res.status).toBe(204);
+    const row = await personRow(personId);
+    expect(verifyPin("8642", row.pinHash!)).toBe(true);
+    expect(verifyPin("5555", row.pinHash!)).toBe(false);
+  });
+
+  it("refuses a PIN change with the wrong current password (401 password.invalid)", async () => {
+    const personId = await personWithPassword();
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
+      cookie: await cookieFor(personId),
+      body: { currentPassword: "not the password", pin: "8642" },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    expect(verifyPin("5555", (await personRow(personId)).pinHash!)).toBe(true);
+  });
+
+  it("slows a person down after repeated wrong passwords (429 password.throttled)", async () => {
+    const personId = await personWithPassword();
+    const app = mountApp();
+    const cookie = await cookieFor(personId);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const res = await send(app, "PUT", "/management-api/session/me/pin", {
+        cookie,
+        body: { currentPassword: "wrong", pin: "8642" },
+      });
+      expect(res.status).toBe(401);
+    }
+    const throttled = await send(app, "PUT", "/management-api/session/me/pin", {
+      cookie,
+      body: { currentPassword: PASSWORD, pin: "8642" },
+    });
+    expect(throttled.status).toBe(429);
+    expect(await throttled.json()).toEqual({
+      error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
+    });
+  });
+
+  it("does not count a refusal that is not a wrong credential towards the slow-down", async () => {
+    const personId = await personWithPassword();
+    const app = mountApp();
+    const cookie = await cookieFor(personId);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await send(app, "PUT", "/management-api/session/me/pin", {
+        cookie,
+        body: { currentPassword: PASSWORD, pin: "1" },
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.too_short");
+    }
+  });
+
+  it("400s (management.request_invalid) a field that is not a string, naming the field", async () => {
+    const personId = await personWithPassword();
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
+      cookie: await cookieFor(personId),
+      body: { currentPassword: PASSWORD, pin: 8642 },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "pin" } },
+    });
+  });
+
+  it("enrols an authenticator, regenerates recovery codes and switches the authenticator off again", async () => {
+    const personId = await personWithPassword();
+    const app = mountApp();
+    const cookie = await cookieFor(personId);
+
+    const begun = await send(app, "POST", "/management-api/session/me/totp/begin", {
+      cookie,
+      body: { currentPassword: PASSWORD },
+    });
+    expect(begun.status).toBe(200);
+    const enrollment = (await begun.json()) as {
+      enrollmentId: string;
+      secret: string;
+      uri: string;
+      expiresAt: string;
+    };
+    expect(enrollment.uri).toContain(enrollment.secret);
+    expect((await personRow(personId)).totpSecret).toBeNull();
+
+    const finished = await send(app, "POST", "/management-api/session/me/totp/finish", {
+      cookie,
+      body: {
+        enrollmentId: enrollment.enrollmentId,
+        code: generateSync({ secret: enrollment.secret }),
+      },
+    });
+    expect(finished.status).toBe(200);
+    const firstCodes = ((await finished.json()) as { codes: string[] }).codes;
+    expect(firstCodes.length).toBeGreaterThan(0);
+    expect((await personRow(personId)).totpSecret).not.toBeNull();
+
+    const regenerated = await send(app, "POST", "/management-api/session/me/recovery-codes", {
+      cookie,
+      body: { currentPassword: PASSWORD, totp: generateSync({ secret: enrollment.secret }) },
+    });
+    expect(regenerated.status).toBe(200);
+    const secondCodes = ((await regenerated.json()) as { codes: string[] }).codes;
+    expect(secondCodes).toHaveLength(firstCodes.length);
+    expect(secondCodes).not.toEqual(firstCodes);
+
+    const disabled = await send(app, "DELETE", "/management-api/session/me/totp", {
+      cookie,
+      body: { currentPassword: PASSWORD, totp: generateSync({ secret: enrollment.secret }) },
+    });
+    expect(disabled.status).toBe(204);
+    expect((await personRow(personId)).totpSecret).toBeNull();
+  });
+
+  it("401s (totp.invalid) finishing an enrolment with a wrong code, leaving no authenticator", async () => {
+    const personId = await personWithPassword();
+    const app = mountApp();
+    const cookie = await cookieFor(personId);
+    const begun = await send(app, "POST", "/management-api/session/me/totp/begin", {
+      cookie,
+      body: { currentPassword: PASSWORD },
+    });
+    const { enrollmentId } = (await begun.json()) as { enrollmentId: string };
+
+    const res = await send(app, "POST", "/management-api/session/me/totp/finish", {
+      cookie,
+      body: { enrollmentId, code: "000000" },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "totp.invalid", params: {} } });
+    expect((await personRow(personId)).totpSecret).toBeNull();
+  });
+
+  it("unlinks the person's Google sign-in once the current password is confirmed", async () => {
+    const personId = await personWithPassword({ googleSubject: "google-subject-unlink" });
+    const res = await send(mountApp(), "DELETE", "/management-api/session/me/google", {
+      cookie: await cookieFor(personId),
+      body: { currentPassword: PASSWORD },
+    });
+    expect(res.status).toBe(204);
+    expect((await personRow(personId)).googleSubject).toBeNull();
+  });
+
+  it("400s (account_action.invalid) an email confirmation code that matches no pending change", async () => {
+    const personId = await personWithPassword();
+    const res = await send(mountApp(), "POST", "/management-api/session/me/profile/email/confirm", {
+      cookie: await cookieFor(personId),
+      body: { code: "123456" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "account_action.invalid", params: {} } });
+  });
+
+  it.each([
+    ["an Error", new Error("mail relay down"), "mail relay down"],
+    ["a bare string", "mail relay refused", "mail relay refused"],
+  ])(
+    "saves the profile but reports no verification email sent when sending throws %s",
+    async (_label, thrown, logged) => {
+      personCount += 1;
+      const personId = await personWithPassword({ email: `before-${personCount}@example.com` });
+      const sent: AccountEmail[] = [];
+      const { app, lines } = capturingApp({
+        sendAccountEmail: async (message) => {
+          sent.push(message);
+          throw thrown;
+        },
+      });
+      const res = await send(app, "PUT", "/management-api/session/me/profile", {
+        cookie: await cookieFor(personId),
+        body: {
+          displayName: `Credential User ${personCount}`,
+          firstNames: "Alex",
+          lastNames: "Rivera",
+          telephone: null,
+          email: `after-${personCount}@example.com`,
+          locale: "en-GB",
+          currentPassword: PASSWORD,
+        },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ emailVerificationSent: false });
+      expect(sent).toHaveLength(1);
+      expect(sent[0]!.actionUrl).toBe("/");
+      expect((await personRow(personId)).pendingEmail).toBe(`after-${personCount}@example.com`);
+      expect(lines).toContainEqual([
+        "error",
+        "account_email.send_failed",
+        { purpose: "email_change", error: logged },
+      ]);
+    },
+  );
 });

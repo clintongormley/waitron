@@ -286,4 +286,80 @@ describe("unit management routes", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it("GET /management-api/units/:id returns the one unit, and 404s an unknown one", async () => {
+    const created = (await (
+      await send("POST", "/management-api/units", {
+        name: { en: "portion" },
+        precision: 1,
+        abbreviation: { en: "pt" },
+      })
+    ).json()) as { id: string };
+    const res = await send("GET", `/management-api/units/${created.id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: created.id,
+      name: { en: "portion" },
+      precision: 1,
+      abbreviation: { en: "pt" },
+    });
+    const unknown = await send("GET", `/management-api/units/${crypto.randomUUID()}`);
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "unit.not_found" } });
+  });
+
+  it("400s a unit id that is not a uuid, naming it", async () => {
+    const res = await send("GET", "/management-api/units/not-a-uuid");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "UnitId", value: "not-a-uuid" } },
+    });
+  });
+
+  it("rejects a reassign whose target unitId is neither null nor a uuid", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", {
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      })
+    ).json()) as { id: string };
+    const p1 = await withTransaction(suite.db, async (tx) =>
+      seedProduct(tx, await seedCatalogue(tx), "A", unit.id),
+    );
+    for (const unitId of ["not-a-uuid", 7, undefined]) {
+      const response = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
+        productIds: [p1],
+        unitId,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "unitId" } },
+      });
+    }
+    const still = await send("GET", `/management-api/units/${unit.id}/products`);
+    expect(((await still.json()) as { id: string }[]).map((p) => p.id)).toEqual([p1]);
+  });
+
+  it("rejects an update whose precision is not a number, leaving the unit unchanged", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", {
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "kg" },
+      })
+    ).json()) as { id: string };
+    const response = await send("PATCH", `/management-api/units/${unit.id}`, { precision: "2" });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "precision" } },
+    });
+    expect(
+      (
+        (await (await send("GET", `/management-api/units/${unit.id}`)).json()) as {
+          precision: number;
+        }
+      ).precision,
+    ).toBe(3);
+  });
 });

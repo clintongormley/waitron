@@ -1,9 +1,13 @@
-import { mkdtemp, rm, stat, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
+import { sql } from "drizzle-orm";
+import { locations, type Database } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   PENDING_ADOPTION_FILE,
   readPendingAdoption,
@@ -11,6 +15,7 @@ import {
   writePendingAdoption,
   type PendingAdoption,
 } from "./finish-adoption.js";
+import { MIRROR_VIEWER_PERSON_ID } from "./mirror-session.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -136,5 +141,70 @@ describe("runFinishAdoption", () => {
     });
     expect(events).toContain("adoption.establish_failed");
     expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
+  });
+});
+
+describe("readPendingAdoption — unreadable record", () => {
+  it("rejects with the read error when the record's path is not a readable file", async () => {
+    const dir = await tempDir();
+    await mkdir(join(dir, PENDING_ADOPTION_FILE));
+    await expect(readPendingAdoption(dir)).rejects.toMatchObject({ code: "EISDIR" });
+  });
+});
+
+describe("runFinishAdoption — default steps on a migrated venue", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  const ring: KeyRing = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+
+  it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
+    await seedTenant(suite.db);
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const dir = await tempDir();
+    await writePendingAdoption(dir, {
+      ...PENDING,
+      locationId: location!.id,
+      filingModule: null,
+      reserved: {
+        modules: {},
+        series: [],
+        endorsement: { nodeId: STANDBY_NODE_ID, publicKey: "pub", endorsedBy: "e", signature: "s" },
+      },
+    });
+    const logged: unknown[] = [];
+
+    await runFinishAdoption({
+      ownerDb: suite.db,
+      ring,
+      stateDir: dir,
+      modules: [],
+      log: ((level: string, event: string, fields: unknown) =>
+        logged.push({ level, event, fields })) as never,
+    });
+
+    expect(logged).toEqual([
+      { level: "info", event: "adoption.established", fields: { nodeId: STANDBY_NODE_ID } },
+    ]);
+    const node = await suite.db.execute<{ name: string }>(
+      sql`select name from nodes where id = ${STANDBY_NODE_ID}`,
+    );
+    expect(node.rows).toEqual([{ name: "standby" }]);
+    const viewer = await suite.db.execute<{ role: string }>(
+      sql`select role from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+    );
+    expect(viewer.rows).toEqual([{ role: "admin" }]);
+    expect(await readPendingAdoption(dir)).toBeNull();
   });
 });

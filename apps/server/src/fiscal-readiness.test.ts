@@ -82,4 +82,46 @@ describe("fiscal activation readiness", () => {
       createFiscalReadinessStore(dir, vi.fn(), evidenceKey).assertReady(input),
     ).rejects.toMatchObject({ code: "setup.fiscal_test_required" });
   });
+
+  it("reuses accepted evidence for unchanged inputs instead of submitting again", async () => {
+    const dir = await stateDir();
+    const submit = vi.fn().mockResolvedValue("accepted");
+    const first = await createFiscalReadinessStore(dir, submit, evidenceKey).run(input);
+    const again = await createFiscalReadinessStore(dir, submit, evidenceKey).run(input);
+    expect(again).toEqual(first);
+    expect(submit).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["another evidence version", { version: 2 }],
+    ["a status other than accepted", { status: "rejected" }],
+    ["no binding", { binding: undefined }],
+    ["no test time", { testedAt: undefined }],
+    ["no signature", { mac: undefined }],
+  ])("ignores stored evidence with %s", async (_label, change) => {
+    const dir = await stateDir();
+    await createFiscalReadinessStore(dir, vi.fn().mockResolvedValue("accepted"), evidenceKey).run(
+      input,
+    );
+    const path = join(dir, "fiscal-readiness.json");
+    const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    await writeFile(path, JSON.stringify({ ...evidence, ...change }));
+
+    await expect(
+      createFiscalReadinessStore(dir, vi.fn(), evidenceKey).assertReady(input),
+    ).rejects.toMatchObject({ code: "setup.fiscal_test_required" });
+  });
+
+  it("treats unreadable stored evidence as absent and submits again", async () => {
+    const dir = await stateDir();
+    await writeFile(join(dir, "fiscal-readiness.json"), "not json");
+    const submit = vi.fn().mockResolvedValue("accepted");
+    const store = createFiscalReadinessStore(dir, submit, evidenceKey);
+    await expect(store.assertReady(input)).rejects.toMatchObject({
+      code: "setup.fiscal_test_required",
+    });
+    await expect(store.run(input)).resolves.toMatchObject({ status: "accepted" });
+    expect(submit).toHaveBeenCalledOnce();
+    await expect(store.assertReady(input)).resolves.toBeUndefined();
+  });
 });

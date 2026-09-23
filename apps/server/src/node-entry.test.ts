@@ -544,6 +544,38 @@ describe("runEntry", () => {
     expect(reported).toContain("non-error thrown: boot gave up");
   });
 
+  it("reports an Error that carries no stack with a placeholder in its place", async () => {
+    const reportFailure = vi.fn();
+    const stackless = new Error("boot failed without a stack");
+    stackless.stack = undefined;
+    await expect(
+      runEntry(
+        deps({ reportFailure, startServer: vi.fn<StartServer>(() => Promise.reject(stackless)) }),
+      ),
+    ).rejects.toBe(stackless);
+    const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(reported).toContain("Error: boot failed without a stack\n(no stack)");
+  });
+
+  it.each(["70000", "-1", "not-a-port"])(
+    "falls back to the default landing port when WAITRON_HTTP_LANDING_PORT is %s",
+    async (raw) => {
+      const serveRecovery = vi.fn<
+        (app: Hono, opts: { landing?: { landingPort?: number } }) => Promise<void>
+      >(() => Promise.resolve());
+      await runEntry(
+        deps({
+          baseEnv: { WAITRON_HTTP_LANDING_PORT: raw },
+          readRecoveryState: vi.fn(() =>
+            Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+          ),
+          serveRecovery,
+        }),
+      );
+      expect(serveRecovery.mock.calls[0]![1].landing?.landingPort).toBe(80);
+    },
+  );
+
   // `MAX_CAUSE_DEPTH` from `@waitron/shared`, the same bound `sqlStateOf` walks and for the same
   // reason — a self-referential `cause` must not spin.
   it("stops walking a self-referential cause rather than spinning", async () => {
@@ -845,6 +877,46 @@ describe("serveRecovery's landing listener", () => {
     }
     // Closing the recovery server cascades to the landing listener.
     await vi.waitFor(() => expect(close).toHaveBeenCalled());
+  });
+
+  it("swallows a landing listener that fails to close when the recovery server is torn down", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-landing3-"));
+    const app = recoveryApp({ state: FRESH, logDir: stateDir, onRetry: () => Promise.resolve() });
+    // A plain function, not `vi.fn`: a spy attaches its own handlers to a returned promise, which
+    // would mark the rejection handled whether or not the code under test does.
+    let closes = 0;
+    const close = (): Promise<void> => {
+      closes += 1;
+      return Promise.reject(new Error("landing close failed"));
+    };
+    const server = await serveRecovery(app, {
+      stateDir,
+      port: 0,
+      log: vi.fn(),
+      landing: {
+        landingPort: 80,
+        httpHost: "0.0.0.0",
+        stateDir,
+        httpPort: 8080,
+        boxAddresses: undefined,
+        tls: undefined,
+      },
+      startLanding: vi.fn(() => ({ close })),
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await vi.waitFor(() => expect(closes).toBe(1));
+      // One macrotask so an unhandled rejection, if any, is reported before the listener goes.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 
   it("starts no landing listener when none is configured", async () => {

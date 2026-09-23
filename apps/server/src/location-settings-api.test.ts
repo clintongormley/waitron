@@ -10,6 +10,8 @@ import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSale } from "./till-sale.js";
+import type { FiscalContribution } from "@waitron/fiscal";
+import { AppError } from "@waitron/shared";
 
 /**
  * The venue's invoice operation description, over the route.
@@ -53,6 +55,12 @@ function app(locationId?: string) {
   );
   return app;
 }
+function appWithFiscal(fiscal: FiscalContribution) {
+  const app = new Hono();
+  mountLocationSettingsApi(app, { db: suite.db, cfg: venue.cfg, fiscal }, () => {});
+  return app;
+}
+const realFiscal = () => venueFiscalSelection(ALL_MODULES, "ES-common").contribution!;
 const request = (cookie: string, operationDescription: unknown) => ({
   method: "PUT",
   headers: { cookie, "content-type": "application/json" },
@@ -183,4 +191,95 @@ describe("location invoice settings", () => {
       expect((await read.json()).operationDescription).toBe("Venta en establecimiento");
     },
   );
+  it("refuses a read when the configured location does not exist", async () => {
+    const response = await app("no-such-location").request("/management-api/location-settings", {
+      headers: { cookie: venue.managerCookie },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "locationId" } },
+    });
+  });
+
+  it("refuses a write when the configured location does not exist", async () => {
+    const response = await app("no-such-location").request(
+      "/management-api/location-settings",
+      request(venue.managerCookie, "Venta de comidas"),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "locationId" } },
+    });
+  });
+
+  it.each([
+    ["an object without the field", {}],
+    ["a bare string", "Venta de comidas"],
+    ["null", null],
+  ])("refuses a body that is %s", async (_label, body) => {
+    const response = await app().request("/management-api/location-settings", {
+      method: "PUT",
+      headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "operationDescription" } },
+    });
+  });
+
+  it("passes on a validator refusal that is not a field refusal instead of blaming the field", async () => {
+    const real = realFiscal();
+    const response = await appWithFiscal({
+      ...real,
+      venueFields: {
+        ...real.venueFields!,
+        validateOperationDescription: () => {
+          throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
+        },
+      },
+    }).request("/management-api/location-settings", request(venue.managerCookie, "Venta"));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    });
+  });
+
+  it("answers an internal error when the validator fails unexpectedly", async () => {
+    const real = realFiscal();
+    const response = await appWithFiscal({
+      ...real,
+      venueFields: {
+        ...real.venueFields!,
+        validateOperationDescription: () => {
+          throw new Error("validator crashed");
+        },
+      },
+    }).request("/management-api/location-settings", request(venue.managerCookie, "Venta"));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+    const read = await app().request("/management-api/location-settings", {
+      headers: { cookie: venue.managerCookie },
+    });
+    expect((await read.json()).operationDescription).toBe("Venta en establecimiento");
+  });
+
+  it("saves any non-blank description when the fiscal regime declares no venue-field rules", async () => {
+    const withoutRules: FiscalContribution = { ...realFiscal(), venueFields: undefined };
+    try {
+      const response = await appWithFiscal(withoutRules).request(
+        "/management-api/location-settings",
+        request(venue.managerCookie, "a".repeat(501)),
+      );
+      expect(response.status).toBe(204);
+      const read = await app().request("/management-api/location-settings", {
+        headers: { cookie: venue.managerCookie },
+      });
+      expect((await read.json()).operationDescription).toBe("a".repeat(501));
+    } finally {
+      await suite.db.execute(
+        sql`update locations set operation_description = 'Venta en establecimiento' where id = ${venue.cfg.locationId}`,
+      );
+    }
+  });
 });

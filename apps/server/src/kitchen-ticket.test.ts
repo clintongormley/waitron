@@ -371,3 +371,21 @@ describe("kitchen paper layout", () => {
     expect(lines).toContain("  + Salsa de setas silvestres");
   });
 });
+
+describe("a note made only of control characters", () => {
+  it("prints no note sub-line, leaving the dish exactly as a dish with no note", () => {
+    const ticket = (note?: string) =>
+      formatKitchenTicket(
+        {
+          scope: "station",
+          stationName: "Cocina",
+          tableLabel: "Mesa 4",
+          orderNumber: "A-17",
+          firedAt: new Date(2026, 7, 17, 14, 30),
+          items: [{ qty: 1, name: "Steak", ...(note === undefined ? {} : { note }) }],
+        },
+        KITCHEN_80,
+      );
+    expect([...ticket("\r\n\t\u0007")]).toEqual([...ticket()]);
+  });
+});

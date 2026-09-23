@@ -145,4 +145,11 @@ describe("nextFireMs", () => {
     expect(new Date(fire).toISOString()).toBe("2026-06-01T00:30:00.000Z");
     expect(localHour(fire, MADRID.timeZone)).toMatchObject({ hour: 2, minute: 30 });
   });
+
+  it("falls back to a day from now when no weekday is allowed", () => {
+    const now = new Date("2026-09-09T10:00:00Z");
+    expect(
+      nextFireMs({ kind: "wall-clock", days: [], at: { hour: 3, minute: 0 } }, MADRID, now, "n1"),
+    ).toBe(now.getTime() + 24 * 60 * 60 * 1000);
+  });
 });

@@ -1001,6 +1001,29 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
       error: { code: "device.binding_invalid", params: { field: "receiptPrinterId" } },
     });
   });
+
+  it("refuses a non-boolean hasCashDrawer, and a body naming no hardware field, leaving the row as it was", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja screens");
+    const before = await deviceBindings(deviceId);
+
+    for (const [body, field] of [
+      [{ hasCashDrawer: "yes" }, "hasCashDrawer"],
+      [{}, "hardware"],
+      [{ somethingElse: true }, "hardware"],
+    ] as const) {
+      const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
+        cookie: venue.managerCookie,
+        body,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await deviceBindings(deviceId)).toEqual(before);
+  });
 });
 
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {

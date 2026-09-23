@@ -62,6 +62,19 @@ describe("writeTradingEnv", () => {
     expect(env).not.toContain("WAITRON_ONBOARDING_INTENT");
   });
 
+  it("writes no account key for a configuration that carries none", async () => {
+    const d = await newDir();
+    const env = await readFile(await writeTradingEnv(d, { ...cfg, accountKey: undefined }), "utf8");
+    expect(env).toBe(
+      "WAITRON_TILL_TILL_ID=till-2\n" +
+        "WAITRON_TILL_NODE_ID=node-3\n" +
+        "WAITRON_TILL_SERIES_ID=series-4\n" +
+        "WAITRON_TILL_LOCATION_ID=location-5\n" +
+        "WAITRON_ENV=production\n" +
+        "WAITRON_ONBOARDING_INTENT=live\n",
+    );
+  });
+
   it("keeps a development Live walkthrough on WAITRON_ENV=dev after restart", async () => {
     const d = await newDir();
     const env = await readFile(

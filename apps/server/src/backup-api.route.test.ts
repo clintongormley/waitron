@@ -481,6 +481,44 @@ describe("backup admin routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
   }, 60_000);
 
+  it("rotate fails loud when the reloaded key is not the one requested", async () => {
+    const dest = makeDestDir();
+    const stateDir = await makeStateDir();
+    const pinned: BackupConfig = {
+      destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
+      recoveryKey: KEY_1,
+      schedule: DAILY_AT_0330,
+      retain: 7,
+      retainDays: 30,
+      staleAfterMs: 2 * 24 * 60 * 60 * 1000,
+      keyRotatedAt: undefined,
+    };
+    const sup = new BackupSupervisor({
+      buildConfig: async () => pinned, // ignores the file the route writes, so KEY_1 stays effective
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir,
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: () => {},
+    });
+    cleanup.push(() => sup.stop());
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ recoveryKey: KEY_2 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
+    expect(sup.current().recoveryKey).toBe(KEY_1);
+  }, 60_000);
+
   it("rejects malformed apply/rotate bodies and unconfigured rotate without touching disk", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const app = buildApp(makeSupervisor(sc), sc.stateDir); // never reloaded → no config

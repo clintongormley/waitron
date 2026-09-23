@@ -136,4 +136,59 @@ describe("createOriginAllowlist", () => {
       false,
     );
   });
+  it("allows nothing for a contact address that does not parse", async () => {
+    const allow = createOriginAllowlist({
+      advertisedOrigin: "https://box.deli.test",
+      readMembership: () => Promise.resolve(doc(["not a url", "https://cloud.deli.test"])),
+      devMode: false,
+      now: () => 0,
+    });
+    expect(await allow("https://cloud.deli.test")).toBe(true);
+    expect(await allow("not a url")).toBe(false);
+    expect(await allow("null")).toBe(false);
+  });
+
+  it("retries the membership read on the next call after a failed one, rather than caching the failure", async () => {
+    const read = vi
+      .fn<() => Promise<SignedMembershipDocument | null>>()
+      .mockRejectedValueOnce(new Error("membership read failed"))
+      .mockResolvedValue(doc(["https://cloud.deli.test"]));
+    const allow = createOriginAllowlist({
+      advertisedOrigin: "https://box.deli.test",
+      readMembership: read,
+      devMode: false,
+      now: () => 0,
+    });
+    await expect(allow("https://cloud.deli.test")).rejects.toThrow("membership read failed");
+    expect(await allow("https://cloud.deli.test")).toBe(true);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let an older read's failure discard a newer cache entry", async () => {
+    let t = 0;
+    let failFirst!: (e: Error) => void;
+    let resolveSecond!: (d: SignedMembershipDocument) => void;
+    const read = vi
+      .fn<() => Promise<SignedMembershipDocument | null>>()
+      .mockImplementationOnce(() => new Promise((_, reject) => (failFirst = reject)))
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveSecond = resolve)))
+      .mockResolvedValue(doc([]));
+    const allow = createOriginAllowlist({
+      advertisedOrigin: "https://box.deli.test",
+      readMembership: read,
+      devMode: false,
+      now: () => t,
+      ttlMs: 10,
+    });
+    const first = allow("https://cloud.deli.test");
+    t = 100;
+    const second = allow("https://cloud.deli.test");
+    resolveSecond(doc(["https://cloud.deli.test"]));
+    failFirst(new Error("older read failed"));
+    await expect(first).rejects.toThrow("older read failed");
+    expect(await second).toBe(true);
+    t = 105;
+    expect(await allow("https://cloud.deli.test")).toBe(true);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
 });

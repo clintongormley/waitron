@@ -474,6 +474,23 @@ describe("mountPurchasingApi — update", () => {
     expect(body.lines.map((l) => l.rate)).toEqual(["10.00", "21.00"]);
   });
 
+  it("PATCH /:id with a partial header changes only the named field and keeps the note", async () => {
+    const app = mountApp();
+    const created = await createVia(app, { supplierInvoiceNumber: "PARTIAL-1" });
+    const res = await send(app, "PATCH", `/management-api/purchase-invoices/${created.id}`, {
+      body: { header: { supplierName: "Solo el nombre" } },
+    });
+    expect(res.status).toBe(204);
+    const read = await send(app, "GET", `/management-api/purchase-invoices/${created.id}`);
+    expect(await read.json()).toMatchObject({
+      supplierTaxId: "B12345678",
+      supplierName: "Solo el nombre",
+      supplierInvoiceNumber: "PARTIAL-1",
+      total: "121.00",
+      note: "Compra de género",
+    });
+  });
+
   it("PATCH /:id with an empty body is a 204 no-op that bumps the record", async () => {
     const app = mountApp();
     const created = await createVia(app, { supplierInvoiceNumber: "NOOP-1" });

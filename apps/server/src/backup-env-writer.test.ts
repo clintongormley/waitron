@@ -105,3 +105,47 @@ describe("assertStorableRecord", () => {
     );
   });
 });
+
+describe("assertStorableRecord — values the env file would read back differently", () => {
+  function refusal(record: Record<string, string>): unknown {
+    try {
+      assertStorableRecord(record);
+    } catch (error) {
+      return error;
+    }
+    throw new Error("expected assertStorableRecord to refuse the record");
+  }
+
+  it("refuses a directory with a trailing space, which reading the file back would drop", () => {
+    expect(refusal({ WAITRON_BACKUP_DIR: "/srv/backups " })).toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+  });
+
+  it("refuses a record whose key carries an equals sign, which would read back as another key", () => {
+    expect(refusal({ "WAITRON_BACKUP=DIR": "/srv/backups" })).toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+  });
+
+  it("does not write backup.env for a directory that would not read back unchanged", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "backup-env-"));
+    await expect(
+      writeBackupEnv(dir, {
+        destinationDir: "/mnt/usb ",
+        recoveryKey: "abcDEF-_1234567890",
+        schedule: { kind: "interval", ms: 3_600_000 },
+        retention: { count: 7, days: 30 },
+        keyRotatedAt: undefined,
+      }),
+    ).rejects.toMatchObject({
+      code: "backup.destinations_invalid",
+      params: { reason: "round_trip" },
+    });
+    await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+});

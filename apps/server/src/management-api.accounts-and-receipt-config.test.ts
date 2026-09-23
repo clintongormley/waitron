@@ -49,6 +49,7 @@
  * kitchen stations and kitchen courses — plus a two-case sign-in block that mints the cookie those
  * routes need.
  */
+import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
@@ -61,7 +62,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
-import { mountManagementApi } from "./management-api.js";
+import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
@@ -1227,5 +1228,428 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect((await receiptNull.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management.request_invalid" },
     });
+  });
+});
+
+describe("Management API — Google sign-in edges, credential checks and staff lifecycle", () => {
+  const GOOGLE_OIDC = {
+    clientId: "client.apps.googleusercontent.com",
+    clientSecret: "secret",
+    redirectUri: "http://localhost/management-api/google/callback",
+  };
+
+  function mountWith(extra: Partial<ManagementApiDeps>, log: Logger = noopLog): Hono {
+    const app = new Hono();
+    mountManagementApi(
+      app,
+      {
+        db: suite.db,
+        cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        accountActionCodeKey: ACCOUNT_ACTION_CODE_KEY,
+        ...extra,
+      },
+      log,
+    );
+    return app;
+  }
+
+  const json = { "content-type": "application/json" };
+
+  it("reports whether Google sign-in is configured, with the privacy notice address", async () => {
+    const off = await mountWith({}).request("/management-api/google/config");
+    expect(await off.json()).toEqual({ configured: false });
+    const on = await mountWith({
+      googleOidc: GOOGLE_OIDC,
+      privacyNoticeUrl: "https://example.test/privacy",
+    }).request("/management-api/google/config");
+    expect(await on.json()).toEqual({
+      configured: true,
+      privacyNoticeUrl: "https://example.test/privacy",
+    });
+  });
+
+  it("refuses every Google route with google.invalid when Google is not configured", async () => {
+    await setupTenant();
+    const exchange = vi.fn<typeof exchangeGoogleCode>();
+    const app = mountWith({ googleCodeExchange: exchange });
+    const cookie = await login(app, MANAGER_EMAIL);
+    // A live ceremony left over from when Google was configured: the callback must not spend it.
+    const state = "state-from-an-earlier-configuration";
+    const stateHash = createHash("sha256").update(state, "utf8").digest("hex");
+    await suite.db.execute(sql`
+      insert into google_oidc_states (id, person_id, mode, state_hash, nonce, verifier, expires_at)
+      values (${randomUUID()}, null, 'login', ${stateHash}, 'nonce', 'verifier',
+              ${new Date(Date.now() + 5 * 60_000).toISOString()})`);
+    const responses = [
+      await app.request("/management-api/google/login", { method: "POST" }),
+      await app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ currentPassword: PASSWORD }),
+      }),
+      await app.request(`/management-api/google/callback?state=${state}&code=c`, {
+        headers: { cookie: `waitron_google_flow=${state}` },
+      }),
+    ];
+    for (const res of responses) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: { code: "google.invalid", params: {} } });
+    }
+    expect(exchange).not.toHaveBeenCalled();
+    const states = await suite.db.execute<{ state_hash: string }>(
+      sql`select state_hash from google_oidc_states`,
+    );
+    expect(states.rows).toEqual([{ state_hash: stateHash }]);
+  });
+
+  it("refuses a Google callback missing its state or its code without spending the ceremony", async () => {
+    await setupTenant();
+    const exchange = vi
+      .fn<typeof exchangeGoogleCode>()
+      .mockResolvedValue({ subject: "google-subject-unlinked" });
+    const app = mountApp(undefined, undefined, { exchange });
+    const started = await app.request("/management-api/google/login", { method: "POST" });
+    const flowCookie = started.headers.get("set-cookie")!.split(";")[0]!;
+    const state = encodeURIComponent(
+      new URL(
+        ((await started.json()) as { authorizationUrl: string }).authorizationUrl,
+      ).searchParams.get("state")!,
+    );
+    for (const query of ["code=c", `state=${state}`, "state=&code=c", `state=${state}&code=`]) {
+      const res = await app.request(`/management-api/google/callback?${query}`, {
+        headers: { cookie: flowCookie },
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: { code: "google.invalid", params: {} } });
+    }
+    expect(exchange).not.toHaveBeenCalled();
+    // The state was never claimed, so the same ceremony still reaches the code exchange.
+    await app.request(`/management-api/google/callback?state=${state}&code=c`, {
+      headers: { cookie: flowCookie },
+    });
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a Google callback whose code exchange fails, and signs nobody in", async () => {
+    await setupTenant();
+    const exchange = vi
+      .fn<typeof exchangeGoogleCode>()
+      .mockRejectedValue(new Error("token endpoint unreachable"));
+    const app = mountApp(undefined, undefined, { exchange });
+    const started = await app.request("/management-api/google/login", { method: "POST" });
+    const url = new URL(((await started.json()) as { authorizationUrl: string }).authorizationUrl);
+    const callback = await app.request(
+      `/management-api/google/callback?state=${encodeURIComponent(url.searchParams.get("state")!)}&code=code`,
+      { headers: { cookie: started.headers.get("set-cookie")!.split(";")[0]! } },
+    );
+    expect(callback.status).toBe(401);
+    expect(await callback.json()).toEqual({ error: { code: "google.invalid", params: {} } });
+    expect(callback.headers.get("set-cookie") ?? "").not.toContain("waitron_management_session=");
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a link ceremony whose stored state names no person, linking nobody", async () => {
+    await setupTenant();
+    const exchange = vi
+      .fn<typeof exchangeGoogleCode>()
+      .mockResolvedValue({ subject: "google-subject-orphan" });
+    const app = mountApp(undefined, undefined, { exchange });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = await app.request("/management-api/session/me/google", {
+      method: "POST",
+      headers: { cookie, ...json },
+      body: JSON.stringify({ currentPassword: PASSWORD, totp: "000000" }),
+    });
+    expect(startLink.status).toBe(200);
+    await suite.db.execute(sql`update google_oidc_states set person_id = null`);
+    const url = new URL(
+      ((await startLink.json()) as { authorizationUrl: string }).authorizationUrl,
+    );
+    const callback = await app.request(
+      `/management-api/google/callback?state=${encodeURIComponent(url.searchParams.get("state")!)}&code=link-code`,
+      { headers: { cookie: startLink.headers.get("set-cookie")!.split(";")[0]! } },
+    );
+    expect(callback.status).toBe(401);
+    expect(await callback.json()).toEqual({ error: { code: "google.invalid", params: {} } });
+    const linked = await suite.db.execute<{ count: number }>(
+      sql`select count(*) as count from persons where google_subject is not null`,
+    );
+    expect(linked.rows[0]!.count).toBe(0);
+  });
+
+  it("throttles repeated wrong current passwords on a credential change", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = (currentPassword: unknown) =>
+      app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword }),
+      });
+    for (let i = 0; i < 4; i++) {
+      const wrong = await startLink("not the password");
+      expect(wrong.status).toBe(401);
+      expect(await wrong.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    }
+    const blocked = await startLink(PASSWORD);
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ error: { code: "password.throttled" } });
+  });
+
+  it("refuses a Google link whose current password is missing or not text as password.invalid", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+    for (const body of [{}, { currentPassword: 12345 }]) {
+      const res = await app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
+  it("does not count a credential change that failed for another reason towards the throttle", async () => {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const startLink = () =>
+      app.request("/management-api/session/me/google", {
+        method: "POST",
+        headers: { cookie, ...json },
+        body: JSON.stringify({ currentPassword: PASSWORD }),
+      });
+    await suite.db.execute(sql`alter table google_oidc_states rename to google_oidc_states_away`);
+    try {
+      for (let i = 0; i < 5; i++) expect((await startLink()).status).toBe(500);
+    } finally {
+      await suite.db.execute(sql`alter table google_oidc_states_away rename to google_oidc_states`);
+    }
+    expect((await startLink()).status).toBe(200);
+  });
+
+  it("refuses a login whose recovery code is not a string as password.invalid, with no cookie", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const res = await app.request("/management-api/session", {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD, recoveryCode: 12345678 }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("acknowledges a password reset with no usable email and sends nothing", async () => {
+    await setupTenant();
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    for (const body of [{}, { email: 42 }]) {
+      const res = await app.request("/management-api/password-reset", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify(body),
+      });
+      expect(res.status).toBe(202);
+    }
+    expect(sent).toEqual([]);
+  });
+
+  it("inspects a password-reset token, and refuses an unknown purpose", async () => {
+    await setupTenant();
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    await app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: json,
+      body: JSON.stringify({ email: STAFF_EMAIL }),
+    });
+    const token = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
+    const inspect = (purpose: string) =>
+      app.request("/management-api/account-actions/inspect", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ token, purpose }),
+      });
+    const good = await inspect("password_reset");
+    expect(good.status).toBe(200);
+    expect(await good.json()).toEqual({ email: STAFF_EMAIL, purpose: "password_reset" });
+    const bogus = await inspect("promotion");
+    expect(bogus.status).toBe(400);
+    expect(await bogus.json()).toEqual({ error: { code: "account_action.invalid", params: {} } });
+  });
+
+  it("refuses an invitation whose telephone is neither text nor null, creating nobody", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { ...json, cookie },
+      body: JSON.stringify(invitationBody("Phoneless", "phoneless@x.com", { telephone: 600 })),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "displayName|firstNames|lastNames|role|telephone" },
+      },
+    });
+    expect(await countPersonsNamed("Phoneless")).toBe(0);
+  });
+
+  it("reports an invitation as not sent, and logs it, when the mailer fails", async () => {
+    await setupTenant();
+    const log = vi.fn<Logger>();
+    const app = mountWith(
+      {
+        sendAccountEmail: async () => {
+          throw new Error("smtp://user:secret@mail.example refused");
+        },
+      },
+      log,
+    );
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { ...json, cookie },
+      body: JSON.stringify(invitationBody("Unmailed", "unmailed@x.com")),
+    });
+    expect(res.status).toBe(201);
+    const created = (await res.json()) as { id: string; invitationSent: boolean };
+    expect(created.invitationSent).toBe(false);
+    expect(await countPersonsNamed("Unmailed")).toBe(1);
+    expect(log).toHaveBeenCalledWith("error", "account_email.send_failed", {
+      purpose: "invitation",
+      personId: created.id,
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("secret");
+  });
+
+  it("does not resend an invitation twice within the cooldown", async () => {
+    await setupTenant();
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const created = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { ...json, cookie },
+      body: JSON.stringify(invitationBody("Resent", "resent@x.com")),
+    });
+    const { id } = (await created.json()) as { id: string };
+    const resend = () =>
+      app.request(`/management-api/staff/${id}/invitation`, {
+        method: "POST",
+        headers: { cookie },
+      });
+    expect(await (await resend()).json()).toEqual({ invitationSent: true });
+    expect(await (await resend()).json()).toEqual({ invitationSent: false });
+    expect(sent).toHaveLength(2);
+  });
+
+  it("refuses an administrative edit with a non-text field or telephone, changing nothing", async () => {
+    const { staffId } = await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const details = {
+      displayName: "Grace",
+      firstNames: "Grace Brewster",
+      lastNames: "Hopper",
+      telephone: null,
+      email: "grace@example.com",
+      role: "supervisor",
+      status: "active",
+    };
+    for (const [override, field] of [
+      [{ lastNames: 7 }, "lastNames"],
+      [{ email: null }, "email"],
+      [{ telephone: 600 }, "telephone"],
+    ] as const) {
+      const res = await app.request(`/management-api/staff/${staffId}`, {
+        method: "PUT",
+        headers: { ...json, cookie },
+        body: JSON.stringify({ ...details, ...override }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await countPersonsNamed("Grace")).toBe(0);
+    expect(await countPersonsNamed("The Clerk")).toBe(1);
+  });
+
+  it("deactivates a person, then reactivates them as pending with one fresh invitation", async () => {
+    const { staffId } = await setupTenant();
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    const cookie = await login(app, MANAGER_EMAIL);
+    const status = async () =>
+      (
+        await suite.db.execute<{ status: string }>(
+          sql`select status from persons where id = ${staffId}`,
+        )
+      ).rows[0]!.status;
+
+    const deactivated = await app.request(`/management-api/staff/${staffId}/deactivate`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(deactivated.status).toBe(204);
+    expect(await status()).toBe("suspended");
+
+    const reactivate = () =>
+      app.request(`/management-api/staff/${staffId}/reactivate`, {
+        method: "POST",
+        headers: { cookie },
+      });
+    const first = await reactivate();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ invitationSent: true });
+    expect(await status()).toBe("pending");
+    expect(sent.map((m) => [m.purpose, m.email])).toEqual([["invitation", STAFF_EMAIL]]);
+
+    const repeated = await reactivate();
+    expect(await repeated.json()).toEqual({ invitationSent: false });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("refuses deactivation and reactivation to a staff session and for a malformed id", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp();
+    const staffCookie = await login(app, STAFF_EMAIL);
+    const managerCookie = await login(app, MANAGER_EMAIL);
+    for (const action of ["deactivate", "reactivate"]) {
+      const forbidden = await app.request(`/management-api/staff/${managerId}/${action}`, {
+        method: "POST",
+        headers: { cookie: staffCookie },
+      });
+      expect(forbidden.status).toBe(403);
+      expect(await forbidden.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+      const malformed = await app.request(`/management-api/staff/not-a-uuid/${action}`, {
+        method: "POST",
+        headers: { cookie: managerCookie },
+      });
+      expect(malformed.status).toBe(404);
+      expect(await malformed.json()).toMatchObject({ error: { code: "person.not_found" } });
+    }
   });
 });

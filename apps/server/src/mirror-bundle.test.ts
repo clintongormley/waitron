@@ -1,20 +1,27 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readMembershipTrustSet, stampDeployment, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { canonicalize, generateNodeKeyPair, verifyBytes } from "@waitron/membership";
-import { parseModuleConfig } from "@waitron/module";
+import { parseModuleConfig, type WaitronModule } from "@waitron/module";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { writeModuleConfig } from "./module-config.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
+
+// The module list, as a mutable copy of the real one: the one case that needs a module the shipped
+// list does not have adds it for its own duration.
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return { ...actual, ALL_MODULES: [...actual.ALL_MODULES] };
+});
 
 /**
  * `assembleMirrorBundle`, the primary side, on the engine the box now runs.
@@ -234,6 +241,35 @@ describe("assembleMirrorBundle (primary side)", () => {
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
     expect(withoutKey.wireguardPublicKey).toBeUndefined();
+  });
+
+  it("carries a reserving module's state even when it reserves no invoice series", async () => {
+    const seriesless = {
+      name: "test-standby-without-series",
+      tier: "toggleable",
+      provisioning: {
+        standby: {
+          reserve: async () => ({ state: { marker: "reserved" } }),
+          establish: async () => {},
+        },
+      },
+    } as unknown as WaitronModule;
+    (ALL_MODULES as WaitronModule[]).push(seriesless);
+    try {
+      const bundle = await assembleMirrorBundle({
+        ...baseDeps(),
+        designated,
+        standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      });
+      const r = bundle.reservedIdentity;
+      expect(r.modules["test-standby-without-series"]).toEqual({ marker: "reserved" });
+      const fiscal = r.modules["fiscal-verifactu"] as { numeroInstalacion: number };
+      expect(r.series.map((s) => s.code).sort()).toEqual(
+        [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
+      );
+    } finally {
+      (ALL_MODULES as WaitronModule[]).splice(ALL_MODULES.indexOf(seriesless), 1);
+    }
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {

@@ -33,4 +33,22 @@ describe("verbosity controller", () => {
     vi.advanceTimersByTime(50_000);
     expect(c.current()).toBe("info");
   });
+
+  it("still raises and reverts under a timer host that hands back a plain number", () => {
+    const pending: Array<() => void> = [];
+    vi.stubGlobal("setTimeout", (fn: () => void) => {
+      pending.push(fn);
+      return 7;
+    });
+    vi.stubGlobal("clearTimeout", () => {});
+    try {
+      const c = createVerbosityController({ defaultLevel: "info", now });
+      expect(() => c.raise("debug", 60_000)).not.toThrow();
+      expect(c.current()).toBe("debug");
+      pending[0]!();
+      expect(c.current()).toBe("info");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

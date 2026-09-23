@@ -32,6 +32,7 @@ import type { BackupConfig } from "./backup-config.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 // One migrated venue directory, built once and COPIED per test that needs its own. The sweep only
@@ -533,5 +534,139 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     await new Promise((r) => setTimeout(r, 300));
     expect(sup.current().enabled).toBe(false); // no running duty (#db torn down / never assigned)
     expect(opened).toBe(closed); // every opened venue was closed — nothing leaked
+  }, 60_000);
+});
+
+describe("BackupSupervisor — stop() landing inside a reload, and a worker that fails", () => {
+  function gate() {
+    let release!: () => void;
+    let entered!: () => void;
+    const released = new Promise<void>((r) => {
+      release = r;
+    });
+    const reached = new Promise<void>((r) => {
+      entered = r;
+    });
+    return { release, entered, released, reached };
+  }
+
+  it("adopts no config and opens nothing when stop() lands while the config is being read", async () => {
+    const dest = await makeDestDir();
+    const reading = gate();
+    let opens = 0;
+    const sup = new BackupSupervisor({
+      buildConfig: async () => {
+        reading.entered();
+        await reading.released;
+        return localFsConfig([dest], STRONG_KEY_1);
+      },
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: () => {},
+      openVenue: async (dir) => {
+        opens += 1;
+        return openVenueDatabase(dir);
+      },
+    });
+    const reloading = sup.reload();
+    await reading.reached;
+    await sup.stop();
+    reading.release();
+    await reloading;
+
+    expect(opens).toBe(0);
+    expect(sup.current()).toMatchObject({ enabled: false, destinations: [], schedule: undefined });
+  });
+
+  it("closes the venue it just opened, even if closing fails, when stop() lands during the open", async () => {
+    const dest = await makeDestDir();
+    const opening = gate();
+    let closes = 0;
+    const logs: LogLine[] = [];
+    const sup = new BackupSupervisor({
+      buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: (level, event) => logs.push({ level, event }),
+      openVenue: async () => {
+        opening.entered();
+        await opening.released;
+        return {
+          close: async () => {
+            closes += 1;
+            throw new Error("closing failed");
+          },
+        } as unknown as VenueDatabase;
+      },
+    });
+    const reloading = sup.reload();
+    await opening.reached;
+    await sup.stop();
+    opening.release();
+
+    await expect(reloading).resolves.toBeUndefined();
+    expect(closes).toBe(1);
+    expect(sup.current().enabled).toBe(false);
+    expect(logs).toEqual([]);
+  });
+
+  it("logs a sweep that rejects as backup.worker_rejected, and stop() still settles when the handle will not close", async () => {
+    const dest = await makeDestDir();
+    const lines: Array<{ level: string; event: string; fields: unknown }> = [];
+    let closes = 0;
+    const sup = new BackupSupervisor({
+      buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: (level, event, fields) => lines.push({ level, event, fields }),
+      openVenue: async (dir) => {
+        const store = await openVenueDatabase(dir);
+        return {
+          venue: store.venue,
+          node: store.node,
+          close: async () => {
+            closes += 1;
+            await store.close();
+            throw new Error("closing failed");
+          },
+        };
+      },
+      // The sweep's wait between copies is outside its per-tick handling, so a failing wait rejects
+      // the whole sweep.
+      sleep: () => Promise.reject(new AppError("backup.reload_in_progress", {})),
+    });
+    try {
+      await sup.reload();
+      await poll(async () =>
+        lines.some((l) => l.event === "backup.worker_rejected") ? true : undefined,
+      );
+      expect(lines.find((l) => l.event === "backup.worker_rejected")).toEqual({
+        level: "error",
+        event: "backup.worker_rejected",
+        fields: { errorCode: "backup.reload_in_progress" },
+      });
+    } finally {
+      await expect(sup.stop()).resolves.toBeUndefined();
+    }
+    expect(closes).toBe(1);
+    expect(sup.current().enabled).toBe(false);
   }, 60_000);
 });

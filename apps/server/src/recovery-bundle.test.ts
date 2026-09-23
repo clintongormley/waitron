@@ -176,3 +176,45 @@ describe("recovery-bundle envelope", () => {
     );
   });
 });
+
+/** The error `fn` throws, so a test can pin its code AND params rather than only its message. */
+function thrown(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a throw");
+}
+
+describe("recovery-bundle envelope — refusals past the shape check", () => {
+  it("turns a key-derivation refusal on a shape-valid envelope into bundle_invalid (malformed)", () => {
+    const env = JSON.parse(encryptBundle(FILES, PASS));
+    // In every bound the shape check applies, but scrypt accepts only a power of two.
+    env.kdf.N = 3;
+    expect(thrown(() => decryptBundle(JSON.stringify(env), PASS))).toMatchObject({
+      code: "recovery.bundle_invalid",
+      params: { reason: "malformed" },
+    });
+  });
+
+  it("rejects an authentic bundle whose plaintext is not JSON at all", () => {
+    const cost = { ...SCRYPT_PARAMS, N: 2 ** 14 };
+    const salt = randomBytes(16);
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", deriveKey(PASS, salt, cost), iv);
+    const ct = Buffer.concat([cipher.update(Buffer.from("not json", "utf8")), cipher.final()]);
+    const envelope = {
+      v: 1,
+      kdf: { name: "scrypt", N: cost.N, r: cost.r, p: cost.p, salt: salt.toString("base64") },
+      cipher: "aes-256-gcm",
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ct: ct.toString("base64"),
+    };
+    expect(thrown(() => decryptBundle(JSON.stringify(envelope), PASS))).toMatchObject({
+      code: "recovery.bundle_invalid",
+      params: { reason: "malformed" },
+    });
+  });
+});
