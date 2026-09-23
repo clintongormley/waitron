@@ -109,6 +109,22 @@ const variantPage: ProductEditorDraft = {
   courseId: null,
 };
 
+// axe does not score a placeholder's contrast, so a test of a hinted field measures its own ratio.
+// The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
 describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (theme) => {
   it.each([
     "empty",
@@ -202,6 +218,15 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       // Without these the scan could pass on a page that drew none of its hints.
       for (const name of ["categories-hint", "allergens-hint", "dietary-hint"])
         expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
+      const description =
+        el.shadowRoot!.querySelector<HTMLTextAreaElement>("[name=description-en]")!;
+      expect(description.placeholder).toBe("Roasted in house");
+      expect(
+        contrastRatio(
+          getComputedStyle(description, "::placeholder").color,
+          getComputedStyle(description).backgroundColor,
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
     }
     await expectNoA11yViolations(host);
   });

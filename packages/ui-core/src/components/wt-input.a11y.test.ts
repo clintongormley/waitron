@@ -5,8 +5,8 @@ import "./wt-input.js";
 
 afterEach(cleanup);
 
-// axe does not score a placeholder's contrast, so the placeholder state measures its own ratio. The
-// parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
+// axe does not score a placeholder's contrast, so a test of a hinted field measures its own ratio.
+// The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
 function contrastRatio(a: string, b: string): number {
   const luminance = (rgb: string) => {
     expect(rgb).toMatch(/^rgba?\(/);
