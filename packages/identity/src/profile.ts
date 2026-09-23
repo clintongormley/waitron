@@ -4,6 +4,7 @@ import type { Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
+import { foldForUniqueness } from "./fold.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import {
@@ -242,10 +243,14 @@ export async function saveOwnProfile(
       .update(persons)
       .set({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
+        // Cleared together, always: a `pending_email` left with a stale folded value beside it
+        // would be read by the index as a request nobody made.
         pendingEmail: changedEmail ? email : null,
+        pendingEmailFolded: changedEmail ? foldForUniqueness(email) : null,
         locale,
       })
       .where(eq(persons.id, person.id));

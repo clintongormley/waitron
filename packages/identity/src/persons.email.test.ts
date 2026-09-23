@@ -72,7 +72,7 @@ describe("persons.email unique index (persons_tenant_email_uq)", () => {
     await seedTenant(suite.db);
     await insertPerson(suite.db, "A", "Owner@x.com");
 
-    // The differing case (Owner@x.com vs owner@x.com) is the point: lower(email) collides while the
+    // The differing case (Owner@x.com vs owner@x.com) is the point: the index folds them together while the
     // raw values differ. `captureError` fails the test if the insert is ACCEPTED, so the assertions
     // below can never read an absent refusal as a matching one.
     const error = await captureError(() => insertPerson(suite.db, "B", "owner@x.com"));

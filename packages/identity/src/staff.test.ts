@@ -310,7 +310,7 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // A `lower(email)` collision somewhere other than `persons` is not this refusal. The
+  // A collision on another table's email index is not this refusal. The
   // discriminator moved with the engine: it was the TABLE reported beside the key, and it is now
   // the index's NAME, which carries the table because SQLite keeps every index in one namespace
   // per database — a second `CREATE UNIQUE INDEX persons_tenant_email_uq` on another table is

@@ -33,7 +33,8 @@ describe("createPerson / setEmail email_taken on a real unique index", () => {
       }),
     );
 
-    // Different case, same address (lower(email) collides) — the translator maps 23505 → email_taken.
+    // Different case, same address: `normalizeEmail` folds the case before either the pre-check or
+    // the index sees it, so both addresses arrive as `owner@x.com` and the duplicate is refused.
     await expect(
       run(suite.db, (tx) =>
         createPerson(tx, {

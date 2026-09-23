@@ -5,9 +5,10 @@ import { persons } from "./persons.js";
 /**
  * A registered passkey (WebAuthn credential) for a person. Deliberately MUTABLE, not an audit trail:
  * `counter` is bumped on every successful authentication, and a stale or revoked passkey is removed
- * outright — so app_user holds SELECT, INSERT, UPDATE, DELETE. DELETE is
- * granted here, unlike `management_sessions`, mirroring `tenant_credentials`: a credential row is
- * live configuration, not a record anyone needs preserved.
+ * outright — so this table carries no append-only trigger. Under PostgreSQL the grant here included
+ * DELETE, unlike `management_sessions` and mirroring `tenant_credentials`, because a credential row
+ * is live configuration rather than a record anyone needs preserved; that grant went with the
+ * engine, nothing replaced it, and the database now draws no distinction between the two tables.
  */
 export const webauthnCredentials = table(
   "webauthn_credentials",
@@ -49,9 +50,10 @@ export const webauthnCredentials = table(
  * is what enforces single-use when two finishes arrive for the same handle (`../passkey.ts`'s
  * `consumeChallenge`; the row lock that note used to name is gone). `person_id` is null for a
  * login (discoverable-credential) ceremony, where the person is not yet known. Ephemeral rather than
- * an audit trail — app_user holds SELECT, INSERT, UPDATE, DELETE (DELETE because a challenge is
- * deleted the moment it is consumed; the consume-DELETE is undone if the finish transaction then rolls
- * back, so the row survives on a failed or expired ceremony). An expired challenge is bounded by the
+ * an audit trail, so no append-only trigger stands between a caller and the row: a challenge is
+ * deleted the moment it is consumed, and that consume-DELETE is undone if the finish transaction then
+ * rolls back, so the row survives a failed or expired ceremony. (The grant that used to spell out the
+ * same permissions went with PostgreSQL.) An expired challenge is bounded by the
  * `CHALLENGE_TTL_MS` check at consume time — a later finish rejects it as `passkey.challenge_expired`
  * and rolls the transaction back — NOT swept: there is no sweep job (a background sweep is a possible
  * future follow-up).

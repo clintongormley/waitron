@@ -253,7 +253,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
   // A duplicate credential on register/verify: `finishPasskeyRegistration` translated a
-  // `credential_id` 23505 into this code. 409 Conflict, the house convention for a
+  // `credential_id` duplicate-key refusal into this code. 409 Conflict, the house convention for a
   // "already exists" collision (`table.label_taken`, `tab.already_open`, `roster.already_published`,
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
@@ -266,7 +266,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.self_deactivation": 403,
   "person.not_found": 404,
   // The email write boundary: a malformed address is a request-shape
-  // fault (400), a `persons_tenant_email_uq` collision (one `lower(email)` per database) is a
+  // fault (400), a `persons_tenant_email_uq` collision (one login address per database, compared with
+  // accents and case folded — `packages/identity/src/fold.ts`) is a
   // "already exists" conflict
   // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
   // not the `?? 400` default).
@@ -288,7 +289,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "receipt.invalid": 400,
   // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
   // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
-  // canvas name collides on the `(name)` unique, translated from 23505 by `canvas-store.ts`
+  // canvas name collides on the `(name)` unique, translated by `canvas-store.ts`
   // → 409 (`canvas.name_taken`), the same conflict shape a taken station/zone name has. An invalid
   // `definition`/`theme` payload is refused by the store's validator → 400 (`canvas.invalid` /
   // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
@@ -347,9 +348,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Device-profile CRUD (Task 4, design 2026-09-05 §5.1). A GET/PUT/DELETE-by-id (or a malformed id
   // screened to it by `requireDeviceProfileId`) that names no profile the tenant owns → 404
   // (`device_profile.not_found`); a duplicate profile name collides on the `(name)` unique,
-  // translated from 23505 by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
+  // translated by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
   // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
-  // OR a `canvasId` naming no canvas (the FK 23503) is refused → 400 (`device_profile.invalid`,
+  // OR a `canvasId` naming no canvas (the foreign key) is refused → 400 (`device_profile.invalid`,
   // params `{ reason: "bad_capabilities" | "bad_canvas_ref" }`), the same 400 family as `canvas.invalid`.
   // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
@@ -371,8 +372,9 @@ const run = createErrorBoundary(STATUS, "management.failed");
 
 /**
  * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning
- * it. A malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing
- * it here as `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
+ * it. Every id column is plain `text`, so a malformed id passed straight into a query is refused by
+ * nothing below and simply matches no row (the id-screen note on `shared.invalid_id` in `till-api.ts`); refusing
+ * it here as `person.not_found` (a caller-supplied uuid, safe to echo) makes that silent miss a
  * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
  * no row passes this guard; the identity operation then returns `person.not_found`. Every staff
  * route that takes a person id shares this shape guard before its lookup.
@@ -384,9 +386,9 @@ function requirePersonId(id: string): string {
 
 /**
  * Screen a `/management-api/service-statuses/:id` path param as a UUID before it reaches a query,
- * returning it. Mirrors `requirePersonId` for the status routes: a malformed id passed into a `uuid`
- * column would `22P02` → an opaque 500, so refusing it here as `status.not_found` (a caller-supplied
- * uuid, safe to echo) turns that 500 into a clean 404. Proven by deletion in `management-api.status.test.ts`.
+ * returning it. Mirrors `requirePersonId` for the status routes: nothing below refuses a malformed
+ * id, so refusing it here as `status.not_found` (a caller-supplied uuid, safe to echo) makes a silent
+ * miss a clean 404. Proven by deletion in `management-api.status.test.ts`.
  * Shared by the PATCH and DELETE `:id` routes below.
  */
 function requireStatusId(id: string): string {
@@ -396,9 +398,8 @@ function requireStatusId(id: string): string {
 
 /**
  * Screen a `/management-api/zones/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
- * for the zone routes: a malformed id passed into a `uuid` column would `22P02` → an opaque 500, so
- * refusing it here as `zone.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
- * clean 404. Shared by the PATCH and DELETE `:id` zone routes below.
+ * for the zone routes: nothing below refuses a malformed id, so refusing it here as `zone.not_found`
+ * (a caller-supplied uuid, safe to echo) makes a silent miss a clean 404. Shared by the PATCH and DELETE `:id` zone routes below.
  */
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
@@ -407,8 +408,8 @@ function requireZoneId(id: string): string {
 
 /**
  * Screen a `/management-api/tables/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
- * for the table routes: a malformed id → `22P02` → opaque 500 without this, so it is refused as
- * `table.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the same screen
+ * for the table routes: without this a malformed id reaches the query unrefused and matches nothing,
+ * so it is refused as `table.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the same screen
  * `till-api.ts`'s `PATCH`/`DELETE /api/tables/:id` routes apply inline. Shared by the PATCH and DELETE
  * `:id` table routes below.
  */
@@ -419,8 +420,8 @@ function requireTableId(id: string): string {
 
 /**
  * Screen a `/management-api/stations/:id` path param as a UUID, returning it. Mirrors `requireZoneId`
- * for the kitchen-station routes: a malformed id → `22P02` → opaque 500 without this, so it is refused
- * as `station.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
+ * for the kitchen-station routes: without this a malformed id reaches the query unrefused and matches
+ * nothing, so it is refused as `station.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
  * station gets from the by-id station verbs. Shared by the PATCH, DELETE and set-default `:id` routes.
  */
 function requireStationId(id: string): string {
@@ -430,8 +431,8 @@ function requireStationId(id: string): string {
 
 /**
  * Screen a `/management-api/courses/:id` path param as a UUID, returning it. Mirrors `requireStationId`
- * for the kitchen-course routes: a malformed id → `22P02` → opaque 500 without this, so it is refused as
- * `course.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
+ * for the kitchen-course routes: without this a malformed id reaches the query unrefused and matches
+ * nothing, so it is refused as `course.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
  * course gets from the by-id course verbs. Shared by the PATCH and DELETE `:id` course routes.
  */
 function requireCourseId(id: string): string {
@@ -440,9 +441,8 @@ function requireCourseId(id: string): string {
 }
 
 /**
- * Screen a `/management-api/canvases/:id` path param as a UUID, returning it. A malformed id passed
- * into a `uuid` column would `22P02` → an opaque 500, so refusing it here as `canvas.not_found` turns
- * that 500 into a clean 404 — the same screen the sibling `require*Id` helpers apply. UNLIKE those
+ * Screen a `/management-api/canvases/:id` path param as a UUID, returning it. Nothing below refuses a
+ * malformed id, so refusing it here as `canvas.not_found` makes a silent miss a clean 404 — the same screen the sibling `require*Id` helpers apply. UNLIKE those
  * siblings it echoes NO id: `canvas.not_found` carries no params by design (errors.ts), so a
  * well-formed-but-absent id (the GET-by-id 404 below) and a malformed one give the identical 404 body.
  * Shared by the GET, PUT and DELETE `:id` canvas routes.
@@ -454,9 +454,8 @@ function requireCanvasId(id: string): string {
 
 /**
  * Screen a `/management-api/device-profiles/:id` path param as a UUID, returning it. The twin of
- * `requireCanvasId` for the device-profile routes: a malformed id passed into a `uuid` column would
- * `22P02` → an opaque 500, so refusing it here as `device_profile.not_found` turns that 500 into a
- * clean 404. Like `canvas.not_found`, `device_profile.not_found` carries NO params (errors.ts), so a
+ * `requireCanvasId` for the device-profile routes: nothing below refuses a malformed id, so refusing
+ * it here as `device_profile.not_found` makes a silent miss a clean 404. Like `canvas.not_found`, `device_profile.not_found` carries NO params (errors.ts), so a
  * well-formed-but-absent id (the GET/PUT/DELETE-by-id 404) and a malformed one give the identical 404
  * body. Shared by the GET, PUT and DELETE `:id` device-profile routes.
  */
@@ -520,9 +519,10 @@ function withVenueAuth<T>(
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  // typeof + integer + int4 RANGE: `display_order` is a Postgres `integer`, so a value outside int4's
-  // range clears `Number.isInteger` but would reach the column and raise `22003` (an opaque 500) rather
-  // than a clean 400 — the same opaque-500-on-int4-overflow class the `capacity` / `line_no` guards close.
+  // typeof + integer + int4 RANGE. The range half is now the ONLY bound: `display_order` is declared
+  // `integer`, but this engine's INTEGER is 64-bit whatever the declared type says, so a value outside
+  // int4's range is stored rather than refused (`packages/db/src/schema/columns.ts` carries the
+  // measurement) — the same class the `capacity` / `line_no` guards close.
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
@@ -539,8 +539,10 @@ function parseDisplayOrder(value: unknown): number | undefined {
  * PATCH leaves it untouched); a PRESENT value must be a non-negative integer NUMBER in int4 range, else
  * it is refused as `management.request_invalid` naming the FIELD (never the value). The `typeof` screen
  * comes first (matching `parseDisplayOrder`), so a non-number such as `null` is REJECTED rather than
- * coerced; the int4 upper bound closes the same opaque-500-on-overflow class (`capacity` is a Postgres
- * `integer`; "Plazas" is only its Spanish UI label). The same rule `till-api.ts`'s `requireCapacity`
+ * coerced; the int4 upper bound is now the ONLY bound, because `capacity` is declared `integer` and
+ * this engine's INTEGER is 64-bit whatever the declared type says
+ * (`packages/db/src/schema/columns.ts` carries the measurement). "Plazas" is only its Spanish UI
+ * label. The same rule `till-api.ts`'s `requireCapacity`
  * applies to the operator table routes.
  */
 function parseCapacity(value: unknown): number | undefined {
@@ -571,9 +573,10 @@ function parseThresholdMinutes(value: unknown, field: string): number | undefine
 /**
  * Screen the device-profile `inactivityTimeoutSeconds` body field for SHAPE only, shared by the profile
  * POST and PUT routes. An absent or `null` value is `null` (the app default / "never"); a present value
- * must be an integer NUMBER in int4 range (the column is a Postgres `integer`), else it is refused as
- * `management.request_invalid` naming the FIELD — the same typeof-first, int4-bounded shape
- * `parseThresholdMinutes` uses, closing the opaque-500-on-int4-overflow class. The DOMAIN rule (a
+ * must be an integer NUMBER in int4 range (the column is declared `integer`, though nothing below
+ * enforces that width any more), else it is refused as `management.request_invalid` naming the
+ * FIELD — the same typeof-first, int4-bounded shape `parseThresholdMinutes` uses, and the screen is
+ * what closes the class. The DOMAIN rule (a
  * non-null value must be `>= 1`, and a `kds` profile coerces to null) is `validateInactivityTimeout`'s
  * (`@waitron/layouts`), which the store applies — so `0`/`-5` pass this screen and surface as the store's
  * 400 `device_profile.invalid`, exactly as `capabilities` reaches its own validator unscreened here.
@@ -1551,8 +1554,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // that narrowing does not survive into the `withTransaction` closure (TS resets a captured property to
       // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId` is
       // screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key → `null`; a
-      // malformed string → 400 `management.request_invalid`, never a downstream `22P02` 500 on the
-      // `canvas_id` uuid column).
+      // malformed string → 400 `management.request_invalid`; the `canvas_id` column is plain `text` and
+      // would store it without complaint).
       const { name, capabilities } = body;
       const canvasId =
         body.canvasId === undefined || body.canvasId === null
@@ -1606,7 +1609,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
       // `canvasId` screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key →
-      // `null`; a malformed string → 400 `management.request_invalid`, never a downstream `22P02` 500).
+      // `null`; a malformed string → 400 `management.request_invalid`, which is the only refusal there
+      // is).
       const { name, capabilities } = body;
       const canvasId =
         body.canvasId === undefined || body.canvasId === null
@@ -1770,7 +1774,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a status (DELETE = deactivate; app_user holds no hard DELETE). Malformed :id →
+  // Deactivate a status (DELETE = deactivate; the verb is the only thing keeping it one —
+  // (`tables.ts`'s `deactivateTable` note)). Malformed :id →
   // status.not_found.
   app.delete("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
@@ -1872,7 +1877,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a zone (DELETE = deactivate; app_user holds no hard DELETE). Malformed :id → zone.not_found.
+  // Deactivate a zone (DELETE = deactivate; the verb is the only thing keeping it one —
+  // (`tables.ts`'s `deactivateTable` note)). Malformed :id → zone.not_found.
   app.delete("/management-api/zones/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1885,8 +1891,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Create a table (thin wrapper over TS-1's `createTable`). Body { label, zoneId?, capacity? }; a bad
   // shape → management.request_invalid naming the FIELD; a duplicate label → table.label_taken (409); a
-  // `zoneId` naming no floor_zones row → zone.not_found (404), mapped in the verb
-  // (`isZoneFkViolation`) and NOT re-mapped here. Returns the new id at 201 (the management-surface
+  // `zoneId` naming no floor_zones row → zone.not_found (404), raised by the verb's own zone read
+  // (`requireZone`, `tables.ts`) before the insert, and NOT re-mapped here. Returns the new id at 201 (the management-surface
   // create convention; TS-1's till POST returns 200, but this surface is 201 throughout).
   app.post("/management-api/tables", (c) =>
     run(c, log, async () => {
@@ -1902,10 +1908,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
-        // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened reaches
-        // the `zone_id` uuid column → `22P02` → opaque 500. Screen it as a UUID and give it the SAME
-        // `zone.not_found` a well-formed-but-missing zoneId gets (the FK's 23503, mapped in the
-        // verb) — the till surface's create/patch routes screen it identically.
+        // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened would
+        // be STORED in `zone_id` unchallenged. Screen it as a UUID and give it the SAME
+        // `zone.not_found` a well-formed-but-missing zoneId gets (from the verb's own zone read) — the
+        // till surface's create/patch routes screen it identically.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         zoneId = body.zoneId;
       }
@@ -1954,9 +1960,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
-        // Screen a string-typed but MALFORMED zoneId as a UUID (same as the POST route above): un-screened
-        // it reaches the `zone_id` uuid column → `22P02` → opaque 500, so it gets the SAME `zone.not_found`
-        // a well-formed-but-missing zoneId does.
+        // Screen a string-typed but MALFORMED zoneId as a UUID (same as the POST route above):
+        // un-screened it would be stored in `zone_id` unchallenged, so it gets the SAME
+        // `zone.not_found` a well-formed-but-missing zoneId does.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         patch.zoneId = body.zoneId;
       }
@@ -1971,7 +1977,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a table (DELETE = deactivate; app_user holds no hard DELETE; the table has order history).
+  // Deactivate a table (DELETE = deactivate; the verb is the only thing keeping it one — the table
+  // has order history, and (`tables.ts`'s `deactivateTable` note) says what used to refuse it).
   // Malformed :id → table.not_found (thin wrapper over TS-1's `deactivateTable`).
   app.delete("/management-api/tables/:id", (c) =>
     run(c, log, async () => {
@@ -1989,15 +1996,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
   // under `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is
   // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
-  // the test names). `requireTableId` screens `:id` (malformed → table.not_found, not an opaque 22P02
-  // 500); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
+  // the test names). `requireTableId` screens `:id` (malformed → table.not_found, and that screen is
+  // the only refusal); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
   // live-zone reads (`table.not_found` / `zone.not_found`).
 
   // Place a table (PUT = full placement). Body { zoneId, posX, posY, shape, rotation }; the body-shape
   // screen mirrors the sibling table routes — a non-object body → management.request_invalid naming
   // "body", each MISSING or wrong-TYPE field → the same code naming THAT field. A string-typed but
-  // MALFORMED `zoneId` is screened to zone.not_found (as the sibling POST/PATCH do: un-screened it reaches
-  // the `id` uuid column → 22P02 → opaque 500). The narrowed fields are bound to locals before the
+  // MALFORMED `zoneId` is screened to zone.not_found (as the sibling POST/PATCH do: un-screened it
+  // reaches the zone read, which neither refuses it nor matches it). The narrowed fields are bound to locals before the
   // closure (the login/create-person pattern). Value/range faults (posX/posY 0..1000, shape enum,
   // rotation 0..359) are the verb's `placement.invalid`; a missing/inactive table or zone is its
   // table.not_found/zone.not_found. Returns 204 (the sibling PATCH/DELETE convention on this surface).
@@ -2019,8 +2026,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.zoneId !== "string")
         throw new AppError("management.request_invalid", { field: "zoneId" });
       // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
-      // verb reads `floor_zones … where id = ${zoneId}`, so an un-screened non-UUID reaches the `uuid`
-      // column → 22P02 → opaque 500. Give it the SAME zone.not_found a well-formed-but-missing one gets.
+      // verb reads `floor_zones … where id = ${zoneId}`, which neither refuses an un-screened non-UUID
+      // nor matches it. Give it the SAME zone.not_found a well-formed-but-missing one gets.
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
       if (typeof body.posX !== "number")
         throw new AppError("management.request_invalid", { field: "posX" });
@@ -2122,7 +2129,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // `displayName|role|pin` compound-field shape the staff-create route uses for its own required trio:
   // each is shape-screened individually (`parseThresholdMinutes`, positive int4), then — if ANY of the
   // three is present — all three must be present and strictly ordered `warm < overdue < forgotten`,
-  // mirroring the `kitchen_stations_thresholds_ordered` CHECK exactly so that CHECK (23514) is never
+  // mirroring the `kitchen_stations_thresholds_ordered` CHECK exactly so that CHECK is never
   // reached from here. A patch that edits only one or two of the three cannot be ordering-checked
   // without reading the row's current values, which this route deliberately does not do — the config
   // editor's form always saves the trio together (design §8), so "all or none" costs nothing a real
@@ -2208,7 +2215,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a station (DELETE = deactivate; app_user holds no hard DELETE — a `ticket_items.station_id`
+  // Deactivate a station (DELETE = deactivate, and the verb is the only thing keeping it one — a `ticket_items.station_id`
   // snapshot may reference it). Malformed :id → station.not_found; an unknown id → station.not_found.
   app.delete("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
@@ -2239,7 +2246,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // LIVE station of this venue (the verb → station.not_found); a malformed one is screened to that SAME
   // code before the DB touch. A malformed :id names no such entity — the verb no-ops on an unknown one, so
   // it is the same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped
-  // request), never a 22P02 500. KDS-1 mints no `category.not_found`/`product.not_found` (spec §6).
+  // request). KDS-1 mints no `category.not_found`/`product.not_found` (spec §6).
   // Returns 204.
   const registerStationRoute = (
     segment: string,
@@ -2377,7 +2384,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a course (DELETE = deactivate; app_user holds no hard DELETE — a `ticket_items.course_id`
+  // Deactivate a course (DELETE = deactivate, and the verb is the only thing keeping it one — a `ticket_items.course_id`
   // snapshot may reference it). Malformed :id → course.not_found; an unknown id → course.not_found.
   app.delete("/management-api/courses/:id", (c) =>
     run(c, log, async () => {
@@ -2393,8 +2400,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // { courseId: string | null }. A non-null courseId must be a LIVE course of this venue (the verb's
   // `requireLiveCourse` → course.not_found); a malformed one is screened to that SAME code before the DB
   // touch. A malformed PRODUCT :id names no such product — the verb no-ops on an unknown one, so it is the
-  // same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped request), never a
-  // 22P02 500. The sibling of the `PUT /management-api/products/:id/station` route above. Returns 204.
+  // same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped request).
+  // The sibling of the `PUT /management-api/products/:id/station` route above. Returns 204.
   app.put("/management-api/products/:id/course", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2493,10 +2500,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // persist the credential. The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why a
   // `null`/non-object body must not TypeError → 500) and `challengeHandle` is screened to a UUID (else
   // `management.request_invalid` naming the FIELD, matching the sibling write routes). The UUID screen
-  // prevents a database cast error: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against
-  // a `uuid` PK column, so a well-formed-string-but-non-UUID value would `22P02` → opaque 500 — the
-  // same failure `requirePersonId`'s `isUuid` screen above exists to prevent, keeping `run`'s
-  // "every surfaced code is a client 4xx" invariant true. `response` is then required to be a non-null
+  // is the only one: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against a plain
+  // `text` PK column, which neither refuses a non-UUID value nor matches it, so without the screen a
+  // forged handle would fall through as an unexplained miss instead of a named 400 — the same reason
+  // `requirePersonId`'s `isUuid` screen above exists. `response` is then required to be a non-null
   // object (else the same `management.request_invalid`) before it reaches the verifier.
   //
   // `finishPasskeyRegistration`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
@@ -2540,9 +2547,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Finish passkey authentication (UNGATED — this IS the login): verify the signed assertion, open a
   // management session for the credential's owner, set the cookie, and return the person id — the exact
   // shape of the password login route. Same body coercion + `challengeHandle` UUID screen as
-  // register/verify above; the UUID screen matters MORE here because this route is UNAUTHENTICATED, so
-  // a non-UUID `challengeHandle` reaching the `uuid` PK column (`22P02` → opaque 500) would be an
-  // unauthenticated 500 — the same failure the write routes' `requirePersonId` `isUuid` screen prevents
+  // register/verify above; the screen matters MORE here because this route is UNAUTHENTICATED, and it
+  // is the only thing looking at the handle's shape — the `text` PK column refuses nothing — the same
+  // reason the write routes run `requirePersonId`'s `isUuid` screen
   // (the password login route no longer screens a UUID: it screens a non-empty `email` string).
   // `response` is then required to be a non-null object (else `management.request_invalid`): this route
   // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,

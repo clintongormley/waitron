@@ -9,7 +9,8 @@ import { assertPinLength, hashPin } from "./verify-pin.js";
 import { startManagementSession, type ManagementSession } from "./management-session.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
+import { loginEmailKey, persons } from "./schema/persons.js";
+import { foldForUniqueness } from "./fold.js";
 import { PERSONS_EMAIL } from "./person-constraints.js";
 
 export type AccountActionPurpose = "invitation" | "password_reset" | "email_change";
@@ -185,7 +186,13 @@ export async function confirmEmailChangeByCode(
   try {
     const changed = await tx
       .update(persons)
-      .set({ email: action.targetEmail, pendingEmail: null, emailVerifiedAt: nowIso })
+      .set({
+        email: action.targetEmail,
+        emailFolded: foldForUniqueness(action.targetEmail),
+        pendingEmail: null,
+        pendingEmailFolded: null,
+        emailVerifiedAt: nowIso,
+      })
       .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.targetEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
@@ -309,7 +316,11 @@ export async function requestAccountRecoveryAction(
     .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(
-      and(eq(sql`lower(${persons.email})`, email), inArray(persons.status, ["active", "pending"])),
+      and(
+        // The index's own expression, for the reason `assertEmailAvailable` (`./staff.ts`) states.
+        eq(loginEmailKey(), foldForUniqueness(email)),
+        inArray(persons.status, ["active", "pending"]),
+      ),
     );
   if (person === undefined) return null;
   return issueAccountAction(tx, {

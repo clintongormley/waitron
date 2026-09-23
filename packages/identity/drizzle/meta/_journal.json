@@ -8,6 +8,13 @@
       "when": 1790007647804,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790121046847,
+      "tag": "0001_person_case_fold",
+      "breakpoints": true
     }
   ]
 }

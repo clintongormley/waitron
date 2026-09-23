@@ -1,9 +1,9 @@
 import "./errors.js";
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { indexViolated, isUniqueViolation, nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
+import { liveDisplayNameKey, loginEmailKey, pendingEmailKey, persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import { sessions } from "./schema/sessions.js";
@@ -11,6 +11,7 @@ import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
+import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
@@ -106,10 +107,17 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
-/** The predicate must spell the trim the way `persons_tenant_live_display_name_uq` does
- * (`./schema/persons.ts:83`), or this pre-check and the index disagree about which names collide.
- * SQLite has no `btrim`: `select btrim('  Ada  ')` throws `no such function: btrim` where
- * `trim('  Ada  ')` returns `Ada`, driven on node:sqlite (Node v26.7.0). */
+/** The predicate reads `liveDisplayNameKey()`, which is the SAME expression
+ * `persons_tenant_live_display_name_uq` is declared over — one function builds both
+ * (`./schema/persons.ts`) — so this pre-check and the index cannot disagree about which names
+ * collide. They used to be written out separately, and this one folded the caller's name in
+ * JavaScript while the index folded the stored name in SQL; the two agreed on `Ana` and disagreed
+ * on `José`.
+ *
+ * The caller's name is folded by `foldForUniqueness`, which trims as well as lower-cases, matching
+ * the `trim` inside that expression. SQLite has no `btrim`: `select btrim('  Ada  ')` throws
+ * `no such function: btrim` where `trim('  Ada  ')` returns `Ada`, driven on node:sqlite
+ * (Node v26.7.0). */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -120,7 +128,7 @@ export async function assertDisplayNameAvailable(
     .from(persons)
     .where(
       and(
-        eq(sql`lower(trim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
+        eq(liveDisplayNameKey(), foldForUniqueness(displayName)),
         ne(persons.status, "suspended"),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
@@ -138,7 +146,13 @@ export async function assertEmailAvailable(
     .from(persons)
     .where(
       and(
-        or(eq(sql`lower(${persons.email})`, email), eq(sql`lower(${persons.pendingEmail})`, email)),
+        // Both expressions are the ones their indexes are declared over, for the reason
+        // {@link assertDisplayNameAvailable} states. `email` arrives normalized; folding it again
+        // is what settles how its accents are encoded.
+        or(
+          eq(loginEmailKey(), foldForUniqueness(email)),
+          eq(pendingEmailKey(), foldForUniqueness(email)),
+        ),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
     );
@@ -235,10 +249,12 @@ export async function updatePersonDetails(
       .update(persons)
       .set({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
         email,
+        emailFolded: foldForUniqueness(email),
         emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
         role: input.role,
         status: input.status,
@@ -417,6 +433,7 @@ export async function invitePerson(
       .insert(persons)
       .values({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
@@ -425,6 +442,7 @@ export async function invitePerson(
         role: input.role,
         status: "pending",
         email,
+        emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
     return { id: row!.id };
@@ -469,9 +487,11 @@ export async function createPerson(
       .insert(persons)
       .values({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         pinHash: hashPin(input.pin),
         role: input.role,
         email,
+        emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
     return { id: row!.id };
@@ -543,9 +563,10 @@ export async function setPassword(
  * `person.manage`, mirroring `setPassword`: `authorizeManager` runs FIRST, so a caller without the
  * permission is rejected before any write. The email is normalized then screened (malformed →
  * `person.email_invalid`) before the UPDATE; a collision with any other person's email surfaces as
- * `person.email_taken` — `persons_tenant_email_uq` is `UNIQUE (lower(email)) WHERE email IS NOT
- * NULL`, so one address across the whole database, case-insensitively. (The index NAME still reads
- * `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
+ * `person.email_taken` — `persons_tenant_email_uq` holds one address across the whole database,
+ * case-insensitively and whichever way its accents are encoded, among the people who have one.
+ * This path writes `email_folded` beside `email`, which is what the index reads. (The index NAME
+ * still reads `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
 export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
@@ -558,7 +579,7 @@ export async function setEmail(
   try {
     await tx
       .update(persons)
-      .set({ email, emailVerifiedAt: null })
+      .set({ email, emailFolded: foldForUniqueness(email), emailVerifiedAt: null })
       .where(eq(persons.id, settleId(input.personId)));
   } catch (err) {
     asEmailTaken(err, email);

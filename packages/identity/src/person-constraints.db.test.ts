@@ -3,8 +3,9 @@
  * driven against the migrated database rather than a crafted error.
  *
  * Four unique indexes live on `persons` and they are NOT reported alike. Three are over an
- * EXPRESSION — `lower(email)`, `lower(trim(display_name))`, `lower(pending_email)` — and this
- * engine reports one of those as `UNIQUE constraint failed: index '<the index's name>'`: the
+ * EXPRESSION — a `case` per index that reads the row's folded column when it has one and falls
+ * back to `lower(...)` when it does not (`schema/persons.ts`) — and this engine reports one of
+ * those as `UNIQUE constraint failed: index '<the index's name>'`: the
  * index's name, and no columns. The fourth, `persons_tenant_google_subject_uq`, is over a plain
  * column and reports `UNIQUE constraint failed: persons.google_subject` — a table and a key, and
  * no name. That is why the translators ask `indexViolated` (the name) rather than `sameTarget`

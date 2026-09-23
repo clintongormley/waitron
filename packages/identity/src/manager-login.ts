@@ -1,9 +1,10 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { eq, sql } from "drizzle-orm";
-import { persons } from "./schema/persons.js";
+import { eq } from "drizzle-orm";
+import { loginEmailKey, persons } from "./schema/persons.js";
 import { normalizeEmail } from "./email.js";
+import { foldForUniqueness } from "./fold.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
 import { verifyTotp } from "./totp.js";
 import { consumeRecoveryCode, decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
@@ -104,12 +105,12 @@ export async function loginManager(
     totpKeyRing?: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
-  // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. The lookup matches
-  // the same normalised (trim + lowercase) form the write boundary stores under the
-  // case-insensitive unique index (persons_tenant_email_uq), so `lower(email)` here mirrors the index
-  // and login is case-insensitive.
+  // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. It looks the
+  // address up under `loginEmailKey()`, which is the SAME expression `persons_tenant_email_uq` is
+  // declared over — one function builds both (`./schema/persons.ts`) — so the address that signs in
+  // is exactly the one the index treats as taken, whatever case or accent encoding it was typed in.
   const email = normalizeEmail(input.email);
-  const [person] = await selectPersonLogin(tx).where(eq(sql`lower(${persons.email})`, email));
+  const [person] = await selectPersonLogin(tx).where(eq(loginEmailKey(), foldForUniqueness(email)));
   // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
   // login form — both throw `password.invalid`, so the response never reveals which addresses have
   // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the

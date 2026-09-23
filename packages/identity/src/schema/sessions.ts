@@ -4,8 +4,9 @@ import { id, newId, nowIso, table, tsString } from "@waitron/db";
 /**
  * A shift login: a person active at a physical till. Keyed to the TILL (the station where a cashier
  * stands and where cash-up is grouped), not the node (the SIF machine, one per venue, shared across
- * tills). MUTABLE: `ended_at` is stamped on logout, so app_user holds SELECT, INSERT, UPDATE (no
- * DELETE), with no immutability triggers.
+ * tills). MUTABLE, with no append-only trigger: `ended_at` is stamped on logout. A session is ended
+ * that way rather than deleted, but that is now the callers' rule alone — the grant that withheld
+ * DELETE went with PostgreSQL and nothing replaced it.
  */
 export const sessions = table(
   "sessions",

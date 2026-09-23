@@ -3,9 +3,10 @@ import { id, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * A browser "management session": a person signed into the management dashboard from a browser,
- * distinct from a till's PIN shift-login (`sessions`), which is keyed to a physical till. MUTABLE:
- * `last_seen_at` is refreshed on activity and `ended_at` is stamped on sign-out, so app_user
- * holds SELECT, INSERT, UPDATE (no DELETE).
+ * distinct from a till's PIN shift-login (`sessions`), which is keyed to a physical till. MUTABLE,
+ * with no append-only trigger: `last_seen_at` is refreshed on activity and `ended_at` is stamped on
+ * sign-out. A session is ENDED by stamping `ended_at` rather than deleted, but that is now the
+ * callers' rule alone — the grant that withheld DELETE went with PostgreSQL and nothing replaced it.
  */
 export const managementSessions = table(
   "management_sessions",
