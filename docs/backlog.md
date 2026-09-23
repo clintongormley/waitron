@@ -3743,6 +3743,13 @@ already read as filed) rather than a record filed twice. The fence-before-ship r
 now in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
 any of this code, so you can still read how something worked under PostgreSQL.
 
+**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
+its database to a bucket the owner supplies, and a dead box is rebuilt from it. Landed so far:
+Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
+(branch `feat/sqlite-slice2-measurements`) — the values later tasks read are under "What later
+tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+
 **What the gate left open (index; the receipts are in the results note):**
 
 - **Validate every supported object store.** Cloud owns its production-provider checks in the
