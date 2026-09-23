@@ -1720,11 +1720,10 @@ export async function collectOrder(
         .update(workingOrders)
         // `collected_at` is the ORDER-level customer-handover marker (KDS-1 §3e): a counter order
         // fired to a station leaves that station's queue (`listStationQueue` excludes
-        // `collected_at IS NOT NULL`) once collected. It is stamped in THIS same placed → settled
-        // UPDATE — a later UPDATE on the settled row would be a settled → settled edit, which
-        // `working_orders_enforce_transition` rejects (0001_db_baseline_sql.sql). Same instant as
-        // `settled_at` (the collect's own clock reading). NON-FISCAL: the alta path never reads it,
-        // and the H2 huella-identity test pins two records differing only in it hash identically.
+        // `collected_at IS NOT NULL`) once collected. It is stamped in this same placed → settled
+        // UPDATE, at the same instant as `settled_at` (the collect's own clock reading).
+        // NON-FISCAL: the alta path never reads it, and the H2 huella-identity test pins two records
+        // differing only in it hash identically.
         .set({
           status: "settled",
           settledAt: settledAt.toISOString(),

@@ -59,7 +59,7 @@ const STRIPE = {
 };
 
 // CORE then CREDENTIALS — the pair the deleted `core_credentials` template this file cloned was
-// built from (`git show origin/main:packages/credentials/src/testing/global-setup.ts`).
+// built from (`git show aabdde6a8^:packages/credentials/src/testing/global-setup.ts`).
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 describe("the vault through the venue store", () => {

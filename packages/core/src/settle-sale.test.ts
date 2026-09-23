@@ -25,7 +25,7 @@ import type { SettleSaleInput } from "./settle-sale.js";
 
 /**
  * CORE then IDENTITY — the pair the deleted `core_identity` template this file cloned was built
- * from (`git show origin/main:packages/core/src/testing/global-setup.ts`). Kept as the pair rather
+ * from (`git show aabdde6a8^:packages/core/src/testing/global-setup.ts`). Kept as the pair rather
  * than narrowed to CORE, so the fixture is the one the suite always had.
  *
  * This file no longer has "two backends" available to it, and one describe changed subject because

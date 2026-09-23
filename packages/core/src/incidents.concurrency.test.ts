@@ -42,7 +42,7 @@ import {
  * Restored afterwards.
  *
  * Migration sets: CORE then IDENTITY, the pair the deleted `core_identity` template this file
- * cloned was built from (`git show origin/main:packages/core/src/testing/global-setup.ts`). Kept
+ * cloned was built from (`git show aabdde6a8^:packages/core/src/testing/global-setup.ts`). Kept
  * as the pair rather than narrowed to CORE, so the fixture is the one the suite always had.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });

@@ -8,15 +8,13 @@ import { locations } from "./tenants.js";
  * is a machine, not a person). One node per venue today; active-active/failover (a `role` column,
  * a second node) are later specs.
  *
- * 2026-08-28 (cloud-mirror C2a): the first primary-vs-mirror split shipped, and it deliberately did
- * NOT land here as a `nodes.role`. Which role a whole deployment plays — a `primary` that writes and
- * originates, or a read-only `mirror` of it — is a fact about the DATABASE, not about a node row, so
- * it lives on the singleton `deployment.mode` (`primary`|`mirror`; packages/db/src/deployment.ts,
- * drizzle/0001_db_baseline_sql.sql), which carries no node scope. A future reader adding
- * active-active/failover must not add a `role` column here for the mirror/primary split — that
- * concept already has its flag. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF
- * identity (`NúmeroInstalación`, `IdSistemaInformatico`) lives in the module-owned `registro_sif`
- * table, which the node rekey re-keys from till to node (the SIF is the node — #33).
+ * Which role a whole deployment plays — a `primary` that writes and originates, or a read-only
+ * `mirror` of it — is a fact about the DATABASE, not about a node row, so it lives on the singleton
+ * `deployment.mode` (`primary`|`mirror`; `packages/db/src/schema/deployment.ts`), which carries no
+ * node scope. Do not add a `role` column here for the mirror/primary split — that concept already
+ * has its flag. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF identity
+ * (`NúmeroInstalación`, `IdSistemaInformatico`) lives in the module-owned `registro_sif` table,
+ * keyed by node (the SIF is the node — #33).
  *
  * `filing_module`/`tax_module` are nullable and stamped at provision time from the location's
  * territory (Task D1); the authoritative per-sale value stays `sales.fiscal_backend` — these are
@@ -40,9 +38,9 @@ export const nodes = table("nodes", {
   // The node's Ed25519 identity PUBLIC key (base64 SPKI DER), the membership trust anchor (design
   // §4). Nullable like filing_module/tax_module above: pre-production, and bare-node fixtures carry
   // none — a keyless node is simply not a trust anchor (readMembershipTrustSet filters nulls). The
-  // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. Nothing carries
-  // the primary's nodes row to a mirror today: the bundle carries identity and dial details only
-  // (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
+  // PRIVATE half is sealed in the vault (`apps/server/src/node-identity.ts`), never here. Nothing
+  // carries the primary's nodes row to a mirror today: the bundle carries identity and dial details
+  // only (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
   // Set at provision by setNodePublicKey. Nothing in the database refuses another writer: this
   // engine has no roles and no grants.
   publicKey: label("public_key"),
