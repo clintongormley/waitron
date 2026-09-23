@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { refusalError } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./canvas-store.js";
 
@@ -8,11 +9,7 @@ import { translateWriteError } from "./canvas-store.js";
 // deterministically. `translateWriteError` is exported from canvas-store.ts for exactly this, not
 // from the package barrel. Mirrors identity's `asEmailTaken` unit tests (staff.test.ts).
 //
-// Each crafted error carries the `errcode` + `message` pair the refusal readers in
-// `packages/db/src/constraint-target.ts` look at, copied from what node:sqlite reported for the
-// same refusal on Node v26.7.0, 2026-09-21 (the real ones are driven in canvas-store.db.test.ts).
-// `code` is deliberately absent: node:sqlite sets it to the constant "ERR_SQLITE_ERROR" for every
-// failure alike, so nothing reads it.
+// Each crafted refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
 describe("translateWriteError", () => {
   it("translates a unique violation that named no key to canvas.name_taken", () => {
     // The fallback branch: a unique violation whose target cannot be identified still translates,
@@ -23,7 +20,7 @@ describe("translateWriteError", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: { errcode: 2067, message: "UNIQUE constraint failed: index 'canvases_expr_uq'" },
+        cause: refusalError({ uniqueIndex: "canvases_expr_uq" }),
       });
     } catch (e) {
       thrown = e;
@@ -36,7 +33,7 @@ describe("translateWriteError", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: { errcode: 2067, message: "UNIQUE constraint failed: canvases.name" },
+        cause: refusalError({ unique: { table: "canvases", columns: ["name"] } }),
       });
     } catch (e) {
       thrown = e;
@@ -46,12 +43,11 @@ describe("translateWriteError", () => {
 
   // A unique violation on a DIFFERENT canvases key (the primary key, or any unique added later)
   // must NOT be mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-deletion: drop
-  // the target gate and this fails (the error becomes name_taken). The code is 1555 rather than
-  // 2067 because SQLite reports a primary-key collision under its own result code; both are in
-  // `UNIQUE_VIOLATION`, so it reaches the branch.
+  // the target gate and this fails (the error becomes name_taken). A primary-key collision has its
+  // own result code, which `UNIQUE_VIOLATION` also holds, so it reaches the branch.
   it("re-throws a unique violation on canvases whose key is not (name)", () => {
     const original = {
-      cause: { errcode: 1555, message: "UNIQUE constraint failed: canvases.id" },
+      cause: refusalError({ primaryKey: { table: "canvases", column: "id" } }),
     };
     let thrown: unknown;
     try {
@@ -68,7 +64,7 @@ describe("translateWriteError", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: { errcode: 1811, message: "FOREIGN KEY constraint failed" },
+        cause: refusalError({ restrict: true }),
       });
     } catch (e) {
       thrown = e;
@@ -77,26 +73,17 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  // ONE LOSS, from the storage swap. `re-throws a restrict refusal from a foreign key that does
-  // not reference canvases` stood here and is deleted. It built the SAME crafted error as the case
-  // above — SQLite reports every foreign-key refusal as the identical `FOREIGN KEY constraint
-  // failed`, with no table, no column and no constraint name (`packages/db/src/constraint-target.ts`)
-  // — and asked for the opposite outcome, so the pair was unsatisfiable by any implementation
-  // rather than failing against one. What is no longer checked: that a restrict refusal from some
-  // OTHER key re-throws instead of being reported to a user as `canvas.in_use`.
-  //
-  // Where the guarantee went: the schema. Each writer's try wraps ONE statement on `canvases`, and
-  // `has device_profiles.canvas_id as the ONLY key into canvases, and no key out of it`
-  // (canvas-store.db.test.ts) reads the real migrated schema and fails if any other key could
-  // raise an 1811 there. That is a weaker promise than the constraint-name match it replaces — it
-  // holds for the schema as it stands, where the old one held whatever was added — and it is the
-  // strongest one this engine's words support.
+  // Not checked here: that a restrict refusal from some OTHER key re-throws. The engine's message
+  // names no key, so every restrict refusal is the same error and no crafted one could tell them
+  // apart. The schema holds it instead: `has device_profiles.canvas_id as the ONLY key into
+  // canvases, and no key out of it` (canvas-store.db.test.ts) fails if another key could raise one
+  // on `canvases` — for the schema as it stands, not for whatever is added later.
 
   // A refusal of another class on the SAME key the name branch matches: only the class tells a NOT
   // NULL from a unique index apart, so this is the case that proves the class half of the gate.
   it("re-throws a refusal of another class unchanged", () => {
     const original = {
-      cause: { errcode: 1299, message: "NOT NULL constraint failed: canvases.name" },
+      cause: refusalError({ notNull: { table: "canvases", column: "name" } }),
     };
     let thrown: unknown;
     try {

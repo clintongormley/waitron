@@ -29,8 +29,8 @@ export const UNIQUE_VIOLATION = [2067, 1555] as const;
 export const FOREIGN_KEY_VIOLATION = [787] as const;
 
 /**
- * A delete or update refused by an `ON DELETE RESTRICT` foreign key (1811 — SQLite implements
- * RESTRICT with an internal trigger, so it arrives under the TRIGGER reason rather than the
+ * A delete refused by an `ON DELETE RESTRICT` foreign key (1811 — SQLite implements RESTRICT with
+ * an internal trigger, so it arrives under the TRIGGER reason rather than the
  * FOREIGN KEY one). NOT {@link FOREIGN_KEY_VIOLATION}, which is the other direction.
  */
 export const RESTRICT_VIOLATION = [1811] as const;

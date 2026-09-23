@@ -8,6 +8,7 @@ import {
   isRefusal,
   newId,
   nowIso,
+  refusalError,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -332,13 +333,15 @@ describe("appendToChain", () => {
     // Stubbing tx.transaction is the only deterministic way to reach exhaustion: one write
     // transaction runs on the venue file at a time, so three real CONCURRENT collisions cannot be
     // generated. appendToChain touches only tx.transaction on this path, so the stub is exactly
-    // that one method. The forged rejection carries `errcode`, which is where `node:sqlite` puts
-    // the discriminating value and where `isUniqueViolation` reads it (`packages/db/src/sql-state.ts`);
-    // 2067 is a unique index. A stub carrying the old `code: "23505"` is not a collision to this
-    // predicate and the retry would never run — which is what the control below rests on.
+    // that one method. The forged rejection is the chain-position index's refusal, from
+    // `refusalError`, whose own suite holds it equal to the engine's.
     const alwaysCollides = {
       transaction: () =>
-        Promise.reject(Object.assign(new Error("dup"), { errcode: UNIQUE_VIOLATION[0] })),
+        Promise.reject(
+          refusalError({
+            unique: { table: "time_entries", columns: ["node_id", "location_id", "sequence_no"] },
+          }),
+        ),
     } as never;
     const error = await appendToChain(alwaysCollides, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,
@@ -351,8 +354,7 @@ describe("appendToChain", () => {
   it("does not retry an error that is not a chain collision", async () => {
     // The control in the other direction: a refusal of a DIFFERENT class is re-thrown untouched.
     const alwaysFk = {
-      transaction: () =>
-        Promise.reject(Object.assign(new Error("fk"), { errcode: FOREIGN_KEY_VIOLATION[0] })),
+      transaction: () => Promise.reject(refusalError({ foreignKey: true })),
     } as never;
     const error = await appendToChain(alwaysFk, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,

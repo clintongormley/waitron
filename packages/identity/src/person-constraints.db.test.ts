@@ -62,8 +62,8 @@ async function collision(
  *
  * Asserting on the caught error's own message would prove nothing: Drizzle's wrapper message is
  * `Failed to run the query '<the statement>'`, so a match on any word the statement contains passes
- * whether the index fired or not. Same shape, and the same reason, as `persons.email.test.ts`'s
- * helper.
+ * whether the index fired or not. The same reason as `persons.email.test.ts`'s `driverRefusal`,
+ * but this returns only the message.
  */
 function driverMessage(error: unknown): string {
   let layer: unknown = error;
