@@ -3546,10 +3546,15 @@ What the preparation tasks left, with F1's own answers where it found them:
   `@waitron/db/testing/schema-conformance.js`, and the core set calls the same factory. None of the
   four turned out to have any drift. Every other set that builds a table has had one since; see
   **B9. CI and test infra** above.
-- **Two coverage gaps under a 5-second default bound** — `scripts/changed-packages.test.mjs` needs an
-  explicit `testTimeout` above a loaded machine's worst case (P5); and no suite covers the
-  deterministic middle of a chain refusal followed by a SUCCESSFUL retry, which
-  `packages/fiscal-verifactu/src/chain.concurrency.test.ts` leaves uncovered (P10).
+- **Two coverage gaps under a 5-second default bound — BOTH CLOSED, 2026-09-23.**
+  `scripts/changed-packages.test.mjs` needs no bound of its own: the root Vitest project has run
+  every `scripts/` suite under a default `testTimeout: 30_000` since #482, whose comment in
+  `vitest.config.ts` records this very file timing out at 5000ms under load. Probed 2026-09-23: a
+  case sleeping six seconds, added to that file and removed, passed as the file stands and failed
+  `Test timed out in 5000ms` under `--testTimeout=5000`. The chain refusal followed by a SUCCESSFUL
+  retry now has a case, in `packages/fiscal-verifactu/src/chain.test.ts` beside the other retry
+  cases rather than in `chain.concurrency.test.ts`, because one writer runs at a time and the
+  refusal is staged, not raced; its controls are recorded at the case.
 - **Stale `vitest.config.ts` comments with no conversion left to catch them** —
   `packages/purchasing`, `packages/fiscal-none` and `packages/fiscal` still carry the false claim that
   a config timeout bounds the PGlite boot; `packages/db/vitest.config.ts:11`'s "every test here boots a

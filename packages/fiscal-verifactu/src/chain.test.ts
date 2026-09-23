@@ -263,6 +263,7 @@ describe("appendToChain", () => {
     // write an attempt makes, and the only earlier write is `readChainHead` creating a missing
     // head row, which is idempotent. CLAUDE.md §4, "a proof-by-deletion belongs to the SHAPE of
     // the code it was taken against" — the shape changed and the proof did not survive it.
+    // The next case reaches that job by staging the earlier write itself, and holds it.
     const occupied = await seedSale(pg.db, till, 1);
     await pg.db.insert(registrosFacturacion).values({
       tillId: till.tillId,
@@ -293,6 +294,85 @@ describe("appendToChain", () => {
     expect((error as AppError).params).toEqual({
       nodeId: till.nodeId,
       attempts: 3,
+    });
+  });
+
+  it("lands the record on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
+    // The middle of the loop, between the two ends the cases around it hold: one refusal the
+    // database really issued, then a clean second attempt. The first attempt's savepoint plants a
+    // record at the position the attempt is about to compute (the chain head still says 0), so the
+    // attempt's own insert is refused by the position's unique index; rolling back to the
+    // savepoint takes the planted record with it, and the second attempt passes straight through.
+    // The only thing wrapped is `transaction`, the one method appendToChain calls on `tx`.
+    //
+    // Controls run 2026-09-23, each restored: `MAX_APPEND_ATTEMPTS = 1` fails this case with
+    // `chain.append_contention`, and rethrowing every error from the loop fails it with the raw
+    // unique refusal. Planting the record BEFORE the first savepoint opens, instead of inside it,
+    // fails it with `chain.append_contention` — the retry lands only because the rollback removed
+    // what the refused attempt wrote. (Dropping the savepoint from `appendToChain` also fails it,
+    // but only because the wrapper has no `select`; that is not evidence.)
+    const decoy = await seedSale(pg.db, till, 1);
+    const saleId = await seedSale(pg.db, till, 2);
+    let calls = 0;
+    let firstRefusal: unknown;
+
+    const result = await pg.db.transaction((tx) => {
+      const refusedOnce = {
+        transaction: <T>(body: (nested: typeof tx) => Promise<T>): Promise<T> => {
+          calls += 1;
+          if (calls > 1) return tx.transaction(body);
+          return tx
+            .transaction(async (nested) => {
+              await nested.insert(registrosFacturacion).values({
+                tillId: till.tillId,
+                nodeId: till.nodeId,
+                sifId: till.sifId,
+                saleId: decoy,
+                secuencia: 1,
+                tipoRegistro: "alta",
+                idEmisorFactura: "89890001K",
+                numSerieFactura: "A/999",
+                fechaExpedicionFactura: "2026-07-20",
+                nombreRazonEmisor: "Waitron SL",
+                primerRegistro: true,
+                sistemaInformatico: {},
+                fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:31+02:00"),
+                offsetMinutos: 120,
+                tipoHuella: "01",
+                huella: "1".repeat(64),
+              });
+              return body(nested);
+            })
+            .catch((error: unknown) => {
+              firstRefusal = error;
+              throw error;
+            });
+        },
+      } as never;
+      return appendToChain(refusedOnce, till.nodeId, altaFor(till.tillId, saleId, 2, 2));
+    });
+
+    expect(calls).toBe(2);
+    expect(constraintTarget(firstRefusal)).toEqual({
+      table: "registros_facturacion",
+      columns: ["node_id", "secuencia"],
+    });
+    const rows = await pg.db
+      .select({
+        id: registrosFacturacion.id,
+        saleId: registrosFacturacion.saleId,
+        secuencia: registrosFacturacion.secuencia,
+        huella: registrosFacturacion.huella,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.nodeId, till.nodeId));
+    expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
+    expect(result.secuencia).toBe(1);
+    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
+    expect(head).toEqual({
+      secuencia: 1,
+      ultimoRegistroId: result.id,
+      ultimaHuella: result.huella,
     });
   });
 
