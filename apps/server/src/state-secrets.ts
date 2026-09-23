@@ -10,7 +10,8 @@ import "./errors.js";
  * material (the vault master key in `secrets.env`), its fiscal identity (`trading.env`), and the CA +
  * leaf that let a restored box keep the same trusted identity so already-trusting devices need not
  * re-trust. Relative to `stateDir`, posix-slashed. NOT the database — that is a separate scheduled
- * backup (slice 4b-ii). The layout mirrors `box-secrets.ts`/`trading-config.ts` which WROTE these.
+ * backup (slice 4b-ii). Cloud installation keys are excluded: a replacement pairs with its own key.
+ * The layout mirrors `box-secrets.ts`/`trading-config.ts` which WROTE these.
  */
 export const RECOVERY_FILES = [
   "secrets.env",

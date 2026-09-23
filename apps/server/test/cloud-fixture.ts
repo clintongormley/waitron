@@ -8,6 +8,7 @@ import { expect } from "vitest";
 export async function cloudFixture() {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-client-"));
   const requests: unknown[][] = [];
+  let replyPatch: Record<string, unknown> = {};
   let reject = false;
   let bad = false;
   let approved = false;
@@ -91,6 +92,7 @@ export async function cloudFixture() {
         ...(complete
           ? { registration: { venueId, installationId, organisationId, legalBusinessId } }
           : {}),
+        ...replyPatch,
       }),
     );
   });
@@ -101,6 +103,9 @@ export async function cloudFixture() {
   const options = { stateDir, origin, localVenueId: randomUUID(), environment: "test" as const };
   return {
     stateDir,
+    patchReply: (patch: Record<string, unknown>) => {
+      replyPatch = patch;
+    },
     requests,
     options,
     organisationId,

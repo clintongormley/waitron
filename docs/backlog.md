@@ -3776,9 +3776,9 @@ CI covers both packages and the weekly mutation matrix retains both. See the
 Cloud has published private `@waitron-io/ui-core@0.1.0` from Waitron commit
 `0a93f4d3557b669661ac8f589aad866e2cd9653f`; its installed-package Chromium and
 declaration checks pass locally. See the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md).
-Cloud owns the release workflow and account screens; its consumer integration is
-tracked in [Cloud PR #29](https://github.com/waitron-io/waitron-cloud/pull/29).
-Next, build Cloud account screens against its existing API.
+Cloud owns the release workflow and account screens. Its English/Spanish account portal
+is implemented, and the connection screens now use its real account and pairing APIs
+(see Cloud connection integration above).
 Read the first weekly mutation results for both UI packages after the split; this
 branch preserves the 90% gates but does not measure their new full mutation scores.
 
@@ -3788,7 +3788,7 @@ Cloud product and infrastructure work moved to the
 on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provider integration
 and cloud operations. See [documentation ownership](cloud-ownership.md).
 
-**Waitron retains:** signup and account-linking UI once the contract is agreed; box-side networking
+**Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side networking
 and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute

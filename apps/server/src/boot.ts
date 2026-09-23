@@ -2134,6 +2134,7 @@ export async function startServer(
     {
       db,
       managementOrigin: config.managementOrigin,
+      // Roles can change live; fencing takes effect through a server restart.
       isPrimary: () =>
         holders.mode.current === "primary" &&
         holders.singletonRole.current === "primary" &&

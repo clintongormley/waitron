@@ -55,7 +55,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
     "/management-api/cloud/*",
     bodyLimit({
       maxSize: 4096,
-      onError: (c) => c.json({ error: { code: "cloud.request_invalid", params: {} } }, 413),
+      onError: (c) => c.json({ error: { code: "cloud.request_invalid", params: {} } }, 400),
     }),
   );
   app.get("/management-api/cloud/status", (c) =>
@@ -71,9 +71,9 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   for (const action of ["start", "check", "complete"] as const)
     app.post(`/management-api/cloud/${action}`, (c) =>
       run(c, log, async () => {
-        await authorize(c, action === "check");
         if (c.req.header("origin") !== deps.managementOrigin)
           return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+        await authorize(c);
         const body = await readRawJsonBody<unknown>(c);
         if (!body || typeof body !== "object" || Array.isArray(body))
           throw new AppError("cloud.request_invalid", {});

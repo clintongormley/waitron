@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 it("requires a pinned secure Cloud origin except explicit loopback development", () => {
@@ -56,6 +56,14 @@ it("requires explicit bound local confirmation and checks authority again after 
     f.approve();
     const approved = await client.check();
     expect(approved.state).toBe("awaiting_local");
+    const approvedPath = join(f.stateDir, "cloud-connection.json");
+    const approvedFile = await readFile(approvedPath, "utf8");
+    for (const patch of [{ organisationId: randomUUID() }, { legalBusinessId: randomUUID() }]) {
+      f.patchReply(patch);
+      await expect(client.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(await readFile(approvedPath, "utf8")).toBe(approvedFile);
+    }
+    f.patchReply({});
     expect(f.requests.some((v) => v[2] === "complete")).toBe(false);
     const choice = {
       requestId: approved.requestId!,
@@ -73,9 +81,23 @@ it("requires explicit bound local confirmation and checks authority again after 
     expect(f.requests.some((v) => v[2] === "complete")).toBe(false);
     const complete = await client.complete(choice, async () => {});
     expect(complete.state).toBe("complete");
+    expect(complete.code).toBe("");
     expect(complete.registration?.installationId).toBe(f.installationId);
     const restarted = createCloudConnection(f.options);
     expect((await restarted.check()).registration).toEqual(complete.registration);
+    expect((await restarted.status()).code).toBe("");
+    const path = join(f.stateDir, "cloud-connection.json");
+    const before = await readFile(path, "utf8");
+    for (const patch of [
+      { registration: { ...complete.registration, installationId: randomUUID() } },
+      { registration: { ...complete.registration, venueId: randomUUID() } },
+    ]) {
+      f.patchReply(patch);
+      await expect(restarted.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(await readFile(path, "utf8")).toBe(before);
+    }
+    await chmod(path, 0o644);
+    await expect(restarted.status()).rejects.toMatchObject({ code: "cloud.state_invalid" });
   } finally {
     await f.close();
   }
@@ -164,6 +186,51 @@ it("starts again only after Cloud refuses the old request, retaining the install
     expect(f.requests[0]![4]).toBe(f.requests.at(-1)![4]);
     expect(next.code).toMatch(/^\d{8}$/);
   } finally {
+    await f.close();
+  }
+});
+
+it("emits the fixed version-one wire vector shared with Cloud", async () => {
+  const f = await fixture();
+  const v = JSON.parse(
+    await readFile(new URL("../test/cloud-pairing-vector.json", import.meta.url), "utf8"),
+  );
+  const options = { ...f.options, origin: v.claims.origin, localVenueId: v.claims.localVenueId };
+  await writeFile(
+    join(f.stateDir, "cloud-connection.json"),
+    JSON.stringify({
+      version: 1,
+      origin: v.claims.origin,
+      requestId: v.claims.requestId,
+      localVenueId: v.claims.localVenueId,
+      environment: "test",
+      code: v.claims.code,
+      privateKey: v.privateKey,
+      publicKey: v.claims.publicKey,
+    }),
+    { mode: 0o600 },
+  );
+  const clock = vi.spyOn(Date, "now").mockReturnValue(v.claims.issuedAt);
+  const send = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    expect(url).toBe(v.claims.origin + "/api/pairing/start");
+    expect(JSON.parse(init!.body as string)).toEqual({
+      payload: v.payload,
+      signature: v.signature,
+    });
+    return Response.json({
+      requestId: v.claims.requestId,
+      localVenueId: v.claims.localVenueId,
+      environment: "test",
+      expiresAt: new Date(v.claims.issuedAt + 600000).toISOString(),
+      state: "awaiting_cloud",
+    });
+  });
+  try {
+    await createCloudConnection(options).start();
+    expect(send).toHaveBeenCalledTimes(1);
+  } finally {
+    send.mockRestore();
+    clock.mockRestore();
     await f.close();
   }
 });

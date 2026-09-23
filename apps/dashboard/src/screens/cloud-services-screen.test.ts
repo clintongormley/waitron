@@ -126,3 +126,35 @@ it("ignores a delayed reply after removal and reloads when the screen is reconne
   expect(el.shadowRoot!.textContent).not.toContain("Old account");
   expect(calls).toBe(2);
 });
+it("keeps Start again available after an unavailable request and a later network failure", async () => {
+  setLocale("en");
+  let checks = 0;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/check"))
+      return Response.json(
+        {
+          error: {
+            code: ++checks === 1 ? "cloud.request_unavailable" : "cloud.unavailable",
+            params: {},
+          },
+        },
+        { status: 409 },
+      );
+    return Response.json({
+      state: "awaiting_cloud",
+      configured: true,
+      isPrimary: true,
+      requestId,
+      code: "12345678",
+      expiresAt: "2099-01-01T12:00:00Z",
+    });
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check")).not.toBeNull();
+  click(el, "check");
+  await expect.poll(() => el.shadowRoot!.querySelector("#restart")).not.toBeNull();
+  click(el, "check");
+  await expect.poll(() => checks).toBe(2);
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("#restart")).not.toBeNull();
+});

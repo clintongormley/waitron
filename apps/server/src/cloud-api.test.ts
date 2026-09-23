@@ -48,7 +48,20 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
       });
     expect((await send("")).status).toBe(401);
     expect((await send(staff.cookie)).status).toBe(403);
+    const oldActivity = new Date(Date.now() - 60000).toISOString();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: oldActivity })
+      .where(eq(managementSessions.id, manager.session));
     expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.id, manager.session))
+      )[0]!.lastSeenAt,
+    ).toBe(oldActivity);
     primary = false;
     expect((await send(manager.cookie)).status).toBe(409);
     primary = true;
@@ -76,6 +89,31 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     const body = await connected.json();
     expect(body.localVenueId).toBe(f.options.localVenueId);
     expect(body.privateKey).toBeUndefined();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: oldActivity })
+      .where(eq(managementSessions.id, manager.session));
+    expect(
+      (
+        await app.request("/management-api/cloud/check", {
+          method: "POST",
+          headers: {
+            cookie: manager.cookie,
+            origin: "https://venue.test",
+            "content-type": "application/json",
+          },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.id, manager.session))
+      )[0]!.lastSeenAt,
+    ).not.toBe(oldActivity);
     await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
     expect((await send(manager.cookie)).status).toBe(403);
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
@@ -161,6 +199,7 @@ it("rejects malformed or extra browser inputs and reports an unconfigured server
     "null",
     "[1]",
     "broken",
+    "x".repeat(4097),
     '{"localVenueId":"caller"}',
     '{"restart":null}',
     '{"restart":"true"}',

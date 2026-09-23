@@ -50,6 +50,7 @@ export class CloudServicesScreen extends LitElement {
   @state() private status: CloudConnectionStatus | undefined;
   @state() private busy = false;
   @state() private error: string | undefined;
+  @state() private requestUnavailable = false;
   #generation = 0;
   override connectedCallback() {
     super.connectedCallback();
@@ -67,9 +68,15 @@ export class CloudServicesScreen extends LitElement {
     const generation = this.#generation;
     try {
       const result = await request();
-      if (generation === this.#generation) this.status = result;
+      if (generation === this.#generation) {
+        this.status = result;
+        this.requestUnavailable = false;
+      }
     } catch (error) {
-      if (generation === this.#generation) this.error = codeOf(error);
+      if (generation === this.#generation) {
+        this.error = codeOf(error);
+        if (this.error === "cloud.request_unavailable") this.requestUnavailable = true;
+      }
     } finally {
       if (generation === this.#generation) {
         this.busy = false;
@@ -148,7 +155,7 @@ export class CloudServicesScreen extends LitElement {
                             ${s.state === "awaiting_local" && s.isPrimary ? html`<wt-button id="confirm" variant="primary" .disabled=${this.busy} @click=${() => this.#complete()}>${t("cloud.confirm")}</wt-button>` : nothing}
                           </wt-form-actions>
                           ${s.isPrimary && !s.expiresAt ? button("retry-start", t("cloud.retry_start"), () => this.api.startCloudConnection()) : nothing}
-                          ${s.isPrimary && (this.error === "cloud.request_unavailable" || (!!s.expiresAt && Date.parse(s.expiresAt) < Date.now())) ? button("restart", t("cloud.restart"), () => this.api.startCloudConnection(true)) : nothing}
+                          ${s.isPrimary && (this.requestUnavailable || (!!s.expiresAt && Date.parse(s.expiresAt) < Date.now())) ? button("restart", t("cloud.restart"), () => this.api.startCloudConnection(true)) : nothing}
                         `
                 }`
         }

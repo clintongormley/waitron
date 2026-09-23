@@ -51,3 +51,8 @@ The runner starts two actual Waitron servers through
 plus the Cloud API and browser. It verifies the two approval screens, a server restart,
 a lost committed reply and rejection of crossed installation proofs. The fixture uses
 demo mode and does not configure fiscal/payment providers or create invoices.
+
+The local Cloud write routes accept only the configured management origin. Open the
+screen at `WAITRON_MANAGEMENT_ORIGIN`; the later remote-access integration must
+configure its staff hostname consistently. An automatic status read leaves your
+session idle time unchanged. Clicking Check connection counts as your activity.
