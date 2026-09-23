@@ -86,7 +86,7 @@ describe("stringToThousandths", () => {
   });
 
   it("refuses a malformed string before converting it", () => {
-    for (const bad of ["abc", "1e3"]) {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
       expect(refusalOf(() => stringToThousandths(bad))).toEqual({
         code: "shared.invalid_decimal",
         params: { value: bad },
@@ -98,6 +98,10 @@ describe("stringToThousandths", () => {
     expect(refusalOf(() => stringToThousandths("1000000000"))).toEqual({
       code: "shared.decimal_overflow",
       params: { value: "1000000000", maxIntegerDigits: 9 },
+    });
+    expect(refusalOf(() => stringToThousandths("-1000000000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "-1000000000", maxIntegerDigits: 9 },
     });
     expect(stringToThousandths("999999999.999")).toBe(999999999999);
   });
@@ -173,7 +177,7 @@ describe("stringToBasisPoints", () => {
   });
 
   it("refuses a malformed string before converting it", () => {
-    for (const bad of ["abc", "1e3"]) {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
       expect(refusalOf(() => stringToBasisPoints(bad))).toEqual({
         code: "shared.invalid_decimal",
         params: { value: bad },

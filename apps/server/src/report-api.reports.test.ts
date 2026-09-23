@@ -106,9 +106,6 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   // the row. `vat_breakdown` is jsonb and keeps its decimal literals; `sale_lines.quantity` and
   // `sale_lines.vat_rate` are whole numbers too, at their own scales — a count of thousandths and a
   // count of basis points — so each gets its own converter here.
-  const cents = (value: string): number => stringToCents(value);
-  const thousandths = (value: string): number => stringToThousandths(value);
-  const basisPoints = (value: string): number => stringToBasisPoints(value);
   // Through the table definitions: every id is a `$defaultFn` generator here, and `vat_breakdown`,
   // `descriptions` and `invoice_locales` are encoded by their own write mappings — the `::jsonb`
   // casts and the `array[...]` constructor they replace are both refused by this engine. Every
@@ -122,7 +119,7 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
       invoiceNumber,
       issuedAt: d.issuedAt,
       issuedOffsetMinutes: 0,
-      total: cents(d.total),
+      total: stringToCents(d.total),
       vatBreakdown: [{ rate: d.rate, base: d.base, tax: d.tax }],
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -134,8 +131,8 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   await db.insert(tenders).values({
     saleId,
     method: "cash",
-    amount: cents(d.tenderAmount),
-    tipAmount: cents(d.tipAmount),
+    amount: stringToCents(d.tenderAmount),
+    tipAmount: stringToCents(d.tipAmount),
     settledAt: d.issuedAt,
   });
   await db.insert(saleLines).values({
@@ -143,10 +140,10 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
     lineNo: 1,
     name: d.line.name,
     descriptions: d.line.descriptions,
-    quantity: thousandths(d.line.quantity),
-    unitPrice: cents("3.50"),
-    vatRate: basisPoints(d.rate),
-    lineTotal: cents(d.line.total),
+    quantity: stringToThousandths(d.line.quantity),
+    unitPrice: stringToCents("3.50"),
+    vatRate: stringToBasisPoints(d.rate),
+    lineTotal: stringToCents(d.line.total),
   });
 }
 

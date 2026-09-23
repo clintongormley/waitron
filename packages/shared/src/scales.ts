@@ -86,7 +86,8 @@ export function decimalToThousandths(value: Decimal): number {
 
 /**
  * The count of whole thousandths in a decimal string: "1.5" is 1500. Refuses a malformed
- * string with `shared.invalid_decimal`.
+ * string with `shared.invalid_decimal`, and one wider than the quantity scale admits with
+ * `shared.decimal_overflow`.
  */
 export function stringToThousandths(value: string): number {
   return decimalToThousandths(decimal(value));
@@ -112,7 +113,8 @@ export function decimalToBasisPoints(value: Decimal): number {
 
 /**
  * The count of whole basis points in a decimal string: "21.00" is 2100. Refuses a malformed
- * string with `shared.invalid_decimal`.
+ * string with `shared.invalid_decimal`, and one wider than the rate scale admits with
+ * `shared.decimal_overflow`.
  */
 export function stringToBasisPoints(value: string): number {
   return decimalToBasisPoints(decimal(value));

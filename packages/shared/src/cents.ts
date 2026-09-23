@@ -6,16 +6,20 @@ import { RAW_COUNT_PATTERN, scaledLiteral } from "./scales.js";
 // The one sanctioned crossing between a money COLUMN and the amount type.
 //
 // A money column stores a count of whole cents, while every arithmetic and every printed or
-// hashed literal above the storage boundary is an exact `Decimal`. The three functions that
-// convert between those two forms are declared here and nowhere else in the tree
-// (`grep -rn 'function decimalToCents\|function centsToDecimal\|function rawCentsToDecimal'`
-// over `packages` and `apps` returns this file alone), which is why it is a file of its own
-// rather than more exports in `./money.ts`: that file is checked, as text, for the absence of
-// `Number(` and every other float-shaped token (`conventions.test.ts`), and keeping the check
-// that strict is worth more than the convenience of one module.
+// hashed literal above the storage boundary is an exact `Decimal`. The functions that convert
+// between those two forms — `decimalToCents`, `centsToDecimal`, `rawCentsToDecimal` and
+// `stringToCents`, which is `decimal()` followed by `decimalToCents` — are declared here and
+// nowhere else in the tree. This returns this file alone:
 //
-// The sentence above is about these three functions, not about the number type in general, and
-// the difference matters because plenty of code crosses into a number without coming through
+//   git grep -n 'function decimalToCents\|function centsToDecimal\|function rawCentsToDecimal\|function stringToCents' -- packages apps
+//
+// That is why it is a file of its own rather than more exports in `./money.ts`: that file is
+// checked, as text, for the absence of `Number(` and every other float-shaped token
+// (`conventions.test.ts`), and keeping the check that strict is worth more than the convenience
+// of one module.
+//
+// The claim that they are declared nowhere else is about these functions, not about the number
+// type in general, and the difference matters because plenty of code crosses into a number without coming through
 // here. A caller that already holds a `Decimal` may take it further whenever it needs a number to
 // format, compare or hand to a library — display formatting and `packages/workforce-es`'s
 // `convenio.ts` both do, and some of those call sites carry their own note saying why it is safe
@@ -38,7 +42,8 @@ export function decimalToCents(value: Decimal): number {
 
 /**
  * The count of whole cents in a decimal string: "12.34" is 1234. Refuses a malformed
- * string with `shared.invalid_decimal`.
+ * string with `shared.invalid_decimal`, and one whose integer part is wider than the money
+ * scale admits with `shared.decimal_overflow`.
  */
 export function stringToCents(value: string): number {
   return decimalToCents(decimal(value));

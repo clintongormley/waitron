@@ -84,13 +84,13 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  stringToBasisPoints,
+  stringToCents,
   subtractDecimal,
   sumDecimals,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
-  stringToBasisPoints,
-  stringToCents,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";

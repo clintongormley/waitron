@@ -96,7 +96,7 @@ describe("stringToCents", () => {
   });
 
   it("refuses a malformed string before converting it", () => {
-    for (const bad of ["abc", "1e3"]) {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
       expect(refusalOf(() => stringToCents(bad))).toEqual({
         code: "shared.invalid_decimal",
         params: { value: bad },
@@ -104,7 +104,8 @@ describe("stringToCents", () => {
     }
   });
 
-  it("refuses an amount wider than the money scale admits", () => {
+  it("accepts the widest two-place amount the money scale admits and refuses one digit wider", () => {
+    expect(stringToCents("9".repeat(MAX_MONEY_INTEGER_DIGITS) + ".99")).toBe(99999999999999);
     const tooWide = "1" + "0".repeat(MAX_MONEY_INTEGER_DIGITS);
     expect(refusalOf(() => stringToCents(tooWide))).toEqual({
       code: "shared.decimal_overflow",
