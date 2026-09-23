@@ -54,10 +54,10 @@ export const products = table(
       /* v8 ignore start */
       .references(() => catalogues.id),
     /* v8 ignore stop */
-    // Set only on a VARIANT (spec §1.2, §15): the product it is a variant of. One level only, and
-    // fixed once set — both enforced by triggers, which cannot be declared here
-    // (0004_variant_one_level.sql; scripts/behavioural-triggers.test.ts). Same catalogue as the
-    // parent: the composite key below.
+    // Set only on a VARIANT (spec §1.2, §15): the product it is a variant of. One level only,
+    // fixed when the row is created, and the row's `id` never changes either — all enforced by
+    // triggers, which cannot be declared here (0004_variant_one_level.sql;
+    // scripts/behavioural-triggers.test.ts). Same catalogue as the parent: the composite key below.
     parentId: id("parent_id"),
     // A variant's position among its parent's variants (spec §15.5); unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),

@@ -189,11 +189,12 @@ be restored in any order after those identities.
 The storage switch regenerated every module's PostgreSQL chain into one SQLite baseline per set, so
 all three files this paragraph used to name are gone and so is core's `0020_category_names` —
 `grep -rn 0020_category_names` over `packages/` and `apps/` matched nothing on 2026-09-23. The
-category tables are created by the baselines: `packages/catalogue/drizzle/0000_baseline.sql`, and
-`packages/db/drizzle/0000_baseline.sql` for `products.category_id`; the media set adds the category
-image triggers in `packages/media/drizzle/0001_image_references.sql`. Core's later migrations change
-`products` for variants — `0003_variant_inherited_nullable.sql` rebuilds the table and carries
-`category_id` and its key to `categories` across — and none of them touches category membership.
+category tables are created by the baselines: `packages/catalogue/drizzle/0000_baseline.sql` for
+`category_details` and `product_categories`, and `packages/db/drizzle/0000_baseline.sql` for
+`categories` itself and `products.category_id`; the media set adds the category image triggers in
+`packages/media/drizzle/0001_image_references.sql`. Core's `0002` to `0004` change `products` for
+variants — `0003_variant_inherited_nullable.sql` rebuilds the table and carries `category_id` and
+its key to `categories` across — and none of core's later migrations touches category membership.
 
 The operational advice that hung off the old migration still holds, and it is a house rule rather
 than a property of any one file: schema changes drop and recreate, with no translation and no

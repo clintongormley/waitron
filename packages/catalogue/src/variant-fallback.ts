@@ -22,10 +22,13 @@ import { productUnits } from "./schema/units.js";
  * The catalogue's product reads, and the order path's read of an extras item, take their inherited
  * values from here, so the nullability of the four columns a variant may leave blank (`vat_class`,
  * `pricing_unit`, `unit_price`, `dietary_declarations`) stops here: their callers see the same
- * non-null types they always did. One catalogue read is raw on purpose: `readProductCategories`
- * (`categories.ts`, also served by `GET /management-api/products/:id/categories`), because the
- * category writers read it back and rewrite the product's OWN rows — an inherited list there would
- * be copied onto the variant by its next save. Reads keyed on an ORDER LINE's product — the
+ * non-null types they always did. The catalogue's reads keyed on CATEGORY MEMBERSHIP read each
+ * product's OWN `product_categories` rows, so a variant that inherits its parent's categories is not
+ * listed under them there — a category's product list and its delete preview (`categories.ts`) are
+ * two. For `readProductCategories` (also served by `GET /management-api/products/:id/categories`)
+ * that is on purpose: the category writers read it back and rewrite the product's OWN rows, so an
+ * inherited list there would be copied onto the variant by its next save. Reads keyed on an ORDER
+ * LINE's product — the
  * kitchen's station routing, its allergen and dietary display, preparation routes — still read the
  * raw columns, and are correct only while no order line names a variant.
  */
@@ -54,7 +57,8 @@ const hasOwnCategories = exists(
  *
  * Typed non-null, for a column `products_top_level_owns_ck` requires on every product with no
  * parent: a variant's parent exists (the composite foreign key, `on delete restrict`) and has no
- * parent of its own (`products_variant_one_level_insert`), so the value is never null.
+ * parent of its own (the triggers in `packages/db/drizzle/0004_variant_one_level.sql`), so the value
+ * is never null.
  */
 function owned<C extends AnyColumn>(column: C, parentColumn: AnyColumn): SQL<C["_"]["data"]> {
   return sql`coalesce(${column}, ${parentColumn})`.mapWith(column);

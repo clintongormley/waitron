@@ -496,8 +496,9 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
  * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it
  * and how many of each this dish takes. Both are the shared wire shapes (`@waitron/shared`), and the
  * server resolves everything else: an options answer freezes six names onto the dish line and an
- * extras pick becomes a priced child line carrying the picked product's own VAT class. Each key is
- * ABSENT on a line that answered nothing of that kind — never `[]`.
+ * extras pick becomes a priced child line carrying the picked product's VAT class — its own, or its
+ * parent's where a variant leaves it blank, never the dish's. Each key is ABSENT on a line that
+ * answered nothing of that kind — never `[]`.
  *
  * Every ACTIVE options list a dish attaches must be answered, so a line that omits one is refused
  * `options.label_required` rather than ignored (`validateOptionSelections`,

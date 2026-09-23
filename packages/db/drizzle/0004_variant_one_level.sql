@@ -17,10 +17,11 @@
 -- deferred, as configuration transfer defers them (`apps/server/src/configuration-transfer.ts`),
 -- so a variant can be written before the parent it names.
 --
--- The second statement holds the fixed parent against `INSERT OR REPLACE`, which runs this trigger
--- while the row it replaces is still in the table and never runs the update trigger below. It reads
--- the stored row, so a plain insert of a taken id naming a different parent is refused here too,
--- before the primary key sees it.
+-- The second statement holds the fixed parent on an insert that names a taken id. This trigger runs
+-- before the conflict is resolved, while the stored row is still in the table, so any such insert
+-- naming a different parent is refused whatever its conflict clause — among them `INSERT OR
+-- REPLACE`, which never runs the update trigger below, and a plain insert, before the primary key
+-- sees it.
 CREATE TRIGGER products_variant_one_level_insert
 BEFORE INSERT ON products
 FOR EACH ROW
@@ -43,10 +44,10 @@ BEGIN
   WHERE new.parent_id IS NOT old.parent_id;
 END;
 --> statement-breakpoint
--- `id` never changes after insert. Without this an UPDATE reaches a second level without naming
--- `parent_id`: a variant renamed onto an id a waiting child already names (foreign keys deferred),
--- or `UPDATE OR REPLACE` moving a top-level row onto a variant's id, which deletes the variant and
--- leaves a top-level row in its place.
+-- `id` never changes after insert. Without this an UPDATE reaches a second level, or clears a
+-- parent, without naming `parent_id`: a variant renamed onto an id a waiting child already names
+-- (foreign keys deferred) makes a second level, and `UPDATE OR REPLACE` moving a top-level row onto
+-- a variant's id deletes the variant and leaves a top-level row in its place.
 CREATE TRIGGER products_id_fixed_update
 BEFORE UPDATE OF id ON products
 FOR EACH ROW

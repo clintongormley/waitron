@@ -62,8 +62,10 @@ import {
  *
  * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
  * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
- * path; `INSERT OR REPLACE` and `UPDATE OR REPLACE` are tried only against the triggers on
- * `products`. Nor is any concurrency claim: one connection, one process.
+ * path. `INSERT OR REPLACE` is tried only against `products_variant_one_level_insert` and
+ * `UPDATE OR REPLACE` only against `products_id_fixed_update`, both of
+ * `0004_variant_one_level.sql`; no other trigger here, media's triggers on `products` included, is
+ * tried with either. Nor is any concurrency claim: one connection, one process.
  */
 
 /**

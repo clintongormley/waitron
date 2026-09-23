@@ -58,7 +58,7 @@ const listColumns = {
   active: extraLists.active,
 };
 // No name of any kind: an item's three names, VAT class, allergens, dietary labels and photo all
-// come from the `products` row it names (spec §3.1).
+// come from the product it names (spec §3.1).
 const itemColumns = {
   id: extraListItems.id,
   productId: extraListItems.productId,

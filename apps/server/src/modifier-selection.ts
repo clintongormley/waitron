@@ -6,8 +6,9 @@ import type { OptionSnapshot } from "@waitron/shared";
 
 /**
  * What the order path knows about a product offered as an extra: the three names it freezes onto
- * the child line, and the VAT class that line is taxed at. Read from the `products` row, never from
- * the `extra_list_items` row that offers it — the offer holds nothing that duplicates the product
+ * the child line, and the VAT class that line is taxed at. Read from the `products` row (and, for a
+ * variant that leaves its VAT blank, its parent's), never from the `extra_list_items` row that offers
+ * it — the offer holds nothing that duplicates the product
  * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1).
  */
 export interface ExtraProductFacts {
@@ -53,7 +54,8 @@ export interface ExtraChild {
  *
  * Nothing is resolved here. `price` is the offer's already-settled `price` — the projection
  * collapsed the menu → list item → product chain into that field
- * (`packages/catalogue/src/extra-projection.ts`) — and `vatClass` is the extra product's own.
+ * (`packages/catalogue/src/extra-projection.ts`) — and `vatClass` is the extra product's effective
+ * rate, never the dish's.
  * `defaultLanguage` is the language the two plain staff names widen under, because an
  * `OptionSnapshot` holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`.
  *

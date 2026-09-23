@@ -65,7 +65,7 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
 `maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
-or photo, which all come from the `products` row (spec §3.1). A product may appear at most once in
+or photo, which all come from the product (spec §3.1). A product may appear at most once in
 one list (`extra_list_items_list_product_uq`).
 
 ### Attaching a list to a dish
@@ -303,10 +303,12 @@ Five things it is worth knowing about that payload:
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
   them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —
   except the names, which are always the variant's own. The two declaration fields take the names
-  a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the same two
-  values `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
-  pick is what becomes such a line. Shown beside the dish's own, never folded into them (spec
-  §3.4).
+  a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the field
+  names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
+  pick is what becomes such a line. That kitchen read takes the product's RAW columns until Task 5
+  of `docs/superpowers/plans/2026-09-23-variants-as-products.md`, so an extra that is a variant
+  inheriting its parent's declarations shows none there. Shown beside the dish's own, never folded
+  into them (spec §3.4).
 
 ## On the filed sale
 

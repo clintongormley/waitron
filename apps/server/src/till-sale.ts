@@ -86,8 +86,9 @@ export interface TillTender {
 export interface TillSaleRequest {
   /** The walk-up basket. A line MAY carry `options` — one `{ listId, labelId }` answer per ACTIVE
    *  options list its dish attaches, frozen onto the dish line — and `extras`, whose picks each become
-   *  a child line carrying the picked product at the offer's price and that product's own VAT. The
-   *  server validates both against the dish's own definitions and is the gate.
+   *  a child line carrying the picked product at the offer's price and that product's VAT — its own,
+   *  or its parent's where a variant leaves it blank, never the dish's. The server validates both
+   *  against the dish's own definitions and is the gate.
    *
    *  A line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated and persisted server-side and
    *  never threaded into any sale/fiscal projection. Declared here because the till already sends them
