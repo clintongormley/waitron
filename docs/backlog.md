@@ -2477,6 +2477,24 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
+**`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
+2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every
+backslash and wraps the value in `E'…'` when it contains one, and its header still argues from
+PostgreSQL's `standard_conforming_strings`. Measured 2026-09-23 on `node:sqlite` (Node v26.7.0):
+`select E'a\\b' as v` fails with `near "as": syntax error`, and in a plain literal SQLite keeps a
+backslash as itself, so doubling it would also change the value. Its one product caller,
+`packages/db/src/change-feed.ts`, quotes fixed relation type names with no backslash, so nothing
+fails today. **Next action:** make it SQLite's rule (double the single quote only), test-first with a
+backslash case, and rewrite the header.
+
+**Two identity error descriptions say less than the code raises — OPEN (found 2026-09-23, identity's
+coverage review, PR #526).** In `packages/identity/src/errors.ts`, `account_action.invalid` reads
+"unknown, expired, or already used", but it is also raised for a live proof whose person has since
+been suspended, activated or lost their login email; `management_session.required` reads "unknown or
+already ended", but `profile.ts` also raises it for a live session whose person row is gone. The
+tests for each case are in `account-action.test.ts` and `profile.test.ts`. **Next action:** widen
+the two descriptions to the cases the tests pin.
+
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
 nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
