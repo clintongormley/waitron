@@ -136,9 +136,9 @@ export interface DrainResult {
   nextDueAt: Date | null;
   /**
    * Whether this pass found due work and attempted it — 1 if it did, whether it submitted, deferred
-   * to a gate, or landed in `skipped`; 0 for a no-work pass, which read no certificate, and 0 when
-   * the host's restart reset failed and no drain ran to look for work. One database files for one
-   * taxpayer, so the only values are 0 and 1; it stays a COUNT because the
+   * to a gate, or landed in `skipped`; 0 for a pass that found no work or never looked for any, and
+   * read no certificate. One database files for one taxpayer, so the only values are 0 and 1; it
+   * stays a COUNT because the
    * awaiting-fiscal-certificate flag (`apps/server/src/pass.ts`) keys off `> 0` — a no-work pass
    * must not clear it, since a pass that exercised no cert is no evidence the cert has arrived.
    */
