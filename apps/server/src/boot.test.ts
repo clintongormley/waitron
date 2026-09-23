@@ -3021,6 +3021,7 @@ describe("startServer — what a trading boot wires behind its management routes
       body: JSON.stringify({ defaultLanguage: "fr", languages: ["fr"] }),
     });
 
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "content.default_missing", params: { language: "fr", count: 1 } },
     });
@@ -3092,7 +3093,12 @@ describe("startServer — background listeners and sinks that fail or close", ()
       await awaitListening(landingPort);
       const page = await fetch(`http://127.0.0.1:${landingPort}/`);
       expect(page.status).toBe(200);
-      await page.text();
+      expect(page.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(await page.text()).toContain("/ca.crt");
+      // The listener reads the boot's own state directory: it hands out the CA minted above.
+      const ca = await fetch(`http://127.0.0.1:${landingPort}/ca.crt`);
+      expect(ca.status).toBe(200);
+      expect(await ca.text()).toBe(await readFile(join(stateDir, "tls", "ca.crt"), "utf8"));
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
@@ -3118,9 +3124,9 @@ describe("startServer — background listeners and sinks that fail or close", ()
           level: "warn",
         });
         expect((await fetch(`http://127.0.0.1:${port}/api/node`)).status).toBe(200);
-        expect(lines.filter((line) => line.includes('"event":"log.file_unavailable"'))).toHaveLength(
-          1,
-        );
+        expect(
+          lines.filter((line) => line.includes('"event":"log.file_unavailable"')),
+        ).toHaveLength(1);
       } finally {
         await server.close();
       }
@@ -3233,13 +3239,15 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             "x-waitron-recovery-key": "not-the-key-that-sealed-it",
             "x-waitron-restore-environment": "preproduction",
           },
-          body: encryptArtifact(
-            packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
-            "the key that really sealed it",
+          body: new Uint8Array(
+            encryptArtifact(
+              packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+              "the key that really sealed it",
+            ),
           ),
         });
         const body = (await response.json()) as { error?: { code: string } };
-        expect(response.status).toBeGreaterThanOrEqual(400);
+        expect(response.status).toBe(400);
         expect(body.error?.code).toBe("recovery.passphrase_invalid");
         await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
           code: "ENOENT",
@@ -3265,6 +3273,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           }),
         });
         const body = (await response.json()) as { error?: { code: string } };
+        expect(response.status).toBe(502);
         expect(body.error?.code).toBe("mirror.bundle_fetch_failed");
         expect(kills).toEqual([]);
       });
@@ -3314,6 +3323,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post, kills }) => {
         const json = { "content-type": "application/json" };
         const unstaged = await post("/setup-api/provision", { headers: json, body: live(TAX_ID) });
+        expect(unstaged.status).toBe(400);
         expect(await unstaged.json()).toEqual({
           error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
         });
@@ -3323,7 +3333,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             "content-type": "application/octet-stream",
             "x-waitron-export-passphrase": PASSPHRASE,
           },
-          body: artifact,
+          body: new Uint8Array(artifact),
         });
         expect(staged.status).toBe(200);
         expect(((await staged.json()) as { venue: { taxId: string } }).venue.taxId).toBe(TAX_ID);
@@ -3332,11 +3342,15 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           headers: json,
           body: live("60000012G"),
         });
+        expect(otherBusiness.status).toBe(400);
         expect(await otherBusiness.json()).toEqual({
           error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
         });
 
-        const provisioned = await post("/setup-api/provision", { headers: json, body: live(TAX_ID) });
+        const provisioned = await post("/setup-api/provision", {
+          headers: json,
+          body: live(TAX_ID),
+        });
         expect(await provisioned.json()).toEqual({ provisioned: true, restarting: true });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
       });

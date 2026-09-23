@@ -326,7 +326,12 @@ describe("waitron-rejoin rejoin — default wiring", () => {
           level: "warn",
           event: "rejoin.accept_loss",
         },
-        { carrierNodeId: "carrier-node", at: expect.any(String), level: "info", event: "rejoin.wiped" },
+        {
+          carrierNodeId: "carrier-node",
+          at: expect.any(String),
+          level: "info",
+          event: "rejoin.wiped",
+        },
         `wiped ${venueDir}; next boot is setup mode — re-adopt from carrier-node`,
       ]);
       // The wipe took the held chart with it, and the re-migrate rebuilt the schema.

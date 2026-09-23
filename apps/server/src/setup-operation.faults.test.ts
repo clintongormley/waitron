@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createSetupOperationStore } from "./setup-operation.js";
 
-// Filesystem failures and races between two boots cannot be produced on demand through the real
-// filesystem, so each case arms one-shot hooks around the real calls.
+// Each case arms a one-shot hook around one real `open` or `unlink`, either to fail that call or to
+// act as a second boot at exactly that moment.
 type Hook = {
   op: "open" | "unlink";
   file: string;
