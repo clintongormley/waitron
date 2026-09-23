@@ -114,23 +114,16 @@ export async function saveProductEditor(
   input: unknown,
   fallbackLanguage: string,
 ): Promise<ProductEditorValue> {
+  // An update reads the stored row first, because whether the body may leave inherited fields
+  // blank depends on it; a create has no stored row and parses first.
   let storedParentId: string | null = null;
   if (productId !== null) {
-    // A plain existence read. It took `for update` on PostgreSQL, to serialise two saves of the
-    // same product; one write transaction runs on the venue file at a time, so there is no second
-    // save — the pattern is stated once on `assertExtraListForWrite` (extras.ts).
     const [product] = await tx
       .select({ parentId: products.parentId })
       .from(products)
       .where(productWithId(productId, "any"));
     if (!product) throw new AppError("product.not_found", { productId });
     storedParentId = product.parentId;
-  } else {
-    const [catalogue] = await tx
-      .select({ id: catalogues.id })
-      .from(catalogues)
-      .where(eq(catalogues.id, catalogueId));
-    if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
   const isVariant = storedParentId !== null;
   const value = parseProductEditorInput(input, { isVariant });
@@ -142,6 +135,13 @@ export async function saveProductEditor(
   // default-language entry.
   if (value.customerName !== null)
     await validateContentTranslations(tx, value.customerName, fallbackLanguage);
+  if (productId === null) {
+    const [catalogue] = await tx
+      .select({ id: catalogues.id })
+      .from(catalogues)
+      .where(eq(catalogues.id, catalogueId));
+    if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
+  }
   if (productId === null) {
     const created = await createProduct(tx, {
       catalogueId,

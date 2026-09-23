@@ -200,10 +200,11 @@ lists are always its parent's. On a menu it is charged the most specific price s
 (`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
 else its own price, else its parent's price on that menu, else its parent's own price. A menu may
 leave any product's price blank (`menu_items.gross_price` is nullable), which means the product's
-own price; the menu screen shows that price as the empty field's hint. `setProductVariants`
-(`packages/catalogue/src/variants.ts`) and the storage beneath it accept a variant with no price of
-its own; the parent's product-editor save still refuses one in its variants list (`price()` in
-`packages/catalogue/src/product-editor-input.ts`).
+own price; the menu screen shows that price as the empty field's hint. A variant's own price
+may be blank, which sends it down that chain to its parent's prices: the product-editor save accepts a blank one both in
+the parent's variants list and on the variant's own page (`parseProductEditorInput`,
+`packages/catalogue/src/product-editor-input.ts`), and `setProductVariants`
+(`packages/catalogue/src/variants.ts`) stores it blank.
 
 A variant also has its own product page: the product editor's routes read and save a variant's id.
 The value it reads is the variant's own row, a field it leaves blank read blank, and its parent's

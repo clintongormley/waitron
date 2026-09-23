@@ -117,6 +117,34 @@ it("saves and reads the canonical editor shape with independent content and vari
   });
 });
 
+it("saves a variant listed with a blank price as blank, and reads it back blank", async () => {
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(
+      tx,
+      null,
+      catalogueId,
+      { ...input, variants: [{ ...input.variants[0]!, unitPrice: null }, input.variants[1]!] },
+      "en",
+    ),
+  );
+  expect(saved.variants.map((variant) => variant.unitPrice)).toEqual([null, "3.00"]);
+  const again = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, saved.id, catalogueId, saved, "en"),
+  );
+  expect(again.variants.map((variant) => variant.unitPrice)).toEqual([null, "3.00"]);
+});
+
+it("reports a malformed create body before an unknown catalogue", async () => {
+  await expect(
+    withTransaction(fx.db, (tx) =>
+      saveProductEditor(tx, null, crypto.randomUUID(), { ...input, name: null }, "en"),
+    ),
+  ).rejects.toMatchObject({ code: "product.invalid", params: { field: "name" } });
+  await expect(
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, null, crypto.randomUUID(), input, "en")),
+  ).rejects.toMatchObject({ code: "catalogue.not_found" });
+});
+
 it("saves a product with exactly one variant, or none", async () => {
   // Spec §15.1: one variant is allowed; the server no longer requires a second.
   const one = await withTransaction(fx.db, (tx) =>

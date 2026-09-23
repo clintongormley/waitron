@@ -1237,6 +1237,39 @@ describe("mountCatalogueApi — products", () => {
     expect(await stored()).toEqual(blank);
   });
 
+  it("saves the parent's page back unchanged after its variant's price was blanked", async () => {
+    const app = mountApp("es-ES");
+    const { parentId, variantId } = await parentWithVariant(app);
+    const value = (await (
+      await send(app, "GET", `/management-api/products/${variantId}/editor`)
+    ).json()) as Record<string, unknown>;
+    expect(
+      (
+        await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
+          body: { ...value, unitPrice: null },
+        })
+      ).status,
+    ).toBe(200);
+    const parent = (await (
+      await send(app, "GET", `/management-api/products/${parentId}/editor`)
+    ).json()) as { variants: { unitPrice: string | null }[] };
+    expect(parent.variants.map((variant) => variant.unitPrice)).toEqual([null]);
+    const saved = await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
+      body: parent,
+    });
+    expect(saved.status).toBe(200);
+    expect(
+      ((await saved.json()) as typeof parent).variants.map((variant) => variant.unitPrice),
+    ).toEqual([null]);
+    expect(
+      (
+        await suite.db.execute<{ unit_price: number | null }>(
+          sql`select unit_price from products where id = ${variantId}`,
+        )
+      ).rows,
+    ).toEqual([{ unit_price: null }]);
+  });
+
   it.each(["vatClass", "unitPrice"] as const)(
     "refuses a blank %s on a product with no parent",
     async (field) => {

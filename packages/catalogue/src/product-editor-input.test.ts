@@ -252,6 +252,17 @@ it.each([
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
+it("parses a variant listed with a blank price as blank, so it follows the product's", () => {
+  const blank = {
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+  };
+  expect(parse({ ...input, variants: [blank] }).variants).toEqual([blank]);
+});
 it("accepts none, one or two variants, and parses each variant's own names", () => {
   const one = {
     name: "Small",

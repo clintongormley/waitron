@@ -772,17 +772,17 @@ async function republishOverlays(
 }
 
 /**
- * A derivation comes from a recipe, and a variant has no recipe of its own (`setProductRecipe`,
- * packages/recipes/src/recipes.ts, refuses one), so a derivation written to a variant's id is
- * refused as an id naming no product. An id naming no row at all stays a silent no-op.
+ * Called when a derivation write matched no top-level product. A derivation comes from a recipe,
+ * and a variant has no recipe of its own (`setProductRecipe`, packages/recipes/src/recipes.ts,
+ * refuses one), so a variant's id is refused as an id naming no product. An id naming no row at
+ * all stays a silent no-op.
  */
 async function refuseVariantDerivation(tx: Transaction, productId: string): Promise<void> {
   const [row] = await tx
-    .select({ parentId: products.parentId })
+    .select({ id: products.id })
     .from(products)
-    .where(productWithId(productId, "any"));
-  if (row !== undefined && row.parentId !== null)
-    throw new AppError("product.not_found", { productId });
+    .where(eq(products.id, productId));
+  if (row !== undefined) throw new AppError("product.not_found", { productId });
 }
 
 /**
@@ -795,11 +795,12 @@ export async function applyRecipeDerivation(
   productId: string,
   derivation: RecipeDerivation | null,
 ): Promise<void> {
-  await refuseVariantDerivation(tx, productId);
-  await tx
+  const [written] = await tx
     .update(products)
     .set({ recipeDerivation: derivation, updatedAt: now() })
-    .where(eq(products.id, productId));
+    .where(productWithId(productId, "top-level"))
+    .returning({ id: products.id });
+  if (written === undefined) return refuseVariantDerivation(tx, productId);
   await republishOverlays(tx, productId, { allergens: true, diet: false });
 }
 
@@ -813,11 +814,12 @@ export async function applyDietDerivation(
   productId: string,
   derivation: DietDerivation | null,
 ): Promise<void> {
-  await refuseVariantDerivation(tx, productId);
-  await tx
+  const [written] = await tx
     .update(products)
     .set({ dietDerivation: derivation, updatedAt: now() })
-    .where(eq(products.id, productId));
+    .where(productWithId(productId, "top-level"))
+    .returning({ id: products.id });
+  if (written === undefined) return refuseVariantDerivation(tx, productId);
   await republishOverlays(tx, productId, { allergens: false, diet: true });
 }
 
@@ -999,14 +1001,7 @@ export async function updateProduct(
     throw new AppError("product.invalid", { field: "pricingUnit" });
   }
   // A variant with no unit of its own takes its parent's (V12), so its pricing unit is blank too.
-  let clearedPricingUnit: PricingUnit | null = "each";
-  if (unitAction.kind === "clear") {
-    const [row] = await tx
-      .select({ parentId: products.parentId })
-      .from(products)
-      .where(eq(products.id, id));
-    if (row?.parentId != null) clearedPricingUnit = null;
-  }
+  const clearedPricingUnit = sql`case when ${products.parentId} is null then 'each' end`;
   await tx
     .update(products)
     .set({

@@ -168,7 +168,8 @@ export function parseProductEditorInput(
       customerName: nullableTranslations(variant.customerName, `${field}.customerName`),
       kitchenName: nullableText(variant.kitchenName, `${field}.kitchenName`),
       image: nullableText(variant.image, `${field}.image`),
-      unitPrice: price(variant.unitPrice, `${field}.unitPrice`),
+      // A blank price follows the product's (spec §15.3).
+      unitPrice: variant.unitPrice === null ? null : price(variant.unitPrice, `${field}.unitPrice`),
       available: boolean(variant.available, `${field}.available`),
     };
   });

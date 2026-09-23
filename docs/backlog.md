@@ -531,9 +531,15 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   pattern (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `PRICE`) is looser
   than `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`). **Next action:** use one rule
   for both, checking first that the catalogue helper is safe to load in the browser.
-- **The dashboard's variant form turns a missing variant price into `0.00`**
-  (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
-  save still refuses a variant with no price; Task 7 settles both ends.
+- **A variant's price may be left blank everywhere, and a blank variant is charged its product's
+  price** (on a menu, a price that menu sets for the variant or its product comes first).
+  Since Task 6 the product editor accepts a blank price both on a variant's own page and in its
+  product's variants list, so a product whose variant has no price of its own can be saved back
+  unchanged. The dashboard's variant form shows such a price as an empty field and saves it back
+  blank (`apps/dashboard/src/widgets/variant-form.ts`); the price field is no longer marked
+  required. What is still missing: the empty field shows no hint of the price it falls back to,
+  and a NEW variant's form still starts at `0.00`. **Next action (Task 7):** show the product's
+  price as the empty field's hint, and decide whether a new variant starts blank.
 
 **Task 4 LANDED as #532 (2026-09-23): a blank menu price follows the product's own price.** A menu row's price
 (`menu_items.gross_price`) may be left empty, meaning the product's own price — the last step of the

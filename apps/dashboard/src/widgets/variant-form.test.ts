@@ -85,10 +85,11 @@ it("opens with every field of the variant it was given", async () => {
   expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe("half.png");
 });
 
-it("marks the name and the price as required and leaves the optional names unmarked", async () => {
+it("marks the name as required and leaves the price and the optional names unmarked", async () => {
   const el = await mountForm();
   expect(field(el, "name").required).toBe(true);
-  expect(field(el, "unitPrice").required).toBe(true);
+  // A blank price is the variant following its product's (spec §15.3).
+  expect(field(el, "unitPrice").required).toBe(false);
   expect(field(el, "kitchenName").required).toBe(false);
   expect(field(el, "customerName-es").required).toBe(false);
 });
@@ -125,6 +126,19 @@ it("refuses a blank name, explains it beside the field and in the summary, and k
   await change(el, "name", "Entera");
   await click(el, "variant-save");
   expect(submit).toHaveBeenCalledTimes(1);
+});
+
+it("opens a variant with no price of its own blank, and saves it back blank, never 0.00", async () => {
+  const el = await mountForm({ value: { ...halfPortion, unitPrice: null } });
+  expect(field(el, "unitPrice").value).toBe("");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "name", "Entera");
+  await click(el, "variant-save");
+  expect(
+    (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail.value
+      .unitPrice,
+  ).toBeNull();
 });
 
 it("refuses a price that is not a plain amount", async () => {
