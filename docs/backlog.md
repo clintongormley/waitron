@@ -3927,6 +3927,11 @@ Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's be
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 Task 0, shrink every uploaded photo, landed as #543; what it does and what it leaves
 open are under the image library in Track A.
+Task 1a, each machine's own rows keyed by its node id (a new `node_roles` table takes a node's mode,
+singleton role and break-glass verifier off `deployment`; `mirror_config` and `join_requests` gain
+`node_id`), is on branch `feat/sqlite-slice2-node-keyed-rows` (PR number added at land). A dev venue
+holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt reset demo <name>`
+rebuilds it.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
