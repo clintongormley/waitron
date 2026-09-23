@@ -578,7 +578,7 @@ now that it has landed. What it left open, both put to the owner in #532 — now
   only an explicit `null` means "blank, charge the product's own price". **DECIDED 2026-09-23 by the
   owner: keep refusing** — _"we don't want to confuse 0.00 with `""`"_, so a missing field is never read
   as blank or as zero. Pinned by a test in `apps/server/src/catalogue-api.test.ts`.
-- **DONE (2026-09-24, lane C's A11b): the menu's offers list marks a blank price.** The owner's
+- **DONE (2026-09-24, #541, lane C's A11b): the menu's offers list marks a blank price.** The owner's
   answer: show the product's own price struck out beside a menu price that differs from it, and grey
   out a price that is blank and following the product. A menu price equal to the product's own shows
   plainly. The struck and greyed prices carry hidden text for a screen reader ("Was", "(product's own
@@ -588,6 +588,13 @@ now that it has landed. What it left open, both put to the owner in #532 — now
   response: an offer is always a top-level product, which owns its price. Where that list lacks the
   product, a price the menu sets shows plainly, as before; a blank price is still greyed, since the
   offer itself records that its price is blank. The edit form is unchanged.
+  Two follow-ups #541's review raised, not taken, neither blocking: (1) the dashboard's product list
+  shows a variant's blank price as its parent's with no marking
+  (`apps/dashboard/src/widgets/product-list.ts`, the `price` column's cell) — whether it should grey
+  it the way the offers list now does is the owner's call; (2) the rule that hides screen-reader
+  text now has four copies (`venue-operations-screen.ts`, `apps/till/src/widgets/numeric-pad.ts`,
+  `apps/dashboard/src/widgets/variant-table.ts`, `apps/dashboard/src/widgets/reorder-table.ts`);
+  a shared one in `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
 The till's "+€" label on a variant, priced from the parent's resolved price, was Task 5's work and
 landed with #537.
 
