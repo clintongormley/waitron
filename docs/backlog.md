@@ -3796,7 +3796,7 @@ any of this code, so you can still read how something worked under PostgreSQL.
 [plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
 its database to a bucket the owner supplies, and a dead box is rebuilt from it. Landed so far:
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
-(branch `feat/sqlite-slice2-measurements`) — the values later tasks read are under "What later
+(#540) — the values later tasks read are under "What later
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
