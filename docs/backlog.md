@@ -2048,10 +2048,13 @@ image constraints under *Detail → Box image*.
   `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
   packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
   `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
-  `credentials`, `scheduler`, `identity`, `bookings` and `venue-service` have had one since, and
-  none found drift; re-run the command for the current list. `bookings` and `venue-service` have no
-  `src/schema/index.ts` barrel, so each call site hands the factory the one file its
-  `drizzle.config.ts` generates from (`src/schema/bookings.ts`, `src/schema/service.ts`).
+  `credentials`, `scheduler`, `identity`, `bookings`, `venue-service` and `media` have had one
+  since, and none found drift; re-run the command for the current list. `bookings`,
+  `venue-service` and `media` have no `src/schema/index.ts` barrel, so each call site hands the
+  factory the one file its `drizzle.config.ts` generates from (`src/schema/bookings.ts`,
+  `src/schema/service.ts`, `src/schema/images.ts`). `media`'s is blind to the eight triggers
+  `drizzle/0001_image_references.sql` creates, because the factory never reads a trigger; those
+  are guarded by `packages/media/src/image-references.test.ts`.
   `identity`'s is blind to one thing that matters there: three `persons` unique indexes are over a
   folded-key expression, and the factory compares an expression index by name, uniqueness, filter
   and where the expression sits among its parts, never by what it says — measured by changing
@@ -2059,14 +2062,14 @@ image constraints under *Detail → Box image*.
   the rest, `fiscal-verifactu` carries a `src/schema/index.ts`
   barrel, its own migration set and a `src/schema-ownership.test.ts` beside it, which is everything
   a call site needs to be written from, so it is roughly ten lines now that the factory exists.
-  (That is not a comparison with the four that landed: `catalogue` has no `schema-ownership.test.ts`
+  (That is not a comparison with the four PR #491 landed: `catalogue` has no `schema-ownership.test.ts`
   and did not need one — the declarations and the set are what the factory reads.) The sets without a call
   site were left out deliberately, not overlooked: a set getting its first guard may also turn up
   real drift, and fixing unrelated schema drift would have turned a guard branch into a
   schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory holds
   `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
-  for a declaration to be compared against. **Next action:** add a call site per set, one branch at
-  a time, and treat any drift each one reports as its own piece of work.
+  for a declaration to be compared against. **Next action:** `fiscal-verifactu` is the one set left
+  that needs a call site; add it, and treat any drift it reports as its own piece of work.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
   longer build — OPEN (2026-09-23).** In `packages/credentials`, `src/migrations.ts` says core
   must migrate first because of "the baseline's `tenants` foreign key", and

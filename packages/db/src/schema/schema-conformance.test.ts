@@ -13,8 +13,9 @@
 // migrations that drizzle-kit had never diffed. The flip regenerated every set as one baseline, so
 // every one of them is a declaration now; measured the same day, comparing each table's declared
 // foreign keys, indexes and checks against the catalogue with no allowance at all and finding
-// nothing on either side unmatched. A hand-written object reappearing in a migration fails this
-// suite, which is what an empty allowance list buys.
+// nothing on either side unmatched. A hand-written foreign key, index or named check reappearing in
+// a migration fails this suite, which is what an empty allowance list buys. The triggers in
+// `drizzle/0001_behavioural_triggers.sql` are hand-written too, and the factory does not read them.
 //
 // Three facts about the core set that the factory cannot state for a set it has not seen:
 //

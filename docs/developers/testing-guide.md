@@ -145,9 +145,9 @@ path rather than a special case.
 
 **Finding a module's prerequisites: read them off the package's own suites, do not guess.** An
 existing `useVenueDb` call in the package is where to start: its suite passes with that list in
-that order. (A missing prerequisite does not stop a set migrating on this engine — a foreign key
-naming a table that does not exist is refused at the first write, not at migrate time — so a clean
-migrate alone would not have told you.) `packages/workforce/src/migrations.test.ts:32` is the worked
+that order. (A missing prerequisite reached only through a foreign key or a trigger body does not
+stop a set migrating on this engine — a foreign key naming a table that does not exist is refused
+at the first write, not at migrate time — so a clean migrate alone would not have told you.) `packages/workforce/src/migrations.test.ts:32` is the worked
 example, and it states the reason for a three-set case in the comment beside it: core first because
 shifts point at its `locations`, `tills` and `nodes`, then identity because `employments` and
 `time_entries` point at its `persons`, then workforce itself. Ordering across packages is the
@@ -156,8 +156,11 @@ than just the list. A package's suites can apply MORE than its set's tables need
 `packages/credentials`'s other database suites apply core — `credentials.test.ts` because
 `credentialProvisioned` reads `tenants` — while its migrations point at nothing in core, so its
 schema-conformance call site passes no prerequisites. Check the list against the other sets' tables
-the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES` or a trigger body — and keep
-only those sets, in runtime order.
+the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES`, the table a `CREATE TRIGGER …
+ON` names, or a trigger body — and keep only those sets, in runtime order.
+`packages/media/src/schema/schema-conformance.test.ts` is the case of the middle one: its set puts
+triggers on core's and catalogue's tables, and the migration fails with `no such table` without
+them.
 
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix
