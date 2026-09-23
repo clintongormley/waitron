@@ -2021,7 +2021,7 @@ image constraints under *Detail → Box image*.
   connection reset; 100/100/100/100); `print-agent-app` (**PR #508**, 2026-09-23 — tests for
   malformed mDNS packets, out-of-range subnet addresses, non-printer usbmisc entries, a late socket
   event, an IPP reply cut off mid-body, and the setup page's fallbacks and non-text form fields;
-  99.23/99.65/98.4/97.83); `provisioning` (**PR pending**, 2026-09-23 — tests for the tenant and
+  99.23/99.65/98.4/97.83); `provisioning` (**PR #510**, 2026-09-23 — tests for the tenant and
   venue readers the one-taxpayer and one-venue guards consume, and for a same-taxpayer re-run
   refused when the database already holds two venues or its till, node or series differs from the
   plan; 100/100/100/99.03).
