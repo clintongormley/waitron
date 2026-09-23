@@ -836,6 +836,9 @@ export class ProductEditor extends LitElement {
     const named = (value: LocalizedText | null) => Object.keys(nonBlankNames(value ?? {}));
     const customer = named(this.draft.customerName);
     const described = named(this.draft.description);
+    // Storage inherits a variant's description as one value across every language, so a parent's
+    // text is a truthful hint only while the variant describes itself in none of them.
+    const descriptionHints = described.length ? null : this.inherited?.description;
     const summary = [
       customer.length
         ? t("editor.summary_customer_name").replace("{languages}", customer.join(", "))
@@ -866,7 +869,7 @@ export class ProductEditor extends LitElement {
             html`<label
               >${t("editor.description")} (${locale})<textarea
                 name=${`description-${locale}`}
-                placeholder=${this.inherited?.description?.[locale] ?? ""}
+                placeholder=${descriptionHints?.[locale] ?? ""}
                 .value=${this.draft.description?.[locale] ?? ""}
                 @input=${(event: Event) => {
                   event.stopPropagation();

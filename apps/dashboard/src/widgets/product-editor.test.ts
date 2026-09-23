@@ -1675,6 +1675,56 @@ it("shows a variant's inherited price and description empty, with the parent's v
   expect(description.placeholder).toBe("Roasted in house");
 });
 
+// Storage inherits a variant's description as ONE value across every language
+// (`packages/catalogue/src/variant-fallback.ts`), so a language left blank beside one with text reads
+// blank, not the parent's.
+async function mountBilingualVariant(description: ProductEditorDraft["description"] = null) {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: {
+      ...glass,
+      description,
+      inherited: {
+        ...parentValues,
+        description: { en: "Roasted in house", es: "Tostado en casa" },
+      },
+    },
+    locales: ["en", "es"],
+    units: [unit, litre],
+    taxChoices: taxes,
+    categories,
+  });
+  return el;
+}
+const placeholders = (el: ProductEditor) =>
+  ["en", "es"].map(
+    (locale) => control<HTMLTextAreaElement>(el, `description-${locale}`).placeholder,
+  );
+
+it("hints a variant's description in every language only while every language is blank", async () => {
+  const el = await mountBilingualVariant();
+  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+  await input(el, "description-en", "Served in a glass");
+  expect(placeholders(el)).toEqual(["", ""]);
+  await input(el, "description-en", "  ");
+  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+});
+
+it("shows no description hint on a variant that already describes itself in one language", async () => {
+  const el = await mountBilingualVariant({ es: "Servido en vaso" });
+  expect(placeholders(el)).toEqual(["", ""]);
+});
+
+it("saves a variant's description as null once every language is blanked again", async () => {
+  const el = await mountBilingualVariant({ en: "Served in a glass", es: "Servido en vaso" });
+  await input(el, "description-en", "");
+  await input(el, "description-es", " ");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.description).toBeNull();
+});
+
 it("never hints a variant's names from the parent's", async () => {
   const el = await mountVariant({ ...glass, customerName: null, kitchenName: null });
   for (const name of ["name", "customer-name-en", "kitchen-name"])
