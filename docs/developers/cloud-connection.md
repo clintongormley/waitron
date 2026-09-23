@@ -82,3 +82,9 @@ The local Cloud write routes accept only the configured management origin. Open 
 screen at `WAITRON_MANAGEMENT_ORIGIN`; the later remote-access integration must
 configure its staff hostname consistently. An automatic status read leaves your
 session idle time unchanged. Clicking Check connection or Refresh status counts as your activity.
+
+Version 1 returns exactly three services. Adding services requires a negotiated protocol
+version before changing that response. Stopping access permanently retires the key;
+the replacement flow is not implemented yet. Do not delete the state file to reconnect:
+a new key does not take over the existing venue. A stop request waits for the local
+worker, rechecks your permission, and saves the stop intent before contacting Cloud.

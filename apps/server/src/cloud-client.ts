@@ -160,7 +160,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     throw new AppError("cloud.unavailable", {});
   return view;
 }
-const activePaths = new Set<string>();
+const activePaths = new Map<string, Promise<void>>();
 /** One server process owns a node state directory. Calls within that process share this write gate. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), "cloud-connection.json");
@@ -295,13 +295,23 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function run(work: () => Promise<CloudConnectionStatus>) {
-    if (activePaths.has(path)) throw new AppError("cloud.busy", {});
-    activePaths.add(path);
+  async function run(work: () => Promise<CloudConnectionStatus>, wait = false) {
+    while (activePaths.has(path)) {
+      if (!wait) throw new AppError("cloud.busy", {});
+      await activePaths.get(path);
+    }
+    let release = () => {};
+    activePaths.set(
+      path,
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
     try {
       return await work();
     } finally {
       activePaths.delete(path);
+      release();
     }
   }
   return {
@@ -322,7 +332,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
         await installationClient(state, save).revoke(authorize, signal);
         return project(state);
-      });
+      }, true);
     },
     async report(services: CloudObservation[], observedAt = Date.now(), signal?: AbortSignal) {
       return run(async () => {

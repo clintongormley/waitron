@@ -170,3 +170,79 @@ it("reports use the applied revision, recover expired authority and stop after a
     await f.close();
   }
 });
+
+it("queues stop access behind the worker and persists it ahead of an unavailable configuration", async () => {
+  const f = await installationFixture();
+  let release = () => {};
+  try {
+    let reached = () => {};
+    const entered = new Promise<void>((r) => {
+      reached = r;
+    });
+    f.delay(async () => {
+      reached();
+      await new Promise<void>((r) => {
+        release = r;
+      });
+    });
+    const refresh = f.client.refresh();
+    await entered;
+    let authorized = false;
+    const stop = f.client.revoke(async () => {
+      authorized = true;
+    });
+    const outcome = stop.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    expect(authorized).toBe(false);
+    f.delay(async () => {});
+    release();
+    await refresh;
+    const stopped = await outcome;
+    expect(stopped).toHaveProperty("value.installation.state", "revoked");
+    expect(authorized).toBe(true);
+  } finally {
+    release();
+    await f.close();
+  }
+  const second = await installationFixture();
+  try {
+    await second.client.refresh();
+    second.offline();
+    await expect(second.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    await expect(second.client.revoke(async () => {})).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    const pending = JSON.parse(
+      await readFile(join(second.stateDir, "cloud-connection.json"), "utf8"),
+    ).lifecycle.pending;
+    expect(pending.action).toBe("revoke");
+    second.online();
+    expect((await createCloudConnection(second.options).refresh()).installation?.state).toBe(
+      "revoked",
+    );
+  } finally {
+    await second.close();
+  }
+});
+it("cached observations distinguish fresh healthy from stale health and clear stale failure details", async () => {
+  const f = await installationFixture();
+  try {
+    await f.client.refresh();
+    const path = join(f.stateDir, "cloud-connection.json"),
+      saved = JSON.parse(await readFile(path, "utf8"));
+    saved.lifecycle.view.services[0].health = "healthy";
+    saved.lifecycle.view.services[0].observedAt = new Date(Date.now() - 10000).toISOString();
+    saved.lifecycle.view.services[1].health = "failed";
+    saved.lifecycle.view.services[1].failure = "storage";
+    saved.lifecycle.view.services[1].observedAt = new Date(Date.now() - 300001).toISOString();
+    await writeFile(path, JSON.stringify(saved));
+    const view = (await f.client.status()).installation!;
+    expect(view.services[0]!.health).toBe("healthy");
+    expect(view.services[1]!.health).toBe("unknown");
+    expect(view.services[1]!.failure).toBeNull();
+  } finally {
+    await f.close();
+  }
+});

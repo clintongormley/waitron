@@ -108,7 +108,7 @@ function readView(value: unknown, state: SavedCloudState): View {
     services,
   };
 }
-/** The pinned HTTPS origin authenticates this response; gateways separately verify their configured issuer key. */
+/** The pinned HTTPS origin authenticates this control response. It is not a gateway signature verifier. */
 function readLease(value: unknown, state: SavedCloudState): Envelope {
   if (
     !object(value) ||
@@ -331,10 +331,9 @@ export function installationClient(
     },
     async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
       if (c.revoked) return;
-      if (c.pending) await exchange(signal);
-      if (c.revoked) return;
       await authorize();
-      await prepare("revoke");
+      // Stopping access supersedes earlier work; persist that intent even while Cloud is offline.
+      if (c.pending?.action !== "revoke") await prepare("revoke");
       await exchange(signal);
     },
     async report(services: CloudObservation[], observedAt = Date.now(), signal?: AbortSignal) {

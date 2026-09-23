@@ -53,6 +53,7 @@ export class CloudServicesScreen extends LitElement {
   @state() private requestUnavailable = false;
   @state() private confirmingStop = false;
   #generation = 0;
+  #clock: ReturnType<typeof setTimeout> | undefined;
   override connectedCallback() {
     super.connectedCallback();
     this.busy = false;
@@ -60,8 +61,14 @@ export class CloudServicesScreen extends LitElement {
     void this.#run(() => this.api.getCloudStatus());
   }
   override disconnectedCallback() {
+    clearTimeout(this.#clock);
     this.#generation++;
     super.disconnectedCallback();
+  }
+  protected override updated() {
+    clearTimeout(this.#clock);
+    if (this.isConnected && this.status?.state === "complete")
+      this.#clock = setTimeout(() => this.requestUpdate(), 1000);
   }
   async #run(request: () => Promise<CloudConnectionStatus>) {
     if (this.busy) return;
@@ -117,6 +124,7 @@ export class CloudServicesScreen extends LitElement {
           service,
           state: "unconfigured" as const,
           health: "unknown" as const,
+          observedAt: null,
         }));
     return html`<p role="status">${t(`cloud.access_${installation?.state ?? "pending"}`)}</p>
       <dl>
@@ -129,7 +137,7 @@ export class CloudServicesScreen extends LitElement {
             html`<dt>${t(names[service.service])}</dt>
               <dd>
                 ${t(`cloud.state_${service.state}`)} ·
-                ${t(`cloud.health_${installation?.state === "revoked" ? "unknown" : service.health}`)}
+                ${t(`cloud.health_${installation?.state === "revoked" || !service.observedAt || Date.parse(service.observedAt) <= Date.now() - 300000 ? "unknown" : service.health}`)}
               </dd>`,
         )}
       </dl>

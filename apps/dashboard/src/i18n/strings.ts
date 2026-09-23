@@ -27,7 +27,7 @@ export const en = {
   "cloud.business": "Legal business",
   "cloud.connected": "Connected",
   "cloud.snapshots": "Snapshots",
-  "cloud.continuous": "Livestream backups",
+  "cloud.continuous": "Continuous backups",
   "cloud.access_pending": "Waiting for the server",
   "cloud.access_active": "Cloud access active",
   "cloud.access_unavailable":
@@ -52,8 +52,6 @@ export const en = {
   "cloud.health_failed": "Not working",
 
   "cloud.remote": "Remote access",
-  "cloud.backups": "Backups",
-  "cloud.unconfigured": "Not configured",
   "cloud.expires": "Code expires",
   "cloud.retry": "Try again",
   "cloud.retry_start": "Retry request",
@@ -1423,8 +1421,6 @@ export const es: Record<StringKey, string> = {
   "cloud.health_failed": "No funciona",
 
   "cloud.remote": "Acceso remoto",
-  "cloud.backups": "Copias de seguridad",
-  "cloud.unconfigured": "Sin configurar",
   "cloud.expires": "El código caduca",
   "cloud.retry": "Volver a intentar",
   "cloud.retry_start": "Reintentar solicitud",

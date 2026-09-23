@@ -243,3 +243,38 @@ for (const locale of ["en", "es"] as const)
     );
     expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
   });
+
+it("ages a displayed observation without extending the login or requesting Cloud", async () => {
+  setLocale("en");
+  let calls = 0;
+  const api = new DashboardApi("", async () => {
+    calls++;
+    return Response.json({
+      state: "complete",
+      configured: true,
+      isPrimary: true,
+      code: "",
+      installation: {
+        state: "active",
+        revision: 0,
+        lastContactAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+        services: [
+          {
+            service: "remote_access",
+            state: "ready",
+            health: "healthy",
+            failure: null,
+            observedAt: new Date(Date.now() - 299500).toISOString(),
+          },
+        ],
+      },
+    });
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain("Working");
+  await expect.poll(() => el.shadowRoot!.textContent, { timeout: 2000 }).not.toContain("Working");
+  expect(el.shadowRoot!.textContent).toContain("Health unknown");
+  expect(calls).toBe(1);
+});
