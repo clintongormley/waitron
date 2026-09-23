@@ -65,7 +65,7 @@ export async function prepareImage(
   const sharp = await loadSharp();
   let declared: { width: number; height: number };
   try {
-    declared = await sharp(bytes).metadata();
+    declared = await sharp(bytes, { limitInputPixels: false }).metadata();
   } catch {
     throw new AppError("image.invalid_file", {});
   }

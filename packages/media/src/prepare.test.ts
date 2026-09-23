@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { MAX_INPUT_PIXELS, prepareImage, STORED_LONG_EDGE } from "./prepare.js";
@@ -141,6 +142,27 @@ describe("prepareImage", () => {
       .toBuffer();
     await expect(
       prepareImage(new Uint8Array(bomb), { maxUploadBytes: UPLOAD_LIMIT }),
+    ).rejects.toMatchObject({
+      code: "image.too_many_pixels",
+      params: { maxPixels: MAX_INPUT_PIXELS },
+    });
+  });
+
+  it("refuses a header declaring more pixels than sharp's own default ceiling as too many pixels", async () => {
+    // A real 8×6 PNG whose IHDR is rewritten to declare 20000×20000 (400,000,000 pixels), above
+    // sharp's default limitInputPixels of 268,402,689; the IHDR CRC is recomputed so it still reads.
+    const png = Buffer.from(await sampleImage({ width: 8, height: 6, format: "png" }));
+    png.writeUInt32BE(20_000, 16);
+    png.writeUInt32BE(20_000, 20);
+    png.writeUInt32BE(crc32(png.subarray(12, 29)), 29);
+    // The control: the rewritten header reads, and sharp's defaults refuse it.
+    await expect(sharp(png, { limitInputPixels: false }).metadata()).resolves.toMatchObject({
+      width: 20_000,
+      height: 20_000,
+    });
+    await expect(sharp(png).metadata()).rejects.toThrow(/pixel limit/);
+    await expect(
+      prepareImage(new Uint8Array(png), { maxUploadBytes: UPLOAD_LIMIT }),
     ).rejects.toMatchObject({
       code: "image.too_many_pixels",
       params: { maxPixels: MAX_INPUT_PIXELS },
