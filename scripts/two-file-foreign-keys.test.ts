@@ -51,14 +51,11 @@ function fileOfClass(cls: string): string {
 }
 
 /** Physical table name (lowercased) -> declared class, across every module. */
-function classOfTable(): Map<string, string> {
-  const classes = new Map<string, string>();
-  for (const module of ALL_MODULES) {
-    for (const entry of module.classification ?? []) {
-      classes.set(entry.table.toLowerCase(), entry.class);
-    }
+const classes = new Map<string, string>();
+for (const module of ALL_MODULES) {
+  for (const entry of module.classification ?? []) {
+    classes.set(entry.table.toLowerCase(), entry.class);
   }
-  return classes;
 }
 
 interface Edge {
@@ -122,7 +119,6 @@ function violationOf(edge: Edge, classes: Map<string, string>): string | null {
 
 describe("the two database files are independent", () => {
   it("has no foreign key crossing between them", () => {
-    const classes = classOfTable();
     const violations = declaredForeignKeys()
       .map((edge) => violationOf(edge, classes))
       .filter((violation) => violation !== null);
@@ -156,7 +152,6 @@ describe("the two database files are independent", () => {
  * made-up constraint — so that both answers are pinned rather than one.
  */
 describe("negative controls", () => {
-  const classes = classOfTable();
   const edge = (from: string, to: string): Edge => ({
     set: "control",
     constraint: "control_fk",
