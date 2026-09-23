@@ -3743,13 +3743,6 @@ already read as filed) rather than a record filed twice. The fence-before-ship r
 now in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
 any of this code, so you can still read how something worked under PostgreSQL.
 
-**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
-[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
-its database to a bucket the owner supplies, and a dead box is rebuilt from it. Landed so far:
-Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
-(branch `feat/sqlite-slice2-measurements`) — the values later tasks read are under "What later
-tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
-
 **What the gate left open (index; the receipts are in the results note):**
 
 - **Validate every supported object store.** Cloud owns its production-provider checks in the
@@ -3784,7 +3777,10 @@ tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
   nothing, and dropping `wal_autocheckpoint = 0` changes nothing either. So whatever bounds that log
   has to stop or detach the daemon, and doing that on the sale path is what risk 9 forbids.
-  2026-09-23: slice 2 measured what stopping and restarting Litestream does, and what Litestream's own emergency checkpoint does offline — [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+  2026-09-23: slice 2 measured that a restarted Litestream uploads the sales made while it was
+  stopped, and drove an offline side file past Litestream's documented emergency-checkpoint threshold
+  for a few seconds (it did not shrink; what the checkpoint does over longer was not measured) —
+  [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 - **The promoted generation and store pointer remain unproven.** The prototype does not stream a
   promoted node's generation or restore by following `current.json`. Cloud recovery orchestration
   is tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);
@@ -3795,6 +3791,15 @@ tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.
 - **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
   wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task should
   pin them or delete them.
+
+**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
+its database to a bucket the owner supplies, and a dead box is rebuilt from it. Landed so far:
+Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
+(branch `feat/sqlite-slice2-measurements`) — the values later tasks read are under "What later
+tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
+on purpose: that step rewrites it to match measurement 2's result.
 
 **The SQLite slice-1 preparation tasks are all landed.** Column vocabulary (P1 — #390, #393, #394,
 #396–#404, #408, #413, #414, #416); the `useVenueDb` test-helper conversion (P2 — every package

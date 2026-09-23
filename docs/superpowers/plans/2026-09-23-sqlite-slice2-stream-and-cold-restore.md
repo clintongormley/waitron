@@ -7027,7 +7027,9 @@ How to read the line (write this reading into the results note, with the printed
 - `L1-gone-boundaries` reading `refused` while `L1-surviving-boundaries` read `rowsN` means a
   30-second point is lost once its L1 file is merged into L2; `L1-oldest-surviving-age-s` says how
   long after writing that happens on the scaled schedule. The same pair for L2 and L3 says when the
-  5-minute and hourly points go.
+  5-minute and hourly points go. **2026-09-23:** that is not what the pin did — level-1 files stayed
+  after level 2 had merged them and went with the retention window; results note, Slice 2
+  measurements §3.
 - `oldest-surviving-l9-age-s` against `retention` says whether full copies older than the window are
   removed, and so whether "a week back" is the limit.
 - The production statement is then: "at an age where only L<n> files survive, the finest point is
@@ -7268,6 +7270,10 @@ Run, one after the other (never beside another session's heavy run — check `ps
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-time 2>&1 | tee /tmp/m4-typical.txt
 pnpm --filter @waitron/bench-sqlite-failover probe:restore-time -- --image-kib 330 2>&1 | tee /tmp/m4-cap.txt
 ```
+
+**2026-09-23:** the form without `--` is what works, as the package README gives it: with `--`, the
+probe printed `reason="bad option -- --image-kib; …"`; without it, `pnpm` ran
+`node src/probes/restore-time.ts "--image-kib" …` and the option reached the probe.
 
 Expected: each ends in `| m4-restore-time | MEASURED |` with `verified=true`. By the probe's own
 estimate (images × size × `DISK_FACTOR`), the first run needs about five gigabytes of free space in
@@ -11750,6 +11756,9 @@ implementation):
 
 **`RESTART_RESYNCS = true`** (Litestream uploads a fresh full copy on restart; the same generation
 continues):
+
+**2026-09-23, measured:** no new full copy was seen on restart; the restarted daemon uploaded the
+missed sales into the same generation — results note, Slice 2 measurements §1.
 
 ```ts
     await h.clock.until(() => h.supervisor.status().state === "streaming");
@@ -23760,7 +23769,10 @@ scripted request handler in place of the network), and the Litestream settings w
    this threshold Litestream first attempts a non-blocking PASSIVE checkpoint and only forces a
    blocking TRUNCATE (which blocks both readers and writers) when that passive checkpoint does not
    bring the WAL back below the threshold."_ The prototype's offline run stopped at 308 MB
-   (results note, S4), so nothing has seen what this does while the bucket is unreachable. If it
+   (results note, S4), so nothing has seen what this does while the bucket is unreachable.
+   **2026-09-23:** arm 2b drove an offline side file past the threshold for a few seconds only; it did
+   not shrink, and what the emergency checkpoint does over longer was not established (results note,
+   Slice 2 measurements §2). If it
    fires there, it is Litestream putting a blocking checkpoint on the sale path, below whatever limit
    Task 6 picks. Task 4 adds an arm (2b) that drives an offline side file past 500 MB and records the
    longest commit and whether the file shrank. Task 6's side-file limit must be chosen knowing the

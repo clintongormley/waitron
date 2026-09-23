@@ -89,7 +89,7 @@ Three rules, each of which cost something on the way:
 | Object store | **MinIO** `RELEASE.2025-09-07T16-13-09Z`, digest `sha256:14cea493…8936e` | tag and digest together in the one reference `src/store.ts` starts the container from |
 | SQLite | **3.53.4**, via node's built-in `node:sqlite` | `node -e 'select sqlite_version()'`, 2026-09-18 |
 | Node | **v26.7.0** | `node --version`, 2026-09-18 |
-| Host | **darwin/arm64** | only this platform has been downloaded and run |
+| Host | **darwin/arm64** | only this platform has been downloaded and run. **2026-09-23:** every scenario and slice-2 measurements 1–4 ran only here; measurement 5 downloaded and ran the two Linux archives in Docker |
 | Linux | **linux/amd64** (emulated on the darwin/arm64 host) and **linux/arm64**, in node:26-slim | measurement 5 only, below |
 | Litestream archives | linux-x86_64 sha256:cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d, linux-arm64 sha256:f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 | recomputed from the downloaded bytes, equal to the release API's digest |
 
@@ -320,7 +320,9 @@ the store can be reached.
    is inside the run**: the last modelled day's p95 (0.196 ms) is below the first's (0.403 ms), with
    the log having grown to 308 MB in between. Nothing here extends that beyond 7500 sales — an earlier
    draft cited a longer probe, and it is gone because its output was never recorded anywhere a reader
-   could check.
+   could check. **2026-09-23:** slice 2's arm 2b ran 15,000 offline sales, with p99 0.545 ms and the
+   longest commit 6.861 ms over the whole arm; it recorded no per-day figure, so it says nothing about
+   drift ([Slice 2 measurements §2](#slice-2-measurements)).
 2. **The log grows linearly and is bounded only by how long the box stays offline** — about **41 KB a
    sale**, 308 MB over 7500 sales, roughly **104 offline trading days per GiB**. It holds about **80x**
    the data a checkpoint then writes into the database. The prototype spec's example ceiling — "a small
@@ -356,7 +358,11 @@ minute. Anything about the real ledger's cost per commit: 41 KB a sale is this r
 SQLite's default page size, not `packages/fiscal-verifactu`'s schema — the same load at an 8192-byte page
 grew linearly and sat over the per-sale ceiling throughout, so a breach can equally mean a wider page or
 a wider schema. That a longer offline stretch stays linear: the run stops at 7500 sales, and days-per-GiB
-extrapolates the measured rate. And a disk budget: no partition size is recorded anywhere in this
+extrapolates the measured rate. **2026-09-23:** slice 2's arm 2b ran 15,000 offline sales in fifteen
+rounds of 1,000; the side file stood at 40,174,152 bytes after the first round and each later round added
+between 41,162,920 and 41,929,240 (`D-wal-by-round`, one run, about half a minute by arithmetic —
+[Slice 2 measurements §2](#slice-2-measurements)).
+And a disk budget: no partition size is recorded anywhere in this
 repository. **250 sales a day is an assumption nothing in this repository measures**, and the row says so
 (`day-rate=assumed-not-measured`).
 
@@ -492,7 +498,8 @@ Stated together, because each is something a reader would otherwise assume the g
   `packages/fiscal-verifactu`'s tables. Slice 1's own tests, over the real ported schema, are where the
   full-schema loop is proven. This gate de-risks the mechanism, not the port.
 - **The production object store.** Every store result is MinIO's.
-- **Litestream beyond 0.5.17 on darwin/arm64.**
+- **Litestream beyond 0.5.17 on darwin/arm64.** **2026-09-23:** slice 2's measurement 5 ran 0.5.17's
+  Linux archives in Docker — [Slice 2 measurements §5](#slice-2-measurements).
 - **The cloud's own generation, and the store pointer.** Nothing streams the cloud's generation and no
   node restores by following `current.json`. S0 handed that case to S3; **S3 did not take it, and neither
   did S4, so it is unowned.**
@@ -528,7 +535,10 @@ Two design decisions this measurement hands to slice 2:
 
 - **A box that has been offline for days cannot have its write-ahead log reclaimed while litestream is
   attached, and the pragma the risk names is not the lever.** The only thing that reclaimed it here was
-  stopping the daemon first; whether anything else would was not tested. Doing that on the sale path is
+  stopping the daemon first; whether anything else would was not tested. **2026-09-23:** slice 2's arm
+  2b drove the offline side file past Litestream's documented emergency-checkpoint threshold for a few
+  seconds and it did not shrink; longer was not measured —
+  [Slice 2 measurements §2](#slice-2-measurements). Doing that on the sale path is
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
@@ -543,19 +553,20 @@ be quoted as a single number where S4's spread already shows these move run to r
 
 Every probe ran against the rig's model schema (`src/model.ts`), not `packages/fiscal-verifactu`'s,
 and against the pinned local MinIO, not the owner's bucket. Each was first run once with its code
-altered so that it had to print its failing case; that line is quoted beside the real one. The probes
+altered so that its failing case — or, for measurements 2–4, its control — had to fire; that line is
+quoted beside the real one. The probes
 ran one at a time.
 
 ### What later tasks read
 
 | value | recorded | read by |
 | --- | --- | --- |
-| `RESTART_RESYNCS` | `RESTART_RESYNCS = true` (measurement 1) | Task 6: same generation after a pause, or a new one |
+| `RESTART_RESYNCS` | `RESTART_RESYNCS = true` (measurement 1): the restore after the restart held every sale and the daemon stayed up. The restarted daemon did NOT upload a new level-9 full copy, so spec §4.5's condition as worded ("If Litestream uploads a fresh full copy on restart, the same generation continues") does not describe what happened; the recorded verdict rests on the restore being complete | Task 6: same generation after a pause, or a new one |
 | `AUTOCHECKPOINT_OFF_NEEDED` | `AUTOCHECKPOINT_OFF_NEEDED = false` (measurement 2; the peak comparison behind it is close, see below) | Task 6: whether the venue connection sets `wal_autocheckpoint = 0` while streaming |
-| `TRUNCATE_THRESHOLD_OFFLINE` | `D-crossed-threshold=true D-shrank-after-threshold=false D-max-commit-ms=6.861` (arm 2b; peak side file 621,090,032 bytes; past the threshold for the last three of fifteen rounds only) | Task 6: the side-file limit |
+| `TRUNCATE_THRESHOLD_OFFLINE` | `D-crossed-threshold=true D-shrank-after-threshold=false D-max-commit-ms=6.861` (arm 2b; peak side file 621,090,032 bytes; past the threshold for the last three of fifteen rounds only); what Litestream's emergency checkpoint does past the threshold is not established — the side file was past it for a few seconds only, and the absence of log lines says nothing (see 2b) | Task 6: the side-file limit |
 | `LINUX_BINARIES_RUN` | `LINUX_BINARIES_RUN = true`; `litestream-0.5.17-linux-x86_64.tar.gz` sha256:cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d, `litestream-0.5.17-linux-arm64.tar.gz` sha256:f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 (measurement 5; amd64 under emulation) | Task 6: the image's download-and-check step |
-| restore points | on the compressed schedule, every sampled boundary newer than the oldest surviving full copy restored, at level-1 granularity, and nothing older did (measurement 3); extrapolated to production: 30-second points back to the oldest surviving daily full copy | the spec's promise about going back in time (docs) |
-| restore time | 4,058 / 4,107 / 4,092 ms at 5,000 × 171 KiB images; 7,345 / 51,712 / 9,394 ms at 5,000 × 330 KiB (measurement 4, local store, no network) | the rebuild screen's wording (docs) |
+| restore points | on the compressed schedule, every sampled boundary newer than the oldest surviving full copy restored, at the level-1 boundaries sampled (three per group), and nothing older did; the restored row counts were recorded but not compared with the sales at each point (measurement 3); extrapolated to production: 30-second points back to the oldest surviving daily full copy | the spec's promise about going back in time (docs) |
+| restore time | 4,058 / 4,107 / 4,092 ms at 5,000 × 171 KiB images; 7,345 / 51,712 / 9,394 ms at 5,000 × 330 KiB (measurement 4, local store, no network; the 51.7 s restore is unexplained and was not re-run) | the rebuild screen's wording (docs) |
 
 **Litestream configuration lines each probe used, and whether it was seen taking effect** (for Task 6's
 config writer). Every probe wrote the rig's base shape — top-level `access-key-id: ${VAR}` and
@@ -604,11 +615,14 @@ emptied the side file; 20 more sales with nothing attached and a second fold-bac
 restarted against MinIO and 20 more sales. The restore after the restart held all 80 sales in order
 with `integrity=ok`, the daemon was still running, and it logged no WARN or ERROR line. So on the pin,
 sales that existed only in the database file when Litestream restarted were uploaded, into the same
-generation prefix. `objects-after` shows how: level 0 went from 2 files (10,249 bytes) to 3 (48,455
-bytes) and a level-2 file appeared, while level 9 stayed at one file of 2,203 bytes — **no fresh full
-copy was uploaded at level 9**, the missing sales travelled in a level-0 file. The spec's §8.1 wording
-also names "Litestream exits 0 having uploaded no fresh full copy" as failing: the daemon did not exit,
-and no full copy was taken, yet the restore was complete. The generation's `opened.json` marker
+generation prefix. `objects-after` counts files per level: level 0 went from 2 files (10,249 bytes)
+to 3 (48,455 bytes), so it gained one file and 38,206 bytes, and a level-2 file appeared, while level 9
+stayed at one file of 2,203 bytes — **no fresh full copy was uploaded at level 9**. The probe never
+read the new level-0 file, so whether it held the whole database or only the changed pages was not
+established; for scale, the rig's model database is 81,920 bytes (20 pages of 4096) at 80 sales
+(measured 2026-09-23 by building it with 80 sales and folding the side file back). The spec's §8.1
+wording also names "Litestream exits 0 having uploaded no fresh full copy" as failing: the daemon did
+not exit, and no new level-9 file appeared, yet the restore was complete. The generation's `opened.json` marker
 survived, and no WARN or ERROR line was logged. `daemon-exit=0` is the exit code of the probe's own
 stop at the end (read from the probe: the field is filled after its `kill()`), not a death.
 Not established: a pause longer than seconds, batches larger than 20 sales, and what Litestream's own
@@ -618,7 +632,7 @@ directory beside the database (`.venue.db-litestream/`) held or grew to — it w
 
 **Failing would print:** `AUTOCHECKPOINT_OFF_NEEDED=true`, because arm A's restore is incomplete, its
 integrity check is not `ok`, Litestream logged a WARN/ERROR line, A's peak side file is larger than
-B's, or A uploaded more than twice B's bytes.
+B's, or A's store held more than twice B's bytes at the end.
 **Control:** arm C, default folding with the store unreachable, must grow at least 4096 bytes a sale,
 or the probe cannot see growth and prints `VOID`.
 **Failing case, printed on purpose** (arm C pointed at the reachable store):
@@ -635,9 +649,13 @@ or the probe cannot see growth and prints `VOID`.
 
 Arms A–C each made 7,500 sales in 15 rounds with a 1.5-second pause after each. With SQLite's default
 automatic folding (`A-autocheckpoint=1000`, read back) and the store reachable, arm A restored
-completely with `integrity=ok`, logged no WARN or ERROR line, uploaded 9,887,370 bytes against arm
-B's 10,314,513, and peaked at 20,958,472 bytes of side file against arm B's 21,061,472 with folding
-switched off. **The margin on that last comparison is small**: A came out 103,000 bytes (about 0.5%)
+completely with `integrity=ok`, logged no WARN or ERROR line, held 9,887,370 bytes in the store at
+the end against arm B's 10,314,513, and peaked at 20,958,472 bytes of side file against arm B's
+21,061,472 with folding switched off. The store figure is what remained in the store once the arm
+finished, not what was sent: overwrites and deletions make the two differ, and upload traffic was not
+measured. The probe also ran a one-off upload (`syncOnce`) after stopping each arm's daemon and before
+restoring it (`autocheckpoint.ts`), so "arm A restored completely" cannot tell "the daemon kept up"
+from "the one-off upload caught up". **The margin on that last comparison is small**: A came out 103,000 bytes (about 0.5%)
 below B here, and 321,360 bytes below B on the failing-case run, whose arms A and B were unchanged. Two
 runs put A below B; a run where A came out above B would print `true` by the probe's own rule. Arm C
 grew 41,258 bytes a sale, about the rate S4 recorded offline; pointed at the reachable store it grew 2,790
@@ -646,7 +664,8 @@ and the line read `VOID`, as intended.
 Arm D (2b) made 15,000 sales with default folding and the store unreachable. The side file grew every
 round, crossed 497,086,464 bytes (`truncate-page-n`'s documented default of 121,359 pages at 4096
 bytes — the default of the current release's documentation, not read from the pin) in round 13, and
-was larger again in rounds 14 and 15, ending at 621,090,032. It never shrank; the longest commit was
+was larger again in rounds 14 and 15, ending at 621,090,032. None of the fifteen per-round samples
+was smaller than the one before it (one sample per round, taken after the round's pause); the longest commit was
 6.861 ms and p99 0.545 ms; the daemon stayed up and logged no WARN or ERROR line. What that does NOT
 establish: the file was past the threshold only for the last three rounds, a few seconds (each round
 is its sales plus a 1.5-second pause), so what Litestream's emergency checkpoint does over minutes or
@@ -686,12 +705,16 @@ group (still in the store, or removed), spread by age:
 - a restore past the newest transaction was refused (`beyond-refused=true`), so a refusal is how the
   pin answers "no such point".
 
+"Restored" here means the restore was not refused and its rows were counted (`rows1930` and so on);
+the restored row counts were recorded but not compared with the sales at each point, and no restored
+row's contents were compared with anything.
+
 Level-1 files were not removed once level 2 had merged them: level-1 points 140 seconds old were
 still in the store and restored, although level-2 files of the same age were there too and the
 10-second level-2 interval had passed many times since. They were removed by the
 retention window, together with full copies and higher levels. In the control run, with the default
 24-hour retention, every level-1, level-2 and level-3 file seen was still there after 630 seconds. So on this schedule the limit on going back was the oldest surviving full copy, and within it
-the finest point was a level-1 boundary. The plan's reading of this probe had expected a level-1 point
+restores were accepted at the level-1 boundaries sampled (three per group). The plan's reading of this probe had expected a level-1 point
 to be lost once merged into level 2; that is not what the pin did.
 
 **Extrapolated, not measured:** with the production settings, a restore could reach any 30-second
@@ -703,8 +726,9 @@ about 20,000 files at 30 seconds (arithmetic). The level-0 files had all gone by
 
 ### 4 — restore time
 
-**Failing would print:** `VOID` with `verified=false`, when a restored copy does not hold exactly the
-source's ledger rows, image count and image bytes.
+**Failing would print:** `VOID` with `verified=false`, when a restored copy's integrity check is not
+`ok` or its ledger row count, image count or total image bytes differ from the source's. Contents
+were not compared.
 **Failing case, printed on purpose** (the source's image count raised by one; 10 images of 64 KiB, 2
 days of history, 1 restore):
 
@@ -723,7 +747,9 @@ days of history, 1 restore):
 Each run built a database of 5,000 random-byte images (random bytes do not compress, as an
 already-compressed photo does not) and 91,250 sales (365 days at the assumed 250 a day), uploaded it
 in one shot with the production `snapshot:` lines, streamed a day of 250 more sales through a daemon,
-and restored it three times, each copy checked against the source. 5,000 is the owner's upper figure
+stopped it, ran a final one-off upload (`syncOnce`, `restore-time.ts`), and only then restored it
+three times, each copy's counts and total image bytes checked against the source's. So the restores
+read a store the one-off upload had caught up, not one left as the daemon left it. 5,000 is the owner's upper figure
 for product images (Reconciliation O2), not a venue's count. At 171 KiB the three restores took 4,058,
 4,107 and 4,092 ms and the integrity check 255–259 ms, for a database plus side file of 931,881,688 bytes. At 330 KiB they
 took 7,345, **51,712** and 9,394 ms, with integrity checks of 391, 4,571 and 390 ms, for 1,752,470,152
@@ -742,8 +768,8 @@ any network, a real photo's bytes, or the real schema.
 which of `sha256-matches-release`, `version`, `roundtrip-equal`, `control-refused` or `tls` is wrong.
 **Control:** the TLS check repeated in bare `node:26-slim`, without `ca-certificates`, should read
 `tls=roots-missing`.
-**Failing case, printed on purpose** (the expected version changed to `0.5.16`; both inside lines read
-`FAIL` with `version=0.5.17`):
+**Failing case, printed on purpose** (the expected version changed to `0.5.16`; only the summary line
+was kept, and it reads `amd64-pass=false arm64-pass=false`):
 
 ```
 | m5-linux-binaries | LINUX_BINARIES_RUN=false | host-arch=arm64 base-image=node:26-slim amd64-pass=false amd64-sha256=cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d amd64-tls-control=indistinguishable arm64-pass=false arm64-sha256=f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 arm64-tls-control=indistinguishable |
@@ -775,10 +801,29 @@ seen.
 
 **The TLS control did not discriminate** (`tls-control=indistinguishable` on both): bare
 `node:26-slim` also reached S3. So this probe does not establish that Litestream used the image's
-certificate store. A check outside the probe, the same day: bare `node:26-slim` has no `/etc/ssl`
-directory and `dpkg-query` reports `ca-certificates` `not-installed`, on both platforms; and `strings`
-on both Linux binaries (downloaded again, same digests) finds `golang.org/x/crypto/x509roots/fallback`
-(9 matches each). That is consistent with the binary carrying Go's fallback root certificates, which
+certificate store. A check outside the probe, the same day (command not recorded): bare `node:26-slim` has no `/etc/ssl`
+directory and `dpkg-query` reports `ca-certificates` `not-installed`, on both platforms. Re-run
+2026-09-23 during review, against the same local image
+(`sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1`):
+
+```
+for pl in linux/arm64 linux/amd64; do echo "== $pl"; gtimeout 60 docker run --rm --platform $pl --pull never node:26-slim sh -c 'ls /etc/ssl; echo "ls-exit=$?"; dpkg-query -W -f="\${Package} \${db:Status-Status}\n" ca-certificates; echo "dpkg-exit=$?"' 2>&1; done
+== linux/arm64
+ls: cannot access '/etc/ssl': No such file or directory
+ls-exit=2
+ca-certificates not-installed
+dpkg-exit=0
+== linux/amd64
+ls: cannot access '/etc/ssl': No such file or directory
+ls-exit=2
+ca-certificates not-installed
+dpkg-exit=0
+```
+
+And `strings` on both Linux binaries (downloaded again,
+same digests) finds `golang.org/x/crypto/x509roots/fallback` (9 matches each) — command not recorded,
+and not re-run during review because the Linux binaries are not kept on disk (the probe downloads
+them inside its container). That is consistent with the binary carrying Go's fallback root certificates, which
 would explain the control, but it was not established that those roots verified S3's certificate. The
 first native amd64 confirmation is the first CI job that runs the pinned binary.
 

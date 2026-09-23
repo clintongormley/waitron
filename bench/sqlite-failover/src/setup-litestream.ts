@@ -27,6 +27,8 @@ type ReleaseAsset = { name: string; browser_download_url: string };
  * The name is composed from this host rather than hardcoded, so a platform this rig has not been run
  * on fails on a missing asset instead of installing a darwin binary. Only darwin/arm64 has actually
  * been downloaded and run; the other names are read off the release listing, not exercised.
+ * 2026-09-23: this script itself has still run only on darwin/arm64; `probe:linux`
+ * (`probes/linux-binaries.ts`) downloaded and ran the two Linux archives in Docker.
  *
  * `x64` maps to `x86_64` because that is what the CLI assets are called — the listing for this tag
  * holds `litestream-0.5.17-darwin-x86_64.tar.gz` and `litestream-0.5.17-linux-x86_64.tar.gz`, and

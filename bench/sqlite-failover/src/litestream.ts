@@ -20,9 +20,11 @@ import type { Store } from "./store.ts";
 export const LITESTREAM_VERSION = "0.5.17";
 
 /**
- * How long any one litestream call may take before it is killed. Generous: the slowest call this
- * rig makes is a restore, and the recorded runs finish one in well under a second against a local
- * container. It is a bound on a stall, not a performance budget.
+ * How long any one litestream call may take before it is killed, unless the caller passes its own
+ * bound. Generous for the scenarios: their slowest call is a restore, and their recorded runs finish
+ * one in well under a second against a local container. Measurement 4's gigabyte-scale restores took
+ * 4-52 seconds and pass a longer bound of their own (`probes/restore-time.ts`). It is a bound on a
+ * stall, not a performance budget.
  */
 const CHILD_TIMEOUT_MS = 30_000;
 
@@ -121,7 +123,8 @@ export async function resolveLitestream(): Promise<{ bin: string; version: strin
  * 2026-09-18, a `replicate` daemon under a default config still listed every `0000/` file it had
  * uploaded after 90 seconds and had created no `0001/` file. With them, three L0 files disappeared
  * 6-8 seconds after being written, once a `0001/` file covering their transaction range existed.
- * S3 (`scenarios/s3_copied_replica.ts`) is the only caller that needs a deletion to happen at all.
+ * S3 (`scenarios/s3_copied_replica.ts`) is the only caller that passes `fastCompaction`; measurement 3
+ * (`probes/restore-points.ts`) also relies on deletions, set through its own `globalLines`.
  */
 export function writeConfig(opts: {
   dbPath: string;
@@ -173,7 +176,7 @@ export function writeConfig(opts: {
  * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
  * container.
  *
- * Three scenarios call this, at four sites, and none of them needs that flush.
+ * The scenarios below do not need that flush; whether a slice-2 probe does was not tested.
  * `s_litestream_roundtrip` makes its last read before killing its daemon. S3
  * (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits `exited`, and then runs a `syncOnce`
  * with box-a's handle still open — and that S3 does not need the flush was RUN rather than read off
