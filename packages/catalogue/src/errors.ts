@@ -79,7 +79,7 @@ declare module "@waitron/shared" {
     "product.variant_not_found": { variantId: string };
     /** A variant cannot be removed while menu offers still publish it. */
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
-    /** A product or its menu path is disabled. */
+    /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
     /** A product with variants cannot be sold without selecting one. */
     "product.variant_required": { productId: string };
@@ -213,7 +213,7 @@ declare module "@waitron/shared" {
      * of them is products; `grep -rn '\.delete(products)' packages apps --include="*.ts"` and
      * `grep -rn 'delete from products' packages apps --include="*.ts"` find only test files,
      * fixtures, and the comments — this one among them — that quote the commands. The dashboard's
-     * `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts) sets `available: false`
+     * `#deleteProduct` (apps/dashboard/src/screens/catalogue-screen.ts) sets `active: false`
      * through the product editor rather than deleting anything. What refuses today is the database:
      * `extra_list_items.product_id` and `menu_item_extra_items.product_id` are both
      * `ON DELETE RESTRICT` (schema/extras.ts).

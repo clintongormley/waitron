@@ -15,6 +15,10 @@ export interface DataTableColumn<Row> {
     allLabel: string;
     value: (row: Row) => string;
     options: { value: string; label: string }[];
+    /** The option the filter starts on, while no choice is made or restored and the column's
+     * options include it. Choosing the all option is then remembered as a choice of its own, so on
+     * a table with a `viewKey` it outlives a reload. */
+    initial?: string;
   };
   align?: "start" | "end";
 }
@@ -271,7 +275,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * key and restores them on the next visit. Search text is never persisted. */
   @property() viewKey?: string;
   @state() private searchText = "";
-  /** Every filter choice, chosen or restored, keyed by column key; an absent key means "all". A
+  /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
+   * `initial` option, or "all" when it has none, and "" is "all" chosen over an `initial` one. A
    * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
    * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
@@ -333,7 +338,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         }
         if (parsed.filters && typeof parsed.filters === "object") {
           const stored = Object.entries(parsed.filters as Record<string, unknown>).filter(
-            (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
+            (entry): entry is [string, string] => typeof entry[1] === "string",
           );
           this.filterSelections = { ...this.filterSelections, ...Object.fromEntries(stored) };
         }
@@ -351,10 +356,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** Removes every choice whose column offers options that do not include it, and reports whether it
-   * removed any. A choice whose column offers none waits, kept and stored but not applied, until the
-   * column offers a non-empty list to judge it by. */
+   * removed any. A chosen "all" (an empty string) is the exception: it is kept exactly while its
+   * column names an `initial`, and removed otherwise. Any other choice whose column offers none
+   * waits, kept and stored but not applied, until the column offers a non-empty list to judge it by. */
   #judgeFilters(): boolean {
     const kept = Object.entries(this.filterSelections).filter(([key, value]) => {
+      // The all option is kept only where it overrides an initial choice; anywhere else it is what
+      // an absent choice already means.
+      if (value === "") return this.#initial(key) !== undefined;
       const options = this.#offered(key);
       return !options || options.some((option) => option.value === value);
     });
@@ -363,9 +372,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return true;
   }
 
-  /** The choice that narrows rows for this column, or "" when there is none or it is waiting. */
+  #initial(key: string): string | undefined {
+    return this.columns.find((column) => column.key === key)?.filter?.initial;
+  }
+
+  /** The choice that narrows rows for this column, or "" when there is none or it is waiting. An
+   * initial choice applies only while nothing was chosen and the column offers it. */
   #activeFilter(column: DataTableColumn<Row>): string {
-    return this.#offered(column.key) ? (this.filterSelections[column.key] ?? "") : "";
+    const options = this.#offered(column.key);
+    if (!options) return "";
+    const chosen = this.filterSelections[column.key];
+    if (chosen !== undefined) return chosen;
+    const initial = column.filter?.initial;
+    return options.some((option) => option.value === initial) ? initial! : "";
   }
 
   #persistView(): void {
@@ -704,7 +723,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       @change=${(event: Event) => {
                         const next = { ...this.filterSelections };
                         const value = (event.target as HTMLSelectElement).value;
-                        if (value === "") delete next[column.key];
+                        if (value === "" && column.filter!.initial === undefined)
+                          delete next[column.key];
                         else next[column.key] = value;
                         this.filterSelections = next;
                         this.#persistView();

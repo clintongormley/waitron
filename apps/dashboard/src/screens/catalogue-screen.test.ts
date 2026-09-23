@@ -90,6 +90,7 @@ const products: Product[] = [
     unitPrice: "8.50",
     vatClass: "reduced",
     active: true,
+    available: true,
     soldAlone: true,
     allergens: null,
     dietOverride: null,
@@ -107,6 +108,7 @@ const value: ProductEditorValue = {
   image: null,
   unitId: "u1",
   unitPrice: "8.50",
+  active: true,
   available: true,
   soldAlone: true,
   vatClass: "reduced",
@@ -190,7 +192,8 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
-  it("confirms Delete and marks the product unavailable without deleting its history", async () => {
+  // Spec §15.6: Delete makes the product Inactive and leaves its availability as it was.
+  it("confirms Delete and makes the product Inactive without deleting its history", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -200,7 +203,11 @@ describe("catalogue-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
     await flush(el);
     expect(api.getProductEditor).toHaveBeenCalledWith("p1");
-    expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, available: false });
+    expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
+      ...value,
+      active: false,
+      available: true,
+    });
   });
 
   it("keeps the Delete confirmation open and reports a refused deactivation inside it", async () => {

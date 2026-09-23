@@ -997,8 +997,8 @@ export const en = {
   "product.no_matches": "No products match your search.",
   "product.delete_named": "Delete {name}",
   "product.delete_warning":
-    "This makes the product unavailable while keeping its historical records.",
-  "product.active": "Active",
+    "This makes the product inactive: the till stops selling it and it leaves this list until you choose to show inactive products. You can restore it, and its past sales are kept.",
+  "product.status": "Status",
   "product.allergens": "Allergens",
   // Product → diet override (Task 8b): tri-state forced labels + contains-tag add/remove
   "diet.section": "Dietary override",
@@ -1017,6 +1017,11 @@ export const en = {
   // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
+  "product.unavailable_badge": "Unavailable",
+  "product.filter_status_all": "Any status",
+  "product.inactive_notice":
+    "This product is inactive, so the till does not sell it. Restore it to sell it again.",
+  "product.restore": "Restore",
   "product.sold_alone": "Sold on its own",
   "product.sold_alone_badge": "On its own",
   "product.not_sold_alone_badge": "Extra or ingredient only",
@@ -2279,8 +2284,9 @@ export const es: Record<StringKey, string> = {
   "product.search": "Buscar productos",
   "product.no_matches": "Ningún producto coincide con tu búsqueda.",
   "product.delete_named": "Eliminar {name}",
-  "product.delete_warning": "Esto desactiva el producto y conserva sus registros históricos.",
-  "product.active": "Activo",
+  "product.delete_warning":
+    "Esto desactiva el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos inactivos. Puedes restaurarlo, y sus ventas anteriores se conservan.",
+  "product.status": "Estado",
   "product.allergens": "Alérgenos",
   "diet.section": "Anulación dietética",
   "diet.vegan": "Vegano",
@@ -2297,6 +2303,11 @@ export const es: Record<StringKey, string> = {
   "diet.contains_remove": "Quitar",
   "product.active_badge": "Activo",
   "product.inactive_badge": "Inactivo",
+  "product.unavailable_badge": "No disponible",
+  "product.filter_status_all": "Cualquier estado",
+  "product.inactive_notice":
+    "Este producto está inactivo, así que la caja no lo vende. Restáuralo para volver a venderlo.",
+  "product.restore": "Restaurar",
   "product.sold_alone": "Se vende por separado",
   "product.sold_alone_badge": "Por separado",
   "product.not_sold_alone_badge": "Solo como extra o ingrediente",

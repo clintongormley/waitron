@@ -49,6 +49,7 @@ const product: Product = {
   categoryIds: ["food", "drink"],
   primaryCategoryId: "food",
   active: true,
+  available: true,
   soldAlone: true,
   variants: [],
 };

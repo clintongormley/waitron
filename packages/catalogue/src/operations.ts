@@ -112,6 +112,8 @@ export interface CreateProductInput {
   /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
    * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
   active?: boolean;
+  /** Omitted leaves it available, mirroring the `products.available` column default. */
+  available?: boolean;
   /** Omitted leaves it offered standalone, mirroring the `products.sold_alone` column default. */
   soldAlone?: boolean;
   description?: Record<string, string> | null;
@@ -140,6 +142,8 @@ export interface UpdateProductInput {
   image?: string | null;
   /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
   active?: boolean;
+  /** Toggle available/unavailable ("sold out for now"); omitted leaves it unchanged. */
+  available?: boolean;
   /** Toggle whether the product is offered standalone; omitted leaves it unchanged. */
   soldAlone?: boolean;
   description?: Record<string, string> | null;
@@ -167,6 +171,7 @@ const PRODUCT_BASE_COLUMNS = {
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
   active: products.active,
+  available: products.available,
   allergens: effective.allergens,
   manualAllergens: effective.manualAllergens,
   dietOverride: effective.dietOverride,
@@ -206,6 +211,7 @@ interface RawProduct {
   unitPrice: number;
   vatClass: string;
   active: boolean;
+  available: boolean;
   allergens: ProductAllergens | null;
   manualAllergens: ProductAllergens | null;
   // The `diet_override` jsonb column's `$type` is looser than {@link DietOverride} (its contains lists
@@ -420,7 +426,16 @@ export async function deactivateMenuItem(
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
 }
 
-export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promise<MenuOffer[]> {
+/**
+ * The Active offers on the given menus. Unavailable (sold-out) products are left out unless the
+ * caller is a management read passing `includeUnavailable`: spec §15.6 lets Available hide an item
+ * from the till, never from the dashboard.
+ */
+export async function listMenuOffers(
+  tx: Transaction,
+  menuIds: string[],
+  options: { includeUnavailable?: boolean } = {},
+): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const rows = await tx
     .select({
@@ -466,6 +481,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
         eq(menuSections.active, true),
         eq(catalogues.active, true),
         eq(products.active, true),
+        options.includeUnavailable === true ? undefined : eq(products.available, true),
       ),
     )
     .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);
@@ -743,6 +759,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       unitPrice: decimalToCents(decimal(input.unitPrice)),
       vatClass: input.vatClass,
       active: input.active ?? true,
+      available: input.available ?? true,
       soldAlone: input.soldAlone ?? true,
       manualAllergens: allergens,
       allergens: republish(allergens, null),
@@ -1085,8 +1102,8 @@ export async function listAccessibleCatalogues(
 /**
  * The products the till can sell at `locationId`, across the WHOLE accessible catalogue set (the
  * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each
- * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only active products of an
- * active catalogue, with the category NAME resolved via a left join (null when the product has no
+ * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only Active and Available
+ * products of an active catalogue, with the category NAME resolved via a left join (null when the product has no
  * category). `products` is `[]` when the location has no accessible catalogue at all. Ordered by
  * catalogue name, then product `created_at`, then `id` so the result is stable and grouped by menu.
  *
@@ -1139,6 +1156,7 @@ export async function listAvailableProducts(
         inArray(catalogues.id, accessible),
         eq(catalogues.active, true),
         eq(products.active, true),
+        eq(products.available, true),
         // A variant is sold only through its parent's menu offer, never as a product in its own
         // right: sold from here it would be filed under its own names as if it had no parent.
         isNull(products.parentId),

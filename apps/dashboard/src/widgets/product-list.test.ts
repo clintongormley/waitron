@@ -81,6 +81,7 @@ function product(overrides: Partial<Product> = {}): Product {
     unitPrice: "8.50",
     vatClass: "reduced",
     active: true,
+    available: true,
     soldAlone: true,
     allergens: null,
     dietOverride: null,
@@ -423,6 +424,8 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "on", active: true }), product({ id: "off", active: false })],
     });
+    // An Inactive product is behind the status filter (spec §15.6), so both are shown with "any".
+    await choose(el, "active", "");
     const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>("[data-test=active-badge]");
     expect(badges.length).toBe(2);
     // Each badge names its state in text (an a11y requirement — not conveyed by colour alone).
@@ -431,6 +434,80 @@ describe("product-list", () => {
     expect(badges[1]!.getAttribute("data-active")).toBe("false");
     expect(badges[1]!.textContent!.trim().length).toBeGreaterThan(0);
     expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
+  });
+
+  // Spec §15.6: Inactive (deleted) products are hidden behind a status filter that starts on
+  // Active; no product is hidden for being Unavailable (sold out for now). The fixtures give Active
+  // and Available DIFFERENT values, so a column or filter reading the wrong flag fails.
+  it("starts the status filter on Active, so an Inactive product is hidden until it is changed", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "gone", name: "Anchoas", active: false, available: true }),
+        product({ id: "sold-out", name: "Boquerones", active: true, available: false }),
+      ],
+    });
+    const root = await tableRoot(el);
+    const select = root.querySelector<HTMLSelectElement>('select[data-filter="active"]')!;
+    expect([...select.options].map((option) => option.value)).toEqual(["", "active", "inactive"]);
+    expect([...select.options].map((option) => option.textContent!.trim())).toEqual([
+      t("product.filter_status_all"),
+      t("product.active_badge"),
+      t("product.inactive_badge"),
+    ]);
+    expect(select.value).toBe("active");
+    expect(rowKeys(root)).toEqual(["sold-out"]);
+    await choose(el, "active", "inactive");
+    expect(rowKeys(root)).toEqual(["gone"]);
+    await choose(el, "active", "");
+    expect(rowKeys(root)).toEqual(["gone", "sold-out"]);
+  });
+
+  it("reads the Active column from active, and badges an Unavailable product that stays listed", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "gone", name: "Anchoas", active: false, available: true }),
+        product({ id: "sold-out", name: "Boquerones", active: true, available: false }),
+      ],
+    });
+    await choose(el, "active", "");
+    const root = await tableRoot(el);
+    const gone = cellUnder(root, "gone", t("product.status"));
+    const soldOut = cellUnder(root, "sold-out", t("product.status"));
+    expect(gone.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
+      "false",
+    );
+    expect(gone.querySelector("[data-test=unavailable-badge]")).toBeNull();
+    expect(soldOut.querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
+      "true",
+    );
+    expect(soldOut.querySelector("[data-test=unavailable-badge]")!.textContent!.trim()).toBe(
+      t("product.unavailable_badge"),
+    );
+  });
+
+  // A variant row answers the status filter with its PRODUCT's state, for the reason the
+  // sold-on-its-own filter gives above; its own cell carries only its own Unavailable badge.
+  it("keeps a variant with its product under the status filter, and badges an Unavailable variant", async () => {
+    const soldOutVariant = { ...bunVariant, id: "large", name: "Large", available: false };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "bun", active: true, variants: [bunVariant, soldOutVariant] }),
+        product({ id: "roll", active: false, variants: [{ ...bunVariant, id: "roll-small" }] }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["bun", "bun:large", "bun:small"]);
+    const small = cellUnder(root, "bun:small", t("product.status"));
+    const large = cellUnder(root, "bun:large", t("product.status"));
+    expect(small.querySelector("[data-test=active-badge]")).toBeNull();
+    expect(small.querySelector("[data-test=unavailable-badge]")).toBeNull();
+    expect(small.textContent!.trim()).toBe("—");
+    expect(large.querySelector("[data-test=unavailable-badge]")).not.toBeNull();
+    await choose(el, "active", "inactive");
+    expect(rowKeys(root)).toEqual(["roll"]);
   });
 
   // The three-state allergen invariant (design §7): null=PENDING, {}=none, {…}=declared. PENDING and
@@ -513,7 +590,7 @@ describe("product-list", () => {
   // assertion that can tell the two apart.
   it("paints the thumbnail frame and the badges through ::part, not a class", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ image: null })],
+      products: [product({ image: null, available: false })],
     });
     const root = await tableRoot(el);
     const frame = getComputedStyle(
@@ -523,7 +600,12 @@ describe("product-list", () => {
     expect(parseFloat(frame.width)).toBeGreaterThan(0);
     expect(frame.width).toBe(frame.height);
     expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
-    for (const test of ["active-badge", "sold-alone-badge", "allergen-state"]) {
+    for (const test of [
+      "active-badge",
+      "unavailable-badge",
+      "sold-alone-badge",
+      "allergen-state",
+    ]) {
       const badge = getComputedStyle(root.querySelector<HTMLElement>(`[data-test=${test}]`)!);
       expect(badge.display, test).toBe("inline-flex");
       expect(parseFloat(badge.borderTopWidth), test).toBeGreaterThan(0);

@@ -151,6 +151,7 @@ function emptyDraft(): ProductEditorDraft {
     image: null,
     unitId: null,
     unitPrice: "0.00",
+    active: true,
     available: true,
     soldAlone: true,
     vatClass: "general",
@@ -230,6 +231,10 @@ export class ProductEditor extends LitElement {
       .error {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
+      }
+      .notice {
+        margin: 0;
+        color: var(--wt-color-text-muted);
       }
       /* A chip is the lozenge's tap target, so the BUTTON carries the minimum size rather than
          stretching something inside it past its own box. */
@@ -554,7 +559,9 @@ export class ProductEditor extends LitElement {
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
   }
-  private save(event: Event) {
+  /** Save the draft; `restore` also makes an Inactive product Active again (spec §15.6). Nothing
+   * else on the form changes `active`, so a plain Save of an Inactive product keeps it Inactive. */
+  private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
     // Inserted in the order the fields are rendered, so the summary reads top to bottom and the
@@ -583,6 +590,7 @@ export class ProductEditor extends LitElement {
     }
     this.submitted = true;
     const value = this.currentValue;
+    if (restore) value.active = true;
     value.name = value.name.trim();
     value.kitchenName = value.kitchenName?.trim() || null;
     value.customerName = blankToNull(value.customerName);
@@ -1177,6 +1185,13 @@ export class ProductEditor extends LitElement {
           .errors=${Object.values(this.allErrors)}
         ></wt-form-error-summary>
         <div class="form">
+          ${
+            this.draft.active
+              ? nothing
+              : html`<p class="notice" data-test="inactive-notice">
+                  ${t("product.inactive_notice")}
+                </p>`
+          }
           <div class="group" data-section="name">
             ${textField(
               fields,
@@ -1210,6 +1225,19 @@ export class ProductEditor extends LitElement {
             @click=${this.cancel}
             >${t("action.cancel")}</wt-button
           >
+          ${
+            this.draft.active
+              ? nothing
+              : html`<wt-button
+                  slot="secondary"
+                  variant="secondary"
+                  data-test="restore"
+                  .loading=${this.busy}
+                  ?disabled=${this.suspended}
+                  @click=${(event: Event) => this.save(event, true)}
+                  >${t("product.restore")}</wt-button
+                >`
+          }
           <wt-button
             data-test="save"
             .loading=${this.busy}

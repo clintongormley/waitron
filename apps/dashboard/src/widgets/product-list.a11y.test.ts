@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./product-list.js";
 import type { ProductList } from "./product-list.js";
@@ -10,8 +10,9 @@ import type { Product } from "../api/client.js";
  * color-contrast check means what it means in the app.
  *
  * The fixture covers all THREE allergen states (null=PENDING, {}=none, {…}=declared), both
- * active/inactive badges, and both a product WITH a decorative image and one WITHOUT
- * (the placeholder) — so axe sees the whole rendered surface, every branch of the row template.
+ * active/inactive badges, the Unavailable badge, and both a product WITH a decorative image and one
+ * WITHOUT (the placeholder) — so axe sees the whole rendered surface, every branch of the row
+ * template. The Inactive product sits behind the status filter, so one case shows every status.
  */
 const products: Product[] = [
   {
@@ -32,6 +33,7 @@ const products: Product[] = [
     unitPrice: "8.50",
     vatClass: "reduced",
     active: true,
+    available: false,
     soldAlone: true,
     allergens: null,
     dietOverride: null,
@@ -57,6 +59,7 @@ const products: Product[] = [
     unitPrice: "2.00",
     vatClass: "general",
     active: false,
+    available: true,
     soldAlone: true,
     allergens: {},
     dietOverride: null,
@@ -82,6 +85,7 @@ const products: Product[] = [
     unitPrice: "15.00",
     vatClass: "super_reduced",
     active: true,
+    available: true,
     soldAlone: true,
     allergens: {
       gluten: { presence: "contains", source: "trigo" },
@@ -98,10 +102,31 @@ const products: Product[] = [
 ];
 
 afterEach(cleanupWidgets);
+// The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
+// a choice one test makes would otherwise be restored into the next one.
+beforeEach(() => sessionStorage.clear());
 
 describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme) => {
   it("renders accessibly", async () => {
     const { host } = await mountWidget<ProductList>("dashboard-product-list", { products }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with every status shown", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      { products },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const select = table.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[data-filter="active"]',
+    )!;
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll("[data-test=active-badge]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 

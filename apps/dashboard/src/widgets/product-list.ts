@@ -123,6 +123,12 @@ export class ProductList extends LitElement {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
   }
 
+  #unavailableBadge() {
+    return html`<span part="badge" data-test="unavailable-badge"
+      >${t("product.unavailable_badge")}</span
+    >`;
+  }
+
   #price(product: Product): string {
     if (product.variants.length === 0) return Number(product.unitPrice).toFixed(2);
     const prices = product.variants.map(({ unitPrice }) => Number(unitPrice));
@@ -227,17 +233,34 @@ export class ProductList extends LitElement {
       },
       {
         key: "active",
-        label: t("product.active"),
+        label: t("product.status"),
+        // Spec §15.6: the product's Active state is its own cell and the filter's answer — for its
+        // variant rows too, for the reason the sold-on-its-own column gives. Available is shown
+        // only when it is off, as a second badge: no product is hidden for being Unavailable.
         cell: ({ product, variant }) => {
-          const active = variant?.available ?? product.active;
+          if (variant)
+            return variant.available
+              ? html`<span part="variant-muted">—</span>`
+              : this.#unavailableBadge();
           return html`<span
-            part="badge"
-            data-test="active-badge"
-            data-active=${active ? "true" : "false"}
-            >${active ? t("product.active_badge") : t("product.inactive_badge")}</span
-          >`;
+              part="badge"
+              data-test="active-badge"
+              data-active=${product.active ? "true" : "false"}
+              >${product.active ? t("product.active_badge") : t("product.inactive_badge")}</span
+            >
+            ${product.available ? nothing : this.#unavailableBadge()}`;
         },
-        sortValue: ({ product, variant }) => ((variant?.available ?? product.active) ? 0 : 1),
+        sortValue: ({ product }) => (product.active ? 0 : 1),
+        filter: {
+          label: t("product.status"),
+          allLabel: t("product.filter_status_all"),
+          value: ({ product }) => (product.active ? "active" : "inactive"),
+          options: [
+            { value: "active", label: t("product.active_badge") },
+            { value: "inactive", label: t("product.inactive_badge") },
+          ],
+          initial: "active",
+        },
       },
       {
         key: "allergens",

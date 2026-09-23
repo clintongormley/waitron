@@ -33,6 +33,7 @@ beforeEach(async () => {
     kitchenName: "BAR COFFEE",
     unitId: setup.unit.id,
     unitPrice: "9.00",
+    active: true,
     available: false,
     vatClass: "reduced",
     image: null,

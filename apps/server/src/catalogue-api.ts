@@ -765,7 +765,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const rows = await gated(sessionId, (tx) => listMenuOffers(tx, [menuId]));
+      const rows = await gated(sessionId, (tx) =>
+        listMenuOffers(tx, [menuId], { includeUnavailable: true }),
+      );
       return c.json(rows);
     }),
   );
@@ -1172,6 +1174,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
+        available?: unknown;
         soldAlone?: unknown;
         modifiers?: unknown;
         // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
@@ -1210,6 +1213,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw new AppError("management.request_invalid", { field: "active" });
       }
+      if (body.available !== undefined && typeof body.available !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "available" });
+      }
       if (body.soldAlone !== undefined && typeof body.soldAlone !== "boolean") {
         throw new AppError("management.request_invalid", { field: "soldAlone" });
       }
@@ -1238,6 +1244,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           : { dietOverride: body.dietOverride as DietOverride | null }),
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
+        ...(body.available === undefined ? {} : { available: body.available }),
         ...(body.soldAlone === undefined ? {} : { soldAlone: body.soldAlone }),
       };
       const created = await gated(sessionId, async (tx) => {
@@ -1281,6 +1288,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         dietOverride?: unknown;
         image?: unknown;
         active?: unknown;
+        available?: unknown;
         soldAlone?: unknown;
         modifiers?: unknown;
         // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
@@ -1339,6 +1347,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "active" });
         }
         patch.active = body.active;
+      }
+      if (body.available !== undefined) {
+        if (typeof body.available !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "available" });
+        }
+        patch.available = body.available;
       }
       if (body.soldAlone !== undefined) {
         if (typeof body.soldAlone !== "boolean") {

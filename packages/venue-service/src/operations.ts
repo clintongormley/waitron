@@ -326,9 +326,10 @@ export async function listVenueReadiness(
     ) {
       continue;
     }
-    const available = await listZoneOffers(tx, cfg, zone.id);
-    for (const menu of available.menus) {
-      if (!available.offers.some((offer) => offer.menuId === menu.id)) {
+    // A setup check, not a sale: a sold-out product still fills its menu and still needs a route.
+    const configured = await listZoneOffers(tx, cfg, zone.id, { includeUnavailable: true });
+    for (const menu of configured.menus) {
+      if (!configured.offers.some((offer) => offer.menuId === menu.id)) {
         issues.push({
           code: "zone.menu_empty",
           zoneId: zone.id,
@@ -347,7 +348,7 @@ export async function listVenueReadiness(
     // `createProduct` call (a demo seed script, say) bypasses all three, so an empty name is
     // storable.
     const productsById = new Map(
-      available.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
+      configured.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
     );
     const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zone.id, [
       ...productsById.keys(),
@@ -481,6 +482,7 @@ export async function listZoneOffers(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
+  options: { includeUnavailable?: boolean } = {},
 ): Promise<{
   defaultMenuId: string | null;
   menus: { id: string; name: string; isDefault: boolean }[];
@@ -497,6 +499,7 @@ export async function listZoneOffers(
   const offers = await listMenuOffers(
     tx,
     menus.map((menu) => menu.id),
+    options,
   );
   offers.sort(
     (left, right) =>

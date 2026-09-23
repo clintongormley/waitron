@@ -1612,6 +1612,183 @@ describe("updateHeldOrder", () => {
     ]);
   });
 
+  // A held-order edit in which every line is quantity-only, and which keeps a line at its stored
+  // quantity or lowers it, keeps the line as rung even when its dish or an extra has since become
+  // Inactive or Unavailable (spec 2026-09-20 §10: existing work is not cancelled). RAISING the
+  // quantity sells more of it, so the dish and every extra the line carries must then be Active and
+  // Available, and the edit is refused with the code a new order naming them gets. From the real
+  // till, only an extra that sold out before the till last loaded its menu is kept out of this
+  // path: retrieve drops a pick the dish's offer, as the till last loaded it, no longer lists
+  // (`deriveExtraSelections`, apps/till/src/state/held-extras.ts).
+  async function readLines(id: string) {
+    return (
+      await db.execute<{
+        id: string;
+        parent_line_id: string | null;
+        quantity: string;
+        unit_price_gross: number;
+        line_total: number;
+      }>(sql`
+        select id, parent_line_id, cast(quantity as text) as quantity,
+               cast(unit_price_gross as int) as unit_price_gross, cast(line_total as int) as line_total
+        from working_order_lines where working_order_id = ${id} order by line_no`)
+    ).rows;
+  }
+
+  async function parkWithExtra(quantity: string) {
+    const venue = await setupVenue();
+    const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = venue;
+    const extra = await withTransaction(db, async (tx) => {
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
+        price: "0.10",
+        maxQuantity: 2,
+        maxPicks: 2,
+      });
+      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
+        {
+          listId: attached.listId,
+          items: [{ productId: attached.productId, price: "0.75", available: true }],
+        },
+      ]);
+      return attached;
+    });
+    const id = randomUUID();
+    const extras = [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }];
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity, extras }],
+    });
+    return { ...venue, extra, extras, id, before: await readLines(id) };
+  }
+
+  it("keeps an unchanged or lowered quantity on a line whose extra has since become Unavailable, and refuses a new pick of it", async () => {
+    const { cfg, zoneId, premiumCafeOfferId, extra, extras, id, before } = await parkWithExtra("2");
+    await withTransaction(db, (tx) =>
+      catalogue.updateProduct(tx, extra.productId, { available: false }),
+    );
+    const edit = (quantity: string) =>
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
+        ],
+      });
+
+    await edit("2");
+    expect(await readLines(id)).toEqual(before);
+
+    await edit("1");
+    // The same two rows at the locked prices, now one dish and its one pick.
+    expect(await readLines(id)).toEqual([
+      { ...before[0]!, quantity: "1000", line_total: 325 },
+      { ...before[1]!, quantity: "1000", line_total: 75 },
+    ]);
+
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [{ menuItemId: premiumCafeOfferId, quantity: "1", extras }],
+      }),
+    ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
+  });
+
+  it("refuses raising the quantity of a line whose extra has since become Unavailable, leaving it as parked", async () => {
+    const { cfg, premiumCafeOfferId, extra, extras, id, before } = await parkWithExtra("1");
+    await withTransaction(db, (tx) =>
+      catalogue.updateProduct(tx, extra.productId, { available: false }),
+    );
+
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCafeOfferId,
+            quantity: "2",
+            extras,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
+    expect(await readLines(id)).toEqual(before);
+  });
+
+  it.each([
+    ["Unavailable", { available: false }],
+    ["Inactive", { active: false }],
+  ])(
+    "refuses raising the quantity of an offer line whose dish is %s, and keeps an unchanged one",
+    async (_state, patch) => {
+      const { cfg, cafeId, premiumCafeOfferId, extras, id, before } = await parkWithExtra("1");
+      await withTransaction(db, (tx) => catalogue.updateProduct(tx, cafeId, patch));
+      const edit = (quantity: string) =>
+        updateHeldOrder({ db }, cfg, id, {
+          lines: [
+            { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
+          ],
+        });
+
+      await expect(edit("2")).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
+      expect(await readLines(id)).toEqual(before);
+      await edit("1");
+      expect(await readLines(id)).toEqual(before);
+    },
+  );
+
+  it("refuses raising the quantity of a catalogue line whose product is Unavailable", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    const before = await readLines(id);
+    await withTransaction(db, (tx) => catalogue.updateProduct(tx, cafeId, { available: false }));
+
+    await expect(
+      updateHeldOrder({ db }, cfg, id, {
+        lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.unknown_product" });
+    expect(await readLines(id)).toEqual(before);
+  });
+
+  it("keeps a raised quantity on a sellable line beside an unchanged line whose extra is sold out", async () => {
+    const { cfg, zoneId, premiumCafeOfferId, extra, extras } = await parkWithExtra("1");
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [
+        { menuItemId: premiumCafeOfferId, quantity: "1", extras },
+        { menuItemId: premiumCafeOfferId, quantity: "1" },
+      ],
+    });
+    const before = await readLines(id);
+    await withTransaction(db, (tx) =>
+      catalogue.updateProduct(tx, extra.productId, { available: false }),
+    );
+    await db.execute(sql`
+      update menu_items set gross_price = 900 where id = ${premiumCafeOfferId}`);
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "1",
+          extras,
+        },
+        { workingOrderLineId: before[2]!.id, menuItemId: premiumCafeOfferId, quantity: "2" },
+      ],
+    });
+
+    // Same ids at the locked price: the plain line is two dishes at 3.25, not re-priced at 9.00.
+    expect(await readLines(id)).toEqual([
+      before[0],
+      before[1],
+      { ...before[2]!, quantity: "2000", line_total: 650 },
+    ]);
+  });
+
   it("keeps a quantity-only offer edit on the original line id and locked price", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();

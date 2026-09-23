@@ -210,7 +210,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
-| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
@@ -278,15 +278,22 @@ container query cannot read a `--wt-*` token. A column exposes text to the searc
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
 column can still sort by it — its direction is restored with that column or not at all, so the
-starting sort stands whole — and every stored filter value that is a non-empty string. A filter
-choice, restored or picked, narrows rows only while its column offers it, and its dropdown then
-shows it. Each time the columns change, every choice is checked against its column's current option
-values. One the options no longer include is cleared — the dropdown returns to its "all" option and
-the stored view is rewritten without it — rather than hiding every row behind a dropdown that reads
-"all". A choice whose column is not rendered, has no `filter`, or has an empty option list (a screen
-still loading the data it builds them from) waits instead: it hides no rows, stays in storage when
-the view is saved for another change, and is checked when the column next has a non-empty list. So
-one `viewKey` can serve two layouts that show different columns.
+starting sort stands whole — and every stored filter value that is a string. A `filter` may name
+an `initial` option, which it starts on until a choice is made or restored, while the column's
+options include it; choosing the "all"
+option over it is then stored as a choice of its own (an empty string), so it survives a reload. A
+filter choice, restored or picked, narrows rows only while its column offers it, and its dropdown
+then shows it. Each time the columns change, every choice is checked against its column. A chosen
+option the column's current option values no longer include is cleared — the dropdown returns to
+the column's `initial` option when it names one still offered, and to its "all" option otherwise,
+and the stored view is rewritten without it — rather than hiding every row behind a dropdown that
+reads "all". A chosen option whose column is not rendered, has no `filter`, or has
+an empty option list (a screen still loading the data it builds them from) waits instead: it hides
+no rows, stays in storage when the view is saved for another change, and is checked when the column
+next has a non-empty list. So one `viewKey` can serve two layouts that show different columns. A
+stored "all" does not wait: it is kept only while its column is rendered with a `filter` that names
+an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
+leaves the column out forgets that "all" was chosen.
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
@@ -1130,6 +1137,16 @@ messages inside the modal, retain entered values after a failed save, and refres
 success. Use the existing Forms contract for required markers, field errors and keyboard submission.
 Only offer operations your domain supports: department removal deactivates the department; removing
 a product from a menu removes that offer.
+
+### Products: Active and Available are two different words
+
+On the products screens (spec §15.6), **Active / Inactive** says whether a product exists for the
+venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
+Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
+list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,
+while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. Other
+screens' words for "switched off, kept for the record" are still being settled in
+`docs/backlog.md`.
 
 ### Navigation and language controls
 

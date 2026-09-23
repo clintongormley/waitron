@@ -17,7 +17,7 @@ import { productUnits } from "./schema/units.js";
  * The three names are never inherited — a blank customer or kitchen name falls back to the
  * variant's OWN staff name, the rule every product follows — nor is anything that says what the row
  * is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`,
- * `sold_alone`), or when it was written.
+ * `available`, `sold_alone`), or when it was written.
  *
  * The catalogue's product reads, and the order path's read of an extras item, take their inherited
  * values from here, so the nullability of the four columns a variant may leave blank (`vat_class`,

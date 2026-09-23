@@ -273,7 +273,7 @@ describe("what deleting a parent row takes with it", () => {
     );
     expect(await attachmentCount()).toBe(2);
 
-    // Direct SQL because no route deletes a product row; the dashboard marks one unavailable
+    // Direct SQL because no route deletes a product row; the dashboard marks one Inactive
     // instead. The attachment's key is the only one of the three that is ON DELETE CASCADE from
     // `products` in this table, and the assertion below is what shows the cascade fired rather than
     // the delete being refused.

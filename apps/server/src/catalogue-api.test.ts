@@ -814,6 +814,7 @@ describe("mountCatalogueApi — products", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",
@@ -918,6 +919,7 @@ describe("mountCatalogueApi — products", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",
@@ -930,6 +932,86 @@ describe("mountCatalogueApi — products", () => {
       ...extra,
     };
   }
+
+  // Spec §15.6: the editor writes Active and Available as two separate states. Each save sets the
+  // two to DIFFERENT values, so a route that writes one flag into the other column fails.
+  it("writes Active and Available as two states through the editor routes", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Two states");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app, { active: true, available: false }) },
+    );
+    expect(created.status).toBe(201);
+    const saved = (await created.json()) as { id: string };
+    expect(saved).toMatchObject({ active: true, available: false });
+
+    const updated = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: await editorBody(app, { active: false, available: true }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ active: false, available: true });
+    const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(await read.json()).toMatchObject({ active: false, available: true });
+    const listed = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(await listed.json()).toEqual([
+      expect.objectContaining({ id: saved.id, active: false, available: true }),
+    ]);
+
+    const withoutActive = await editorBody(app);
+    delete withoutActive.active;
+    const refused = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: withoutActive,
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "active" } },
+    });
+  });
+
+  // Spec §15.6: Available "never hides the item from the dashboard", so the menu management route
+  // keeps a sold-out product's offer; an Inactive product's offer stays hidden, as it was before
+  // the two states were split.
+  it("keeps an Unavailable product's offer on the management offers route and hides an Inactive one", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Management offers");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app) },
+    );
+    const productId = ((await created.json()) as { id: string }).id;
+    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+      body: { name: { en: "Tapas", es: "Tapas" }, displayOrder: 0 },
+    });
+    const sectionId = ((await section.json()) as { id: string }).id;
+    const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
+      body: { productId, sectionId, grossPrice: "4.50", displayOrder: 0 },
+    });
+    expect(offer.status).toBe(201);
+    const offerId = ((await offer.json()) as { id: string }).id;
+    const offeredIds = async (): Promise<string[]> =>
+      (
+        (await (
+          await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
+        ).json()) as { id: string }[]
+      ).map((row) => row.id);
+
+    const soldOut = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { active: true, available: false }),
+    });
+    expect(soldOut.status).toBe(200);
+    expect(await offeredIds()).toEqual([offerId]);
+
+    const deleted = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { active: false, available: true }),
+    });
+    expect(deleted.status).toBe(200);
+    expect(await offeredIds()).toEqual([]);
+  });
 
   it("creates a product with its kitchen station and course in one save", async () => {
     const app = mountApp("es-ES");
@@ -1020,6 +1102,49 @@ describe("mountCatalogueApi — products", () => {
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as { active: boolean }).toMatchObject({ active: false });
+  });
+
+  it("POST /management-api/products with available:false → 201, a sold-out product that stays active", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Create-unavailable catalogue");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Agotado",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        available: false,
+      },
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ active: true, available: false });
+  });
+
+  it("PATCH /management-api/products/:id with available:false stores it and leaves active unchanged", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Patch-unavailable catalogue");
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Se agota",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await createRes.json()) as { id: string }).id;
+
+    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { available: false },
+    });
+    expect(res.status).toBe(204);
+    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(await list.json()).toEqual([
+      expect.objectContaining({ id: productId, active: true, available: false }),
+    ]);
   });
 
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
@@ -1448,6 +1573,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     ["vatClass", { ...productBase, vatClass: 5 }],
     ["image", { ...productBase, image: 5 }],
     ["active", { ...productBase, active: "nope" }],
+    ["available", { ...productBase, available: "nope" }],
   ])(
     "POST /products rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
@@ -1482,6 +1608,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     ["categoryId", { categoryId: 5 }],
     ["image", { image: 5 }],
     ["active", { active: "yes" }],
+    ["available", { available: "yes" }],
   ])(
     "PATCH /products/:id rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
@@ -2732,6 +2859,7 @@ describe("catalogue routes that already refused a negative price", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",

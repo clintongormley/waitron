@@ -12,6 +12,7 @@ import {
   createProduct,
   listAvailableProducts,
   listMenuOffers,
+  updateProduct,
 } from "./operations.js";
 import { createExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
 import { createOptionList, updateOptionList } from "./options.js";
@@ -384,6 +385,42 @@ describe("what a menu offer publishes", () => {
       ["options", seeded.optionsId],
       ["extras", seeded.secondId],
     ]);
+  });
+});
+
+describe("an extra the till cannot sell", () => {
+  // Spec §15.6 and the plan's V16: an extra is sold like any product, so one that is Unavailable
+  // (sold out for now) or Inactive (removed) is not offered. Bacon and cheese take the two states
+  // with the OTHER flag left set, so a read of the wrong column still offers one of them.
+  it("leaves out an item whose product is Unavailable or Inactive, on both paths", async () => {
+    const seeded = await run(async (tx) => {
+      const attached = await attach(tx, ["extras"]);
+      // The offer publishes all three items, so the offer path has the same list to narrow.
+      await setMenuItemExtraLists(tx, offerId, [
+        {
+          listId: attached.extrasId,
+          items: [{ productId: ids.bacon }, { productId: ids.cheese }, { productId: ids.olives }],
+        },
+      ]);
+      await updateProduct(tx, ids.bacon, { available: false });
+      await updateProduct(tx, ids.cheese, { active: false });
+      return attached;
+    });
+
+    const offered = await run(async (tx) => {
+      return readOfferedModifiers(tx, [
+        { productId: ids.burger, menuItemId: null },
+        { productId: ids.burger, menuItemId: offerId },
+      ]);
+    });
+
+    for (const holder of [ids.burger, offerId]) {
+      const [list] = offered.get(holder)!;
+      expect(list!.kind === "extras" && list!.id).toBe(seeded.extrasId);
+      expect(list!.kind === "extras" && list!.items.map((item) => item.productId)).toEqual([
+        ids.olives,
+      ]);
+    }
   });
 });
 

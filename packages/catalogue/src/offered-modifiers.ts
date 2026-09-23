@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
@@ -144,7 +144,13 @@ async function readExtraProducts(
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .where(inArray(products.id, productIds));
+    .where(
+      and(
+        inArray(products.id, productIds),
+        eq(products.active, true),
+        eq(products.available, true),
+      ),
+    );
   return new Map(
     rows.map((row) => [
       row.id,
@@ -186,6 +192,10 @@ type WalkedList =
  * an item it cannot price: there is nothing to draw it with. That is the safe direction — the
  * validator would still accept a pick of it — and it is the same read-committed race that file
  * documents, not a state the `ON DELETE RESTRICT` key allows at any one instant.
+ *
+ * An item whose product is Inactive or Unavailable is left out too (spec §15.6): the till sells
+ * nothing that is not both. The order path refuses a pick of one on its own read
+ * (`resolveBasketModifiers`, `apps/server/src/working-order.ts`).
  *
  * A bounded number of queries whatever the number of dishes: {@link walkAttachedModifiers}'s — the
  * same set {@link resolveAttachedModifiers} issues — plus one for the products the offered items

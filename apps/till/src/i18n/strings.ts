@@ -426,7 +426,7 @@ export const en = {
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
   "held.park_error": "Could not hold the order, try again",
-  "held.product_gone": "A product was removed and dropped from the order",
+  "held.product_gone": "A product is no longer available and was dropped from the order",
   // A retrieved line's frozen answer no longer names anything the dish offers (the list or the
   // chosen label was renamed, or the label was withdrawn), so the till cannot re-send it and the
   // server refuses the whole edit until the question is answered again. Says what the operator has
@@ -737,7 +737,7 @@ export const es: Record<StringKey, string> = {
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
-  "held.product_gone": "Se quitó un producto y se eliminó del pedido",
+  "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
