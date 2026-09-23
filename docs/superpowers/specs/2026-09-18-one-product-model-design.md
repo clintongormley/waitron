@@ -1,6 +1,9 @@
 # One product model: extras, options and variants — design
 
-**Status:** design approved by the owner in the brainstorm of 2026-09-18; plan not yet written.
+**Status:** design approved by the owner in the brainstorm of 2026-09-18. Branch 1 landed (its
+thirteen tasks, ending #480). Branch 2's plan is
+`docs/superpowers/plans/2026-09-23-variants-as-products.md` (2026-09-23), which records where the
+code has moved since this spec was written and the decisions it takes where this spec is silent.
 **Date:** 2026-09-18
 **Branches:** `feat/modifiers-extras-options` (branch 1), `feat/variants-as-products` (branch 2).
 
