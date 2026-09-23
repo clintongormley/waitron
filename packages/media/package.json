@@ -14,29 +14,31 @@
   },
   "dependencies": {
     "@waitron/catalogue": "workspace:*",
+    "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
+    "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "@waitron/dashboard-kit": "workspace:*",
     "@waitron/ui": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.8",
     "lit": "^3.2.0",
-    "@waitron/identity": "workspace:*",
-    "@waitron/server-kit": "workspace:*",
-    "hono": "^4.13.8"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
+    "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
+    "playwright": "^1.63.0",
     "typescript": "^7.0.0",
-    "vitest": "^4.1.11",
-    "@vitest/browser-playwright": "^4.1.11",
-    "playwright": "^1.63.0"
+    "vitest": "^4.1.11"
   },
   "exports": {
     ".": "./src/index.ts",
-    "./dashboard": "./src/dashboard/index.ts"
+    "./dashboard": "./src/dashboard/index.ts",
+    "./testing/sample-image.js": "./src/testing/sample-image.ts"
   }
 }
