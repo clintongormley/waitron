@@ -43,10 +43,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * Registers `POST /api/box/retire` on the shared trading app — the management action a fenced node
  * self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
- * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
- * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
- * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the ordered refusals,
- * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` +
+ * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it).
+ * `retireSelf` owns all retire SEMANTICS — the ordered refusals, idempotency, the
+ * abort-before-write mint; this route is only the auth + status-mapping glue.
  *
  * `"box-retire.failed"` is a LOG TAG only (the boundary's `tag`), NOT a registered error code — matching
  * box-status's `"box-status.failed"`. On a FENCED node this write verb is let through the read-only gate

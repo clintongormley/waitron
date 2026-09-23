@@ -9,9 +9,8 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *
  * NOTHING BUT THIS FILE REFUSES THEM. The database used to: the connection a request was served on
  * wore `app_user`, which held SELECT and no write on the four, so PostgreSQL answered a write with
- * `42501`. SQLite has no roles and no grants — one process opens one file, and
- * `packages/db/src/testing/roles.ts` records what went with them — and every path, request and
- * provisioning alike, now shares that one venue handle. So the rule survives only as a convention
+ * `42501`. SQLite has no roles and no grants — one process opens one file — and every path, request
+ * and provisioning alike, now shares that one venue handle. So the rule survives only as a convention
  * over source text, and this guard is the whole of its enforcement rather than a second opinion on
  * an engine that would refuse the write anyway. Read the four hedges below before trusting it.
  *

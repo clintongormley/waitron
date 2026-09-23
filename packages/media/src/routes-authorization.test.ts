@@ -29,11 +29,8 @@ import { MEDIA_ROUTES } from "./routes.js";
  * behind them on this branch.
  *
  * WHAT DID NOT SURVIVE, so nobody reads this as the whole of that suite. Its subject was that the
- * routes wrote "using non-superuser app_user": it installed a `media_route_role_probe` trigger
- * that raised unless `current_user` was `app_user` and `rolsuper` was false, so every route below
- * carried a live check on WHO was writing. This engine has no roles — `asAppUser` is an empty body
- * (`packages/db/src/testing/roles.ts`) — so the probe has no counterpart and is not restated here
- * in a form that passes. What is left is the authorization gate, which is the module's own code —
+ * routes wrote "using non-superuser app_user", with a live check on WHO was writing. This engine
+ * has no roles, so that check has no counterpart and is not restated here in a form that passes. What is left is the authorization gate, which is the module's own code —
  * and that gate is proven by deletion on this engine, 2026-09-22 on Node v26.7.0: with the
  * `authorizeManager` call in `MEDIA_ROUTES.mount`'s `gated` helper (`packages/media/src/routes.ts`)
  * made unreachable and nothing else changed, this case FAILED on

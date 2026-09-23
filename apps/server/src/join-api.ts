@@ -149,7 +149,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * The shared by-id routes need the permission the ROW's kind demands, which is not known until the
    * row is read — so `gated` cannot take it up front. The shape, exactly:
    *
-   *   1. inside `withTransaction` + `asAppUser`, read the row's kind;
+   *   1. inside `withTransaction`, read the row's kind;
    *   2. `authorizeManager` for `PERMISSION_FOR[kind]`;
    *   3. act.
    *

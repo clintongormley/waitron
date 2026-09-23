@@ -93,8 +93,7 @@ async function insertBooking(
   });
 }
 
-/** Run the annotator in one transaction, the shape production uses. The `asAppUser` call inside is
- * an empty body on this engine (`packages/db/src/testing/roles.ts`) and asserts nothing. */
+/** Run the annotator in one transaction, the shape production uses. */
 function annotate(
   v: Venue,
   now: Date,

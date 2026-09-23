@@ -1,10 +1,8 @@
 /**
  * The demo's media step: committed tiles in the library, content-addressed references on products.
  *
- * **What went with PostgreSQL.** This file used to run the writes through `app_user` on a real
- * server, so a missing grant on `media_images` / `products` would have failed it. SQLite has no
- * roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below
- * runs on the one connection. Nothing now checks who may write the image library.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write the image library.
  */
 
 import { createHash } from "node:crypto";

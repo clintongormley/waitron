@@ -21,13 +21,12 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +
-// id screens, the permission gate wiring — end to end in-process, the
-// same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
-// the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
-// `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.full-manifest.test.ts`);
-// PGlite connects as a superuser holding every grant (CLAUDE.md §4).
+// This suite proves the ROUTES — the request/response boundary, the body + id screens, the
+// permission gate wiring — end to end in-process, the same way `till-api.test.ts` proves the till
+// routes. The catalogue tables live in CORE_MIGRATIONS and the management session/persons in
+// IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` exactly as production does. The
+// gate-by-DELETION proof (removing `authorizeManager` turns the staff refusals green→red) is
+// `catalogue-api.full-manifest.test.ts`.
 const noopLog: Logger = () => {};
 
 let locationId: string;

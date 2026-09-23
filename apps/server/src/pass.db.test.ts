@@ -30,11 +30,10 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
  * a missing SELECT/INSERT/UPDATE grant on `scheduled_runs`, `tenant_credentials` or the reconcile
  * tables fail rather than pass.
  *
- * **SQLite has no roles**, `connectAs` has no counterpart and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`), so both cases now run on the one venue handle. What is no
- * longer checked by anything: that the deployment role can reach the vault, the reconcile tables and
- * the scheduler ledger, and no further. The two cases keep their assertions unchanged; only the
- * handle they run on changed.
+ * **SQLite has no roles** and `connectAs` has no counterpart, so both cases now run on the one
+ * venue handle. What is no longer checked by anything: that the deployment role can reach the
+ * vault, the reconcile tables and the scheduler ledger, and no further. The two cases keep their
+ * assertions unchanged; only the handle they run on changed.
  *
  * The `nonInfo` assertion in the first case was doing double duty and now does single duty. It was
  * the outside-in signal for a MISSING GRANT, because `runDue` folds a permission-denied error into

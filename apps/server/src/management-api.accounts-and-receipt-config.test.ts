@@ -6,10 +6,7 @@
  *
  * ## What went with PostgreSQL
  *
- * The file's stated reason for demanding a real cluster was `app_user`: every route dropped to the
- * non-owner deployment role, so a person created here had to land under that role's grants. SQLite
- * has no roles and no grants — `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`) — so every call below runs on the one connection and nothing
+ * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
  * here now says anything about which identity the routes reach the database as. No case was deleted
  * for it: each one names a route's behaviour, and all thirty-nine still run.
  *

@@ -110,9 +110,8 @@ describe("awaitingCertAlertSource", () => {
   });
 });
 
-// The printing source reads three real tables (printers, print_agents, print_jobs), so it runs on
-// PGlite as the app role — a grant assertion that forgot `asAppUser(tx)` would silently pass as the
-// owner (CLAUDE.md §4). PGlite fits: these are plain SELECTs with no contention to prove.
+// The printing source reads three real tables (printers, print_agents, print_jobs). These are plain
+// SELECTs with no contention to prove.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /** Minutes before NOW as an ISO string — the shape `last_seen_at` / `created_at` compare against. */

@@ -71,10 +71,10 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 // The container was justified by role separation: the read-only gate was served through a
 // non-superuser `app_login` pool, the promote's point-of-no-return write went through a separate
 // table-owner connection, and the promoted primary's fiscal drain ran as the deployment role. There
-// is no role on this engine — `pg.connectAs` has no counterpart and `asAppUser` is an inert function
-// (`packages/db/src/testing/roles.ts`) — and there is no second connection either: `PromoteDeps.db`
-// is ONE handle (`promote.ts:40-52`) and boot opens the venue directory once. Nothing below now
-// distinguishes a write the deployment role may make from one it may not.
+// is no role on this engine — `pg.connectAs` has no counterpart — and there is no second
+// connection either: `PromoteDeps.db` is ONE handle (`promote.ts:40-52`) and boot opens the venue
+// directory once. Nothing below now distinguishes a write the deployment role may make from one it
+// may not.
 //
 // **Step 5, `non-owner WAITRON_ADMIN_DATABASE_URL → 500 promotion.failed, node unchanged; unset →
 // falls back and succeeds`, is DELETED: its subject no longer exists.** It booted a node whose

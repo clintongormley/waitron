@@ -6,10 +6,9 @@
  * It ran against real PostgreSQL through `useTemplateDb`, corrupted the chain as the table OWNER,
  * and then verified through `app_user`. Two things about that are gone and neither is a rewording:
  *
- * 1. **The verify no longer runs as the application role.** `asAppUser`
- *    (`packages/db/src/testing/roles.ts`) is an empty body on this branch and there are no grants,
- *    so what the old shape bought — that `app_user`'s SELECT is enough to re-walk the chain — is
- *    not bought by anything now.
+ * 1. **The verify no longer runs as the application role.** There are no roles and no grants on
+ *    this engine, so what the old shape bought — that `app_user`'s SELECT is enough to re-walk the
+ *    chain — is not bought by anything now.
  * 2. **The corruption is no longer "by the owner, with the trigger disabled".** PostgreSQL has
  *    `ALTER TABLE … DISABLE TRIGGER`; SQLite has no such statement, so {@link bypassingImmutability}
  *    drops each of `daily_closes`' two append-only triggers, mutates, and recreates each one from

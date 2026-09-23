@@ -3,10 +3,7 @@
 // the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
 // `backup-supervisor.test.ts`.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` call in `setupTenant` is now inert
-// (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep; nothing here establishes
-// what the deployment role, which no longer exists, may read or write.
+// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

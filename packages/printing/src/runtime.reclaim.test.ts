@@ -13,10 +13,8 @@ import type { PrintConfig } from "./printers.js";
 // The lease reclaim, on the venue file. These cases use sequential transactions; competing agents
 // are covered by runtime.race.test.ts.
 //
-// WHAT THIS SUITE NO LONGER SHOWS. It used to run every write after `set local role app_user`
-// against a real PostgreSQL cluster, so the deployment role's grants on `print_jobs` were
-// exercised. This engine has no roles and `asAppUser` is an empty body
-// (`packages/db/src/testing/roles.ts`). The second thing that went with PostgreSQL is `now()`: the
+// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here exercises the
+// deployment role's grants on `print_jobs`. The second thing that went with PostgreSQL is `now()`: the
 // lease cutoff was the SERVER's clock, and it is now the process holding the venue file
 // (`claimPrintJobs`'s own comment records what that gives up). Every `now() - interval '2 minutes'`
 // below is therefore computed in JavaScript, in the one ISO-8601 spelling `claimed_at` is compared

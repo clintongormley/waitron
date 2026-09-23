@@ -7,10 +7,8 @@
  * Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
  * `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
  *
- * **What went with PostgreSQL.** The sub-seeds used to run as `app_user` on a real server, so a
- * grant they do not hold would have failed this file. SQLite has no roles, `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
- * Nothing now checks who may write any of the seeded tables.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write any of the seeded tables.
  *
  * Three read-back shapes moved with the engine, none of them changing what is asserted:
  * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is

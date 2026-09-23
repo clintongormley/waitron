@@ -148,8 +148,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 
 /**
  * Runs the write path exactly as the application will: in one transaction, on a node already
- * registered with the injected backend. (The `asAppUser` call inside is inert on this engine —
- * `packages/db/src/testing/roles.ts` — so it is the transaction, not a role, that this mirrors.)
+ * registered with the injected backend.
  *
  * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
  * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node

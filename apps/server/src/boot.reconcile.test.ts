@@ -43,15 +43,11 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //   boots differ only in whether the peer answers, so the read-only outcome above is the reconciliation
 //   working, not a box that was fenced anyway.
 //
-// ## What the move off PostgreSQL took out of this file
+// ## Two things to know about this file
 //
-// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
-// mandatory because the fence persists `node_membership` and demotes `singleton_role` as the
-// non-superuser app and owner roles, so a missing grant would be caught here. There are no roles on
-// this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
-// (`packages/db/src/testing/roles.ts`). Every statement below, and every statement the booted
-// server issues, runs on the one connection `openVenueStore` hands out. Nothing here now shows that
-// the fence's two writes are reachable by the role that has to make them.
+// **There is no ROLE SPLIT on this engine.** Every statement below, and every statement the booted
+// server issues, runs on the one connection `openVenueStore` hands out. Nothing here shows that the
+// fence's two writes are reachable by the role that has to make them.
 //
 // **The suite keeps its own handle open while the server holds one, and only READS through it.**
 // Write-ahead mode admits a reader beside the writer, and both opens set `busy_timeout`

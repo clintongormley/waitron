@@ -48,10 +48,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
-// what the deployment role, which no longer exists, may read or write.
+// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({

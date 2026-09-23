@@ -483,11 +483,11 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 
 /**
  * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
- * transaction as the app role, confirm the caller's management session carries
+ * transaction, confirm the caller's management session carries
  * `venue.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
  * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
  * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
- * `withTransaction` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
+ * `withTransaction` + `authorizeManager` block that followed it. `cfg` is the venue config the
  * route resolved via `requireVenueCfg`, whose `locationId` the zone/table verbs scope to (they take
  * `cfg`, unlike the status verbs).
  */
@@ -612,8 +612,8 @@ async function parsePasskeyVerifyBody(
  * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster
  * (read post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff
  * CRUD routes to THIS same function, each handler wrapped in `run` (above) so the whole surface
- * maps errors identically. Mirrors `mountTillApi`'s shape — `withTransaction(deps.db, …)` + `asAppUser(tx)` on every DB touch, in the database holding this
- * dashboard's tenant.
+ * maps errors identically. Mirrors `mountTillApi`'s shape — `withTransaction(deps.db, …)` on every
+ * DB touch, in the database holding this dashboard's tenant.
  */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
@@ -744,8 +744,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
   // The deployment holds one tenant per database. Roster of active persons. Deliberately
-  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTransaction` +
-  // `asAppUser` rather than `requireManagementSession`. One dashboard screen fetches it via
+  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTransaction`
+  // rather than `requireManagementSession`. One dashboard screen fetches it via
   // `api.getStaffRoster()` at HEAD: `my-schedule-screen.ts`'s staff self-service view (the
   // colleague picker + name resolution). The login screen no longer uses it — spec §4.4's
   // email-login migration landed, so `login-screen.ts`'s `#submit` now POSTs `{ email }`
@@ -764,8 +764,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // The deployment holds one tenant per database. Login: EMAIL + password (+ TOTP iff the person
-  // is enrolled) → management-session cookie. Runs as the app role under the dashboard's tenant
-  // (`withTransaction` + `asAppUser`), in this database. `loginManager` resolves the person by EMAIL
+  // is enrolled) → management-session cookie. Runs under `withTransaction`, in this database.
+  // `loginManager` resolves the person by EMAIL
   // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
   // password BOTH surface as `password.invalid` (401), so the response never reveals which
   // addresses have accounts. A suspended person gets that same result. Once the password succeeds,
@@ -941,7 +941,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // one whose cookie is not even UUID-shaped (so it names no `uuid` row), still clears the cookie and
   // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionId` +
   // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a valid
-  // id ends its session under `withTransaction` + `asAppUser`, and `endManagementSession` is itself a no-op
+  // id ends its session under `withTransaction`, and `endManagementSession` is itself a no-op
   // on an already-ended one.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
@@ -1216,7 +1216,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
   // The deployment holds one taxpayer per database. The dashboard's receipt-trim editor
   // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
-  // every DB touch runs under `withTransaction` + `asAppUser`, in this database; the receipt store
+  // every DB touch runs under `withTransaction`, in this database; the receipt store
   // upserts on `id = 1`. The receipt routes read/write the database's one
   // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
   // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
@@ -1275,7 +1275,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The deployment holds one taxpayer per database. The dashboard's reusable-canvas CRUD
   // and the box's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
-  // `withTransaction` + `asAppUser`, in this database; the theme store upserts on `id = 1` and
+  // `withTransaction`, in this database; the theme store upserts on `id = 1` and
   // the canvas store reads by id alone. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
   // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
@@ -1444,7 +1444,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // device-profile CRUD (design 2026-09-05 §5.1) — a named capability set + optional default
   // canvas that a device (a later task's reassign route) points at. Mirrors the canvas block: all
   // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
-  // touch runs `withTransaction` + `asAppUser`, in this database; the device-profile store reads by
+  // touch runs `withTransaction`, in this database; the device-profile store reads by
   // id alone. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
   // their own explicit `authorizeManager(..., "layout.configure")` —
   // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
@@ -1753,7 +1753,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" config screen (design §3d): CRUD the venue's floor zones and — as thin
   // wrappers over TS-1's table verbs — its dining tables. All eight routes are gated exactly like the
   // layout `GET` above: `requireManagementSession` first (401 before any DB work), then each route calls
-  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTransaction` + `asAppUser` (unlike the
+  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTransaction` (unlike the
   // status verbs, the zone/table verbs do NOT authorize themselves — they take a plain venue `cfg` — so
   // the gate lives at the route, the layout-`GET` shape). The verbs are location-scoped, so each reads
   // the venue's config via `requireVenueCfg`. Body-shape screens mirror the service-status routes above.
@@ -1951,7 +1951,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" editor's place / un-place actions (design §placement): thin wrappers over Task
   // 2's `setTablePlacement` / `clearPlacement`. Same gating and mapping as the FP-1 zone/table routes
   // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
-  // under `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is
+  // under `withTransaction` + `authorizeManager(…, "venue.configure")`, so a staff session is
   // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
   // the test names). `requireTableId` screens `:id` (malformed → table.not_found, and that screen is
   // the only refusal); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
@@ -2024,7 +2024,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cocina" config screen: CRUD the venue's kitchen stations, pick the default, route
   // categories/products to a station, and set the whole-ticket `bump_mode`. All gated exactly like the
   // FP-1 zone/table routes above — `requireManagementSession` first (401 before any DB work), then
-  // `withVenueAuth` runs the verb under `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`,
+  // `withVenueAuth` runs the verb under `withTransaction` + `authorizeManager(…, "venue.configure")`,
   // so a staff session is refused 403 before any write (proven by dropping the authorize in `withVenueAuth`,
   // the deletion-proof the tests name). The verbs are location-scoped, so each reads the venue's config via
   // `requireVenueCfg`. Body-shape screens mirror the service-status / zone routes above.
@@ -2261,7 +2261,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cursos" panel: CRUD the venue's coursing sequence, route a product to its default
   // course, and read/write the fire-control setting. All gated exactly like the KDS-1 station routes above
   // — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb under
-  // `withTransaction` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
+  // `withTransaction` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
   // before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof the tests
   // name). The verbs are location-scoped, so each reads the venue's config via `requireVenueCfg`.
   // Body-shape screens mirror the station / service-status routes above.

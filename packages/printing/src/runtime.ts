@@ -58,7 +58,7 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
-  /** The caller's transaction (the Task-6 route wraps this in `withTransaction` + `asAppUser`). */
+  /** The caller's transaction (the Task-6 route wraps this in `withTransaction`). */
   tx: Transaction;
   /** The calling agent. NOT an eligibility filter (printers carry no agent binding) — it is stamped
    * into `claimed_by` on every claim and is what authorises the later report (only the claimer reports

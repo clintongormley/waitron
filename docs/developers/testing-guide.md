@@ -16,10 +16,9 @@ between: PGlite, the Testcontainers PostgreSQL tier, the helper that ran a suite
 the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
 
 **What went with them, so nobody assumes it is still covered.** SQLite has no roles and no
-grants — one process opens one file, and what a caller may do is decided outside the database — so
-`asAppUser` (`packages/db/src/testing/roles.ts`) is an empty function today, kept only so the
-switch did not also have to edit its call sites. Every privilege assertion that depended on it is
-deleted, and each deletion is recorded in the header of the file it was deleted from:
+grants — one process opens one file, and what a caller may do is decided outside the database. Every
+privilege assertion is deleted, and each deletion is recorded in the header of the file it was
+deleted from:
 `packages/db/src/allocate-number.test.ts` (a column-scoped `grant update (next_number)` was what
 made allocation fail in production and pass in every test that skipped the role switch — nothing
 now states which privileges that allocation needed),
@@ -807,15 +806,14 @@ this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` refere
 Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
 it — an `applyTo: "**"` instructions file would be picked up there.
 
-## A grant assertion had to call `asAppUser(tx)` — retired with the grants themselves
+## A grant assertion had to switch role first — retired with the grants themselves
 
 **Historical.** On PGlite the connection arrived as a superuser, so a privilege test that never
-switched role ran as the owner and asserted nothing, however much it asserted; `asAppUser(tx)` ran
-`set local role app_user` and was what made such a test mean anything. SQLite has neither roles nor
-grants, so `asAppUser` (`packages/db/src/testing/roles.ts`) is an empty function today and there is
-no privilege for it to switch to. The shape is worth keeping even though its subject is gone: a
-test that asserts something is REFUSED has to put itself on the refused side first, or it proves
-nothing about the refusal.
+switched role ran as the owner and asserted nothing, however much it asserted; a helper running
+`set local role app_user` was what made such a test mean anything. SQLite has neither roles nor
+grants, so there is no privilege left to switch to and the helper is gone. The shape is worth
+keeping even though its subject is gone: a test that asserts something is REFUSED has to put itself
+on the refused side first, or it proves nothing about the refusal.
 
 ## A contention test proves the write queue serialises writers, not that a lock blocked
 

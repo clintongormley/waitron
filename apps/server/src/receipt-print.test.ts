@@ -52,10 +52,7 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
  *
  * ## The role half of the old header is gone and is replaced by nothing
  *
- * It argued real PostgreSQL was mandatory rather than PGlite because the hook wrote through the
- * deployment role while provisioning ran as the owner. SQLite has no roles: one process opens one
- * file, and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). The
- * `asAppUser(tx)` calls below are where the product path puts them, and they check nothing.
+ * SQLite has no roles: one process opens one file, and nothing below checks who may write.
  *
  * ## What is unchanged, and must stay that way — CLAUDE.md §5
  *

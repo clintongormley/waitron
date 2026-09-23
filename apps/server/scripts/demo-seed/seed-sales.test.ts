@@ -2,10 +2,8 @@
  * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
  * reports they light up.
  *
- * **What went with PostgreSQL.** The seed used to run through `app_user`, so a grant the sale path
- * does not hold would have failed it. SQLite has no roles, `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection. Nothing
- * now checks who may write a sale, a tender or a fiscal record.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write a sale, a tender or a fiscal record.
  */
 
 import { describe, expect, it } from "vitest";

@@ -1066,7 +1066,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // persisted value across a reload. Lives beside the sibling `PATCH
   // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
   // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
-  // `gated`'s `withTransaction` + `asAppUser` transaction. Ordered by name for a stable list.
+  // `gated`'s `withTransaction`. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

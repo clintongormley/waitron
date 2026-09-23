@@ -43,15 +43,11 @@ import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./res
 //  - a FENCED node: the gate IS mounted, yet the exempt POST reaches the handler, which returns the
 //    precise `promotion.node_fenced` (409), not a lying already-primary nor a generic gate 403.
 //
-// ## What the move off PostgreSQL took out of this file
+// ## Two things to know about this file
 //
-// **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
-// mandatory because the read-only gate is served through the non-superuser `app_login` pool, the
-// mirror boot performs owner-role deployment writes, and the admin login mints a session as
-// `app_user`. There are no roles on this engine: `pg.connectAs` has no counterpart and `asAppUser`
-// is an inert function (`packages/db/src/testing/roles.ts`). Every statement below, and every
-// statement each booted server issues, runs on the one connection `openVenueStore` hands out, so
-// nothing here now separates what the gate refuses from what a grant refuses.
+// **There is no ROLE SPLIT on this engine.** Every statement below, and every statement each booted
+// server issues, runs on the one connection `openVenueStore` hands out, so nothing here separates
+// what the gate refuses from what a grant refuses.
 //
 // **The suite keeps a handle open on each venue directory while a server holds one.** Write-ahead
 // mode admits a second connection and both opens set `busy_timeout`

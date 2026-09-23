@@ -367,7 +367,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
 /**
  * Pay and settle a working order idempotently — the CRUX of park & retrieve (spec §3). It stops a
  * lost-response pay retry from filing a SECOND chained fiscal record (an unrepairable defect: invoice
- * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTransaction`/`asAppUser` transaction, so the
+ * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTransaction` transaction, so the
  * working order's settle, the sale, its tender/settlement and its chained fiscal record commit as one
  * unit — or roll back together.
  *
@@ -1173,7 +1173,7 @@ async function finalizeCapture(
  * files the sale from the order's STORED locked lines — the SAME lines P1 would have priced, so
  * `priced.total` equals what `collect` charged when no tip was added (line-add snapshot, 7c) — and
  * associates THIS existing captured row, never a second `collect` (design Decision 2). All in ONE
- * `withTransaction`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
+ * `withTransaction` transaction so the sale, its tender/settlement, its chained fiscal record,
  * the association and the `open`/`placed` → `settled` transition commit as one unit (or roll back
  * together).
  *
@@ -1595,7 +1595,7 @@ export function toPayOutcome(
 /**
  * Collect and finalise a PLACED order (prepare & collect, sub-project 7c) — the COLLECT half of the
  * mode dispatch, dispatching on the location's `order_flow` (design §3's state-machine table). All in
- * one `withTransaction`/`asAppUser` transaction:
+ * one `withTransaction` transaction:
  *  - `invoice_first` (Mode I): the invoice was ALREADY issued (deferred) at placing, so collect
  *    SETTLES the existing sale (`settleSale`) and moves `placed → settled`. It files NO second fiscal
  *    record — a double-file would be an unrepairable defect (§5). A `card` tender ALSO writes the

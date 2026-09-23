@@ -34,13 +34,9 @@ const WRITERS = 20;
  *   queue that failed to serialise would break. The serialisation itself is observed, with its
  *   control, in `chain.concurrency.test.ts` ("holds a second appender on the same chain until the
  *   first commits"); it is not re-observed here.
- * - **`lets the app role append` is DELETED.** Its subject was the deployment ROLE: it ran
- *   `appendToChain` under `asAppUser` to show the app role held the grants for a node-keyed
- *   insert. `asAppUser` is an inert function on this engine
- *   (`packages/db/src/testing/roles.ts`) and SQLite has no roles, so the case would have asserted
- *   only that an append returns `secuencia: 1` — which the first case here and
- *   `chain.concurrency.test.ts` both already assert. The ROLE half is covered by nothing; see the
- *   note on the deleted `privileges.test.ts`.
+ * - **The deployment ROLE.** SQLite has no roles, so `lets the app role append` is DELETED: it
+ *   would have asserted only that an append returns `secuencia: 1` — which the first case here and
+ *   `chain.concurrency.test.ts` both already assert. The ROLE half is covered by nothing.
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 

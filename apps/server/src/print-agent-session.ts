@@ -31,7 +31,7 @@ export interface PrintAgentSessionDeps {
  * never reaches `authenticateAgent`. Every other failure (an unknown selector, a REVOKED agent, a
  * secret that does not verify) folds into the SAME `agent.unauthorized` inside the core, so a
  * revoked agent fails INSTANTLY (its row is simply not found) with no oracle. The token
- * verification and the sighting write run under `withTransaction` + `asAppUser`.
+ * verification and the sighting write run under `withTransaction`.
  */
 export async function requireAgent(
   deps: PrintAgentSessionDeps,

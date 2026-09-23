@@ -87,9 +87,8 @@ import "./errors.js";
 // clone of a shared PostgreSQL template, with `suite.pg.connect()` handing out extra backends. Both
 // are gone. There is ONE venue file and ONE handle, and `withTransaction` IS the write lock
 // (`packages/db/src/tenancy.ts:20-22` → `withWriteLock`, `packages/store/src/write-queue.ts`), so
-// two overlapping transactions on this handle queue rather than contend. The `asAppUser(tx)` calls
-// below are inert (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing
-// here establishes what any database role may read or write, because there are no roles.
+// two overlapping transactions on this handle queue rather than contend. Nothing here establishes
+// what any database role may read or write, because there are no roles.
 //
 // WHAT THE NINE "two backend" CASES NOW SHOW, AND WHAT THEY DO NOT. Each of them now starts both
 // halves on one handle. Every BEHAVIOURAL assertion each case made is unchanged; three assertions
@@ -1929,8 +1928,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 // per-line/per-station `ticket_items` that replaced #63's one-row-per-order `order_prep`.
 // `sendToPrep` (Mode P) and
 // `placeOrder` (Modes I/T) are the FIRES that put items on the queue; their settled-only guard is
-// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction` +
-// `asAppUser` scope, the latter inert here).
+// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction`
+// scope).
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, cafe } = await modeVenue("prepay");
@@ -2140,7 +2139,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
 // node-scoped either. `working-order.test.ts` covers the join/grouping/exclusions; this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
-// reads run through {@link asTenant} (a `withTransaction` + `asAppUser` scope, the latter inert here).
+// reads run through {@link asTenant} (a `withTransaction` scope).
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");

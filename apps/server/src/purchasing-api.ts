@@ -213,9 +213,9 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
  * The deployment holds one tenant per database. Mounts the dashboard's gated purchase-invoice
  * write group on an existing Hono app — `mountCatalogueApi`'s sibling, attached to the SAME app
  * (the `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
- * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction` +
- * `asAppUser`, `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in
- * this database. The `purchase.manage` gate runs on every route through one constant.
+ * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction`,
+ * `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in this database.
+ * The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
   // Open a transaction as the app role, confirm the caller's management session carries

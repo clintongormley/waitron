@@ -1,12 +1,8 @@
 /**
  * The staff seed, end to end, on the engine the box now runs.
  *
- * **What went with PostgreSQL: this file's reason for running the seed through `app_user`.** It
- * used to say it exercised "the permitted persons writes" — the seed's inserts arriving as the
- * non-owner deployment role, so a missing `INSERT` grant on `persons` would have failed it. SQLite
- * has no roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every
- * call below runs on the one connection. Nothing now checks who may write `persons`. The `asAppUser`
- * calls are left in place only because task T1 of the storage swap removes them tree-wide.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write `persons`.
  */
 
 import { describe, expect, it } from "vitest";

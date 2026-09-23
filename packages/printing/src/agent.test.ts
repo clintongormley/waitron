@@ -10,9 +10,8 @@ import { authenticateAgent } from "./agent.js";
 import type { PrintAgentConfig } from "./agent.js";
 import "./errors.js";
 
-// One venue file. The suite asked for real PostgreSQL to exercise the deployment role's grants,
-// which this engine has neither of: one process opens one file and `asAppUser` does nothing
-// (`packages/db/src/testing/roles.ts`). What is left is the bearer-token auth core itself — the
+// One venue file: this engine has neither roles nor grants, and one process opens one file. What is
+// left is the bearer-token auth core itself — the
 // scrypt check, the revocation filter and the last-seen gate — none of which turns on who
 // connected. (Agent enrolment is join-and-accept, in apps/server/src/join-requests.ts.)
 const LOCALE = "es-ES";

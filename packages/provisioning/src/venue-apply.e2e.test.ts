@@ -196,9 +196,7 @@ describe("the provisioned admin authenticates by id with its password", () => {
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
-    // The provisioned password logs in and mints a management session — run as the app role under the
-    // tenant (asAppUser), the same role constraints production's login runs under, so this also proves
-    // app_user can SELECT the seeded password_hash and INSERT the management session.
+    // The provisioned password logs in and mints a management session.
     const session = await withTransaction(suite.db, async (tx) => {
       return loginManagerById(tx, {
         personId: personId!,
@@ -240,8 +238,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
-    // The email path mints a management session for the provisioned admin — run as the app role under
-    // the tenant (asAppUser), the same role constraints production's login runs under.
+    // The email path mints a management session for the provisioned admin.
     const session = await withTransaction(suite.db, async (tx) => {
       return loginManager(tx, {
         email: adminEmail,

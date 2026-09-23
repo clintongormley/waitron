@@ -129,9 +129,8 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
- * `loginWithPin` path the login route runs — and returns its id, so a test can hand a cookie that names
- * a genuine open row. */
+/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+ * route runs — and returns its id, so a test can hand a cookie that names a genuine open row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {

@@ -12,9 +12,7 @@
  * property.** The clause is deleted rather than translated — SQLite has no row locks and drizzle's
  * SQLite query builder has no `.for()` — so there is no longer a clause to delete as a control. The
  * two distinct backends and the `pg_locks` catalogue have no counterpart either, and neither does
- * the deployment role: every write below used to run after `set local role app_user` on a
- * non-superuser connection, and `asAppUser` is now an empty body
- * (`packages/db/src/testing/roles.ts`).
+ * the deployment role.
  *
  * ## What replaced the lock observation, and the control behind it
  *

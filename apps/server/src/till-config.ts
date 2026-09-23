@@ -191,8 +191,8 @@ export function tryLoadTillConfig(
 
 /**
  * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
- * `loadTillConfig` cannot resolve from the environment. Runs as the app role (`withTransaction` +
- * `asAppUser`); the `eq(id)` filter selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
+ * `loadTillConfig` cannot resolve from the environment. Runs under `withTransaction`; the `eq(id)`
+ * filter selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
  * mode is provisioning-time config, stable for the process lifetime, so re-reading it on every
  * place/collect would be a needless round trip on the till's hottest path.
  */

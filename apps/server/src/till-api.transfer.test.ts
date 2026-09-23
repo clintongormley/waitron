@@ -75,8 +75,8 @@ const suite = useVenueDb({
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
-    // One product in a catalogue assigned to the counter location, seeded on the APP role via the
-    // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
+    // One product in a catalogue assigned to the counter location, seeded via the catalogue
+    // helpers — the same `withTransaction` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -152,8 +152,8 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
- * `loginWithPin` path the login route runs — and returns its id. */
+/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+ * route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {

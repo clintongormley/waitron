@@ -22,13 +22,9 @@ const LOCALE = "es-ES";
  *
  * ## The half this file used to carry and does not any more
  *
- * It ran against a real PostgreSQL cluster as `app_user`, a non-superuser LOGIN role, because the
- * subject is a security fix and the old header argued a security claim wants the production role.
- * **That role is gone and is replaced by nothing**: SQLite has no roles, `RealPostgres.connectAs`
- * has no counterpart, and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`). Every call below now runs on the one connection the
- * venue file admits. The `asAppUser(tx)` calls are kept rather than picked out one file at a time,
- * because the branch sweeps them together; they separate nothing today.
+ * **The non-superuser `app_user` LOGIN role this file ran as is gone and is replaced by nothing**:
+ * SQLite has no roles and `RealPostgres.connectAs` has no counterpart. Every call below now runs on
+ * the one connection the venue file admits.
  *
  * **Nothing in the four cases below depended on the role.** What each one asserts is that a verb's
  * own `location_id` predicate refuses a row belonging to another location of the SAME tenant, and

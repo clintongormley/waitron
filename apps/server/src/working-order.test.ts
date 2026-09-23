@@ -1893,8 +1893,8 @@ describe("abandonHeldOrder", () => {
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
 // tab's round-send via addTabRound) funnel through it. PGlite proves the resolver, the snapshot rule
 // and the no-default refusal — plain SQL a single backend proves; the `ticket_items` schema's own
-// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every write runs through
-// `withTransaction` + `asAppUser`, so the tenant scope and grants are exercised, not bypassed.
+// columns, unique and cascade are real-Postgres's job (packages/db `ticket-items.test.ts`). Every
+// write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
@@ -2536,8 +2536,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
 // grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
-// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
-// role's grants are in force, not bypassed.
+// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -3363,8 +3362,8 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
 // plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
-// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`,
-// so the app role's grants are in force, not bypassed.
+// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through
+// `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
@@ -3830,7 +3829,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
 // actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
 // `ticket_items`/`working_order_lines`/`print_jobs`. PGlite proves the enqueue count + payload in both
-// directions; every write runs through `withTransaction`/`asAppUser`.
+// directions; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("correction slips on recall & void (A6)", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
@@ -3978,7 +3977,7 @@ describe("correction slips on recall & void (A6)", () => {
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
 // the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
 // time, never stored (no migration). PGlite proves the hold short-circuit and the parent correlation under
-// modifier expansion — plain SQL a single backend proves; every write runs through `withTransaction`/`asAppUser`.
+// modifier expansion — plain SQL a single backend proves; every write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("addTabRound hold-on-send (A3)", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
@@ -4071,7 +4070,7 @@ describe("addTabRound hold-on-send (A3)", () => {
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
 // single backend proves; the NODE scoping is real-Postgres's job (working-order.pay-and-dispatch.test.ts).
-// Every read/write runs through `withTransaction` + `asAppUser`, so the app role's grants are in force.
+// Every read/write runs through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
@@ -4313,8 +4312,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
 // dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
-// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
-// `withTransaction` + `asAppUser`, so the app role's grants are in force, not bypassed.
+// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs
+// through `withTransaction`.
 // ---------------------------------------------------------------------------------------------------
 
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)

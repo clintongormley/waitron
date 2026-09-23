@@ -96,8 +96,8 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
 
-    // Seed the courses + three products (two coursed, one loose) on the APP role under the tenant, the
-    // same `withTransaction` + `asAppUser` path the routes read/write through — so the course FK + the
+    // Seed the courses + three products (two coursed, one loose) under the tenant, the same
+    // `withTransaction` path the routes read/write through — so the course FK + the
     // active/assignment filters are real, not bypassed by a superuser insert.
     await withTransaction(db, async (tx) => {
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
@@ -184,8 +184,8 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
- *  `loginWithPin` path the login route runs — and returns its id. */
+/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+ *  route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {

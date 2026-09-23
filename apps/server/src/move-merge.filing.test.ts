@@ -63,10 +63,8 @@ import "./errors.js";
  * `payWorkingOrder`** — that a merge and a settle on the same tab cannot cross-lock. Nothing covers
  * it and nothing here can, because the pair of holders it ordered no longer exists.
  *
- * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
- * app_user` on a non-superuser connection; `asAppUser` is an empty body now
- * (`packages/db/src/testing/roles.ts`), so nothing checks that role's grants are part of any
- * refusal below.
+ * **Also lost, and not replaced:** the deployment role. Nothing checks that role's grants are part
+ * of any refusal below.
  */
 const LOCALE = "es-ES";
 

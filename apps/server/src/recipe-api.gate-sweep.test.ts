@@ -15,13 +15,10 @@ import "./errors.js";
 /**
  * The recipe-authoring write group's `recipe.manage` gate, on the engine the box now runs.
  *
- * ## What this file was, and the one thing that went with PostgreSQL
+ * ## The one thing that went with PostgreSQL
  *
- * Its header said it needed the real cluster because every touch ran `withTransaction` + `asAppUser`
- * so the routes executed as the non-superuser app role and that role's table grants were enforced.
- * **There are no roles on this engine**: `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the one
- * connection. Nothing now checks that the deployment role's grants are part of the refusal.
+ * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
+ * one connection. Nothing now checks that the deployment role's grants are part of the refusal.
  *
  * What survives is the reason the file is worth keeping beside `recipe-api.test.ts`, and the reason
  * it is now named `recipe-api.gate-sweep.test.ts`: that sibling gates the ingredients LIST route

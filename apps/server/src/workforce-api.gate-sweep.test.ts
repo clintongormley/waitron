@@ -30,11 +30,8 @@ import "./errors.js";
  *
  * ## What this file was, and the two things that went with PostgreSQL
  *
- * 1. **The ROLE is gone and is replaced by nothing.** The header said every touch ran
- *    `withTransaction` + `asAppUser` so the routes executed as the non-superuser app role, where a
- *    PGlite superuser would hold every privilege. `asAppUser` is an inert function
- *    (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs on the
- *    one connection.
+ * 1. **The ROLE is gone and is replaced by nothing.** There is no `connectAs`, and every call below
+ *    runs on the one connection.
  *
  * 2. **The decide case's STATED SUBJECT is gone with it.** It existed to show that migration 0010 added
  *    `decided_by_person_id`/`decided_at` with no new grant, relying on a TABLE-level

@@ -13,10 +13,8 @@ import type { PrintConfig } from "./printers.js";
 // Eligibility is derived at claim time from the venue (network_tcp) and the agent's reported visible
 // device keys (usb/bluetooth) — schema-only logic, which is what every case below asserts.
 //
-// WHAT THIS SUITE NO LONGER SHOWS. Its header used to say it ran as the real deployment role
-// (`set local role app_user` inside a real PostgreSQL transaction) so the grants the claim and the
-// report need were exercised rather than bypassed. This engine has no roles and `asAppUser` is an
-// empty body (`packages/db/src/testing/roles.ts`), so that half is gone and nothing replaces it.
+// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so the GRANT half is gone and nothing
+// replaces it.
 //
 // The empty-visibleKeys guard is proven by deletion on this engine, 2026-09-22 on Node v26.7.0:
 // with the `sql`false`` arm in `claimPrintJobs` (`packages/printing/src/runtime.ts`) widened to

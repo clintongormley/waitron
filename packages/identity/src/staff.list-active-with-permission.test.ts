@@ -4,13 +4,9 @@
  *
  * ## What this suite was, and what converting it cost
  *
- * It ran against real PostgreSQL through `useTemplateDb` and read through `identity_rls_probe`, a
- * LOGIN role holding `app_user`'s grants, so that the read was shown to work for an ordinary
- * application connection and not only for the owner. **That is the whole of what was lost:** there
- * are no roles on this engine, and `asAppUser` (`packages/db/src/testing/roles.ts`) is an empty
- * body, so nothing here now distinguishes "the query is permitted" from "the query runs". The
- * filtering, the projection and the ordering — which is what the case actually asserts — are
- * unchanged.
+ * There are no roles on this engine, so nothing here distinguishes "the query is permitted" from
+ * "the query runs". The filtering, the projection and the ordering — which is what the case
+ * actually asserts — are unchanged.
  *
  * This is the only suite in the package that covers this function, which is why it is converted
  * rather than deleted with the role it used to exercise.

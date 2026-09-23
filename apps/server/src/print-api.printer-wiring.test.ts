@@ -52,11 +52,8 @@ import "./errors.js";
  * Its old header said real PostgreSQL was MANDATORY here rather than PGlite, for two properties
  * that a single-superuser-connection engine cannot show. Both are gone and neither is replaced.
  *
- * 1. **The GRANT half.** Every route below ran as `app_user`, and the header claimed the suite
- *    proved the table grants those routes need. SQLite has no roles and no grants: one process
- *    opens one file, and `asAppUser` is an empty function body
- *    (`packages/db/src/testing/roles.ts:25`). The `asAppUser(tx)` calls below are kept where they
- *    were because the product code still calls it, not because they check anything.
+ * 1. **The GRANT half.** SQLite has no roles and no grants: one process opens one file, so nothing
+ *    below checks the table grants those routes need.
  * 2. **The cross-connection commit boundary.** The first case read the claimed job back "from a
  *    separate pooled backend" to show the claim's transaction had COMMITTED inside the request.
  *    There is one connection now, so that read cannot distinguish a committed claim from an open
@@ -356,10 +353,10 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("discovered-printers reads registered keys + agent names", async () => {
-    // The two new management routes run their reads through the same `gated` (asAppUser) transaction as
-    // the sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
-    // `print_agents` — succeeds under the real app grants, and that a device the agent reports appears in
-    // the list marked against the registered set (registered → true, unregistered → false).
+    // The two new management routes run their reads through the same `gated` transaction as the
+    // sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
+    // `print_agents` — succeeds, and that a device the agent reports appears in the list marked
+    // against the registered set (registered → true, unregistered → false).
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Inventory");
     const registered = `SN-${randomUUID()}`;

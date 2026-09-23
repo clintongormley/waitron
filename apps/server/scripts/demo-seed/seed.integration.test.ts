@@ -6,12 +6,10 @@
 // end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
 // location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
 //
-// What went with PostgreSQL: the sub-seeds used to run as `app_user` and `parkOrder` re-priced in
-// the same app-role transaction, so a grant they do not hold would have failed this file. SQLite
-// has no roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every
-// call below runs on the one connection. Nothing now checks who may write any seeded table.
-// `seedSales` still writes real hash-chained preproduction `registros_facturacion` rows through
-// `recordSale`, and the append-only triggers `useVenueDb` installs still fire.
+// SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+// may write any seeded table. `seedSales` still writes real hash-chained preproduction
+// `registros_facturacion` rows through `recordSale`, and the append-only triggers `useVenueDb`
+// installs still fire.
 //
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
 // `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).

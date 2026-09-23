@@ -10,7 +10,7 @@ import { UNIQUE_VIOLATION, type RefusalClass } from "./sql-state.js";
  * top level would silently misreport a genuine violation that arrived wrapped.
  *
  * The name says `pg` and the engine is SQLite. Left alone deliberately: renaming it touches every
- * caller in the tree and belongs with the same sweep that deals with `asAppUser` and
+ * caller in the tree and belongs with the same sweep that deals with
  * `pgErrorCode`/`pgErrorMessage` in `./testing/errors.ts`, not with the body change.
  *
  * A production-layer predicate, not a test helper. It answers WHICH CLASS of refusal this is, and

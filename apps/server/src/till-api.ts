@@ -667,10 +667,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
   // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
-  // httpOnly session cookie. The login runs as the app role under the till's tenant —
-  // `withTransaction` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
-  // unknown or suspended person surfaces as the identity credential codes `STATUS` maps to
-  // 401/403.
+  // httpOnly session cookie. The login runs under the till's tenant — `withTransaction`, exactly as
+  // the sale path does — in this database; a wrong PIN, unknown or suspended person surfaces as the
+  // identity credential codes `STATUS` maps to 401/403.
   //
   // DEVICE-GATED (§5/§6). The login resolves the calling device up front and fails closed without one
   // (`device.unauthorized`), the same gate the sale routes apply (`requireSaleTillId`): the throttle
@@ -764,8 +763,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // opaque 500) and flows through the same `locale` coercion below, so a
   // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
   // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no
-  // separate request-invalid branch. Runs under `withTransaction` + `asAppUser` (the write selects the
-  // session person by id), and returns 204 on success (no body).
+  // separate request-invalid branch. Runs under `withTransaction` (the write selects the session
+  // person by id), and returns 204 on success (no body).
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -780,7 +779,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The deployment holds one tenant per database. Pre-login roster for the lock screen.
   // Deliberately UNAUTHENTICATED — it is what the operator picks their name from before any
-  // session exists — so it calls `listActiveStaff` under `withTransaction` + `asAppUser` rather than
+  // session exists — so it calls `listActiveStaff` under `withTransaction` rather than
   // `requireSession`. `listActiveStaff` returns `{ personId, displayName }` only: no PIN
   // material, role or status, so there is nothing here a bystander at the counter must not see.
   app.get("/api/staff", (c) =>
@@ -801,7 +800,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
   // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
   // rather than a session-guarded one. `venueName`/`nif` still come from the taxpayer row via
-  // `readTenant` (@waitron/db), under `withTransaction` + `asAppUser`, which reads
+  // `readTenant` (@waitron/db), under `withTransaction`, which reads
   // `tenants`.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
@@ -819,7 +818,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const held = await readNodeMembership(deps.db);
       // ONE transaction reads the issuer identity
       // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
-      // the resolved canvas below: all run inside the same `withTransaction` + `asAppUser` block,
+      // the resolved canvas below: all run inside the same `withTransaction` block,
       // never a second connection. `getReceipt` does not authorize — this boot read is
       // deliberately unauthenticated (the browser fetches it before login), and it carries no
       // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
@@ -1047,8 +1046,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs
   // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
-  // the operator must be logged in to see prices. The read itself runs as the app role under the
-  // till's tenant (`withTransaction` + `asAppUser`), in the database holding this tenant. `menus` (the
+  // the operator must be logged in to see prices. The read itself runs under the till's tenant
+  // (`withTransaction`), in the database holding this tenant. `menus` (the
   // location's accessible catalogues, default flagged, for the till's menu switcher) and
   // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
   // they describe one consistent snapshot of the accessible set.
@@ -1103,7 +1102,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
   // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
   // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
-  // `withTransaction`/`asAppUser` transaction and re-prices the basket authoritatively (the request
+  // `withTransaction` transaction and re-prices the basket authoritatively (the request
   // carries no price), so it is called OUTSIDE any transaction here — nesting would deadlock the pool.
   // The sale route neither opens nor rotates the session, so it emits no Set-Cookie.
   app.post("/api/sales", (c) =>
@@ -1265,7 +1264,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
   // is no longer open re-throws the raw refusal). `parkOrder` re-reads the catalogue and prices
-  // authoritatively (the request carries no price), opening its OWN `withTransaction`/`asAppUser` transaction,
+  // authoritatively (the request carries no price), opening its OWN `withTransaction` transaction,
   // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
@@ -1648,8 +1647,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // action — the active persons whose role holds `cash.drawer` (cash-drawer-authorization §5).
   // SESSION-GUARDED, not permission-gated: ANY logged-in operator may call it (they are about to
   // request a supervisor override and need the picker of who could authorize it), so
-  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction` +
-  // `asAppUser`, returning the SAME no-secrets `{ personId, displayName }` shape as `GET
+  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction`,
+  // returning the SAME no-secrets `{ personId, displayName }` shape as `GET
   // /api/staff` — no PIN material, role or status: the till shows this picker BEFORE the
   // supervisor has entered their credential. The client sends the chosen `{ personId, pin }` only
   // on the authenticated `POST /api/drawer/open` override request.
@@ -2216,7 +2215,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The deployment holds one tenant per database. Relocate a tab to a free table (TS-3, design
   // §3a). SESSION-GUARDED. The tab `:id` and the body `toTableId` are both isUuid-screened before
   // any query — a malformed tab id → `tab.not_open` (409), a malformed target → `table.not_found`
-  // (404), never a 500. The verb runs on a fresh withTransaction/asAppUser transaction. Returns 200
+  // (404), never a 500. The verb runs on a fresh withTransaction transaction. Returns 200
   // empty.
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
@@ -2270,7 +2269,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
   // `eq(workingOrders.id, …)` would meet no refusal and match nothing, so it is refused as
   // `tab.not_open` (the SAME fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
-  // opens the `withTransaction`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
+  // opens the `withTransaction` transaction around it. Returns 200 with an empty body; the till
   // re-reads the two tabs' state.
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
@@ -2295,7 +2294,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(workingOrders.id, …)` would meet no refusal and match nothing). The body is shape-screened (non-object/null/
   // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
   // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
-  // tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around it. Returns 200
+  // tx-level, so this route opens the `withTransaction` transaction around it. Returns 200
   // `{ checkId }`; no fiscal write happens here (the check files only when it is later paid), so this
   // stays on the ALLOWED side of the order-only firewall like the other tab verbs.
   app.post("/api/tabs/:id/split", (c) =>
@@ -2340,7 +2339,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // "body") BEFORE the `tableId` check — a literal JSON `null` body used to reach `body.tableId` as a
   // TypeError → opaque 500 (Copilot); screening it first also keeps a missing body out of the
   // domain-specific `table.not_joined`, since "no body" is a request-shape fault, not a claim about a
-  // table. The verb is tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around
+  // table. The verb is tx-level, so this route opens the `withTransaction` transaction around
   // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {

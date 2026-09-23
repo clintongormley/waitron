@@ -28,13 +28,9 @@ import "./errors.js";
  * records NOTHING. Ringing a sale, a void, a correction and a substitution through the real core
  * write path must leave every fiscal table empty and stamp each sale's `fiscal_backend = "none"`.
  *
- * **What went with PostgreSQL: the non-superuser subject.** Every trading write below used to run
- * on a connection opened as `rls_probe`, a LOGIN role inheriting `app_user`, so "no fiscal row was
- * written" was read with the write path bound by the grants that role really held. There are no
- * roles on this engine — `suite.pg.connectAs` has no counterpart and `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`) — so every call below runs on the one connection,
- * and nothing here now distinguishes "the backend wrote nothing" from "the role could not have".
- * The zero-row readings themselves are unchanged: they were owner reads before and still are.
+ * **There is no non-superuser subject.** There are no roles on this engine, so every call below
+ * runs on the one connection, and nothing here distinguishes "the backend wrote nothing" from "the
+ * role could not have".
  */
 const LOCALE = "en-GB";
 

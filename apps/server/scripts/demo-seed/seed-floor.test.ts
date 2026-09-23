@@ -1,10 +1,8 @@
 /**
  * `seedFloor`: the floor-plan zones, the ~16 placed tables, and the four service statuses.
  *
- * **What went with PostgreSQL.** The seed used to run as `app_user`, so a missing SELECT/INSERT on
- * `floor_zones`/`dining_tables`/`table_service_statuses` would have failed this file. SQLite has no
- * roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below
- * runs on the one connection. Nothing now checks who may write the floor plan.
+ * SQLite has no roles, and every call below runs on the one connection. Nothing now checks who
+ * may write the floor plan.
  *
  * `floor_zones.active` is read RAW below, and a raw read reaches no column mapper, so a boolean
  * column arrives as 0 or 1 rather than as `false`/`true`.

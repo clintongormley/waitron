@@ -4,11 +4,9 @@
  *
  * ## What this suite was, and what converting it cost
  *
- * It ran against real PostgreSQL through `useTemplateDb` and inserted as `identity_rls_probe`, a
- * LOGIN role holding `app_user`'s grants. That role is gone: there are no roles on this engine and
- * `asAppUser` (`packages/db/src/testing/roles.ts`) is an empty body, so **nothing here now shows
- * that an ordinary application connection is PERMITTED to insert a person.** The index is enforced
- * for whoever writes, which is the half that survives.
+ * There are no roles on this engine, so **nothing here shows that an ordinary application
+ * connection is PERMITTED to insert a person.** The index is enforced for whoever writes, which is
+ * the half that survives.
  *
  * **The second assertion changed, and this is the one to read carefully.** It was
  * `expect(constraintTarget(error)).toEqual(PERSONS_EMAIL)` — the table and the expression

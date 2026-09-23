@@ -128,7 +128,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 /**
  * Registers `GET /api/box/status` on the shared trading app. Gated exactly like the FP-1 status routes:
- * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` +
  * `authorizeManager("system.manage")` for the chain read (a `manager`-role person holds
  * it). The composed status is assembled by `collectBoxStatus` from the sibling slice-4a readers; a cert
  * path absent (plain-HTTP boot) yields `cert.available:false`.

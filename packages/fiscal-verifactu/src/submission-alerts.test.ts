@@ -6,9 +6,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-// `asAppUser(tx)` still stands before every read, and on this engine it does nothing at all:
-// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do
-// (`packages/db/src/testing/roles.ts`, which keeps the call sites compiling until they are swept).
+// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do.
 // What these cases prove is therefore the source's own arithmetic over the two tables, not that it
 // works under a narrower set of privileges — there is no narrower set here.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });

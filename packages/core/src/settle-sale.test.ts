@@ -74,9 +74,8 @@ async function seedSale(
 }
 
 /**
- * Runs `settleSale` inside one transaction, the shape a request takes. The `asAppUser` call it
- * makes is inert on this engine (`packages/db/src/testing/roles.ts`): there is no second role to
- * assume, so nothing below is a claim about a privilege.
+ * Runs `settleSale` inside one transaction, the shape a request takes. There is no second role to
+ * assume on this engine, so nothing below is a claim about a privilege.
  */
 function settle(db: Database, input: SettleSaleInput): Promise<void> {
   return withTransaction(db, async (tx) => {

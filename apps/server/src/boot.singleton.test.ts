@@ -33,13 +33,10 @@ import { startServer } from "./boot.js";
  * neither, and a default-`primary` one that runs both — the control proving the secondary's absence
  * is real, not a boot that silently wired nothing (CLAUDE.md §1).
  *
- * ## What the move off PostgreSQL took out of this file
+ * ## Two things to know about this file
  *
- * **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
- * mandatory because boot reads `deployment` as the non-superuser app role. There are no roles on
- * this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
- * (`packages/db/src/testing/roles.ts`). Both boots below run every statement on the one connection
- * `openVenueStore` hands out, so nothing here now shows that the deployment role can read
+ * **There is no ROLE SPLIT on this engine.** Both boots below run every statement on the one
+ * connection `openVenueStore` hands out, so nothing here shows that the deployment role can read
  * `deployment` and cannot write it.
  *
  * **Boot owns the file, so the suite hands over a DIRECTORY and lets go of it.** `startServer`

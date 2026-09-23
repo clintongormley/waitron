@@ -14,10 +14,9 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
  * It reached the vault as `credentials_rls_probe`, a non-superuser LOGIN role inheriting
  * `app_user`'s grants, created cluster-wide by the package's now-deleted `global-setup.ts`.
  *
- * 1. **The ROLE is gone and is replaced by nothing.** SQLite has no roles, `pg.connectAs` has no
- *    counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). Every
- *    call below runs on the one connection. Nothing now checks that the deployment role can reach
- *    the vault and no more than the vault.
+ * 1. **The ROLE is gone and is replaced by nothing.** SQLite has no roles, and every call below
+ *    runs on the one connection. Nothing now checks that the deployment role can reach the vault
+ *    and no more than the vault.
  *
  * 2. **`hands the three sealed columns back as plain Uint8Arrays, not node Buffers` is DELETED,
  *    because on this engine it can no longer fail.** That case was put HERE deliberately, and

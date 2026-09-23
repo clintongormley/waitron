@@ -1,10 +1,7 @@
 // The fiscal half of split-bill: paying a carved check files its own registro, the items partition
 // across the checks, and a repeated pay replays rather than files twice.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
-// what the deployment role, which no longer exists, may read or write.
+// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";

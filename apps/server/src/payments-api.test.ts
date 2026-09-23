@@ -35,11 +35,10 @@ import "./errors.js";
  *
  * ## The two properties this file was placed here for, and what is left of them
  *
- * Its old header said real PostgreSQL was MANDATORY rather than PGlite, for the table grants the
- * routes need and for the `payments.manage` gate. **The grant half is gone and is replaced by
- * nothing**: SQLite has no roles, one process opens one file, and `asAppUser` is an empty function
- * body (`packages/db/src/testing/roles.ts:25`). The gate half is application logic in the route
- * layer and is unaffected — `gates every new route before reaching the provider` still proves it.
+ * The two properties are the table grants the routes need and the `payments.manage` gate. **The
+ * grant half is gone and is replaced by nothing**: SQLite has no roles and one process opens one
+ * file. The gate half is application logic in the route layer and is unaffected — `gates every new
+ * route before reaching the provider` still proves it.
  *
  * Two cases changed with the engine, each recorded where it sits:
  *

@@ -15,16 +15,12 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  * Destinatarios and FacturasSustituidas must reach the wire. The fixture builds the record
  * directly to isolate storage and serialization.
  *
- * LOST in the PostgreSQL → SQLite conversion: this file used to run its insert as `app_user`, a
- * distinct database role holding only the deployment grants, so a write the fiscal table's ACL
- * refuses would have failed here. `asAppUser` is an inert function on this engine
- * (`packages/db/src/testing/roles.ts`) and SQLite has no roles at all, so the insert below now
- * runs with whatever the one connection can do. What still refuses a rewrite of a stored fiscal
- * record is the append-only trigger, installed here because `TEST_MIGRATIONS` carries each set's
- * `appendOnlyTables` (`packages/migrations/src/manifest.ts:163`). That refusal was MEASURED on
- * this engine rather than assumed — the probe, its output and why `inmutabilidad.test.ts` could
- * not be cited are in `chain.concurrency.test.ts`'s header. The ROLE half is covered by nothing,
- * which is the whole loss recorded against the deleted `privileges.test.ts`.
+ * SQLite has no roles at all, so the insert below runs with whatever the one connection can do.
+ * What still refuses a rewrite of a stored fiscal record is the append-only trigger, installed here
+ * because `TEST_MIGRATIONS` carries each set's `appendOnlyTables`
+ * (`packages/migrations/src/manifest.ts:163`). That refusal was MEASURED on this engine rather than
+ * assumed — the probe, its output and why `inmutabilidad.test.ts` could not be cited are in
+ * `chain.concurrency.test.ts`'s header. The ROLE half is covered by nothing.
  */
 // The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
 // template this file used to clone.

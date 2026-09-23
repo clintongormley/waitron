@@ -173,8 +173,7 @@ export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]
  * functions of its own, and the call threw `no such function: credential_tenants`
  * (`packages/credentials/src/credentials.test.ts`, both `credentialProvisioned` cases, run
  * 2026-09-22 before this replacement). Nothing about privileges is claimed here any more, because
- * there is no role to claim it of: `asAppUser` is an empty function on this engine and says why
- * (`packages/db/src/testing/roles.ts:4-26`).
+ * there is no role to claim it of.
  *
  * Two facts in one statement, exactly as the function it replaces selected them — the taxpayer row
  * and an `EXISTS` over the vault, so BOTH must hold. Its body, for comparison:

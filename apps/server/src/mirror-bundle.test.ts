@@ -21,16 +21,11 @@ import { assembleMirrorBundle } from "./mirror-bundle.js";
  *
  * ## What went with PostgreSQL, and is replaced by nothing
  *
- * `appDb` used to be a second connection opened as `app_login` — a cluster LOGIN role inheriting
- * `app_user`'s grants, created by the now-deleted `apps/server/src/testing/global-setup.ts` — while
- * provisioning and the read-backs ran on the owner connection. That is what put the bundle's tenant
- * and node reads, and each module's reservation, behind the grants a real box runs under.
- *
- * **The role is gone and nothing replaces it.** SQLite has no roles, `pg.connectAs` has no
- * counterpart, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). The
- * `appDb` dependency is now handed the suite's own handle, so nothing here checks that the
- * deployment role holds SELECT on the parent tables. NO case was deleted for it: every case asserts the SHAPE of the assembled bundle,
- * not a refusal, so each converts with its assertions untouched.
+ * **The role is gone and nothing replaces it.** SQLite has no roles and `pg.connectAs` has no
+ * counterpart. The `appDb` dependency is now handed the suite's own handle, so nothing here checks
+ * that the deployment role holds SELECT on the parent tables. NO case was deleted for it: every
+ * case asserts the SHAPE of the assembled bundle, not a refusal, so each converts with its
+ * assertions untouched.
  *
  * The second, never-stamped database stays a second database. It is what the `mirror.not_provisioned`
  * case needs — an unstamped `deployment` row — and `useVenueDb` gives a file as many as it asks for.

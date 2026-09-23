@@ -89,9 +89,7 @@ import "./errors.js";
  *    without deleting or re-pricing existing lines"; the contiguity-under-load property is covered
  *    by nothing.
  *
- * **Also lost, and not replaced:** the deployment role. These writes ran after `set local role
- * app_user` on a non-superuser connection; `asAppUser` is an empty body now
- * (`packages/db/src/testing/roles.ts`).
+ * **Also lost, and not replaced:** the deployment role.
  *
  * ## Why there are still TWO databases
  *

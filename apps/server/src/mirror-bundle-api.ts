@@ -39,7 +39,7 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (under
- * `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
+ * `withTransaction`, the dashboard-login shape) AND reads the venue's tenant +
  * designated-node identity inside `assembleMirrorBundle`. `designated` are the four ids the primary
  * till was provisioned with (`config.till.*`).
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own

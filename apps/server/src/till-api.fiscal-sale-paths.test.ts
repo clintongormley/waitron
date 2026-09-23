@@ -79,12 +79,11 @@ import { createStation } from "./kitchen.js";
 //   - The file's own header claimed the chained record was "written by the app role" and that
 //     PGlite's superuser connection could not establish the deployment role may write
 //     `registros_facturacion`. There are no database roles on this engine — one file, one handle —
-//     so `asAppUser(tx)` is inert (`packages/db/src/testing/roles.ts`) and every `asAppUser` call
-//     below is left for Task T1's sweep. Nothing in this file now says anything about privileges.
+//     and nothing in this file now says anything about privileges.
 //   - The `/api/pay` tests opened a SECOND connection as the non-superuser `rls_probe` role and
 //     handed it to `StripeTerminalProvider`, whose `payments`-ledger writes
-//     (`insertAttempting`/`captureAttempting`/`failAttempting`) run on its OWN `db` handle and
-//     never call `asAppUser` — so the role that handle carried was the role those writes ran as.
+//     (`insertAttempting`/`captureAttempting`/`failAttempting`) run on its OWN `db` handle — so the
+//     role that handle carried was the role those writes ran as.
 //     That an ordinary application role may make that write is no longer observable anywhere; the
 //     adapter's own option doc already records the same loss for the suite that went with the
 //     PostgreSQL tier (`packages/payments-stripe/src/provider.ts:27-39`). The reader ROUTING these

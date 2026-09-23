@@ -124,10 +124,7 @@ declares).
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
 — `.`, `./testing/seed.js` and `./testing/venue-db.js`. A wildcard would publish the whole harness.
-Consequence: `apps/server` cannot deep-import `packages/db`'s `errors.ts`. (`asAppUser` is no longer
-one of the reasons: it is exported from the main entry, `packages/db/src/index.ts`, where it does
-nothing at all — SQLite has no roles, and it is kept so its call sites still read as grant
-assertions.)
+Consequence: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
 
 ## A new product domain lands as a MODULE, not as new code in the core
 
@@ -335,7 +332,7 @@ write is allowed to live. Keeping them in a handful of named files is the whole 
 because no connection makes the distinction for us any more.
 
 HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in PGlite
-against the core migrations inside a transaction that had called `asAppUser`: an insert and an update
+against the core migrations inside a transaction that had run `set local role app_user`: an insert and an update
 of `tenants`, an insert of `nodes`, an update of `deployment` and a delete from `mirror_config` each
 came back `42501 permission denied for table <name>`, while `select 1 from tenants` in the same shape
 was allowed. Read on 2026-09-19, on PostgreSQL. Nothing in the tree prints that now.

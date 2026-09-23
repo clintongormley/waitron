@@ -37,7 +37,7 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // with the engine, and one writer at a time is now the product's design rather than a test target's
 // limitation. What the app role may do on `workforce_chains` was the privilege matrix's
 // (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`) — there are no
-// roles on this engine, which is also why no asAppUser wrapper is needed here.
+// roles on this engine.
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });

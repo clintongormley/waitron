@@ -62,10 +62,8 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE NO LONGER SHOWS. Every write below used to run as the non-owner `app_user`, the
-// deployment role, on a real PostgreSQL cluster — which PGlite could not be. This engine has no
-// roles and `asAppUser` is an empty body (`packages/db/src/testing/roles.ts`), so nothing here is
-// a claim about a privilege; what it still shows is the CHECK and the three foreign keys.
+// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here is a claim about a
+// privilege; what it still shows is the CHECK and the three foreign keys.
 //
 // The refusals themselves also carry less than they did. `pgErrorCode` answers
 // `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the refusal CLASS comes off

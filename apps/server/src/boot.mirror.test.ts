@@ -41,16 +41,11 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // (the fail-closed control), and an adoption-pending one holding no venue rows at all. The relay
 // recorded in `mirror_config` is UNREACHABLE and nothing on this boot dials it.
 //
-// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED. This suite used to justify a real container by
-// role separation: the ambient viewer session's `ensureMirrorViewer` / `mirrorSession` wrote
-// `persons` and `management_sessions` through an `app_login` pool, so a missing table GRANT failed
-// here where a PGlite superuser would have passed, and migrations ran over a separate superuser
-// connection the app role could not have used. There is no role on this engine — `pg.connectAs` has
-// no counterpart and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) — and no
-// second connection either: boot opens the venue directory and every statement runs on it. Nothing
-// below now checks that the ambient viewer's writes are ones the deployment role may make, and the
-// idempotent-re-migrate observation has no privilege content left. What the cases still prove is
-// what a mirror boot MOUNTS and REFUSES, which is the whole of the rest of this file.
+// WHAT THIS SUITE DOES NOT CHECK. There is no role on this engine, and no second connection
+// either: boot opens the venue directory and every statement runs on it. Nothing below checks that
+// the ambient viewer's writes are ones the deployment role may make, and the idempotent-re-migrate
+// observation has no privilege content. What the cases prove is what a mirror boot MOUNTS and
+// REFUSES, which is the whole of the rest of this file.
 //
 // ONE CASE BELOW WAS RED ON A BROKEN PRODUCT FUNCTION, AND IT PASSES NOW. `drain`'s `workIsDue`
 // (`packages/fiscal-verifactu/src/drain.ts`) used to issue

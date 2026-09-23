@@ -188,7 +188,7 @@ function fromCurrent(
 /**
  * Mount the authenticated backup admin routes. Every route runs the SAME management gate first
  * (`requireManagementSession` → 401, then `authorizeManager("system.manage")` under
- * `withTransaction`+`asAppUser` → 403), mirroring `recovery-bundle-api.ts`. The write routes (`apply`,
+ * `withTransaction` → 403), mirroring `recovery-bundle-api.ts`. The write routes (`apply`,
  * `rotate`) additionally run `guardWritable` — refuse if the ENV owns the config (409) or this node is
  * not the primary (409) — BEFORE any file write, then dry-validate the exact record they will write
  * through `loadBackupConfig` (so the route rejects exactly what boot would), write `backup.env`,

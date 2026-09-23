@@ -339,7 +339,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
   time, so a `bin` under `dist/` is never linked by the install that reads it.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
-  its `errors.ts` and `asAppUser` has one import path.
+  its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an
   identifier, and the body of a generated trigger. For those, either escape
   (`quoteIdent`/`quoteLiteral`, as the change feed does with each source's type,

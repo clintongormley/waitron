@@ -17,19 +17,15 @@ import "./errors.js";
 /**
  * The catalogue write group, on the engine the box now runs.
  *
- * ## What this file was, and the one thing that went with PostgreSQL
+ * ## What this file does not check
  *
- * Its header said the write group had to run as the non-superuser `app_user` so that role's table
- * grants were enforced, where a PGlite superuser holds them unconditionally. **There are no roles on
- * this engine**: `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), there is no
- * `connectAs`, and every call below runs on the one connection. Nothing now checks that the
- * deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
+ * **There are no roles on this engine**, and every call below runs on the one connection. Nothing
+ * checks that the deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
  * `preparation_routes`, `kitchen_stations`, `floor_zones`, `product_categories`, `products` or
- * `product_modifiers`. Each sentence saying so has been taken out of the cases below rather than
- * left standing.
+ * `product_modifiers`.
  *
- * What survives is the reason the file is worth keeping beside `catalogue-api.test.ts`: this suite
- * migrates the FULL manifest, so venue-service's `preparation_routes` exists and
+ * The file is worth keeping beside `catalogue-api.test.ts` because this suite migrates the FULL
+ * manifest, so venue-service's `preparation_routes` exists and
  * `categoryDependants` takes its optional-table branch. The sibling migrates core + catalogue +
  * identity only and covers the absent-table arm, asserting `routes: []`.
  *

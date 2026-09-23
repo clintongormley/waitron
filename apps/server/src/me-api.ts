@@ -135,9 +135,8 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
  * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
  * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
- * whole surface. The verb then runs on the app role under this venue's tenant (`withTransaction` +
- * `asAppUser`), in the database holding this tenant. The explicit `person_id` predicate scopes
- * the operation to the requester.
+ * whole surface. The verb then runs under `withTransaction`, in the database holding this tenant.
+ * The explicit `person_id` predicate scopes the operation to the requester.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing ?? {
@@ -145,7 +144,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   };
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
-  /** Run `fn` on the app role under this venue's tenant — the one place the withTransaction/asAppUser pair
+  /** Run `fn` under this venue's tenant — the one place the `withTransaction` wrapper
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {

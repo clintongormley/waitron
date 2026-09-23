@@ -27,11 +27,8 @@ import "./errors.js";
  *
  * ## What this file was, and the one thing that went with PostgreSQL
  *
- * Its header said the routes ran their database work as the non-superuser `app_user`, so a grant the
- * role lacked would fail these tests. **There are no roles on this engine**: `asAppUser` is an inert
- * function (`packages/db/src/testing/roles.ts`), there is no `connectAs`, and every call below runs
- * on the one connection. A missing grant can no longer fail anything here, because there are no
- * grants.
+ * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
+ * one connection. A missing grant can no longer fail anything here, because there are no grants.
  *
  * ## Which of the two `me-api` suites this is
  *

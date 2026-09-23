@@ -24,11 +24,8 @@ import "./errors.js";
  *
  * ## What the conversion took away, and nothing replaces it
  *
- * The old header argued real PostgreSQL rather than PGlite was required here, because the enrol
- * WRITES a `print_agents` row as `app_user` under `withTransaction`, and only a real cluster would
- * refuse a missing table GRANT. **SQLite has no roles and no grants**: one process opens one file
- * and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). Whether the
- * deployment role may write `print_agents` is no longer a question this file, or any file, asks.
+ * **SQLite has no roles and no grants**: one process opens one file. Whether the deployment role
+ * may write `print_agents` is no longer a question this file, or any file, asks.
  *
  * The six cases below are unaffected, because none of them was about the grant: five are gates
  * that refuse BEFORE any database work (loopback, absent address, non-primary, rate limit) and the

@@ -21,9 +21,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  *
  * TWO THINGS LOST when this file moved off PostgreSQL, neither replaceable here:
  *
- * - **The deployment ROLE.** Every write below used to run as `app_user`. `asAppUser` is an inert
- *   function on this engine (`packages/db/src/testing/roles.ts`) and SQLite has no roles, so the
- *   calls left in place — T1 removes them — switch nothing. What still refuses a REWRITE of a
+ * - **The deployment ROLE.** SQLite has no roles. What still refuses a REWRITE of a
  *   stored fiscal record is the append-only trigger `TEST_MIGRATIONS` installs
  *   (`packages/migrations/src/manifest.ts:163`); that refusal was MEASURED on this engine, and the
  *   probe and its output are in `chain.concurrency.test.ts`'s header. The role half is covered by

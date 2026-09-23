@@ -106,8 +106,8 @@ describe("promoteLocalSecondaryToPrimary", () => {
   // `packages/db/src/node-membership.test.ts` makes for the same reason).
   //
   // There is no target choice left to justify: one storage engine, one file, one connection, and no
-  // roles (`asAppUser` is inert — `packages/db/src/testing/roles.ts`). What the block still proves
-  // is the promote LOGIC — fence, idempotency, mirror-guard, the holder flip and the mint.
+  // roles. What the block still proves is the promote LOGIC — fence, idempotency, mirror-guard,
+  // the holder flip and the mint.
   //
   // Setup also applies CREDENTIALS_MIGRATIONS and establishes a node identity so the mint has a key
   // to sign with — the fence/mirror/already-primary paths return before any mint, so the

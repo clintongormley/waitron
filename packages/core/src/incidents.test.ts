@@ -531,14 +531,6 @@ describe("recordIncidentOnce", () => {
 });
 
 describe("incidents open-dedup invariant (partial unique index)", () => {
-  // **Deviation from the brief.** The brief's sketch called `recordIncident(asAppUser(tx), input)` /
-  // `recordIncidentOnce(asAppUser(tx), input)` — but `asAppUser(tx): Promise<void>` (`@waitron/db`'s
-  // `testing/roles.ts`) sets the role as a side effect and does not return `tx`; passing its result
-  // as the `tx` argument does not type-check. Every other test in this file (see
-  // `recordIncidentOnce`'s own describe above) awaits `asAppUser(tx)` as its own statement inside an
-  // async callback and then uses `tx` directly — reusing that exact, already-established pattern here
-  // instead.
-  //
   // **Deviation from the brief.** The brief's orphan/ack tests used `payment.offline_forward_
   // declined`, an `AppError` code registered by `@waitron/payments`'s `errors.ts` via declaration
   // merging. `@waitron/core` does not depend on `@waitron/payments` (see this file's own

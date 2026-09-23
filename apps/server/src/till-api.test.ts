@@ -58,7 +58,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
-// path runs through `withTransaction` + `asAppUser` exactly as production does. Sessions/persons live in
+// path runs through `withTransaction` exactly as production does. Sessions/persons live in
 // identity; the schema is the whole manifest (the tables here span modules that FK into core, so the
 // shared ordered set is the fixture). What `app_user` may do to those
 // tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
@@ -158,9 +158,9 @@ const suite = useVenueDb({
     // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
     // product in a SECOND catalogue attached as a non-default accessible menu
     // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
-    // on the APP role via the catalogue helpers — the same `withTransaction` + `asAppUser` path the route
-    // reads them back through — so the active/assignment filters are real, not bypassed by a
-    // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
+    // via the catalogue helpers — the same `withTransaction` path the route reads them back
+    // through — so the active/assignment filters are real. (Catalogue tables live in
+    // CORE_MIGRATIONS, already applied.)
     const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
       async (tx) => {
@@ -351,9 +351,9 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
- * `loginWithPin` path the login route runs — and returns its id, so a test can hand `requireSession`
- * or the logout route a cookie that names a genuine row. */
+/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
+ * route runs — and returns its id, so a test can hand `requireSession` or the logout route a cookie
+ * that names a genuine row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {

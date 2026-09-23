@@ -47,9 +47,8 @@ beforeEach(async () => {
 /**
  * The seal's additional authenticated data is the purpose alone (`aadFor`, cipher.ts).
  *
- * The `asAppUser` calls below no longer add anything: it is an empty function on this engine, which
- * has no roles and no grants (`packages/db/src/testing/roles.ts`), so the round trip proves the
- * seal and the store, and nothing about who is allowed to make it.
+ * This engine has no roles and no grants, so the round trip proves the seal and the store, and
+ * nothing about who is allowed to make it.
  */
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {

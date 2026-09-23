@@ -1,10 +1,8 @@
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
 // migrated venue database.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template; the `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep, so nothing here says
-// anything about what the deployment role, which no longer exists, may read or write.
+// Nothing here says anything about what the deployment role, which no longer exists, may read or
+// write.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

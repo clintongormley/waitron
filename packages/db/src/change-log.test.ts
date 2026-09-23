@@ -70,13 +70,9 @@ describe("the change log", () => {
     expect(seen).toEqual([]);
   });
 
-  // THIS CASE NO LONGER SEPARATES ANYTHING, and it is kept rather than deleted only because the
-  // sweep that removes it is its own queue item. It was the grant case: `asAppUser` made the
-  // session assume the non-owner role, and what it proved was that the role held SELECT, INSERT
-  // and DELETE on `change_log`. This engine has no roles — `asAppUser` is an empty body
-  // (`./testing/roles.js`) — so what remains is the first case again under another name. Deleting
-  // the call here and leaving every other one in the tree would be the worse half of both
-  // options; task T1 takes them together.
+  // THIS CASE NO LONGER SEPARATES ANYTHING. It was the grant case, and what it proved was that the
+  // non-owner role held SELECT, INSERT and DELETE on `change_log`. This engine has no roles, so what
+  // remains is the first case again under another name.
   it("lets the application role write a change-fed row and drain what the trigger wrote", async () => {
     const seen = collect();
     let id = "";

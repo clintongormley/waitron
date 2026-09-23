@@ -153,7 +153,7 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
  * The bookings module's `routes` seat. The deployment holds one tenant per database. Mounts the
  * dashboard's gated booking write group on the shared Hono app boot passes — every route wraps its
  * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTransaction` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
+ * `withTransaction`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
  * this database. The `booking.manage` gate runs on every route through one constant. No fiscal path
  * is touched: `seatBooking` opens a pre-fiscal working order only, via `ctx.core.openTab` (boot
  * bound the venue's `TillConfig` into `core`). The seven route paths are byte-identical to the

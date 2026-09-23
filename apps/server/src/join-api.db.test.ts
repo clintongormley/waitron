@@ -2,14 +2,10 @@
  * The management-side join routes — the pairing window, the queue, the challenge, deny, accept and
  * self-enrol — on the engine the box now runs.
  *
- * ## What went with PostgreSQL, and is replaced by nothing
+ * ## What this file does not check
  *
- * The old header argued this file needed real PostgreSQL rather than PGlite because every route
- * runs as `app_user` under `withTransaction`, so the `join_requests` / `devices` / `tills` grants
- * were enforced, where a superuser session would let a missing GRANT pass. SQLite has no roles and
- * no grants: one process opens one file and `asAppUser` is an empty function body
- * (`packages/db/src/testing/roles.ts:25`). Nothing here or elsewhere now checks that these routes
- * reach only what the deployment role is allowed to reach.
+ * SQLite has no roles and no grants: one process opens one file. Nothing here or elsewhere checks
+ * that these routes reach only what the deployment role is allowed to reach.
  *
  * What every case below still proves is the ROUTE: its permission gate, its refusal codes, the
  * shape of what it returns, and what it leaves in the tables — none of which the database enforced.

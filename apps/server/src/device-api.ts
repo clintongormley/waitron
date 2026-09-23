@@ -539,8 +539,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Mounted ONLY in devMode, so outside dev this route DOES NOT EXIST (404) — the same fail-closed shape
   // as the override header. The chooser lists the venue's active devices so a browser can adopt one via
   // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone. A
-  // browser with no device knocks like any other. The read runs under `withTransaction` + `asAppUser`;
-  // nothing here returns a token or reader credential.
+  // browser with no device knocks like any other. The read runs under `withTransaction`; nothing
+  // here returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>
       run(c, log, async () =>

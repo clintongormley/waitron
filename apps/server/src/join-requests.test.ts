@@ -4,13 +4,8 @@
  *
  * ## What went with PostgreSQL, and is replaced by nothing
  *
- * 1. **The ROLE is gone.** The old header argued this file needed real PostgreSQL rather than
- *    PGlite because every verb runs as `app_user` and the `join_requests` grants (SELECT, INSERT,
- *    DELETE and deliberately no UPDATE) were part of what each case asserted. SQLite has no roles
- *    and no grants: one process opens one file and `asAppUser` is an empty function body
- *    (`packages/db/src/testing/roles.ts:25`). **Nothing now checks that the deployment role cannot
- *    UPDATE a join request** — the refusal the two back-dating fixture steps below used to have to
- *    step outside an `asAppUser` transaction to get around.
+ * 1. **The ROLE is gone.** SQLite has no roles and no grants: one process opens one file.
+ *    **Nothing now checks that the deployment role cannot UPDATE a join request.**
  *
  * 2. **FOUR cases staged an interleave on two PostgreSQL backends, and none of them can any
  *    longer.** They are the two in `createJoinRequest — per-tenant serialization…` and the two
@@ -102,9 +97,7 @@ async function seedProfile(
   return row!.id;
 }
 
-// One `withTransaction` per call — the shape every verb here is exercised through. `asAppUser` is an
-// empty body on this engine (`packages/db/src/testing/roles.ts:25`); the call is kept because the
-// production callers make it and the file should not diverge from them.
+// One `withTransaction` per call — the shape every verb here is exercised through.
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {

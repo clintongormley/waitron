@@ -21,7 +21,7 @@ let node: SeededTill;
 /**
  * Twenty appends started together against ONE venue file.
  *
- * ## What this file used to be, and the three things that went with PostgreSQL
+ * ## What this file used to be, and the two things that went with PostgreSQL
  *
  * It opened twenty separate backends through a shared container and had them race the per-node
  * chain-head row lock. None of that survives the engine change, and the losses are named here
@@ -41,8 +41,6 @@ let node: SeededTill;
  *    writer serialises on the FILE, whichever node it is appending to. Nothing replaces this and
  *    nothing can while one file holds every node's chain. Recorded here because a future reader
  *    would otherwise assume the guarantee still holds.
- * 3. **The deployment ROLE.** This file never used `asAppUser`, so it loses nothing there; the
- *    role loss is recorded on `privileges.test.ts`, which was deleted for it.
  *
  * ## What still holds, and why these cases are worth keeping
  *

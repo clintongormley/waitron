@@ -812,7 +812,7 @@ export interface ParkOrderResult {
  * allocated number, same priced lines, same triggers (`require_open_parent`/`check_locales` fire on
  * the inserted lines because their parent was inserted just above). The empty-basket refusal stays
  * with each caller (it is checked before any database work), as does the surrounding
- * `withTransaction`/`asAppUser` scope; this helper owns only the two inserts.
+ * `withTransaction` scope; this helper owns only the two inserts.
  */
 export async function createOpenOrder(
   tx: Transaction,
@@ -901,7 +901,7 @@ export async function createOpenOrder(
 /**
  * Park a working order: re-read the catalogue, re-price with `priceBasket`, allocate the next per-node
  * order number, and persist an OPEN `working_orders` row plus its priced `working_order_lines` — all
- * inside ONE `withTransaction`/`asAppUser` transaction, so the order and every line commit as a single unit
+ * inside ONE `withTransaction` transaction, so the order and every line commit as a single unit
  * (or roll back together, leaving nothing parked). The server never trusts a browser-computed price;
  * `req` carries none. The persisted line keeps `product_id` (a pricing INPUT a later repricing
  * re-resolves) alongside the frozen display snapshot (`descriptions`, `unit_price`, `vat_rate`,

@@ -181,8 +181,7 @@ export async function applyVenue(
           // runs this before seed-admin is refused as a plan-integrity error, mirroring the ordering
           // guards below. Idempotent: find-or-create by name, so a same-venue re-run adds no
           // duplicate (profiles belong to the tenant, not a shop). Runs on the caller's own
-          // transaction — "owner" named a PostgreSQL role, and this engine has none (`asAppUser` is
-          // a no-op stub, `packages/db/src/testing/roles.ts`). Exercised by `venue-apply.test.ts`:
+          // transaction. Exercised by `venue-apply.test.ts`:
           // the three seeded profiles, the re-run that adds no duplicates, and the refusal when a
           // plan runs this before seed-admin.
           await seedDeviceProfiles(tx, action.profiles);

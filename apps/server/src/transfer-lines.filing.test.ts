@@ -53,10 +53,6 @@ import "./errors.js";
  * (CLAUDE.md §4). The `.sort()` in `transferLines` survives for a smaller effect stated on the
  * function itself.
  *
- * **Also lost, and not replaced:** the deployment role. The writes below used to run after
- * `set local role app_user` on a non-superuser connection, so the H2 record's grants were
- * exercised; `asAppUser` is an empty body now (`packages/db/src/testing/roles.ts`).
- *
  * ## Why the surviving case stays here rather than moving
  *
  * The sibling `apps/server/src/transfer-lines.test.ts` never pays a tab, so it cannot see whether a

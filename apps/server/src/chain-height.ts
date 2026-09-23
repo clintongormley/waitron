@@ -11,7 +11,7 @@ export type ChainHeight = { height: number; lastAt: string | null };
 
 /**
  * The deployment holds one tenant per database. Read this node's chain head. The caller supplies
- * a `tx` inside `withTransaction` + `asAppUser`. The read filters by `node_id` for this SIF's chain.
+ * a `tx` inside `withTransaction`. The read filters by `node_id` for this SIF's chain.
  */
 export async function readChainHeight(tx: Transaction, nodeId: string): Promise<ChainHeight> {
   // A raw `.execute()` bypasses the column's own read mapping, so `actualizado_en` arrives as the

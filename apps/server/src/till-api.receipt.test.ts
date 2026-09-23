@@ -54,11 +54,7 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
 // seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
 // receipt-printer config helpers from `receipt-print.test.ts`.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template, and its header opened by claiming REAL Postgres over PGlite because these
-// routes write through the app role. That role no longer exists: every `asAppUser(tx)` call below is
-// inert (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep, so nothing here
-// establishes what an application role may read or write.
+// Nothing here establishes what an application role may read or write.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

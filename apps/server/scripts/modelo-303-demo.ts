@@ -10,12 +10,7 @@
 // which the `core` set creates along with the received-invoice tables; the fiscal chain is never
 // read. The `identity` set is here for the supervisor whose session authorises the rectificativa.
 //
-// LOST with the storage swap: the venue rows, the supervisor and the received invoices used to be
-// seeded as the PGlite superuser and every read and write below used to run through `asAppUser`, to
-// show a running POS filing as `app_user` — a role holding no INSERT on `tenants`. SQLite has no
-// roles and no grants, and `asAppUser` is now an empty function
-// (`packages/db/src/testing/roles.ts`), so that part of the demonstration is gone; the calls are
-// deleted rather than left as no-ops that still read like a claim.
+// SQLite has no roles and no grants: nothing below demonstrates who may write.
 //
 // It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
 // onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"

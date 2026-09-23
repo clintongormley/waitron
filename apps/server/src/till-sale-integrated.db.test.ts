@@ -54,20 +54,9 @@ import "./errors.js";
 // and nothing else, while every case here drives `payWorkingOrderIntegrated` itself against a
 // provisioned venue.
 //
-// ## What this file was built around, and what is left of it
-//
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template, with every `payWorkingOrderIntegrated` call driven over `rls_probe` — a
-// non-superuser LOGIN role inheriting `app_user`'s grants, opened with `suite.pg.connectAs`. Being
-// non-superuser was the point: the provider's own `collect` does NOT `set role app_user`, so it ran
-// as whatever role held the handle, and a missing grant on `payments`, `sales`, `tenders` or
-// `registros_facturacion` failed rather than passed.
-//
-// SQLite has no roles, `connectAs` has no counterpart, and `asAppUser` is an empty function body
-// (`packages/db/src/testing/roles.ts:25`). Every call now runs on the one venue handle, kept under
-// the name `app` at each call site so it still reads as "the handle the provider and the
-// orchestrator share". NOT CHECKED BY ANYTHING ANY MORE: that the deployment role holds the grants
-// the split flow's P3 writes need.
+// SQLite has no roles. Every call runs on the one venue handle, kept under the name `app` at each
+// call site so it still reads as "the handle the provider and the orchestrator share". NOT CHECKED
+// BY ANYTHING ANY MORE: that the deployment role holds the grants the split flow's P3 writes need.
 //
 // What the engine change does NOT narrow, because each belongs to the three-transaction SPLIT
 // rather than to the number of connections staging it:

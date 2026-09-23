@@ -2240,21 +2240,6 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // DELETED, not converted: "boots with a least-privileged DATABASE_URL when migrations run under a
-  // separate WAITRON_MIGRATIONS_DATABASE_URL". It booted with the pool on a role carrying `app_user`
-  // membership and nothing else, migrations on a second role carrying `CREATE`, and asserted a clean
-  // first pass — C1's claim that the host can run under the least-privileged role spec §10 names.
-  //
-  // Its subject is gone twice over. Neither variable exists (`grep -c "DATABASE_URL"
-  // apps/server/src/config.ts` → 0), and neither does the role: SQLite has no `GRANT`, no
-  // `SET ROLE`, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). There is
-  // one connection and it can do everything.
-  //
-  // LOST and covered by nothing: that the duty work a pass performs stays inside the privileges an
-  // application role holds. Nothing in this tree can express that question today; what replaces it
-  // is a decision recorded elsewhere — one database file per node, reached by one process — not
-  // another test.
-
   // I5 / I7: a bind failure must log a structured code and exit non-zero (spec §8's "everything
   // escapes" applied to the one boot failure that cannot literally throw — see boot.ts's own
   // comment on `server.on("error", ...)`), and `WAITRON_HTTP_HOST` must actually reach `serve()`'s

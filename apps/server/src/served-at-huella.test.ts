@@ -61,10 +61,7 @@ import "./errors.js";
 // database, the same reason `till-sale.test.ts` seeds one. The huella comparison itself is
 // deterministic either way; the value is a stronger end-to-end receipt.
 //
-// It reached this engine as two `useTemplateDb({ template: "manifest" })` calls, each a clone of a
-// shared PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
-// what the deployment role, which no longer exists, may read or write.
+// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 const LOCALE = "es-ES";
 
 // TWO databases, one shop in each — the one-tenant-per-database rework of what used to be two tenants
@@ -207,8 +204,8 @@ interface Shop {
  * resets the chain to empty) is what makes both shops file under one obligado NIF while each
  * starts a first record. The NumeroInstalacion is not hashed, so whether it matches between the two
  * shops or not cannot move the huella (with each shop in its own database the per-NIF counter resets,
- * so they in fact match). Run as the owner inside withTransaction — exactly how applyVenue itself
- * runs registerSif (no asAppUser).
+ * so they in fact match). Run inside withTransaction — exactly how applyVenue itself runs
+ * registerSif.
  */
 async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
@@ -276,7 +273,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
 /**
  * Open the identical two-line tab, optionally serve EVERY line, then pay it through the real pay path
  * with the FROZEN clock, returning the filed registro's huella. `payWorkingOrder` establishes its own
- * `withTransaction`/`asAppUser`, files from the tab's STORED locked lines, and chains registro #1 on this
+ * `withTransaction`, files from the tab's STORED locked lines, and chains registro #1 on this
  * shop's node — asserted here to be exactly one row at secuencia 1, so the huella is genuinely that of
  * a first record.
  */

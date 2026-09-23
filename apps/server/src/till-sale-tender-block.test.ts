@@ -40,10 +40,8 @@ import "./errors.js";
 // own sale under its own working-order id (unique, so the `sales.working_order_id` unique index
 // never collides across cases).
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
-// (`packages/db/src/testing/roles.ts`) and are left in place for Task T1 to sweep, so nothing here
-// establishes that the deployment role — which no longer exists — may read `tenders` or `payments`.
+// Nothing here establishes that the deployment role — which no longer exists — may read `tenders`
+// or `payments`.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({

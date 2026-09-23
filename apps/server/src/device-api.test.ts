@@ -1,14 +1,11 @@
 /**
  * The device join, enrolment and management surface end to end, on the engine the box now runs.
  *
- * ## What went with PostgreSQL
+ * ## What this file does not check
  *
- * The file's stated reason for demanding a real cluster was `app_user`: every route ran as the
- * non-owner deployment role so a missing GRANT showed up here rather than in production. SQLite has
- * no roles and no grants — `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) —
- * so every call below runs on the one connection and nothing here now says anything about which
- * identity the routes reach the database as. No case was deleted for it: what each case names is a
- * route's behaviour, and all forty are still driven.
+ * SQLite has no roles and no grants, so every call below runs on the one connection and nothing
+ * here says anything about which identity the routes reach the database as. What each case names is
+ * a route's behaviour.
  *
  * ## The two binding refusals, and the unit tests that used to sit beside them
  *
