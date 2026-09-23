@@ -9,7 +9,8 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
+Last revised **2026-09-23** — Q21 (when a table's invoice is issued: pre-bill first, or the invoice
+when the bill is presented) added beside Q14. Before that, **2026-09-13** — Q20 (zero-rate products shown as **No tax**) added. Q17 (F3 *canje*)
 and Q18 (*modelo 303* IVA soportado) were added on 2026-08-26; Q16 was sharpened then. Prior
 substantive pass **2026-08-01**.
 
@@ -516,6 +517,39 @@ rather than freezing it.
 >
 > **(c)** ¿Debe la precuenta llevar mención expresa de que no tiene validez de factura, y existe
 > algún requisito formal sobre su contenido o numeración que evite que se confunda con una factura?
+
+---
+
+### Q21. When a table asks for the bill — pre-bill first, or the invoice straight away? (added 2026-09-23)
+
+**Why it matters.** Today the table screen has no "print the bill" action: charging the table takes
+the payment, issues the invoice and prints the ticket in one step, so nothing is printed before
+payment. The counter already offers both orders of events per venue (invoice issued when the order is
+confirmed, or a pre-bill then the invoice at payment), and the
+[service design](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) leaves the
+timing for tables to be settled with the advisor. The two routes trade against each other:
+
+- **Pre-bill, invoice at payment.** The order stays editable until payment, so a late dessert, a
+  disputed item or an accepted shortfall is fixed before the invoice exists (a shortfall agreed before
+  issue is a *descuento*, [verifactu-findings.md §12](verifactu-findings.md)). The cost is Q14: if the
+  *precuenta* is a preparatory document, it must be preserved and its changes logged.
+- **Invoice when the bill is presented.** Q14 does not arise, but every later change needs a
+  rectificativa or a second invoice. Art. 11.1 says the invoice is issued *«en el momento de
+  realizarse la operación»*, and whether that is when the meal is served or when it is paid is the
+  point we cannot settle from the text.
+
+Ask it beside Q14: the answer to one decides how much the other matters.
+
+> **(a)** Cuando una mesa pide la cuenta, ¿podemos entregar una precuenta, sin validez de factura, y
+> expedir la factura simplificada sólo en el momento del cobro? ¿O debe expedirse la factura al
+> presentar la cuenta, por entenderse ya realizada la prestación del servicio (artículo 11.1 del RD
+> 1619/2012, «en el momento de realizarse la operación»)?
+>
+> **(b)** Si cabe la precuenta, ¿qué ocurre si entre la precuenta y el cobro la mesa pide algo más o
+> discute alguna partida? ¿Basta con modificar el pedido y dejar anotado el cambio en el sistema?
+>
+> **(c)** A la inversa, si expedimos la factura al presentar la cuenta y el cliente finalmente paga
+> menos, o consume algo más, ¿procede siempre una factura rectificativa o una nueva factura?
 
 ---
 
