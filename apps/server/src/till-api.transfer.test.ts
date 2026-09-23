@@ -68,7 +68,7 @@ const suite = useVenueDb({
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
+    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
@@ -236,7 +236,7 @@ describe("POST /api/tabs/:id/transfer", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("");
 
-    // Owner read: source lost the line entirely, destination gained it with the locked price kept.
+    // Source lost the line entirely, destination gained it with the locked price kept.
     const a = await suite.db.execute<{ count: number }>(
       sql`select cast(count(*) as int) as count from working_order_lines where working_order_id = ${tabA}`,
     );

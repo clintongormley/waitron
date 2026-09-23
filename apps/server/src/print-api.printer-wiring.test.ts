@@ -308,11 +308,11 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("derived eligibility: a usb job is NOT claimed by a box that cannot see its key", async () => {
-    // The key-scoped isolation (design §3/§5) run as the REAL app role: a usb printer's job is claimed
-    // only by the box currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job
-    // stays queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
-    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The positive
-    // key-claim path is proven under PGlite; here the point is the negative branch under the app grants.
+    // The key-scoped isolation (design §3/§5): a usb printer's job is claimed only by the box
+    // currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job stays
+    // queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
+    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The
+    // positive key-claim path is proven under PGlite; here the point is the negative branch.
     const app = mountApp(tenantA);
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
@@ -408,7 +408,7 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the management routes require printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
-    // THE GUARD, proven by DELETION as the app role: a `staff`-role session holds no `printer.manage`,
+    // THE GUARD, proven by DELETION: a `staff`-role session holds no `printer.manage`,
     // so `authorizeManager` (inside print-api's `gated`) throws `authorization.not_permitted` before any
     // op runs. Deleting the `authorizeManager(...)` call from print-api.ts's `gated` makes every staff
     // request below SUCCEED (201/200), flipping the 403 assertions red; restoring it turns them green.

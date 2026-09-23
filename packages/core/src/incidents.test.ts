@@ -352,10 +352,7 @@ describe("openIncidents", () => {
   it("excludes acknowledged incidents", async () => {
     await sell(failingChain());
     await withTransaction(suite.db, async (tx) => {
-      // Acknowledges the fixture rows, so the read below has something to exclude. This used to
-      // double as a privilege check — `app_user` held UPDATE on `acknowledged_at` alone, so a
-      // column-level GRANT that omitted it would have failed right here. On this engine there are
-      // no grants, so it is only a setup write now.
+      // Acknowledges the fixture rows, so the read below has something to exclude.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
     const rows = await withTransaction(suite.db, async (tx) => {
@@ -374,17 +371,14 @@ describe("openIncidents", () => {
   });
 
   // DELETED with the storage switch: "refuses to rewrite an incident's code as the application
-  // role". Its subject was a column-level GRANT — `app_user` held UPDATE on `acknowledged_at` and
-  // `acknowledged_by` alone, and PostgreSQL refused any other column with
-  // `permission denied for table incidents`. SQLite has no roles and no grants, so there is nothing
-  // left to refuse it and the case passed only by asserting that a write it expected to fail did.
+  // role". Nothing on this engine refuses that write, so the case passed only by asserting that a
+  // write it expected to fail did.
   //
-  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) is the replacement for what
-  // grants enforced, and it covers whole TABLES the application may not write, not one column of
-  // one table — `CLAUDE.md` §3 says so of that guard in its own words, and `docs/backlog.md` → B9
-  // is where the per-operation half is tracked. So "an incident is a record, not a note anyone may
-  // rewrite" now rests on nobody writing the UPDATE, which is exactly what this case existed to
-  // stop resting on.
+  // It is NOT replaced. `scripts/write-path-tables.test.ts` (task P9) covers whole TABLES the
+  // application may not write, not one column of one table — `CLAUDE.md` §3 says so of that guard
+  // in its own words, and `docs/backlog.md` → B9 is where the per-operation half is tracked. So
+  // "an incident is a record, not a note anyone may rewrite" now rests on nobody writing the
+  // UPDATE, which is exactly what this case existed to stop resting on.
 });
 
 describe("recordIncidentOnce", () => {

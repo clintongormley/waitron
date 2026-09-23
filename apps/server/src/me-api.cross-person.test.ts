@@ -187,8 +187,8 @@ async function seedPerson(name: string): Promise<string> {
   });
 }
 
-/** Open a real management session (through `startManagementSession` on the app role) and return the
- * cookie header — the credential every me route gates on. */
+/** Open a real management session (through `startManagementSession`) and return the cookie
+ * header — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return startManagementSession(tx, { personId });

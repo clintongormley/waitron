@@ -15,10 +15,8 @@ import { freshNif, seedWorkingOrder } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { payments } from "./payments.js";
 
-// This suite used to run on real PostgreSQL under a non-superuser LOGIN inheriting `app_user`'s
-// grants, and doubled as the grant check for `payments`' SELECT/INSERT/UPDATE. That half is GONE
-// and has no replacement: this engine has no roles. What is left is the column and its foreign
-// key, which the schema still refuses on its own.
+// What this suite covers is the column and its foreign key, which the schema still refuses on its
+// own.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 /** Seeds a till/working_order (via the shared payments seed helper) plus one card reader — the

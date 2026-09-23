@@ -42,9 +42,8 @@ import "./errors.js";
  *
  * Two cases changed with the engine, each recorded where it sits:
  *
- * - `runs as non-superuser app_user` is **DELETED**. It read `current_user` and `rolsuper` out of
- *   `pg_roles` to show the suite itself was not a superuser. There is no catalogue to ask and no
- *   role to ask about, and nothing replaces what it checked.
+ * - `runs as non-superuser app_user` is **DELETED**: there is no role to ask about, and nothing
+ *   replaces what it checked.
  * - `does not enable across a concurrent committed unpair` no longer stages a race; see the comment
  *   on the case for what it proves now.
  *

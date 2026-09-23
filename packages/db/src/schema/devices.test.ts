@@ -12,9 +12,8 @@ import { devices } from "./devices.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
-// PostgreSQL, so the suite also established that role's grants on `devices`. SQLite has no roles
-// and no grants; what is left is the column mapping and the two foreign keys.
+// LOSS, from the storage swap: what is left of this suite is the column mapping and the two
+// foreign keys.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const STATION_A = "cccccccc-0000-4000-8000-000000000001";

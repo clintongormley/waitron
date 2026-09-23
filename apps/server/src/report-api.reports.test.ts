@@ -32,16 +32,14 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite, not real Postgres: this suite proves the `/reports/daily-close` and `/reports/period` ROUTES
-// — their request/response boundary, the `businessDay`/`from`/`to` screens (missing/malformed → 400),
-// the `report.view` gate + STATUS map, and the value mapping from `computeDailyClose` /
-// `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to end in-process, the way
-// `report-api.overview.test.ts` proves the overview route. Unlike the overview (which anchors on
-// TODAY), these routes take an explicit day/range, so the fixtures seed sales on FIXED historical
-// business days and query them by date — no dependence on the wall clock. The `report.view` gate run
-// is asserted by `report-api.test.ts`'s own staff-session case. It used to be asserted a second time
-// under a non-superuser role, in `report-api.pg.test.ts`; that file went with the storage switch,
-// there being no roles on this engine, and the gate is application code either way.
+// PGlite, not real Postgres: this suite proves the `/reports/daily-close` and `/reports/period`
+// ROUTES — their request/response boundary, the `businessDay`/`from`/`to` screens
+// (missing/malformed → 400), the `report.view` gate + STATUS map, and the value mapping from
+// `computeDailyClose` / `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to
+// end in-process, the way `report-api.overview.test.ts` proves the overview route. Unlike the
+// overview (which anchors on TODAY), these routes take an explicit day/range, so the fixtures seed
+// sales on FIXED historical business days and query them by date — no dependence on the wall clock.
+// The `report.view` gate run is asserted by `report-api.test.ts`'s own staff-session case.
 const noopLog: Logger = () => {};
 
 let tillId: string;
@@ -105,7 +103,7 @@ interface DaySeed {
 }
 
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
- * midday-UTC instant). Superuser insert (fixture setup, the demo idiom). */
+ * midday-UTC instant). */
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
   // The DaySeed figures are the AMOUNTS the route's response carries, and the assertions read them
   // unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price` and
@@ -192,9 +190,9 @@ const suite = useVenueDb({
     await seedDay(db, 2, SEED.day2);
 
     // A MANAGER (holds report.view AND report.export), a SUPERVISOR (holds report.view but NOT
-    // report.export) and a STAFF person (holds neither) as the app role, each with a live management
-    // session. The supervisor is what pins the routes to report.view specifically: a supervisor 200
-    // proves they gate on report.view, not report.export (which the supervisor lacks).
+    // report.export) and a STAFF person (holds neither), each with a live management session. The
+    // supervisor is what pins the routes to report.view specifically: a supervisor 200 proves they
+    // gate on report.view, not report.export (which the supervisor lacks).
     const sids = await withTransaction(db, async (tx) => {
       const mkPerson = async (
         name: string,

@@ -15,12 +15,11 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  * Destinatarios and FacturasSustituidas must reach the wire. The fixture builds the record
  * directly to isolate storage and serialization.
  *
- * SQLite has no roles at all, so the insert below runs with whatever the one connection can do.
- * What still refuses a rewrite of a stored fiscal record is the append-only trigger, installed here
+ * What refuses a rewrite of a stored fiscal record is the append-only trigger, installed here
  * because `TEST_MIGRATIONS` carries each set's `appendOnlyTables`
  * (`packages/migrations/src/manifest.ts:163`). That refusal was MEASURED on this engine rather than
  * assumed — the probe, its output and why `inmutabilidad.test.ts` could not be cited are in
- * `chain.concurrency.test.ts`'s header. The ROLE half is covered by nothing.
+ * `chain.concurrency.test.ts`'s header.
  */
 // The whole migration manifest, the SQLite counterpart of the shared container's `manifest`
 // template this file used to clone.
@@ -74,7 +73,7 @@ function f3CanjeRecord(): RegistroAlta {
   });
 }
 
-/** Insert the flattened record under a fresh sale as app_user and return the sale id. */
+/** Insert the flattened record under a fresh sale and return the sale id. */
 async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.db, till, 1);
   const row = toRegistroRow(record, {

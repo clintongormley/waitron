@@ -1,4 +1,4 @@
-// Seed catalogue, floor, staff and media in one app-role transaction. Seed sales after it commits
+// Seed catalogue, floor, staff and media in one transaction. Seed sales after it commits
 // because each sale opens its own transaction and reads the committed products.
 // Image bytes share the database transaction. Fiscal sales are preproduction.
 

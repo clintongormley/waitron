@@ -18,7 +18,7 @@ import { locations, tenants, tills } from "./tenants.js";
  * Checks settlement schema shape, coverage on settlement, the post-settlement tender guard,
  * immutability and tender constraints. The behavioural matrix below pins each guard's refusal.
  *
- * FOUR LOSSES, from the storage swap:
+ * LOSSES, from the storage swap:
  *  - the TRUNCATE case is deleted. SQLite has no `TRUNCATE` statement at all, and no trigger event
  *    for `DROP TABLE`, so the statement-level guard that blocked a table-wide wipe has no
  *    counterpart (`packages/store/src/append-only.ts` states this in its own words). A caller that
@@ -32,7 +32,6 @@ import { locations, tenants, tills } from "./tenants.js";
  *    refusal in particular used to NAME the two amounts that did not match; it is a fixed sentence
  *    here (`packages/db/src/trigger-refusals.ts`), so a failing settlement no longer says by how
  *    much it was short.
- *  - the post-settlement case ran as the non-owner `app_user`; SQLite has no roles.
  */
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";

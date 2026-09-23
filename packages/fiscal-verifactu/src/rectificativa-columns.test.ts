@@ -20,12 +20,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
  * These are CHECK, JSON round-trip and trigger-backstop assertions, none of which needs contention
  * or a second connection, so they run on the venue database `useVenueDb` opens (CLAUDE.md §4).
  *
- * **One case went with the storage switch**, stated here rather than left as a silent deletion:
- * `refuses an UPDATE of tipo_rectificativa as the app role, on privilege grounds` asked whether
- * `app_user` held UPDATE on this table. SQLite has no roles and no grants — one process opens one
- * file and what a caller may do is decided outside the database — so there is no privilege layer
- * left to ask about, and nothing else holds that property. The trigger case below is the layer that
- * DOES survive.
+ * The trigger case below is the only thing refusing an UPDATE of `tipo_rectificativa`.
  */
 const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
@@ -206,10 +201,8 @@ describe("the rectificativa columns are JSON and round-trip", () => {
 
 describe("the new columns inherit the table's immutability", () => {
   it("refuses an UPDATE of tipo_rectificativa by the append-only trigger", async () => {
-    // Confirms the table-wide append-only trigger covers the new column with NO new DDL. On
-    // PostgreSQL the revocation fired first, so this case used to grant UPDATE inside a rolled-back
-    // transaction to reach the trigger underneath; with no grants on this engine the trigger is
-    // what the UPDATE meets directly, and no grant, role switch or rollback dance is needed.
+    // Confirms the table-wide append-only trigger covers the new column with NO new DDL, and that
+    // it is what the UPDATE meets directly.
     await insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "I" });
     const error = await captureError(async () =>
       pg.db.execute(sql`update registros_facturacion set tipo_rectificativa = 'S'`),

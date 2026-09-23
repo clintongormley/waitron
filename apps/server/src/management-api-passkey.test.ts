@@ -308,8 +308,8 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read as the app role: exactly one credential landed, owned by the manager — a real
-    // write, not merely a 200.
+    // Re-read: exactly one credential landed, owned by the manager — a real write, not merely a
+    // 200.
     const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({

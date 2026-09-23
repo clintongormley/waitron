@@ -9,16 +9,9 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
 /**
  * The vault, end to end, on the engine the box now runs.
  *
- * ## What this file was, and the three things that went with PostgreSQL
+ * ## The two things that went with PostgreSQL
  *
- * It reached the vault as `credentials_rls_probe`, a non-superuser LOGIN role inheriting
- * `app_user`'s grants, created cluster-wide by the package's now-deleted `global-setup.ts`.
- *
- * 1. **The ROLE is gone and is replaced by nothing.** SQLite has no roles, and every call below
- *    runs on the one connection. Nothing now checks that the deployment role can reach the vault
- *    and no more than the vault.
- *
- * 2. **`hands the three sealed columns back as plain Uint8Arrays, not node Buffers` is DELETED,
+ * 1. **`hands the three sealed columns back as plain Uint8Arrays, not node Buffers` is DELETED,
  *    because on this engine it can no longer fail.** That case was put HERE deliberately, and
  *    after an argument the storage swap's own plan records at length
  *    (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, "Where the failing test
@@ -36,7 +29,7 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
  *    `packages/credentials/src/index.test.ts:61-73`, and the plan paragraph above. The COMPILE-TIME
  *    half in `index.test.ts` is unaffected and still the real guard on the declaration.
  *
- * 3. **`returns taxpayer ids and nothing else — `setof integer`` is DELETED.** It read
+ * 2. **`returns taxpayer ids and nothing else — `setof integer`` is DELETED.** It read
  *    `pg_get_function_result` out of `pg_proc` to pin the seam's declared return type. There is no
  *    catalogue to ask and no function to ask about (see below).
  *

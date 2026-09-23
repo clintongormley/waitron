@@ -207,7 +207,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // `ENROL_RATE_WINDOW_MS`), throwing `device.join_rate_limited` (429).
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>

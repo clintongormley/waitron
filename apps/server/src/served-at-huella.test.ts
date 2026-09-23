@@ -506,7 +506,7 @@ describe("table placement is not part of the huella", () => {
  * KDS state ALONE — filing path held constant at `payWorkingOrder`, exactly as the served/placement
  * siblings do. `collected_at` is a plain nullable `working_orders` column (no CHECK ties it to a status),
  * and a tab pay leaves it untouched (`markCollected = false`, till-sale.ts), so the value set here survives
- * to the self-check. app_user holds UPDATE on `working_orders` (the settle path writes it as app_user).
+ * to the self-check.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaId, cafeId, tableId } = shop;

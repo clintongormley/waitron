@@ -159,9 +159,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    // Never as the owner. An owner can disable any trigger, so an owner-run
-    // write-path test would prove the code runs, not that the application role is permitted to
-    // run it.
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });

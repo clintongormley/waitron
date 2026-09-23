@@ -28,9 +28,9 @@ function list() {
   });
 }
 
-// Settle a sale directly (bypassing settleSale) as the app role: a covering tender, then the
-// sale_settlements row. Tenders first — tenders_reject_post_settlement rejects a tender once
-// the settlement row exists.
+// Settle a sale directly (bypassing settleSale): a covering tender, then the sale_settlements
+// row. Tenders first — tenders_reject_post_settlement rejects a tender once the settlement row
+// exists.
 async function settleDirectly(saleId: SaleId): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(tenders).values({

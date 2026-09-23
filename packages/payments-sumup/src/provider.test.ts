@@ -65,9 +65,7 @@ describe("SumUp card details mapping", () => {
 });
 
 // This file proves the adapter's LOGIC (T1/T1.5/T2 sequencing, outcome mapping, the poll window).
-// Whether the same writes land as a non-superuser `app_user` member used to be `sumup.test.ts`'s
-// question; that question has no home now, because this engine has no roles. `setup` is shared
-// with `reverse.test.ts` (`./testing/setup.ts`).
+// `setup` is shared with `reverse.test.ts` (`./testing/setup.ts`).
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,

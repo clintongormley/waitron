@@ -331,11 +331,12 @@ calling into one of the four files `scripts/write-path-tables.json` names, which
 write is allowed to live. Keeping them in a handful of named files is the whole of the property now,
 because no connection makes the distinction for us any more.
 
-HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in PGlite
-against the core migrations inside a transaction that had run `set local role app_user`: an insert and an update
-of `tenants`, an insert of `nodes`, an update of `deployment` and a delete from `mirror_config` each
-came back `42501 permission denied for table <name>`, while `select 1 from tenants` in the same shape
-was allowed. Read on 2026-09-19, on PostgreSQL. Nothing in the tree prints that now.
+HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in
+PGlite against the core migrations inside a transaction that had run `set local role app_user`: an
+insert and an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete from
+`mirror_config` each came back `42501 permission denied for table <name>`, while `select 1 from
+tenants` in the same shape was allowed. Read on 2026-09-19, on PostgreSQL. Nothing in the tree
+prints that now.
 
 ## A money column holds a count of whole cents, and the conversion happens at the row
 

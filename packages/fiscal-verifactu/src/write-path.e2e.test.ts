@@ -497,7 +497,7 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
   // Changing only till_id must preserve the hash and chain position. Roll back each sale
   // so the next sale uses the same invoice number and empty chain. Both tills share a location.
   // PGlite checks determinism here; apps/server/src/sale-till-source.receipt.test.ts
-  // exercises device resolution and the sale route as the application role on PostgreSQL.
+  // exercises device resolution and the sale route.
   const ROLLBACK = new Error("rollback: record captured");
 
   // A `type` alias, not an `interface`: `tx.execute<T>` constrains `T extends Record<string, unknown>`,
@@ -540,8 +540,8 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
 
   it("files the same huella and chain position for two tills that differ only by id", async () => {
     // A SECOND till Y in the SAME location as the seeded till X — the two register ids a
-    // re-homed device would ring against. Inserted on `pg.db` directly (PGlite is a superuser, and this
-    // is fixture setup, not the code under test) so it persists across both rolled-back sales.
+    // re-homed device would ring against. Inserted on `pg.db` directly (this is fixture setup, not
+    // the code under test) so it persists across both rolled-back sales.
     const { rows: locRows } = await pg.db.execute<{ location_id: string }>(
       sql`select location_id from tills where id = ${tillId}`,
     );

@@ -12,12 +12,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { cardReaders } from "./card-readers.js";
 
-// This suite used to run on real PostgreSQL, under a non-superuser LOGIN inheriting `app_user`'s
-// grants, and doubled as the grant check for 0001_payments_baseline_sql.sql's REVOKE ALL +
-// targeted GRANT. That half is GONE and has no replacement: this engine has no roles, so nothing
-// anywhere now checks that a write to `card_readers` would be permitted to an ordinary
-// application role rather than to an owner. What is left — the shape, the defaults and the unique
-// index — is what a schema can still refuse on its own.
+// What this suite covers — the shape, the defaults and the unique index — is what a schema can
+// still refuse on its own.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("card_readers", () => {

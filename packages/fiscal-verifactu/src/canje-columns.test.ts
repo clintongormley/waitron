@@ -16,12 +16,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 /**
  * Check canje JSON round-trips and the constraint limiting facturas_sustituidas to F3.
  *
- * **One case went with the storage switch**, stated here rather than left as a silent deletion:
- * `refuses an UPDATE of destinatarios as the app role, on privilege grounds` asked whether
- * `app_user` held UPDATE on this table. SQLite has no roles and no grants — one process opens one
- * file and what a caller may do is decided outside the database — so there is no privilege layer
- * left to ask about, and nothing else holds that property. The trigger case below is the layer that
- * DOES survive, and it is now the only thing refusing the update rather than the second of two.
+ * The trigger case below is the only thing refusing an UPDATE of `destinatarios`.
  */
 const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
@@ -157,10 +152,8 @@ describe("registros_facturas_sustituidas_f3_ck — a substitution block only on 
 
 describe("the destinatarios column inherits the table's immutability", () => {
   it("refuses an UPDATE of destinatarios by the append-only trigger", async () => {
-    // The table-wide append-only trigger covers the new column with NO new DDL. On PostgreSQL the
-    // revocation fired first, so this case used to grant UPDATE inside a rolled-back transaction to
-    // reach the trigger underneath; with no grants on this engine the trigger is what the UPDATE
-    // meets directly, and no grant, role switch or rollback dance is needed to see it.
+    // The table-wide append-only trigger covers the new column with NO new DDL, and it is what the
+    // UPDATE meets directly.
     await insertRegistro(pg.db, { tipoFactura: "F3", destinatarios: A_DESTINATARIO });
     const error = await captureError(async () =>
       pg.db.execute(sql`update registros_facturacion set destinatarios = '{}'`),

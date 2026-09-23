@@ -3,19 +3,14 @@
  *
  * ## What this suite was, and what converting it cost
  *
- * It ran against real PostgreSQL through `useTemplateDb`, corrupted the chain as the table OWNER,
- * and then verified through `app_user`. Two things about that are gone and neither is a rewording:
- *
- * 1. **The verify no longer runs as the application role.** There are no roles and no grants on
- *    this engine, so what the old shape bought — that `app_user`'s SELECT is enough to re-walk the
- *    chain — is not bought by anything now.
- * 2. **The corruption is no longer "by the owner, with the trigger disabled".** PostgreSQL has
- *    `ALTER TABLE … DISABLE TRIGGER`; SQLite has no such statement, so {@link bypassingImmutability}
- *    drops each of `daily_closes`' two append-only triggers, mutates, and recreates each one from
- *    the exact `CREATE TRIGGER` text SQLite stored for it — the same mechanism, and for the same
- *    stated reason, as `buildResetPlan`/`applyReset` in `packages/db/src/testing/venue-db.ts`.
- *    There is no `ENABLE ALWAYS` to restore afterwards: that flag existed so a replication apply
- *    worker could not skip the trigger, and there is no replication here.
+ * It ran against real PostgreSQL through `useTemplateDb` and corrupted the chain with the trigger
+ * disabled. PostgreSQL has `ALTER TABLE … DISABLE TRIGGER`; SQLite has no such statement, so
+ * {@link bypassingImmutability} drops each of `daily_closes`' two append-only triggers, mutates,
+ * and recreates each one from the exact `CREATE TRIGGER` text SQLite stored for it — the same
+ * mechanism, and for the same stated reason, as `buildResetPlan`/`applyReset` in
+ * `packages/db/src/testing/venue-db.ts`. There is no `ENABLE ALWAYS` to restore afterwards: that
+ * flag existed so a replication apply worker could not skip the trigger, and there is no
+ * replication here.
  *
  * The four subjects below are unchanged: an edited snapshot, a deleted middle close, a deleted tip,
  * and a deleted head. `daily_close_chain` is NOT append-only

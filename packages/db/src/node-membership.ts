@@ -19,7 +19,7 @@ import { nodeMembership } from "./schema/node-membership.js";
  * `./deployment.js`.
  *
  * Accepts a `Database` OR a `Transaction` (the explicit union `client.ts` blesses for a reader that
- * must work on whatever handle it is given): R3b's promote reads the held term through its OWN owner
+ * must work on whatever handle it is given): R3b's promote reads the held term through its OWN
  * transaction for the supersede diagnostic, so the read must be able to run on that `tx`.
  */
 export async function readNodeMembership(
@@ -50,15 +50,12 @@ export async function readNodeMembership(
  * `number` term with this bigint column). Deriving it here keeps the column and the in-blob term in
  * step for writes through this accessor; the DB does not enforce it, so a raw SQL write could set
  * them apart.
- * **Which caller may use this one is a convention, and nothing in the database holds it.** The two
- * setters were told apart by the connection they ran on — PostgreSQL granted `app_user` INSERT and
- * UPDATE here, and this plain one ran on the owner connection instead. There are no roles and no
- * grants on this engine. The split stands on its own terms: a caller that cannot assume it is the
- * only writer goes through the term-guarded `persistNodeMembershipIfNewer` below — gossip adoption
- * (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt handshake's org-chart append
- * (`mirror-bundle-api.ts`) — and this one is for where no concurrent writer exists: seeding
- * (`membership-seed.ts`) and the promote transaction (`promote.ts`, via `writeNodeMembershipTx`) —
- * owner decision, Slice 2.
+ * **Which caller may use this one is a convention, and nothing in the database holds it.** The
+ * split stands on its own terms: a caller that cannot assume it is the only writer goes through the
+ * term-guarded `persistNodeMembershipIfNewer` below — gossip adoption (`membership-adopt.ts`),
+ * retirement (`retire.ts`) and the adopt handshake's org-chart append (`mirror-bundle-api.ts`) —
+ * and this one is for where no concurrent writer exists: seeding (`membership-seed.ts`) and the
+ * promote transaction (`promote.ts`, via `writeNodeMembershipTx`) — owner decision, Slice 2.
  */
 export async function writeNodeMembership(
   db: Database,

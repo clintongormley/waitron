@@ -19,10 +19,6 @@ import { racePair } from "../test/fixtures.js";
  * `pg_advisory_xact_lock(hashtextextended('content-languages', 0))` as their first statement, and
  * this file used to watch the second backend block on it. There is one writer on this engine:
  * `racePair` (`test/fixtures.ts`) carries the mechanism, the measurement and its control.
- *
- * What is NOT here any more is a third case — that `content_languages` is read and written as
- * `app_user` with exactly `INSERT,SELECT,UPDATE`, and that a `delete from content_languages` is
- * refused. There are no roles and no grants; the commit message says so.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 

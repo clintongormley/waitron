@@ -228,8 +228,8 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Count the persons named `displayName`, read back as the app role — the proof a real row
- * landed, not merely that a route returned a success status. */
+/** Count the persons named `displayName`, read back — the proof a real row landed, not merely
+ * that a route returned a success status. */
 async function countPersonsNamed(displayName: string): Promise<number> {
   const rows = await withTransaction(suite.db, async (tx) => {
     const r = await tx.execute<{ display_name: string }>(
@@ -442,8 +442,8 @@ describe("Management API staff + session routes", () => {
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
 
-    // Re-read as the app role: exactly one 'Ada' row landed through the route — proving a
-    // real write, not just a 201.
+    // Re-read: exactly one 'Ada' row landed through the route — proving a real write, not just a
+    // 201.
     expect(await countPersonsNamed("Ada")).toBe(1);
   });
 

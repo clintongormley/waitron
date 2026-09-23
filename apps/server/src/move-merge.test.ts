@@ -146,7 +146,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Create one active dining table as the app role; returns its id. */
+/** Create one active dining table; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   return asApp(cfg, (tx) => createTable(tx, cfg, { label }).then((r) => r.id));
 }

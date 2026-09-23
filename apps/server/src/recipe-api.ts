@@ -83,9 +83,9 @@ const run = createErrorBoundary(STATUS, "recipe.failed");
  * this database. The `recipe.manage` gate runs on every route through one constant.
  */
 export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
-  // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
-  // applied identically and in exactly one place — the catalogue §3 seam.
+  // Open a transaction, confirm the caller's management session carries RECIPE_WRITE_PERMISSION,
+  // then run `fn`. Every route funnels its DB work through here so the gate is applied identically
+  // and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {

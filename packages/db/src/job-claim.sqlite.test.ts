@@ -20,10 +20,8 @@ import { count, label, table, ts } from "./schema/columns.js";
  *
  * **One case had no successor at all and is not repeated here.** It was named "locks only the table
  * `of` names, so a claim may join one the role may not lock", and it proved why the claim narrowed
- * its lock: `app_user` held only `select, insert` on the joined table, and PostgreSQL wants an
- * update-shaped privilege on every table a `FOR UPDATE` touches, so the unnarrowed form was refused
- * `42501` while the narrowed one was allowed. There is no lock to narrow and no role to withhold a
- * privilege, and `of` is gone from `LockedClaimSpec` (`./job-claim.ts`) for the same reason.
+ * its lock. There is no lock to narrow, and `of` is gone from `LockedClaimSpec` (`./job-claim.ts`)
+ * for the same reason.
  */
 const probeJobs = table("probe_jobs", {
   position: count("position").primaryKey(),

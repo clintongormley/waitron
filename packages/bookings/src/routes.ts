@@ -163,11 +163,11 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const { db, cfg, core } = ctx;
 
-    // Open a transaction as the app role, confirm the caller's management session carries
-    // BOOKING_WRITE, then run `fn` with the tx AND the authorization result. Every route funnels its DB
-    // work through here so the gate is applied identically and in exactly one place. `fn` receives
-    // `{ authorizedBy }` (the person id the session resolved to) so the create route can stamp
-    // `bookings.created_by` from the authorized manager rather than trusting the request body.
+    // Open a transaction, confirm the caller's management session carries BOOKING_WRITE, then run
+    // `fn` with the tx AND the authorization result. Every route funnels its DB work through here
+    // so the gate is applied identically and in exactly one place. `fn` receives `{ authorizedBy }`
+    // (the person id the session resolved to) so the create route can stamp `bookings.created_by`
+    // from the authorized manager rather than trusting the request body.
     const gated = <T>(
       sessionId: string,
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,

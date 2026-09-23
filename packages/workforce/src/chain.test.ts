@@ -35,9 +35,7 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // while the contention one ran on real Postgres through Testcontainers, and pointed at a permanent
 // demonstration that PGlite serialises every query onto one backend; all three of those are gone
 // with the engine, and one writer at a time is now the product's design rather than a test target's
-// limitation. What the app role may do on `workforce_chains` was the privilege matrix's
-// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`) — there are no
-// roles on this engine.
+// limitation.
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
@@ -362,8 +360,8 @@ describe("appendToChain commits the correction and capture content to the hash",
   // capturing till, the correction's reason, and the accountable actor. These are the record's own
   // attribution, not our metadata (unlike the fiscal `entorno`, CLAUDE.md §5), so they belong in the
   // hash. Each tamper below is applied to the READ-BACK row while its stored `entry_hash` is left
-  // untouched — exactly what a party past the immutability floor (the REVOKE + reject_mutation
-  // trigger) would leave behind by UPDATE-ing a column but being unable to recompute the chain.
+  // untouched — exactly what a party past the immutability floor would leave behind by UPDATE-ing
+  // a column but being unable to recompute the chain.
 
   /** A base `in` captured by a till, then a correction carrying reason + actor, read back as a chain. */
   async function chainWithCorrection(tillId: string) {

@@ -50,9 +50,9 @@ const suite = useVenueDb({
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`, holds
-    // nothing) as the app role under the tenant, then mint a live management session for each so the
-    // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
+    // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`,
+    // holds nothing) under the tenant, then mint a live management session for each so the route
+    // tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
     // supplied even though these sessions are minted directly rather than via a PIN/password login.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
@@ -108,7 +108,7 @@ function mountApp(venueLocale = "es-ES"): Hono {
   return app;
 }
 
-/** A live kitchen station and course of the seeded venue, as the app role. */
+/** A live kitchen station and course of the seeded venue. */
 async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
   return withTransaction(suite.db, async (tx) => {
     const cfg = venueCfg();

@@ -131,8 +131,8 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
   return app;
 }
 
-/** Open a management session for `personId` (through the production `startManagementSession` path, on
- * the app role) and return the cookie header that carries it — the credential every me route gates on. */
+/** Open a management session for `personId` (through the production `startManagementSession` path)
+ * and return the cookie header that carries it — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return startManagementSession(tx, { personId });

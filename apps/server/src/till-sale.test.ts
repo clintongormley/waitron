@@ -108,10 +108,10 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back the sellable products — one `each` product (1.50 gross, general/21%) and one
- * `weight` product (24.90 €/kg, reduced/10%). Each test gets its OWN tenant so the
- * `registros_facturacion` count is that test's alone, order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back the
+ * sellable products — one `each` product (1.50 gross, general/21%) and one `weight` product
+ * (24.90 €/kg, reduced/10%). Each test gets its OWN tenant so the `registros_facturacion` count is
+ * that test's alone, order-independent (CLAUDE.md §4).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   cfg: TillConfig;
@@ -754,8 +754,8 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
  * PARENT line, validating every answer server-side (the client is never the gate). These are the
  * fiscal-adjacent invariants — a filed order carries parent + child `sale_lines`, and a
  * parked-then-paid one re-prices its children from their add-time lock to the same total/desglose.
- * Real Postgres, like the sales above: the chained record, the self-referential `parent_line_id`,
- * and the app-role inserts are the point.
+ * Real Postgres, like the sales above: the chained record and the self-referential
+ * `parent_line_id` are the point.
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {

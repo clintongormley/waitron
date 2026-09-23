@@ -7,8 +7,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { readFilingModule } from "./till-config.js";
 
-// PGlite (superuser) is enough: this proves the column read and the null case, not the role path
-// — `readOrderFlow`, its sibling, is proven under the app role by the boot suites.
+// This proves the column read and the null case.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),

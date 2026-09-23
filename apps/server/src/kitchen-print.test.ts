@@ -119,8 +119,8 @@ function printCfg(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-/** Run `fn` on a transaction scoped to the venue's tenant as `app_user`, the shape every
- *  route uses. `nodeId` mirrors the fire path so `ticket_items.node_id` is set as production would. */
+/** Run `fn` on a transaction scoped to the venue's tenant, the shape every route uses. `nodeId`
+ *  mirrors the fire path so `ticket_items.node_id` is set as production would. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {

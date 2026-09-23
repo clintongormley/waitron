@@ -9,11 +9,6 @@ import { locations, tenants } from "./tenants.js";
 
 // What is proven is the produced Drizzle export's column mapping (posX -> "pos_x") and the decoding
 // of the four placement columns.
-//
-// LOSS, from the storage swap: this suite used to run its write and read-back as the non-owner
-// `app_user` on a real PostgreSQL, so it also established that the deployment role held the grants
-// the columns needed. SQLite has no roles and no grants, so nothing here says anything about who
-// may write — that question does not exist on this engine.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("dining_tables placement columns", () => {

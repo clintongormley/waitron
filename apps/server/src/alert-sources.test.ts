@@ -191,7 +191,7 @@ async function seedJob(t: {
   });
 }
 
-/** Run the source as the app role in one transaction, exactly as the registry does. */
+/** Run the source in one transaction, exactly as the registry does. */
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
     return printingAlertSource().read({ tx, now });
@@ -327,8 +327,8 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
 });
 
 // The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
-// so this suite migrates the payments set on top of core and runs as the app role, like the printing
-// block. The provider is a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
+// so this suite migrates the payments set on top of core, like the printing block. The provider is
+// a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
 const batterySuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {

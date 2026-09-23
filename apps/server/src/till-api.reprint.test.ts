@@ -33,10 +33,9 @@ import "./errors.js";
 // PGlite, not real Postgres: this file proves the HTTP SHAPE of the reprint route — the
 // `requireSession` guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues
 // through the SAME outbox path the fire uses. The reprint VERB's logic (re-query all fired items,
-// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`; the
-// app_user privilege matrix in @waitron/fiscal-verifactu covers station_printers grants on real
-// PostgreSQL. Schema is CORE (kitchen_stations / ticket_items / printers / station_printers /
-// print_jobs all land in CORE) + IDENTITY (the sessions/persons the login path needs).
+// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`. Schema is
+// CORE (kitchen_stations / ticket_items / printers / station_printers / print_jobs all land in
+// CORE) + IDENTITY (the sessions/persons the login path needs).
 const CAFE = "Cafe con leche";
 let cfg: TillConfig;
 let ana: { id: string };
@@ -202,7 +201,7 @@ async function placeAndFire(): Promise<string> {
   return id;
 }
 
-/** Create a live cloud_poll printer and attach it to the default station (app role). */
+/** Create a live cloud_poll printer and attach it to the default station. */
 async function attachPrinterToDefaultStation(): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
     const { id } = await createPrinter(tx, printCfg(), {

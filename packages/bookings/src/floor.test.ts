@@ -66,7 +66,7 @@ async function makeTable(v: Venue, label: string): Promise<string> {
   return row.rows[0]!.id;
 }
 
-/** Insert a booking row directly (as the app role) — this read test only needs rows in the table.
+/** Insert a booking row directly — this read test only needs rows in the table.
  *  `booking_time` is a plain venue-local `time` (§2b). */
 async function insertBooking(
   v: Venue,

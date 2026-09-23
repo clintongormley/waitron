@@ -62,9 +62,6 @@ import "./errors.js";
  * **LOST and replaced by nothing: the lock-ORDER guarantee between `mergeTabs` and
  * `payWorkingOrder`** — that a merge and a settle on the same tab cannot cross-lock. Nothing covers
  * it and nothing here can, because the pair of holders it ordered no longer exists.
- *
- * **Also lost, and not replaced:** the deployment role. Nothing checks that role's grants are part
- * of any refusal below.
  */
 const LOCALE = "es-ES";
 
@@ -131,8 +128,8 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
+ * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue and read
+ * back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
  * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
@@ -198,14 +195,14 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, available, cafe, agua };
 }
 
-/** Seed one active dining table in the venue as the app role; returns its id. */
+/** Seed one active dining table in the venue; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
 }
 
-/** Open a tab on a table as the app role; returns its tab (working_order) id. */
+/** Open a tab on a table; returns its tab (working_order) id. */
 async function openTabOn(
   cfg: TillConfig,
   tableId: string,

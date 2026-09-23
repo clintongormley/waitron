@@ -9,10 +9,8 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertAbsence, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: createAbsence / setAbsenceStatus are LOGIC over mutable planning rows
-// (an overlap query, a status flip) — there is no privilege decision to prove here. The app role's
-// grants on `absences` (that it CAN be INSERTed/UPDATEd/DELETEd) are `absences: "SIUD"` in the
-// privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`.
+// createAbsence / setAbsenceStatus are LOGIC over mutable planning rows (an overlap query, a
+// status flip).
 
 let personId: string;
 

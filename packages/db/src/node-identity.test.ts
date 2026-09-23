@@ -10,10 +10,7 @@ import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 // PGlite, not real Postgres: this proves the query + null-filter logic (the read skips a keyless row,
-// the write stamps the column). PGlite connects as superuser, so it cannot show the GRANT enforcement
-// — that `app_user` holds SELECT on `nodes` and no UPDATE is pinned by the privilege matrix
-// (packages/fiscal-verifactu/src/privileges.expected.ts), and the column-level ACL on `public_key` by
-// the dumped-ACL diff in scripts/schema-equivalence.sh.
+// the write stamps the column).
 
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as seedNode's own suite does.

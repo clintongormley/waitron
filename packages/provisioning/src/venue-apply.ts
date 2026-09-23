@@ -20,8 +20,7 @@ import type { VenueAction } from "./venue-plan.js";
 import "./errors.js";
 
 export interface VenueApplyDeps {
-  /** The OWNER connection to the TARGET database — the admin that ran `instance` and so owns the
-   * tables. The owner inserts the venue scaffold without widening app_user grants. */
+  /** The connection to the TARGET database. */
   db: Database;
   /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
    * list's order. */

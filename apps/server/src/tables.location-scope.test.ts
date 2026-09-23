@@ -20,17 +20,10 @@ const LOCALE = "es-ES";
 /**
  * The placement verbs' location predicate, on the engine the box now runs.
  *
- * ## The half this file used to carry and does not any more
- *
- * **The non-superuser `app_user` LOGIN role this file ran as is gone and is replaced by nothing**:
- * SQLite has no roles and `RealPostgres.connectAs` has no counterpart. Every call below now runs on
- * the one connection the venue file admits.
- *
- * **Nothing in the four cases below depended on the role.** What each one asserts is that a verb's
- * own `location_id` predicate refuses a row belonging to another location of the SAME tenant, and
- * that predicate is a `where` clause in `./tables.ts` that runs identically whoever is connected.
- * Measured 2026-09-22: all four pass here, and the negative control in the fourth case (a
- * same-location place and clear, which must NOT be refused) still passes too.
+ * What each of the four cases below asserts is that a verb's own `location_id` predicate refuses a
+ * row belonging to another location of the SAME tenant, and that predicate is a `where` clause in
+ * `./tables.ts`. Measured 2026-09-22: all four pass here, and the negative control in the fourth
+ * case (a same-location place and clear, which must NOT be refused) still passes too.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;

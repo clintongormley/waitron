@@ -8,15 +8,12 @@ import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 import type { CashCountInput, DailyCloseRecord, DailyCloseSnapshot } from "./close-types.js";
 
-// PGlite, deliberately — and the right target for the WALK. The re-walk (contiguity, genesis,
-// broken-link, hash recomputation from the jsonb read-back) is deterministic logic over rows already
-// committed; it does not turn on the non-superuser deployment role or on two writers contending —
-// two of the things PGlite cannot show (CLAUDE.md §4). The break cases are crafted with
-// raw INSERTs, which the append-only trigger does NOT guard (it is BEFORE UPDATE OR DELETE), so they
-// need no privilege bypass. The verifier's teeth against a real mutation of a COMMITTED chain — a
-// privileged UPDATE/DELETE that bypasses the app-role immutability — are proven on real Postgres in
-// verify-daily-close-chain.tampered.test.ts, where that bypass is the whole point. Mirrors
-// record-daily-close.test.ts's split.
+// The right target for the WALK. The re-walk (contiguity, genesis, broken-link, hash recomputation
+// from the jsonb read-back) is deterministic logic over rows already committed. The break cases are
+// crafted with raw INSERTs, which the append-only trigger does NOT guard (it is BEFORE UPDATE OR
+// DELETE), so they need no bypass. The verifier's teeth against a real mutation of a COMMITTED
+// chain are proven in verify-daily-close-chain.tampered.test.ts, where that bypass is the whole
+// point. Mirrors record-daily-close.test.ts's split.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -39,8 +36,7 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify under the app role for one node — the shape a caller (Task 5's demo) uses, which also
-// proves app_user's SELECT grant is enough to re-walk the chain.
+// Verify for one node — the shape a caller (Task 5's demo) uses.
 function verify() {
   return withTransaction(suite.db, async (tx) => {
     return verifyDailyCloseChain(tx, venue.nodeId);
@@ -57,9 +53,8 @@ const SNAPSHOT = {
   cashReconciliation: { byTill: [], nodeVariance: "0.00" },
 } as unknown as DailyCloseSnapshot;
 
-/** Owner INSERT of one close row. INSERT is not what
- * the append-only trigger guards, so no bypass is needed; this is how a break is staged without
- * mutating a committed row.
+/** INSERT of one close row. INSERT is not what the append-only trigger guards, so no bypass is
+ * needed; this is how a break is staged without mutating a committed row.
  *
  * Through the table definition rather than in raw SQL. Two things forced it, both of them the
  * engine rather than a preference: `daily_closes.id` is supplied by `$defaultFn(newId)` in

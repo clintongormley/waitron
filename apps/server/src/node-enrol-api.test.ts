@@ -162,7 +162,7 @@ describe("POST /api/node/enrol-self", () => {
     expect(res.status).toBe(201);
     const { token } = (await res.json()) as { token: string };
     expect(typeof token).toBe("string");
-    // The token authenticates as a real agent — the row was truly written under `app_user`.
+    // The token authenticates as a real agent — the row was truly written.
     const auth = await authenticate(token);
     expect(auth.agentId).toBeDefined();
   });

@@ -13,14 +13,9 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  * image goes.
  *
  * This is what survived `images.pg.test.ts`, which was deleted 2026-09-22 with the PostgreSQL test
- * harness (recover it with `git show origin/main:packages/media/src/images.pg.test.ts`). Four of
- * that suite's nine cases have counterparts elsewhere and four had none; what went, and why, so
- * nobody reads this file as the whole of it:
+ * harness (recover it with `git show origin/main:packages/media/src/images.pg.test.ts`). What went,
+ * and why, so nobody reads this file as the whole of it:
  *
- *  - Its GRANT matrix (`app_user` holds exactly these privileges on `media_images` and
- *    `media_image_data`), its `current_user`/`rolsuper` probe, and its three `42501` refusals of a
- *    `truncate`, a byte `delete` and a byte `update`: DELETED with no counterpart. This engine has
- *    no roles, no `GRANT`, and nothing that refuses a write by who is making it.
  *  - Its constraint and index listing, read out of `pg_constraint` and `pg_indexes`: DELETED. The
  *    keys it named are now either in the drizzle schema (`media_image_data_image_fk`, the primary
  *    key, the filename unique) or pinned by name in `image-references.test.ts`

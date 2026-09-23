@@ -1,5 +1,5 @@
 // PGlite: route authorization over one transaction per request; no concurrency and no
-// connection-role question, and grants are enforced once the session assumes app_user.
+// connection-role question.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";

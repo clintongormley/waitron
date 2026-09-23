@@ -140,7 +140,7 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /**
- * Run fn in one transaction as app_user.
+ * Run fn in one transaction.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;

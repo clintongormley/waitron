@@ -12,10 +12,7 @@ import { floorZones } from "./floor-zones.js";
 import { workingOrderLines } from "./orders.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` against a
-// real PostgreSQL, so the suite also established that the deployment role held the grants these
-// columns needed. SQLite has no roles and no grants, so nothing here says anything about who may
-// write. What survives is the schema half: the Drizzle export's column mapping, and the
+// What this suite proves is the schema half: the Drizzle export's column mapping, and the
 // `dining_tables.zone_id` foreign key.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const ABSENT_ZONE = "99999999-9999-4999-8999-999999999999";

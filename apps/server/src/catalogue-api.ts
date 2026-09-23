@@ -458,8 +458,8 @@ function refuseLegacyAttachFields(body: Record<string, unknown>): void {
 }
 
 /**
- * How a mounted route runs its database work: `mountCatalogueApi`'s `gated` — one transaction, as
- * the app role, with the caller's management session checked for the catalogue write permission.
+ * How a mounted route runs its database work: `mountCatalogueApi`'s `gated` — one transaction, with
+ * the caller's management session checked for the catalogue write permission.
  */
 type GatedWork = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) => Promise<T>;
 
@@ -568,7 +568,7 @@ function mountListSurface<TList, TDependants>(
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>

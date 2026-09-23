@@ -73,29 +73,11 @@ import { createStation } from "./kitchen.js";
 // empty object, so a case over there that reached the fiscal write would fail rather than file (its
 // own comments at the prep and collect routes say the same). Run 2026-09-22.
 //
-// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
-// PostgreSQL template. Two subjects went with that harness and NOTHING here replaces either:
-//
-//   - The file's own header claimed the chained record was "written by the app role" and that
-//     PGlite's superuser connection could not establish the deployment role may write
-//     `registros_facturacion`. There are no database roles on this engine — one file, one handle —
-//     and nothing in this file now says anything about privileges.
-//   - The `/api/pay` tests opened a SECOND connection as the non-superuser `rls_probe` role and
-//     handed it to `StripeTerminalProvider`, whose `payments`-ledger writes
-//     (`insertAttempting`/`captureAttempting`/`failAttempting`) run on its OWN `db` handle — so the
-//     role that handle carried was the role those writes ran as.
-//     That an ordinary application role may make that write is no longer observable anywhere; the
-//     adapter's own option doc already records the same loss for the suite that went with the
-//     PostgreSQL tier (`packages/payments-stripe/src/provider.ts:27-39`). The reader ROUTING these
-//     cases exist for — which reader a collect drives, and which id is stamped on
-//     `payments.reader_id` — is untouched: they now pass the suite's one handle.
-//
-//     The comment this replaces added that those three writes do not go through `withTransaction`.
-//     That is wrong and was left behind by a change: `collect` wraps each of them in
-//     `this.inTransaction`, which is `withTransaction(db, …)` — both its T1 and T2 steps in
-//     `packages/payments-stripe/src/provider.ts`. It also pointed at a "Present because…"
-//     doc comment on that class, which no longer exists — `grep -rn "Present because"
-//     packages/payments-stripe/src` returns nothing.
+// The `/api/pay` tests pass the suite's one handle to `StripeTerminalProvider`, whose
+// `payments`-ledger writes (`insertAttempting`/`captureAttempting`/`failAttempting`) each run
+// inside `this.inTransaction`, which is `withTransaction(db, …)` — both its T1 and T2 steps in
+// `packages/payments-stripe/src/provider.ts`. The reader ROUTING those cases exist for — which
+// reader a collect drives, and which id is stamped on `payments.reader_id` — is untouched.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -923,11 +905,9 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 // row by id, PRE-CHECKS the provider is connected, then drives the reader's provider
 // (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
 // network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
-// capture/decline genuinely round-trips the adapter rather than being stubbed. These cases reached
-// this engine needing a second, non-superuser connection for the provider's own ledger writes; that
-// subject is gone with the roles (see the file header) and what is left is the reader ROUTING —
-// which reader a collect drives, and which id lands on `payments.reader_id`. The cookieless refusal
-// is hermetic, in `till-api.test.ts`.
+// capture/decline genuinely round-trips the adapter rather than being stubbed. What these cases
+// prove is the reader ROUTING — which reader a collect drives, and which id lands on
+// `payments.reader_id`. The cookieless refusal is hermetic, in `till-api.test.ts`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -1659,8 +1639,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
 // A handheld can file cash and manual-card sales. Receipt, integrated-payment and drawer actions
 // require their profile capabilities; prep mutations retain the handheld restriction. These cases
-// drive real device lookup and real chained fiscal writes; nothing here is about privileges any
-// more (see the file header).
+// drive real device lookup and real chained fiscal writes.
 describe("handheld sales and device capability gates", () => {
   /** Enrol a REAL handheld device in `cfg`'s tenant (no station — a handheld form factor binds none — it is
    * false, Task 2), returning the `waitron_device=<id>.<token>` cookie pair a handheld carries. The

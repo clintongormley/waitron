@@ -13,10 +13,6 @@ import { locations, tenants } from "./tenants.js";
 
 // What this proves is the hand-written (station_id) → kitchen_stations foreign keys on
 // categories/products.
-//
-// LOSS, from the storage swap: the writes below used to run as the non-owner `app_user` on a real
-// PostgreSQL, so the suite also established that the additive `station_id` column fell under the
-// existing table-wide grant. SQLite has no roles and no grants, so only the foreign keys are left.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 

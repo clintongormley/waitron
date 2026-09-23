@@ -20,8 +20,8 @@ import {
  * commercial/accounting records: a received invoice is issued by our SUPPLIER, not by us, so it gets
  * NO fiscal fingerprint, NO `registros_facturacion` row, NO hash chain, and NO invoice number from our
  * `invoice_series` (spec §2, the fiscal boundary H2). Unlike the immutable `sales`/`registros` lane,
- * these are MUTABLE accounting records (fix a mis-keyed rate, correct a typo): the app role holds
- * UPDATE and DELETE, there is no append-only trigger and no chain.
+ * these are MUTABLE accounting records (fix a mis-keyed rate, correct a typo): there is no
+ * append-only trigger and no chain.
  *
  * All identifiers are English (this package is scanned by the english-only guard); the Spanish fiscal
  * term for each concept is given in the doc comments. `tax` here is the `cuota` (`IVA soportado`),

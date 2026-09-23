@@ -11,7 +11,7 @@ import type { Logger } from "./logger.js";
 // `retireSelf` each carry their own registry import for the codes they raise (matching box-status.ts).
 
 export type BoxRetireDeps = {
-  /** The app pool retireSelf reads/writes `node_membership` and the identity key through (app-role). */
+  /** The app pool retireSelf reads/writes `node_membership` and the identity key through. */
   appDb: Database;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;

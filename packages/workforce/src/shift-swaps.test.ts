@@ -10,9 +10,8 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: requestSwap / acceptSwap are LOGIC over mutable planning rows (ownership
-// and existence checks, a status flip) — there is no privilege decision to prove here. The app role's
-// grants on `shift_swaps` are `shift_swaps: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`.
+// requestSwap / acceptSwap are LOGIC over mutable planning rows (ownership and existence checks, a
+// status flip).
 
 let locationId: string;
 

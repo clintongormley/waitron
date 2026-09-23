@@ -89,7 +89,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 // PGlite exercises working-order state, validation, foreign keys, triggers and node-scoped reads.
-// Writes run as app_user. Real PostgreSQL covers concurrent order-number allocation.
+// Real PostgreSQL covers concurrent order-number allocation.
 const LOCALE = "es-ES";
 
 /**
@@ -849,12 +849,12 @@ describe("parkOrder", () => {
   });
 
   it("replays the existing order on a re-sent park, creating no second order", async () => {
-    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the first
-    // park commits, then the re-sent park with the SAME client-minted id collides against that already-
-    // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
-    // real non-superuser role to serialise): one connection replaying its own committed write is exactly
-    // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
+    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the
+    // first park commits, then the re-sent park with the SAME client-minted id collides against
+    // that already-committed row on the SAME backend. It is NOT concurrency (two backends racing):
+    // one connection replaying its own committed write is exactly what a single backend proves. The
+    // CONCURRENT park backstop — two backends racing the same id — is proven separately against
+    // real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -1115,10 +1115,10 @@ describe("openTab service context", () => {
 });
 
 /**
- * Read a working order and its lines back RAW (superuser, no tenant scope), for computing what
+ * Read a working order and its lines back RAW (no tenant scope), for computing what
  * `listHeldOrders`/`getHeldOrder` should independently return. `openedAt` is the actual persisted
- * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that would
- * let an unasserted key slip through (CLAUDE.md §4).
+ * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that
+ * would let an unasserted key slip through (CLAUDE.md §4).
  */
 async function readOrder(id: string): Promise<{
   openedAt: string;

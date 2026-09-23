@@ -10,30 +10,17 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 /*
  * LOSS, from the storage swap, and it is a DDL loss rather than a DML one.
  *
- * PostgreSQL protected an append-only table twice over: the `reject_mutation()` trigger, which
- * refused the owner as well as anyone else, and a `REVOKE` that made the application role a
- * NON-OWNER. Only the trigger has an equivalent here. SQLite has no roles and no grants — one
- * process opens one file — so every connection is the owner-equivalent, and the DDL the ownership
- * check used to close is open to every caller. Measured through `useVenueDb` on a table this
- * file's own helper had just protected, one statement per line:
+ * PostgreSQL protected an append-only table twice over, and only the trigger has an equivalent
+ * here: one process opens one file, so the DDL that removes the trigger is open to every caller.
+ * Measured through `useVenueDb` on a table this file's own helper had just protected, one
+ * statement per line:
  *
  *   drop trigger probe_guarded_append_only_update => SUCCEEDED
  *   the next UPDATE                               => SUCCEEDED, row read back 'tampered'
  *   drop table sales                              => SUCCEEDED, table and triggers both gone
  *
- * and the same two statements as `app_user` against the PostgreSQL shape this replaces, reproduced
- * on PGlite 0.5.8 with an owner-created trigger-protected table and `revoke update, delete,
- * truncate … from app_user`:
- *
- *   update       => REFUSED 42501 "permission denied for table ledger_probe"
- *   drop trigger => REFUSED 42501 "must be owner of relation ledger_probe"
- *   drop table   => REFUSED 42501 "must be owner of table ledger_probe"
- *
- * None of the cases below ever covered that path — this file ran as the owner deliberately, and
- * the owner could always drop a trigger on PostgreSQL too (measured in the same run: DROP TRIGGER
- * SUCCEEDED as owner). So nothing here got weaker. What got weaker is the application's own
- * connection, and replacing it is not a test's job: it needs a control outside the engine, since
- * the engine no longer has one.
+ * None of the cases below ever covered that path, so nothing here got weaker. Replacing it is not
+ * a test's job: it needs a control outside the engine, since the engine no longer has one.
  */
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

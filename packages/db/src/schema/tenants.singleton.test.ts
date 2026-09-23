@@ -1,14 +1,5 @@
-// LOSS, from the storage swap. Three things this suite established are gone and have no counterpart
-// on this engine:
-//  - a fourth case proved `app_user` is refused an INSERT into `tenants` by the GRANT (`42501`)
-//    BEFORE either constraint below is reached. SQLite has no roles and no grants, so nothing now
-//    states that the application role may read this table and not write it — CLAUDE.md §3 still
-//    states the rule, and nothing here holds it.
-//  - the surviving case used to assert `rolsuper` on its own connection first, so that "even to the
-//    session that owns the table" was a checked claim rather than a hope. There is no privileged
-//    session here to be distinguished from an unprivileged one: one process opens one file.
-//  - "a row written without an id IS row 1" is gone with the column default that made it true; the
-//    last case in this file carries that loss and what replaced it.
+// LOSS, from the storage swap: "a row written without an id IS row 1" is gone with the column
+// default that made it true; the last case in this file carries that loss and what replaced it.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";

@@ -15,8 +15,8 @@ is handed, and installs the append-only triggers those sets declare. There is no
 between: PGlite, the Testcontainers PostgreSQL tier, the helper that ran a suite against both, and
 the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
 
-**What went with them, so nobody assumes it is still covered.** SQLite has no roles and no
-grants — one process opens one file, and what a caller may do is decided outside the database. Every
+**What went with them, so nobody assumes it is still covered.** SQLite has no roles and no grants —
+one process opens one file, and what a caller may do is decided outside the database. Every
 privilege assertion is deleted, and each deletion is recorded in the header of the file it was
 deleted from:
 `packages/db/src/allocate-number.test.ts` (a column-scoped `grant update (next_number)` was what

@@ -125,9 +125,9 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app role
- * and read back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
- * order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * `each`/general(21%) products. Each test gets its OWN tenant so its state is order-independent
+ * (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(

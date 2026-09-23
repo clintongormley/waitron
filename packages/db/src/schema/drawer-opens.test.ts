@@ -11,14 +11,13 @@ import { drawerOpens } from "./drawer-opens.js";
 import { printers } from "./printers.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
-// PostgreSQL, so the suite also established that role's grants on `drawer_opens`, `tills` and
-// `locations`. SQLite has no roles and no grants; what is left is the column mapping, the defaults,
-// the reason CHECK and the two foreign keys.
+// What this suite proves is the column mapping, the defaults, the reason CHECK and the two foreign
+// keys.
 //
-// SECOND LOSS: the three cases that ended in a rolled-back transaction did so to leave the SHARED
-// template clone untouched. There is no shared clone here — each suite gets its own file — so they
-// restore the value they changed instead, which keeps them order-independent for the same reason.
+// LOSS, from the storage swap: the three cases that ended in a rolled-back transaction did so to
+// leave the SHARED template clone untouched. There is no shared clone here — each suite gets its
+// own file — so they restore the value they changed instead, which keeps them order-independent
+// for the same reason.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";

@@ -17,10 +17,7 @@ import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
 import { locations, tenants } from "./tenants.js";
 
-// LOSS, from the storage swap: every write below used to run as the non-owner `app_user` on a real
-// PostgreSQL, so the suite also established that role's grants on the three printing tables. SQLite
-// has no roles and no grants; what is left is the column mapping, the defaults, the CHECKs and the
-// foreign keys.
+// What this suite proves is the column mapping, the defaults, the CHECKs and the foreign keys.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // A location id that is never seeded — the negative for the direct location_id → locations.id FK.
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";

@@ -1,9 +1,6 @@
-// LOSS, from the storage swap: a case here read `has_table_privilege` both directions and pinned
-// that `app_user` holds SELECT on `deployment` and NOT INSERT or UPDATE — the mode write being an
-// owner-only write. SQLite has no roles and no grants, so that question has no counterpart and the
-// case is deleted rather than kept in a form that asserts nothing. CLAUDE.md §3 still states the
-// rule ("four tables the application role may read and never write"), and nothing in this package
-// now holds it.
+// LOSS, from the storage swap: a case here pinned that the application may read `deployment` and
+// not write it. It is deleted rather than kept in a form that asserts nothing. CLAUDE.md §3 still
+// states the rule, and nothing in this package now holds it.
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";

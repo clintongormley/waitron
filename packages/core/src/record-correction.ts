@@ -259,10 +259,10 @@ export async function recordCorrection(
       fiscalBackend: backend.id,
       fiscalState: "recorded",
       correctsSaleId: input.correctsSaleId,
-      // Recorded at INSERT because `sales` is append-only for the app role (no UPDATE grant), so
-      // there is no later moment to attribute the correction — the same seam `sale_voids.voided_by`
-      // fills. Our own metadata; it never enters the fiscal record's fingerprint (it is on the sales
-      // row, not the fiscal record).
+      // Recorded at INSERT because `sales` is append-only, so there is no later moment to
+      // attribute the correction — the same seam `sale_voids.voided_by` fills. Our own metadata; it
+      // never enters the fiscal record's fingerprint (it is on the sales row, not the fiscal
+      // record).
       authorizedBy: authorization.authorizedBy,
     })
     .returning({ id: sales.id });

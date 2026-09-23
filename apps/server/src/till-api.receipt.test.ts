@@ -307,8 +307,8 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   });
 }
 
-/** Set the location's `drawer_open_policy` ('gated' | 'open') directly (the app role holds UPDATE on
- *  locations). The column defaults to 'gated', so a test wanting the gate need not call this. */
+/** Set the location's `drawer_open_policy` ('gated' | 'open') directly. The column defaults to
+ *  'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     await tx

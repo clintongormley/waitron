@@ -55,13 +55,10 @@ let node: SeededTill;
  * Keyed by NODE (node-id rekey, 2026-08-03): the chain is per-node.
  */
 /**
- * ## The append-only refusal, measured on this engine (the receipt the deleted `privileges.test.ts`
- * used to share with the grants)
+ * ## The append-only refusal, measured on this engine
  *
- * `registros_facturacion`'s immutability rested on three things on PostgreSQL: the `REVOKE ALL`
- * and the `app_user` grant matrix, the append-only trigger, and the TRUNCATE-blocking trigger
- * (`CLAUDE.md` §5). The GRANTS are gone — SQLite has no roles — so the trigger is what is left,
- * and that was worth measuring rather than assuming.
+ * `registros_facturacion`'s immutability rests on the append-only trigger (`CLAUDE.md` §5), and
+ * that was worth measuring rather than assuming.
  *
  * Measured 2026-09-22 on this file's own `useVenueDb` database (a temporary probe added here,
  * run, and removed), against a registro written through `appendToChain`:
@@ -78,8 +75,7 @@ let node: SeededTill;
  * trigger's own `RAISE(ABORT)`, not a constraint. The triggers reach the database because
  * `TEST_MIGRATIONS` carries each set's `appendOnlyTables` and `useVenueDb` installs them
  * (`packages/migrations/src/manifest.ts:163`, `packages/db/src/testing/venue-db.ts`). So a stored
- * fiscal record still cannot be rewritten or removed; what no longer refuses anything is the
- * ROLE-level half.
+ * fiscal record cannot be rewritten or removed.
  *
  * `inmutabilidad.test.ts` is where this belongs as a standing guard, and it is the receipt: run on
  * 2026-09-22 on its own, 1 file and 2 cases passing. An earlier version of this comment said that

@@ -218,7 +218,7 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
  * The `purchase.manage` gate runs on every route through one constant.
  */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // PURCHASE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>

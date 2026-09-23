@@ -62,8 +62,7 @@ export type { Product } from "./product-types.js";
  * Every operation shares the caller's transaction.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
- * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
- * `packages/fiscal-verifactu/src/privileges.expected.ts`).
+ * snapshots.
  * All SQL is built with Drizzle query builders — no string concatenation.
  */
 

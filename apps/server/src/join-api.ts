@@ -132,7 +132,7 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  *     refuses the OTHER kind 404 via the predicate riding its consuming delete.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  // Open a transaction as the app role, confirm the caller's management session carries
+  // Open a transaction, confirm the caller's management session carries
   // `permission`, then run `fn` — `device-api.ts`'s `gated`, with the permission passed in rather than
   // baked in, because this surface gates on two of them.
   const gated = <T>(

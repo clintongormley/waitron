@@ -18,11 +18,11 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  * the private key and its matching public key must land together or not at all — so they share a
  * single `withTransaction` (CLAUDE.md §3: `withTransaction` IS that transaction; nothing non-DB sits
  * between them to force a split). The handle is named `ownerDb` because the `nodes` stamp belongs on
- * the owner path: `nodes` is one of the four tables a request path may read and never write. That
- * used to be enforced by the database — the application role held SELECT on `nodes` and nothing
- * more. It is not enforced by anything in the engine now: there are no roles and no grants, and
- * `ownerDb` and the app handle are the SAME handle at runtime. What keeps this write in a named
- * file is `scripts/write-path-tables.test.ts`, which reads the tree as text. Runs AFTER provisionVenue mints the node row the stamp updates.
+ * the owner path: `nodes` is one of the four tables a request path may read and never write.
+ * Nothing in the engine enforces that: there are no roles and no grants, and `ownerDb` and the app
+ * handle are the SAME handle at runtime. What keeps this write in a named file is
+ * `scripts/write-path-tables.test.ts`, which reads the tree as text. Runs AFTER provisionVenue
+ * mints the node row the stamp updates.
  */
 export interface EstablishIdentityDeps {
   ownerDb: Database;

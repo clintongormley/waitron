@@ -89,8 +89,6 @@ import "./errors.js";
  *    without deleting or re-pricing existing lines"; the contiguity-under-load property is covered
  *    by nothing.
  *
- * **Also lost, and not replaced:** the deployment role.
- *
  * ## Why there are still TWO databases
  *
  * The two H2 cases file two records carrying the IDENTICAL AEAT identity, and
@@ -141,9 +139,9 @@ interface SeededVenue {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue as the app
- * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its counts are
- * order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
+ * `each`/general(21%) products. Each test gets its OWN tenant so its counts are order-independent
+ * (CLAUDE.md §4).
  */
 async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -208,7 +206,7 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
   return { cfg, cafe, agua };
 }
 
-/** Seed one active dining table in the venue as the app role; returns its id. */
+/** Seed one active dining table in the venue; returns its id. */
 async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db): Promise<string> {
   return withTransaction(db, async (tx) => {
     const { id } = await createTable(tx, cfg, { label });

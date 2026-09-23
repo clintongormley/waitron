@@ -26,11 +26,10 @@ import { openTab } from "./working-order.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the move/join/merge verbs are table-service LOGIC (re-point
-// `dining_tables` rows, move lines, abandon a tab) whose privilege/concurrency behaviour is
-// proven over real Postgres in `working-order.pay-and-dispatch.test.ts`; here we prove only the HTTP surface —
-// the session guard, the malformed-`:id` screen, and the verb's status mapping — which fires at
-// the boundary before/around a single query, so a superuser PGlite backend is adequate (CLAUDE.md
-// §4). Harness ported from `till-api.test.ts`.
+// `dining_tables` rows, move lines, abandon a tab) whose concurrency behaviour is proven in
+// `working-order.pay-and-dispatch.test.ts`; here we prove only the HTTP surface — the session
+// guard, the malformed-`:id` screen, and the verb's status mapping — which fires at the boundary
+// before/around a single query (CLAUDE.md §4). Harness ported from `till-api.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 
@@ -40,9 +39,9 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
-    // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
-    // superuser — pure setup, as `@waitron/db`'s own seed helpers document.
+    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
+    // a FK to `tills`, so the till `cfg.tillId` names must exist. Pure setup, as `@waitron/db`'s
+    // own seed helpers document.
     // Through the table definitions rather than raw SQL, the change
     // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
     // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
@@ -60,7 +59,7 @@ const suite = useVenueDb({
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
+    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })

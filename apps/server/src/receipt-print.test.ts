@@ -50,10 +50,6 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
  * The auto-print hook, on the engine the box now runs: a `print_jobs` outbox row and a `drawer_opens`
  * audit row written atomically with a genuine chained fiscal sale.
  *
- * ## The role half of the old header is gone and is replaced by nothing
- *
- * SQLite has no roles: one process opens one file, and nothing below checks who may write.
- *
  * ## What is unchanged, and must stay that way — CLAUDE.md §5
  *
  * PRINTING NEVER OPENS THE DRAWER: a receipt is a `document` job carrying no drawer command, the
@@ -207,8 +203,8 @@ async function makePrinter(
   });
 }
 
-/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id` (both settable by the
- *  app role — `drawer-opens.test.ts`). Pass `printerId: null` to leave the till with no printer. */
+/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id`. Pass
+ *  `printerId: null` to leave the till with no printer. */
 async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },

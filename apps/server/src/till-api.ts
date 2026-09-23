@@ -226,11 +226,12 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
 }
 
 /**
- * The `card_readers` row a `/api/pay` charge routes to (Task 12), resolved as the app role under the
- * till's tenant. The reader is `body.readerId` when the caller named one (Task 17's picker), else the
- * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
- * chosen reader is loaded BY ID — one tenant per database, so the id alone identifies it; an unknown
- * reader id is `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take a payment).
+ * The `card_readers` row a `/api/pay` charge routes to (Task 12). The reader is `body.readerId`
+ * when the caller named one (Task 17's picker), else the paying DEVICE's default
+ * (`device_card_readers`). A device with neither → `reader.not_found`. The chosen reader is loaded
+ * BY ID — one tenant per database, so the id alone identifies it; an unknown reader id is
+ * `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take
+ * a payment).
  */
 async function resolvePayReader(
   deps: TillApiDeps,

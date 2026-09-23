@@ -205,8 +205,8 @@ async function setupVenue(): Promise<{
 }
 
 /** A SECOND `tills` row in the SAME tenant and location as the venue's own till — the register a
- *  re-homed / second device would ring against. Inserted on the owner connection directly (fixture
- *  setup, not the code under test), returning its id. */
+ *  re-homed / second device would ring against. Inserted directly (fixture setup, not the code
+ *  under test), returning its id. */
 async function insertTill(locationId: string, name: string): Promise<string> {
   // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
   // (`packages/db/src/schema/tenants.ts:232,:246`), which a raw statement never reaches.
@@ -233,11 +233,11 @@ async function seedHandheldProfile(): Promise<string> {
 }
 
 /** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
- *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs on the app role
- *  under the tenant (the production accept path), so the scrypt hash verifies and `tryReadDevice`
- *  resolves a genuine binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a
- *  SPECIFIC existing register is the handheld leg (`registerId`); the sale route resolves `till_id`
- *  from THIS device (`requireSaleTillId`) either way. */
+ *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs the
+ *  production accept path, so the scrypt hash verifies and `tryReadDevice` resolves a genuine
+ *  binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a SPECIFIC
+ *  existing register is the handheld leg (`registerId`); the sale route resolves `till_id` from
+ *  THIS device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, {

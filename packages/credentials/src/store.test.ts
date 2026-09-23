@@ -46,9 +46,6 @@ beforeEach(async () => {
 
 /**
  * The seal's additional authenticated data is the purpose alone (`aadFor`, cipher.ts).
- *
- * This engine has no roles and no grants, so the round trip proves the seal and the store, and
- * nothing about who is allowed to make it.
  */
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {
@@ -407,7 +404,7 @@ describe("listCredentials", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
-    // Exercise the metadata projection as the app role.
+    // Exercise the metadata projection.
     const rows = await withTransaction(suite.db, async (tx) => {
       return listCredentials(tx);
     });

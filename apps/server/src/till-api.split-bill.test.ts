@@ -69,7 +69,7 @@ const suite = useVenueDb({
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
+    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })

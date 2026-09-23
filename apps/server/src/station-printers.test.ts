@@ -21,14 +21,13 @@ import {
 } from "./station-printers.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: these are CONFIG verbs — a live-check SELECT plus an INSERT/DELETE with no
-// privilege or concurrency dimension. The `printer.manage` gate lives on the ROUTE (Task 5), the
-// composite PK and both by-id FKs are proven against real Postgres in packages/db's
-// station-printers.test.ts (Task 1), and `app_user`'s grant is pinned by the privilege matrix in
-// packages/fiscal-verifactu. PGlite serialises every query onto
-// one backend, so it would be a FALSE PASS for a concurrency test — but there is no concurrency here,
-// so it is the correct lighter target (CLAUDE.md §4), the same choice kitchen.test.ts / outbox.test.ts
-// make for their config/outbox verbs.
+// PGlite, not real Postgres: these are CONFIG verbs — a live-check SELECT plus an INSERT/DELETE
+// with no privilege or concurrency dimension. The `printer.manage` gate lives on the ROUTE (Task
+// 5), and the composite PK and both by-id FKs are proven against real Postgres in packages/db's
+// station-printers.test.ts (Task 1). PGlite serialises every query onto one backend, so it would be
+// a FALSE PASS for a concurrency test — but there is no concurrency here, so it is the correct
+// lighter target (CLAUDE.md §4), the same choice kitchen.test.ts / outbox.test.ts make for their
+// config/outbox verbs.
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;

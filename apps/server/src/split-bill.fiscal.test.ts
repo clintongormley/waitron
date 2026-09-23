@@ -103,9 +103,9 @@ interface Seeded {
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF (as the owner), then seed the two-product catalogue
- * and one dining table as the app role. Each test gets its OWN tenant so the `registros_facturacion`
- * count is that test's alone, order-independent (CLAUDE.md §4).
+ * Stand up a fresh chained venue + registered SIF, then seed the two-product catalogue and one
+ * dining table. Each test gets its OWN tenant so the `registros_facturacion` count is that test's
+ * alone, order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<Seeded> {
   const venue = await applyVenue(
@@ -171,7 +171,7 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /**
- * Run fn in one transaction as app_user.
+ * Run fn in one transaction.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;

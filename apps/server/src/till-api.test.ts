@@ -59,9 +59,8 @@ import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
 // path runs through `withTransaction` exactly as production does. Sessions/persons live in
-// identity; the schema is the whole manifest (the tables here span modules that FK into core, so the
-// shared ordered set is the fixture). What `app_user` may do to those
-// tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
+// identity; the schema is the whole manifest (the tables here span modules that FK into core, so
+// the shared ordered set is the fixture).
 let cfg: TillConfig;
 let ana: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
@@ -110,13 +109,13 @@ const suite = useVenueDb({
       sql`select tax_id from tenants where id = 1`,
     );
     venueTaxId = tenant.rows[0]!.tax_id;
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
-    // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
-    // superuser — pure setup, as `@waitron/db`'s own seed helpers document. invoice_locales is
-    // `es-ES` (full-tag, fiscal). The products are authored under the BARE `es` key;
-    // `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the
-    // working-order-line insert `POST /api/working-orders` fires `check_locales`, which demands a
-    // line's `descriptions` keys equal the location's locales EXACTLY.
+    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
+    // a FK to `tills`, so the till `cfg.tillId` names must exist. Pure setup, as `@waitron/db`'s
+    // own seed helpers document. invoice_locales is `es-ES` (full-tag, fiscal). The products are
+    // authored under the BARE `es` key; `priceOrderLines` re-keys their descriptions to the
+    // location's `es-ES` before the working-order-line insert `POST /api/working-orders` fires
+    // `check_locales`, which demands a line's `descriptions` keys equal the location's locales
+    // EXACTLY.
     // Through the table definitions rather than raw SQL, the change
     // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
     // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
@@ -128,7 +127,7 @@ const suite = useVenueDb({
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     // KDS-1: a default kitchen station so the place route's fire (placeOrder → fireLines) has a
-    // fallback. Seeded as the PGlite superuser here, as the surrounding venue rows are.
+    // fallback.
     const defaultStationId = await seedKitchenStation(db, {
       locationId: brandLocationId(loc!.id),
     });
@@ -365,7 +364,7 @@ async function openSession(db: Database): Promise<string> {
   return session.id;
 }
 
-/** Ends a session out of band on the app role, so a cookie can be made to name a CLOSED row. */
+/** Ends a session out of band, so a cookie can be made to name a CLOSED row. */
 async function closeSession(db: Database, id: string): Promise<void> {
   await withTransaction(db, async (tx) => {
     await endSession(tx, id);
@@ -374,11 +373,11 @@ async function closeSession(db: Database, id: string): Promise<void> {
 
 /** Enrol a REAL `till` device for the seeded tenant via join-and-accept (the only way to get a
  * `${deviceId}.${token}` whose scrypt hash actually verifies), optionally bound to a
- * `deviceProfileId`. Runs on the app role under the tenant — the production accept path — and
- * returns the `${DEVICE_COOKIE}=…` header value a booting device would carry. A `till`
- * is sale-capable, so it always carries the seeded `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover,
- * `GET /api/till` resolves the canvas + capabilities THROUGH the device profile — the profile is the
- * SOLE canvas binding (the direct device→canvas link was dropped in Task 10). */
+ * `deviceProfileId`. Runs the production accept path, and returns the `${DEVICE_COOKIE}=…` header
+ * value a booting device would carry. A `till` is sale-capable, so it always carries the seeded
+ * `till_id` (SP-A.2 §16.4). After the Task 9/10 cutover, `GET /api/till` resolves the canvas +
+ * capabilities THROUGH the device profile — the profile is the SOLE canvas binding (the direct
+ * device→canvas link was dropped in Task 10). */
 let tillDeviceCounter = 0;
 async function enrolTillDeviceCookie(
   db: Database,
@@ -398,9 +397,8 @@ async function enrolTillDeviceCookie(
 }
 
 /**
- * Seed a `device_profiles` row for the seeded tenant on the app role, returning its id — the
- * reusable bundle a device resolves its canvas + capabilities through (device-profile §5, Task
- * 9).
+ * Seed a `device_profiles` row for the seeded tenant, returning its id — the reusable bundle a
+ * device resolves its canvas + capabilities through (device-profile §5, Task 9).
  */
 async function seedDeviceProfile(
   db: Database,
@@ -618,8 +616,8 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
 });
 
 describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)", () => {
-  /** Count the `sessions` rows for a person on the app role — the differential proof that a throttled
-   *  attempt never reached `loginWithPin` (a login would have inserted a row). */
+  /** Count the `sessions` rows for a person — the differential proof that a throttled attempt
+   *  never reached `loginWithPin` (a login would have inserted a row). */
   async function sessionCount(personId: string): Promise<number> {
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from sessions where person_id = ${personId}`,
@@ -1283,9 +1281,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
     // Seed two courses out of display order, plus a deactivated one, to prove the boot read
     // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
-    // offers) and drops the retired one. Direct inserts as the PGlite superuser (pure setup, like
-    // the bump_mode seed above); cleaned up in `finally` so the shared-location default `[]` case
-    // stays order-independent.
+    // offers) and drops the retired one. Direct inserts (pure setup, like the bump_mode seed
+    // above); cleaned up in `finally` so the shared-location default `[]` case stays
+    // order-independent.
     // `kitchen_courses.id` and `.created_at` are `$defaultFn` generators on NOT NULL columns
     // (`packages/db/drizzle/0000_baseline.sql:211` and `:216`).
     await suite.db.insert(kitchenCourses).values([
@@ -1313,12 +1311,11 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till returns the AUTHORED receipt (tenant_receipts), not the default, and no `layout` field", async () => {
-    // Seed the till's tenant (as the PGlite superuser — pure setup, like the other seeds here)
-    // with an authored RECEIPT in `tenant_receipts`. `GET /api/till` must return it via
-    // `getReceipt`, proving the read hits its own store rather than a constant. The `layout`
-    // field is GONE from the payload as of SP-B4 (the counter renders from `canvas` now), so the
-    // test also pins its absence. Cleaned up in `finally` so the shared-tenant default case above
-    // stays order-independent (CLAUDE.md §4).
+    // Seed the till's tenant (pure setup, like the other seeds here) with an authored RECEIPT in
+    // `tenant_receipts`. `GET /api/till` must return it via `getReceipt`, proving the read hits its
+    // own store rather than a constant. The `layout` field is GONE from the payload as of SP-B4
+    // (the counter renders from `canvas` now), so the test also pins its absence. Cleaned up in
+    // `finally` so the shared-tenant default case above stays order-independent (CLAUDE.md §4).
     const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
     // `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT NULL column
     // (`packages/db/drizzle/0000_baseline.sql:512`), and `receipt` is JSON in a text column, so the
@@ -1635,9 +1632,8 @@ describe("POST /api/sales (session-guarded sale)", () => {
 
     // The guard runs BEFORE the body is even read, so an unauthenticated sale is refused with the
     // same code a missing session yields everywhere else. The chained fiscal write (the happy path)
-    // and the idempotent replay are proven end-to-end over real Postgres in `till-api.fiscal-sale-paths.test.ts`,
-    // not here — PGlite runs as a superuser and cannot exercise the deployment role's chained write
-    // (CLAUDE.md §4).
+    // and the idempotent replay are proven end-to-end in `till-api.fiscal-sale-paths.test.ts`, not
+    // here (CLAUDE.md §4).
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1679,9 +1675,8 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     mountTillApi(app, deps(suite.db), collect([]));
 
     // The guard runs BEFORE the body is even read, matching every other session-guarded route.
-    // The capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
-    // `till-api.fiscal-sale-paths.test.ts` (PGlite runs as a superuser and cannot check the grants used by the
-    // deployment role and provider, CLAUDE.md §4).
+    // The capture/decline/empty-basket happy paths are proven end-to-end in
+    // `till-api.fiscal-sale-paths.test.ts` (CLAUDE.md §4).
     const res = await app.request("/api/pay", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1841,7 +1836,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 
-    // The order really persisted OPEN on the seeded till (read as the PGlite superuser).
+    // The order really persisted OPEN on the seeded till.
     const rows = await suite.db.execute<{ status: string; till_id: string }>(
       sql`select status, till_id from working_orders where id = ${id}`,
     );
@@ -2141,8 +2136,8 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
     expect(await placed.json()).toEqual({ id, status: "placed" });
 
     // The order really transitioned AND a ticket item was fired at `queued` — placing fires the
-    // lines to the kitchen (KDS-1, `placeOrder` → `fireLines`). Read as the PGlite superuser, a
-    // plain state witness; the single line routes to the seeded default station "Cocina".
+    // lines to the kitchen (KDS-1, `placeOrder` → `fireLines`). A plain state witness; the single
+    // line routes to the seeded default station "Cocina".
     const order = await suite.db.execute<{ status: string }>(
       sql`select status from working_orders where id = ${id}`,
     );
@@ -2221,7 +2216,7 @@ describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)
       error: { code: "working_order.not_settled", params: { workingOrderId: id } },
     });
 
-    // Refused BEFORE any write — no ticket item was fired for the order (read as superuser).
+    // Refused BEFORE any write — no ticket item was fired for the order.
     const fired = await suite.db.execute(
       sql`select 1 from ticket_items where working_order_id = ${id}`,
     );
@@ -2571,18 +2566,18 @@ describe("/api/working-orders/:id/cancel", () => {
 // FP-1 Task 6 — the live-floor till surface: GET /api/zones (list-only), the mark/unmark-served
 // route, and the zoneId + pendingToServe fields Task 4 added to the /api/tables/state read. All
 // SESSION-GUARDED, all wrapped in `run`. served_at is a PRE-FISCAL operational field (design H2):
-// nothing here touches a fiscal path. A zone is SEEDED directly as the PGlite superuser (pure
-// setup, exactly as the location/till/node seeds in `setup` above; zone CRUD is the management
-// API's, Task 5), then read back / assigned through the app-role routes under test.
+// nothing here touches a fiscal path. A zone is SEEDED directly (pure setup, exactly as the
+// location/till/node seeds in `setup` above; zone CRUD is the management API's, Task 5), then read
+// back / assigned through the routes under test.
 describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
   it("lists zones, marks a line served (2→1) and unmarks it (1→2), surfacing zoneId + pendingToServe in the state read", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
-    // Seed one active floor zone in the till's own venue. `GET /api/zones` must read it back through
-    // the app role, and the table-create must accept it, so those two paths — not this insert — are
-    // under test. This is the only zone-seeding test in the suite, so "Comedor" cannot collide.
+    // Seed one active floor zone in the till's own venue. `GET /api/zones` must read it back, and
+    // the table-create must accept it, so those two paths — not this insert — are under test. This
+    // is the only zone-seeding test in the suite, so "Comedor" cannot collide.
     const [zoneRow] = await suite.db
       .insert(floorZones)
       .values({ locationId: cfg.locationId, name: "Comedor" })
@@ -2637,7 +2632,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     expect(tabRes.status).toBe(200);
     const { tabId } = (await tabRes.json()) as { tabId: string };
 
-    // GET /api/zones lists the active zone (session-gated, read through the app role, by display_order).
+    // GET /api/zones lists the active zone (session-gated, by display_order).
     const zonesRes = await app.request("/api/zones", { headers: { cookie } });
     expect(zonesRes.status).toBe(200);
     const zones = (await zonesRes.json()) as {
@@ -2812,10 +2807,9 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on
   // PGlite and real Postgres, because it turns on the person's role VALUE, not on any privilege /
   // concurrency behaviour (CLAUDE.md §4's real-PG triggers). The write itself
-  // (`setTablePlacement`'s UPDATE on dining_tables as app_user) is proven over REAL Postgres by
-  // the management-api placement sibling, which wraps the SAME verb (management-api.test.ts). So
-  // the lighter target is the right one here and the heavier one adds nothing to THIS gate proof
-  // — the choice §4 asks to state.
+  // (`setTablePlacement`'s UPDATE on dining_tables) is proven by the management-api placement
+  // sibling, which wraps the SAME verb (management-api.test.ts). So the lighter target is the right
+  // one here and the heavier one adds nothing to THIS gate proof — the choice §4 asks to state.
 
   // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
   // (role `manager`, which holds `venue.configure`) and a STAFF operator (Ana, role `staff`, which does
@@ -2877,8 +2871,8 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
   }
 
   /**
-   * Read a table's four placement columns (plus zone_id) back as the PGlite superuser (a pure
-   * assertion read, not a path under test).
+   * Read a table's four placement columns (plus zone_id) back (a pure assertion read, not a path
+   * under test).
    */
   async function placementOf(tableId: string) {
     const rows = await suite.db.execute<{

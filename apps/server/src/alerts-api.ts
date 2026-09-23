@@ -29,7 +29,7 @@ const STATUS = {
 
 /**
  * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each
- * request opens one transaction as the app role.
+ * request opens one transaction.
  */
 export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "alerts.failed");

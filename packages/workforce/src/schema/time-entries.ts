@@ -46,18 +46,11 @@ export const workforceCorrectionStatus = enumType(["requested", "approved"]);
  * each refused with `time_entries is append-only`, and the row is left as it was.
  * `registros_facturacion` carries the same floor by the same mechanism.
  *
- * THE ARGUMENT THAT USED TO SIT HERE went the other way, and is settled. It said the record lived on
- * PostgreSQL BECAUSE PostgreSQL has a privilege system and SQLite has none: the app role was granted
- * SELECT and INSERT alone, and the triggers were only the backstop behind that. The storage swap
- * moved the record to SQLite anyway
- * (`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` §6.3), so the triggers
- * are the whole floor now. Two things the revocation gave that nothing here replaces: a refusal
- * aimed at the APPLICATION in particular — these triggers refuse every caller alike, this package's
- * own writers included — and the TRUNCATE-blocking trigger, which has no equivalent, because SQLite
- * has neither that statement nor a trigger event for `DROP TABLE`
- * (`packages/store/src/append-only.ts` states that gap). In the same measurement
- * `drop table time_entries` WAS refused, but with `FOREIGN KEY constraint failed` — by the foreign
- * keys the venue store switches on, not by anything append-only.
+ * The triggers are the whole floor, and they refuse every caller alike, this package's own writers
+ * included. There is no TRUNCATE-blocking trigger, because SQLite has neither that statement nor a
+ * trigger event for `DROP TABLE` (`packages/store/src/append-only.ts` states that gap). In the same
+ * measurement `drop table time_entries` WAS refused, but with `FOREIGN KEY constraint failed` — by
+ * the foreign keys the venue store switches on, not by anything append-only.
  *
  * `event_at` + `event_offset_minutes` are the trusted event timestamp and its wall offset (the
  * `sales.issued_at`/`issued_offset_minutes` pattern). `recorded_at` is the recording node's own clock
