@@ -270,6 +270,31 @@ What that leaves open:
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
+**Photos are shrunk on upload (slice 2, Task 0, 2026-09-23; PR #543,
+not yet landed).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
+stripped of its metadata (GPS position included) and stored as WebP at quality 80 by `prepareImage`
+(`packages/media/src/prepare.ts`), which the upload route calls before it opens the write
+transaction (`packages/media/src/routes.ts`). Measured on ten real food photos by the slice-2 plan's
+Task 0 drafter, a stored photo averages 171 KiB, so 5,000 take about 0.87 GB instead of about 18 GB.
+sharp does the work; every server bundle leaves it out (`--external:sharp`) and the box image
+carries it in `/app/node_modules`.
+
+What it leaves open:
+
+- **The upload limit is 20 MB (owner decision 2026-09-23, up from 5 MB).** It limits what may be
+  uploaded, not what is stored: it bounds how large an upload the server will buffer. The decode is
+  bounded by the pixel limit, `MAX_INPUT_PIXELS` (100 million), because a small file can declare
+  that many pixels; a 100-megapixel picture raised memory by about 29 MiB when decoded (the plan
+  drafter's measurement). What current phones produce has not been measured.
+- **The library grid loads the full 1600-pixel copy for each tile.** The screen asks for 24 photos a
+  page (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size, fetched as
+  the tiles scroll into view and cached afterwards. A small thumbnail copy would help over slow
+  Wi-Fi. Next action: decide whether the grid needs one.
+- **Dev venues seeded before this keep full-size tiles** until `wa-wt reset demo <name>`.
+- **libvips is LGPL-3.0-or-later** and now ships in the box image, with its licence texts, its
+  notices and a written source offer in `/app/third-party/` (`deploy/third-party/`). The legal
+  advisor is asked to confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
+
 **Product categories — LANDED #340 (2026-09-13).** A product can belong to several categories without
 its sales being double-counted; at most one membership is primary and names the order line and the
 kitchen route. Categories get their own page at `/manage/categories` with translation, a picture, a
@@ -3872,6 +3897,8 @@ its database to a bucket the owner supplies, and a dead box is rebuilt from it. 
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
 (#540) — the values later tasks read are under "What later
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+Task 0, shrink every uploaded photo, is in #543, not yet landed; what it does and what it leaves
+open are under the image library in Track A.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same

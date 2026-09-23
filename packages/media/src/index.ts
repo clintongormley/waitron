@@ -1,4 +1,5 @@
 export * from "./images.js";
+export * from "./prepare.js";
 export * from "./schema/images.js";
 export * from "./migrations.js";
 export * from "./module.js";

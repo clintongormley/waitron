@@ -18,6 +18,14 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 > mechanics but does not answer this operating question. Waitron labels Prepare as non-trading,
 > keeps payments and fiscal submission simulated, and requires a fresh production database at go-live;
 > those product controls are not legal clearance.
+>
+> **Open licensing question, 2026-09-23.** Ask the legal advisor to confirm that the box image
+> may ship libvips (LGPL-3.0-or-later), dynamically linked as its own shared library
+> (`@img/sharp-libvips-*`, loaded by sharp), under Waitron's Elastic License 2.0 distribution,
+> and that `deploy/third-party/` (the licence texts, the notices and the written source offer)
+> meets the LGPL's conditions — in particular whether the offer's two forms (GPL-3.0 §6(b) for a
+> box Waitron supplies, §6(d)-style directions for the image pulled from a registry, with requests
+> to info@waitron.io) are the right ones.
 
 ---
 

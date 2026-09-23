@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
+import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
  * The container image's environment, checked against the server that has to boot on it.
@@ -306,4 +307,143 @@ it("stores image-library bytes in the database without a separate image volume",
   expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");
   expect(COMPOSE).not.toContain("media:/var/lib/waitron/media");
   expect(COMPOSE).not.toMatch(/^ {2}media:$/m);
+});
+
+/**
+ * sharp is a native addon with a shared library beside it, and esbuild does not refuse to bundle
+ * it. Without `--external:sharp` the build exits 0 and the bundle cannot even be loaded: bundled
+ * sharp declares `createRequire` a second time beside the `--banner:js` these commands add, and
+ * `node --check dist/server.js` reports `SyntaxError: Identifier 'createRequire' has already been
+ * declared`. Measured 2026-09-23 on esbuild 0.28.2.
+ *
+ * Reads TEXT. It finds the esbuild bundles that can reach `@waitron/media` by following `dependencies`
+ * through workspace package.json files, so a reach through a devDependency or a relative import
+ * across packages is invisible to it. It counts flags, so it cannot tell which command a flag
+ * belongs to.
+ */
+describe("sharp stays outside every bundle and ships beside the server's", () => {
+  type Manifest = {
+    name: string;
+    dependencies?: Record<string, string>;
+    scripts?: Record<string, string>;
+  };
+  /** The workspace's esbuild bundles that can reach `@waitron/media`, listed once per file. */
+  let found: Manifest[] | undefined;
+  const bundlers = (): Manifest[] => {
+    if (found !== undefined) return found;
+    const manifests = new Map<string, Manifest>();
+    for (const { dir } of workspaceMembers()) {
+      const manifest = JSON.parse(read(`${dir}/package.json`)) as Manifest;
+      manifests.set(manifest.name, manifest);
+    }
+    const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
+      if (name === "@waitron/media") return true;
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return Object.keys(manifests.get(name)?.dependencies ?? {}).some(
+        (dependency) => manifests.has(dependency) && reachesMedia(dependency, seen),
+      );
+    };
+    found = [...manifests.values()].filter(
+      (manifest) =>
+        (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
+    );
+    // An empty listing would pass every loop over it.
+    expect(found.length).toBeGreaterThan(0);
+    return found;
+  };
+
+  it("finds the bundles it is meant to check", () => {
+    expect(bundlers().map((manifest) => manifest.name)).toEqual(
+      expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]),
+    );
+  }, 60_000);
+
+  it("names --external:sharp on every esbuild command of each", () => {
+    for (const { name, scripts } of bundlers()) {
+      const build = scripts!.build!;
+      const commands = build.split("esbuild ").length - 1;
+      expect(commands, name).toBeGreaterThan(0);
+      expect(build.split("--external:sharp").length - 1, name).toBe(commands);
+    }
+  }, 60_000);
+
+  it("copies sharp beside the bundle in the image, and both CI jobs check it", () => {
+    expect(DOCKERFILE).toContain("/sharp-runtime/node_modules/ /app/node_modules/");
+    expect(CI).toContain(`grep -q 'import("sharp")' apps/server/dist/server.js`);
+    expect(IMAGE_SMOKE).toContain("await import('sharp')");
+  });
+});
+
+/**
+ * The `@img/sharp-libvips-*` release pnpm-lock.yaml resolves, and the libvips version it carries.
+ *
+ * The package version comes from the lockfile, which names every platform's package. The libvips
+ * version is not in the lockfile, so it comes from the `versions.json` of the package installed for
+ * THIS machine. That stands for the box's linux packages only because one sharp-libvips release
+ * carries one libvips version on every platform: checked 2026-09-24 for 1.3.3, where darwin-arm64's
+ * `versions.json` and the `./binary` export `npm view` printed for linux-x64 and linux-arm64 all
+ * name 8.18.6. So the check needs that release installed on the machine running it, and throws where
+ * none is.
+ */
+function libvipsRelease(): { packageVersion: string; libvips: string } {
+  const lockfile = read("pnpm-lock.yaml");
+  const versions = new Set(
+    [...lockfile.matchAll(/^ {2}'@img\/sharp-libvips-[\w-]+@([^']+)':$/gm)].map((m) => m[1]!),
+  );
+  if (versions.size !== 1) {
+    throw new Error(`expected one @img/sharp-libvips-* version, found [${[...versions]}]`);
+  }
+  const [packageVersion] = [...versions] as [string];
+  for (const arch of ["x64", "arm64"]) {
+    expect(lockfile).toContain(`'@img/sharp-libvips-linux-${arch}@${packageVersion}':`);
+  }
+  const store = `${ROOT}node_modules/.pnpm`;
+  const installed = readdirSync(store).filter(
+    (dir) => dir.startsWith("@img+sharp-libvips-") && dir.endsWith(`@${packageVersion}`),
+  );
+  const libvips = new Set(
+    installed.map((dir) => {
+      const name = dir.slice(0, dir.lastIndexOf("@")).replace("+", "/");
+      const path = `${store}/${dir}/node_modules/${name}/versions.json`;
+      return (JSON.parse(readFileSync(path, "utf8")) as { vips: string }).vips;
+    }),
+  );
+  if (libvips.size !== 1) {
+    throw new Error(`expected one installed libvips version, found [${[...libvips]}]`);
+  }
+  return { packageVersion, libvips: [...libvips][0]! };
+}
+
+/**
+ * libvips ships in the image as its own shared library, under LGPL-3.0-or-later. Reads TEXT: it
+ * proves the files exist and the Dockerfile names them, not that the built image holds them — the
+ * image-smoke step below is what looks inside the image.
+ */
+describe("the box image carries libvips's licence, its notices and a written source offer", () => {
+  it("copies the licence texts, the offer and the libvips package's notices into /app/third-party", () => {
+    expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
+    expect(DOCKERFILE).toContain("/third-party/libvips/ /app/third-party/libvips/");
+    expect(DOCKERFILE).toContain('cp "$1/README.md" /third-party/libvips/NOTICES.md');
+    expect(IMAGE_SMOKE).toContain("/app/third-party/libvips/NOTICES.md");
+  });
+
+  it("holds both licence texts, and an offer naming libvips's version and where to ask", () => {
+    const lgpl = read("deploy/third-party/licenses/LGPL-3.0.txt");
+    expect(lgpl).toContain("GNU LESSER GENERAL PUBLIC LICENSE");
+    expect(lgpl).toContain("Version 3, 29 June 2007");
+    expect(read("deploy/third-party/licenses/GPL-3.0.txt")).toContain("GNU GENERAL PUBLIC LICENSE");
+    const offer = read("deploy/third-party/README.md");
+    const { packageVersion, libvips } = libvipsRelease();
+    expect(offer).toContain(`libvips ${libvips}`);
+    expect(offer).toContain(`libvips-cpp.so.${libvips}`);
+    expect(offer).toContain(packageVersion);
+    // Every version the offer names is one of those two, so a stale one anywhere in it fails.
+    expect(new Set(offer.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(new Set([libvips, packageVersion]));
+    expect(offer).toContain("info@waitron.io");
+    // GPL-3.0 §6(b)'s term for a physical product, and §6(d)'s directions for a download.
+    expect(offer).toMatch(/at least three years/);
+    expect(offer).toMatch(/spare parts or customer support/);
+    expect(offer).toMatch(/container registry/);
+  });
 });

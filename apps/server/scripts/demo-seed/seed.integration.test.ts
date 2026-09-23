@@ -195,7 +195,7 @@ describe("demo seed end-to-end", () => {
     const storedImage = await withTransaction(suite.db, async (tx) => {
       return readImageBytes(tx, read.image!);
     });
-    expect(storedImage?.contentType).toBe("image/png");
+    expect(storedImage?.contentType).toBe("image/webp");
     expect(storedImage!.bytes.length).toBeGreaterThan(0);
 
     // (5) A working order MIXING a Casa Delgado item and a Menú del Día item parks and retrieves

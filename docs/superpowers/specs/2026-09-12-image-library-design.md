@@ -30,6 +30,9 @@ that runtime configuration; the shipped interface language list is not its langu
 ## Agreed behaviour
 
 - Upload JPEG, PNG and WebP photographs using the existing upload size limit.
+  - 2026-09-23: uploads are now resized to at most 1600 pixels, stripped of metadata and stored as
+    WebP (slice 2 Task 0, `packages/media/src/prepare.ts`); the size limit applies to the upload and
+    is now 20 MB.
 - Give each photograph a name and alt text in the supported languages. Require both in
   the configured default content language; allow the other translations to follow later. Derive
   language choices from the tenant's enabled content languages, rather than the interface list.

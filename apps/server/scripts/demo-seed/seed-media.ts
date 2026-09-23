@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { uploadImage } from "@waitron/media";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, uploadImage } from "@waitron/media";
 import { customerPresentationText, readContentLanguages } from "@waitron/catalogue";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 
@@ -46,11 +46,9 @@ export async function seedMedia(
       defaultLanguage,
     ).product;
     const bytes = await readFile(join(SRC_DIR, imageBasename));
-    const { image } = await uploadImage(
-      tx,
-      { bytes, names, altText: names, labels: [] },
-      { maxUploadBytes: 5 * 1024 * 1024 },
-    );
-    await tx.update(products).set({ image: image.filename }).where(eq(products.id, productId));
+    // Inside the caller's transaction, unlike the upload route: seeding runs before the venue sells.
+    const image = await prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
+    const { image: stored } = await uploadImage(tx, { image, names, altText: names, labels: [] });
+    await tx.update(products).set({ image: stored.filename }).where(eq(products.id, productId));
   }
 }

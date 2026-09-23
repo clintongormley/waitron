@@ -7,6 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { uploadImage } from "./images.js";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
+import { samplePreparedImage } from "./testing/sample-image.js";
 
 /**
  * `media_image_data` may only hold bytes for an image that exists, and it loses them when that
@@ -35,15 +36,15 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 
-const photo = new Uint8Array([0xff, 0xd8, 0xff, 1]);
-const options = { fallbackLanguage: "en", maxUploadBytes: 100 };
+const photo = await samplePreparedImage({ width: 8 });
+const options = { fallbackLanguage: "en" };
 
 it("refuses image bytes for an absent image and removes the bytes with their image", async () => {
   await seedTenant(suite.db);
   const { image } = await withTransaction(suite.db, (tx) =>
     uploadImage(
       tx,
-      { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: ["Food"] },
+      { image: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: ["Food"] },
       options,
     ),
   );
@@ -54,7 +55,7 @@ it("refuses image bytes for an absent image and removes the bytes with their ima
   // to come off `errcode`. The message is the engine's own and does not name the key, which is the
   // one part of PostgreSQL's `media_image_data_image_fk` text that located the rule.
   await expect(
-    suite.db.insert(mediaImageData).values({ imageId: crypto.randomUUID(), bytes: photo }),
+    suite.db.insert(mediaImageData).values({ imageId: crypto.randomUUID(), bytes: photo.bytes }),
   ).rejects.toMatchObject({ errcode: 787, message: "FOREIGN KEY constraint failed" });
 
   // The accepting control in the other direction, so the case above is not passing because every

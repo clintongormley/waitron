@@ -51,6 +51,15 @@ name that helps you find it and, if you can, alt text that describes the photogr
 cannot see it. Only the name is required, in your default content language; alt text is optional but
 recommended for accessibility.
 
+Waitron keeps a smaller copy of each photograph rather than the file you chose. A phone photo is
+often several megabytes, and a library of thousands of them would make every backup and every
+restore slow, so Waitron resizes each upload to at most 1600 pixels on its longer side, keeps its
+shape, and saves it in the WebP format. A photo that is already smaller is never enlarged. Waitron
+also removes the hidden details cameras add, such as where and when the photo was taken, because
+anyone who has a photo's address can open it. Files up to 20 MB are accepted. If a photo is refused
+as too large, has too many pixels or cannot be read, export a smaller copy from your photo app and
+upload that instead.
+
 For the bread photograph, you might enter **Pan de verano** as the name and **Rebanadas de pan con
 tomate sobre un plato blanco** as the Spanish alt text. Leave the English fields blank until you
 have a translation. Choose **Save** to add the photo to the library; cancelling before Save leaves
@@ -71,7 +80,9 @@ than fit on the current page.
 In a product editor, select **Choose image** to open the same library, then select **Use image** on
 the photograph you want. Save the product to keep the association. You can reuse one photograph on
 several products. Uploading the same file again finds the existing image and keeps its existing
-names, alt text and labels. A notice identifies the reused image and lets you open it for editing.
+names, alt text and labels, as long as Waitron's image library has not been upgraded in between: a
+newer version may make a slightly different copy, which is then stored as a new image. A notice
+identifies the reused image and lets you open it for editing.
 
 Choose **Edit image** in the library to add translations or change its labels. Editing this shared
 record changes the metadata wherever that photograph is reused.

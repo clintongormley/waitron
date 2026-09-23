@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
-import { setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
 import { ImageApi, type LibraryImage } from "./client.js";
@@ -441,6 +441,36 @@ it("keeps a failed save open, ignores repeated saves while pending and allows re
   expect(el.shadowRoot!.querySelector("[data-test=save]")).not.toBeNull();
   click("[data-test=save]");
   await vi.waitFor(() => expect(client.updateImage).toHaveBeenCalledTimes(2));
+});
+
+it("explains a photo the server could not read", async () => {
+  const client = api();
+  client.uploadImage.mockRejectedValueOnce({ code: "image.invalid_file" });
+  await mount(client);
+  click("[data-test=upload]");
+  await el.updateComplete;
+  const transfer = new DataTransfer();
+  transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
+  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  file.files = transfer.files;
+  file.dispatchEvent(new Event("change"));
+  field("name-es", "Pan");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      "The photo could not be read",
+    ),
+  );
+});
+
+it.each([
+  ["image.too_large", "The photo file is too large", "El archivo de la foto es demasiado grande"],
+  ["image.invalid_file", "The photo could not be read", "No se pudo leer la foto"],
+  ["image.too_many_pixels", "The photo has too many pixels", "La foto tiene demasiados píxeles"],
+])("names %s in English and Spanish", (code, en, es) => {
+  expect(codeMessage(code, "en")).toContain(en);
+  expect(codeMessage(code, "es")).toContain(es);
 });
 
 it("deletes unused images only after confirmation and refreshes the list of labels", async () => {

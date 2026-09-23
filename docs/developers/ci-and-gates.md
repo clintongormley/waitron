@@ -642,6 +642,51 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+### sharp and the server bundle
+
+sharp, which shrinks uploaded photos (`packages/media/src/prepare.ts`), is a native addon that loads
+libvips as a separate shared library, and esbuild does not refuse to bundle it. So every esbuild
+command whose bundle can reach `@waitron/media` names `--external:sharp`, and the box image carries
+sharp beside the bundle in `/app/node_modules`. Measured 2026-09-23 with the repository's esbuild
+0.28.2:
+
+- With `--external:sharp` removed from the `src/bin.ts` command, `pnpm --filter @waitron/server
+  build` exited 0. The resulting `dist/server.js` held no `import("sharp")` and 24 lines naming
+  `sharp-libvips`, and `node --check apps/server/dist/server.js` failed with `SyntaxError: Identifier
+  'createRequire' has already been declared`: bundled sharp declares it a second time beside the
+  `--banner:js` every command adds. The server would not start at all. `bundle-smoke`'s boot step
+  would fail too, without naming why; its `grep -q 'import("sharp")'` step names it. With the flag
+  back, the bundle held one `import("sharp")` and `node --check` passed.
+- A stand-in entry calling `prepareImage` on a demo photo, bundled with the same flags and
+  `--external:sharp`, loaded and then failed at the first shrink with `ERR_MODULE_NOT_FOUND: Cannot
+  find package 'sharp'` when nothing was beside it. It shrank the photo once a flattened copy of
+  `node_modules/.pnpm/sharp@0.35.4…/node_modules` was put beside it. The build stage of
+  `deploy/Dockerfile` makes that copy (`/sharp-runtime`), and the runtime stage puts it at
+  `/app/node_modules`.
+- The provisioning bundle (`dist/bin.js` in `packages/provisioning`) reaches `@waitron/media` as well. Copied to a directory with no
+  sharp anywhere above it, it printed its usage and exited 2, because `prepare.ts` imports sharp only
+  when a photo is prepared.
+
+In the image built from the Dockerfile on linux/arm64 (2026-09-23), run as uid 10001: sharp 0.35.4
+loaded libvips 8.18.6 from `/app/node_modules`, and image-smoke's shrink script passed. With
+`/app/node_modules` removed, `import("sharp")` failed `ERR_MODULE_NOT_FOUND`. `ldd` on the addon
+resolved `libvips-cpp.so.8.18.6` to `@img/sharp-libvips-linux-arm64/lib/`, a separate file.
+`/app/node_modules` was 23 MB, 2.7 MB of it `@types/node`, which pnpm links beside sharp for its
+peer dependency and the copy follows. pnpm 9.15.0 had also installed the musl builds
+(`@img+sharp-linuxmusl-arm64`, `@img+sharp-libvips-linuxmusl-arm64`) on that glibc machine; the build
+stage deletes them. A linux/amd64 build of the same Dockerfile (`docker buildx build --platform
+linux/amd64`, emulated on an arm64 Mac) carried `@img/sharp-linux-x64` and
+`@img/sharp-libvips-linux-x64`, also 23 MB, and passed the same shrink script.
+
+What the guards leave open. `scripts/deploy-image-env.test.ts` finds the bundles to check by
+following `dependencies` through each workspace member's `package.json`, and compares the number of
+`--external:sharp` flags in a package's `build` script with the number of `esbuild ` commands in it.
+Measured 2026-09-24: with the flag taken off the `dist/record-one-sale.js` command in
+`apps/server/package.json` and a second copy added to the `dist/server.js` command, its flag case
+still passed. bundle-smoke's `grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in
+`apps/server`) only, so the other bundles the server's `build` makes, and `waitron-provision`
+(`dist/bin.js` in `packages/provisioning`), are not read by it.
+
 ## Two TypeScript compilers are installed, and that is deliberate
 
 Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on

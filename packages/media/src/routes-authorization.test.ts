@@ -1,13 +1,14 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
+  managementSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -17,6 +18,7 @@ import { locationId } from "@waitron/shared";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
+import { sampleImage } from "./testing/sample-image.js";
 
 /**
  * Every image route refuses a caller without `image.manage`, and refusing leaves the library
@@ -47,12 +49,9 @@ const changed = {
   labels: ["Bakery"],
 };
 
-function uploadBody(): FormData {
+function uploadBody(bytes: Uint8Array<ArrayBuffer>): FormData {
   const form = new FormData();
-  form.set(
-    "file",
-    new File([new Uint8Array([0xff, 0xd8, 0xff, 1])], "photo.jpg", { type: "image/jpeg" }),
-  );
+  form.set("file", new File([bytes], "photo.jpg", { type: "image/jpeg" }));
   for (const [key, value] of Object.entries(original)) form.set(key, JSON.stringify(value));
   return form;
 }
@@ -72,19 +71,17 @@ async function session(role: "manager" | "staff"): Promise<Record<string, string
   return { Cookie: `${MANAGEMENT_COOKIE}=${started.id}` };
 }
 
-async function fixture() {
-  await seedTenant(suite.db);
-  const headers = await session("manager");
+function mount(db: Database): Hono {
   const app = new Hono();
   MEDIA_ROUTES.mount(
     app,
     {
-      db: suite.db,
+      db,
       cfg: {
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "en",
       },
-      maxUploadBytes: 100,
+      maxUploadBytes: 1000,
       core: {
         openTab: async () => {
           throw new Error("unused");
@@ -93,10 +90,17 @@ async function fixture() {
     },
     () => {},
   );
+  return app;
+}
+
+async function fixture() {
+  await seedTenant(suite.db);
+  const headers = await session("manager");
+  const app = mount(suite.db);
   const created = await app.request("/management-api/images", {
     method: "POST",
     headers,
-    body: uploadBody(),
+    body: uploadBody(await sampleImage({ width: 8, height: 6, format: "jpeg" })),
   });
   expect(created.status).toBe(201);
   const { image } = (await created.json()) as { image: { id: string; filename: string } };
@@ -110,7 +114,12 @@ it("denies every library operation to a staff caller and preserves existing imag
     ["/management-api/images", { headers }],
     ["/management-api/image-labels", { headers }],
     [`/management-api/images/${image.id}`, { headers }],
-    ["/management-api/images", { method: "POST", headers, body: uploadBody() }],
+    // Deliberately NOT a decodable picture: authorisation comes before any image work, so a staff
+    // caller gets 403 here, never the 422 these bytes would earn from the decoder.
+    [
+      "/management-api/images",
+      { method: "POST", headers, body: uploadBody(new Uint8Array([0xff, 0xd8, 0xff, 1])) },
+    ],
     [
       `/management-api/images/${image.id}`,
       {
@@ -148,4 +157,76 @@ it("denies every library operation to a staff caller and preserves existing imag
     .from(mediaImageData)
     .where(eq(mediaImageData.imageId, image.id));
   expect(data).toHaveLength(1);
+});
+
+/** `suite.db`, with every request for the write lock counted, and `beforeLock` run ahead of it. */
+function watchWriteLock(beforeLock: () => Promise<void> = async () => {}) {
+  const watched = { locks: 0 };
+  const db = new Proxy(suite.db, {
+    get(target, property, receiver) {
+      if (property !== "withWriteLock") return Reflect.get(target, property, receiver);
+      return async <T>(body: () => Promise<T>) => {
+        watched.locks += 1;
+        await beforeLock();
+        return target.withWriteLock(body);
+      };
+    },
+  });
+  return { db, watched };
+}
+
+it("refuses an upload without image.manage without taking the write lock", async () => {
+  await seedTenant(suite.db);
+  const headers = await session("staff");
+  const { db, watched } = watchWriteLock();
+  const response = await mount(db).request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: uploadBody(await sampleImage({ width: 8, height: 6, format: "jpeg" })),
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect(watched.locks).toBe(0);
+});
+
+it("refuses an upload whose permission is withdrawn while its photo is prepared", async () => {
+  await seedTenant(suite.db);
+  const headers = await session("manager");
+  const [manager] = await suite.db
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.role, "manager"));
+  // The first time the upload asks for the write lock, its photo is already prepared: demote the
+  // manager then, so only the check taken under that lock can refuse.
+  let demoted = false;
+  const { db } = watchWriteLock(async () => {
+    if (demoted) return;
+    demoted = true;
+    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, manager!.id));
+  });
+  const response = await mount(db).request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: uploadBody(await sampleImage({ width: 8, height: 6, format: "jpeg" })),
+  });
+  expect(demoted).toBe(true);
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect(await suite.db.select({ id: mediaImages.id }).from(mediaImages)).toEqual([]);
+});
+
+it("leaves the session's last activity where it was when an upload is refused as damaged", async () => {
+  await seedTenant(suite.db);
+  const headers = await session("manager");
+  const earlier = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  await suite.db.update(managementSessions).set({ lastSeenAt: earlier });
+  const response = await mount(suite.db).request("/management-api/images", {
+    method: "POST",
+    headers,
+    body: uploadBody(new Uint8Array([0xff, 0xd8, 0xff, 1])),
+  });
+  expect(response.status).toBe(422);
+  expect(
+    await suite.db.select({ lastSeenAt: managementSessions.lastSeenAt }).from(managementSessions),
+  ).toEqual([{ lastSeenAt: earlier }]);
 });

@@ -143,6 +143,25 @@ jobs:
           [ "$(docker exec "$app" id -u)" = "10001" ]
           docker exec "$app" getcap /usr/local/bin/node | grep -q cap_net_bind_service
 
+      # The server loads sharp only when a photo is uploaded, so the healthy boot above proves nothing
+      # about it. This loads it from /app the way the bundle does, and shrinks one generated picture.
+      - name: The image carries a working sharp beside the bundle
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          docker exec "$app" node --input-type=module -e "
+            const { default: sharp } = await import('sharp');
+            const input = await sharp({ create: { width: 3200, height: 2400, channels: 3, background: 'tan' } }).jpeg().toBuffer();
+            const { info } = await sharp(input).resize(1600, 1600, { fit: 'inside' }).webp().toBuffer({ resolveWithObject: true });
+            if (info.format !== 'webp' || info.width !== 1600) throw new Error('unexpected ' + JSON.stringify(info));
+            console.log('sharp', sharp.versions.sharp, 'libvips', sharp.versions.vips, info.width + 'x' + info.height);
+          "
+          docker exec "$app" sh -c 'test -s /app/third-party/licenses/LGPL-3.0.txt \
+            && test -s /app/third-party/licenses/GPL-3.0.txt \
+            && grep -q libvips /app/third-party/libvips/NOTICES.md \
+            && test -s /app/third-party/libvips/versions.json \
+            && grep -q "Written offer of source code" /app/third-party/README.md'
+
       - name: The print agent came up and picked up its server URL
         run: |
           set -euo pipefail

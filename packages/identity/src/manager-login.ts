@@ -156,9 +156,12 @@ export async function authorizeManager(
   // `permission` widens past the closed core `Permission` union so a module's OWN permission string
   // (registerModulePermissions, e.g. bookings' booking.manage) type-checks here; `Permission` stays
   // the closed core union everywhere else. `roleHasPermission` resolves either kind.
-  args: { managementSessionId: string; permission: Permission | (string & {}) },
+  // `touch: false` leaves the session's last-seen time alone, so the check writes nothing.
+  args: { managementSessionId: string; permission: Permission | (string & {}); touch?: boolean },
 ): Promise<{ authorizedBy: string; role: PersonRoleValue }> {
-  const { personId, role } = await resolveManagementSession(tx, args.managementSessionId);
+  const { personId, role } = await resolveManagementSession(tx, args.managementSessionId, {
+    touch: args.touch,
+  });
   if (!roleHasPermission(role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }

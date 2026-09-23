@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   categoryDetails,
   parentJoin,
@@ -6,7 +5,6 @@ import {
   readContentLanguages,
   staffPresentationName,
   validateContentTranslations,
-  validateImageBytes,
 } from "@waitron/catalogue";
 import { categories, products, type Transaction } from "@waitron/db";
 import {
@@ -17,6 +15,7 @@ import {
 } from "@waitron/shared";
 import { eq, inArray, isNotNull } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
+import type { PreparedImage } from "./prepare.js";
 import "./errors.js";
 
 export interface ImageMetadataInput {
@@ -57,7 +56,6 @@ export type ImageUsage =
     };
 export interface UploadImageOptions {
   fallbackLanguage?: string;
-  maxUploadBytes: number;
 }
 
 function normalizeTranslations(
@@ -205,15 +203,18 @@ export async function readImage(tx: Transaction, imageId: string): Promise<Image
   };
 }
 
+/**
+ * Adds a photo to the library, or returns the existing entry when one already stores these exact
+ * bytes. Takes a `PreparedImage`, so every photo stored through here has been through
+ * `prepareImage`: shrunk, upright, stripped of metadata and re-encoded. Configuration import
+ * copies the media image rows as they are (`MEDIA_CONFIGURATION_TRANSFER`) and does not shrink them.
+ */
 export async function uploadImage(
   tx: Transaction,
-  input: ImageMetadataInput & { bytes: Uint8Array },
-  options: UploadImageOptions,
+  input: ImageMetadataInput & { image: PreparedImage },
+  options: UploadImageOptions = {},
 ): Promise<{ created: boolean; image: ImageRecord }> {
-  if (input.bytes.length > options.maxUploadBytes)
-    throw new AppError("image.too_large", { maxBytes: options.maxUploadBytes });
-  const extension = validateImageBytes(input.bytes);
-  const filename = `${createHash("sha256").update(input.bytes).digest("hex")}.${extension}`;
+  const { filename, bytes } = input.image;
   const values = await metadata(tx, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
   // The content-language lock also serializes duplicate uploads.
   const [existing] = await tx
@@ -225,7 +226,7 @@ export async function uploadImage(
     .insert(mediaImages)
     .values({ filename, ...values })
     .returning({ id: mediaImages.id });
-  await tx.insert(mediaImageData).values({ imageId: row!.id, bytes: input.bytes });
+  await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
   return { created: true, image: await readImage(tx, row!.id) };
 }
 

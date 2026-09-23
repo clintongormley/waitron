@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
-import { validateImageBytes } from "@waitron/catalogue";
 import { AppError, contentLanguageCode, resolveContentText } from "@waitron/shared";
 import { normalizeImageMetadata, type ImageMetadataInput } from "./images.js";
+import { imageFilename } from "./stored-filename.js";
 import "./errors.js";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -56,9 +55,7 @@ export function validateMediaConfiguration(
     )
       invalid();
     const bytes = Buffer.from(row.bytes.slice(2), "hex");
-    const extension = validateImageBytes(bytes);
-    if (image.filename !== `${createHash("sha256").update(bytes).digest("hex")}.${extension}`)
-      invalid();
+    if (image.filename !== imageFilename(bytes)) invalid();
     const input = {
       names: parsedJson(image.names),
       altText: parsedJson(image.alt_text),

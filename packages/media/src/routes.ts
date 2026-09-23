@@ -22,6 +22,7 @@ import {
   type ImageMetadataInput,
   type ListImagesOptions,
 } from "./images.js";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage } from "./prepare.js";
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -36,6 +37,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "image.translation_required": 400,
   "image.too_large": 413,
   "image.invalid_query": 400,
+  "image.invalid_file": 422,
+  "image.too_many_pixels": 413,
   "content.language_invalid": 400,
   "media.unsupported_type": 415,
 };
@@ -60,7 +63,7 @@ function metadata(value: unknown): ImageMetadataInput {
 export const MEDIA_ROUTES: ModuleRoutes = {
   mount(app, ctx, log) {
     const fallbackLanguage = ctx.cfg.contentDefaultLanguage ?? FALLBACK_LOCALE;
-    const maxUploadBytes = ctx.maxUploadBytes ?? 5 * 1024 * 1024;
+    const maxUploadBytes = ctx.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES;
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
       withTransaction(ctx.db, async (tx) => {
         await authorizeManager(tx, {
@@ -114,26 +117,35 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       (c) =>
         run(c, log, async () => {
           const session = requireManagementSession(c);
-          const result = await gated(session, async (tx) => {
-            let form: Awaited<ReturnType<typeof c.req.parseBody>>;
-            try {
-              form = await c.req.parseBody();
-            } catch {
-              throw new AppError("image.invalid_metadata", {});
-            }
-            const file = form.file;
-            if (!(file instanceof File)) throw new AppError("image.invalid_metadata", {});
-            const input = metadata({
-              names: parseField(form.names),
-              altText: parseField(form.altText),
-              labels: parseField(form.labels),
-            });
-            return uploadImage(
-              tx,
-              { ...input, bytes: new Uint8Array(await file.arrayBuffer()) },
-              { maxUploadBytes, fallbackLanguage },
-            );
+          // Checked before the body is parsed, so a caller without `image.manage` costs no image
+          // work. A read outside any transaction, so it must write nothing: `touch: false`.
+          // The decode runs outside the write lock, so permission is checked again inside the
+          // transaction that stores the photo, and that check is the one that admits the write.
+          await authorizeManager(ctx.db, {
+            managementSessionId: session,
+            permission: "image.manage",
+            touch: false,
           });
+          let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+          try {
+            form = await c.req.parseBody();
+          } catch {
+            throw new AppError("image.invalid_metadata", {});
+          }
+          const file = form.file;
+          if (!(file instanceof File)) throw new AppError("image.invalid_metadata", {});
+          const input = metadata({
+            names: parseField(form.names),
+            altText: parseField(form.altText),
+            labels: parseField(form.labels),
+          });
+          // Outside any transaction: see prepareImage.
+          const image = await prepareImage(new Uint8Array(await file.arrayBuffer()), {
+            maxUploadBytes,
+          });
+          const result = await gated(session, (tx) =>
+            uploadImage(tx, { ...input, image }, { fallbackLanguage }),
+          );
           return c.json(
             { image: result.image, created: result.created },
             result.created ? 201 : 200,

@@ -103,5 +103,17 @@ registerCodeMessages({
     es: "Introduce un nombre en el idioma predeterminado.",
   },
   "image.in_use": { en: en["image.in_use"], es: es["image.in_use"] },
+  "image.too_large": {
+    en: "The photo file is too large. Export a smaller copy and try again.",
+    es: "El archivo de la foto es demasiado grande. Exporta una copia más pequeña e inténtalo de nuevo.",
+  },
+  "image.invalid_file": {
+    en: "The photo could not be read. It may be damaged, so try exporting it again.",
+    es: "No se pudo leer la foto. Puede que esté dañada, así que prueba a exportarla de nuevo.",
+  },
+  "image.too_many_pixels": {
+    en: "The photo has too many pixels. Export a smaller copy and try again.",
+    es: "La foto tiene demasiados píxeles. Exporta una copia más pequeña e inténtalo de nuevo.",
+  },
 });
 export const t = makeT<keyof typeof en>();

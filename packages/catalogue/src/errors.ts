@@ -54,7 +54,10 @@ declare module "@waitron/shared" {
     "diet.invalid_label": { field: string; value: string };
     /** A diet override both adds and removes the same contains-tag — a contradiction. */
     "diet.add_remove_conflict": { tag: string };
-    /** An image upload carried no file part in the multipart body. Thrown by the server route. */
+    /**
+     * Not thrown: an upload with no file part is refused as `image.invalid_metadata`
+     * (`packages/media`). Kept because a shipped code is never renamed or removed.
+     */
     "media.missing": Record<string, never>;
     /**
      * The uploaded bytes are not an accepted image type (JPEG/PNG/WEBP). `detected` names the type
@@ -62,10 +65,8 @@ declare module "@waitron/shared" {
      */
     "media.unsupported_type": { detected?: string };
     /**
-     * The uploaded image exceeds `maxUploadBytes`. Thrown by the server route. Facts, not bytes.
-     * `size` is the true `file.size` when the precise per-file check rejects it, but a LOWER BOUND
-     * (the raw-body ceiling that was exceeded) when the coarse `bodyLimit` middleware rejects the
-     * stream before the file is measured — so a consumer must not render it as "your file was N bytes".
+     * Not thrown: an upload over the size limit is refused as `image.too_large`
+     * (`packages/media`). Kept because a shipped code is never renamed or removed.
      */
     "media.too_large": { size: number; limit: number };
     /** A location-menu write names no catalogue. The trust-boundary check returns 404 before
