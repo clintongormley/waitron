@@ -15,7 +15,7 @@ import {
   FALLBACK_LOCALE,
   resolveContentText,
 } from "@waitron/shared";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNotNull } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import "./errors.js";
 
@@ -52,6 +52,7 @@ export type ImageUsage =
       catalogueId: string;
       /** The product and variant staff names joined by `staffPresentationName`. */
       name: string;
+      /** The variant AND its product are Active. */
       active: boolean;
     };
 export interface UploadImageOptions {
@@ -153,11 +154,13 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
       name: products.name,
       parentName: parentProducts.name,
       active: products.active,
+      parentActive: parentProducts.active,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(eq(products.image, image[0].filename))
-    .orderBy(products.id);
+    // Products before variants, each in id order.
+    .orderBy(isNotNull(products.parentId), products.id);
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })
     .from(categoryDetails)
@@ -167,21 +170,23 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
   const usage = ({
     parentId,
     parentName,
+    parentActive,
     name,
+    active,
     ...row
   }: (typeof productRows)[number]): ImageUsage =>
     parentId === null
-      ? { kind: "product", ...row, name }
+      ? { kind: "product", ...row, name, active }
       : {
           kind: "variant",
           ...row,
           productId: parentId,
           // The " · " join lives in product-presentation.ts and is called, never rewritten here.
           name: staffPresentationName({ name: parentName!, variantName: name }),
+          active: active && parentActive === true,
         };
   return [
-    ...productRows.filter((row) => row.parentId === null).map(usage),
-    ...productRows.filter((row) => row.parentId !== null).map(usage),
+    ...productRows.map(usage),
     ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
   ];
 }

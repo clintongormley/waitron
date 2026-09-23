@@ -294,6 +294,59 @@ describe("metadata, labels and references", () => {
     });
   });
 
+  it("reports a variant inactive when it is removed or its product is Inactive", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const { image } = await uploadImage(
+        tx,
+        { bytes: photo, names: { en: "Loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+        id: catalogues.id,
+      });
+      const catalogueId = menu!.id;
+      const top = { catalogueId, pricingUnit: "each", unitPrice: 200, vatClass: "general" };
+      await tx.insert(products).values([
+        { ...top, id: "p-on", name: "Bread", image: image.filename },
+        { ...top, id: "p-off", name: "Cake", active: false },
+      ]);
+      // Every variant id sorts BEFORE its product's, so the products-first order is the reader's.
+      await tx.insert(products).values([
+        { catalogueId, id: "a-kept", parentId: "p-on", name: "Large", image: image.filename },
+        {
+          catalogueId,
+          id: "a-of-inactive",
+          parentId: "p-off",
+          name: "Slice",
+          image: image.filename,
+        },
+        {
+          catalogueId,
+          id: "a-removed",
+          parentId: "p-on",
+          name: "Small",
+          active: false,
+          image: image.filename,
+        },
+      ]);
+      const variant = (id: string, productId: string, name: string, active: boolean) => ({
+        kind: "variant",
+        id,
+        productId,
+        catalogueId,
+        name,
+        active,
+      });
+      expect(await listImageUsages(tx, image.id)).toEqual([
+        { kind: "product", id: "p-on", catalogueId, name: "Bread", active: true },
+        variant("a-kept", "p-on", "Bread \u00b7 Large", true),
+        variant("a-of-inactive", "p-off", "Cake \u00b7 Slice", false),
+        variant("a-removed", "p-on", "Bread \u00b7 Small", false),
+      ]);
+    });
+  });
+
   it("reports a missing name but not missing alt text as a translation gap", async () => {
     await withTransaction(suite.db, async (tx) => {
       // Alt text is optional, so an image named in French but without French alt text is complete;
