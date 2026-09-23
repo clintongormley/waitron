@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+
 /**
  * The set of tables a migration SET leaves in existence, read as TEXT (never executed).
  *
@@ -86,4 +89,57 @@ export function tablesCreatedBy(files: readonly string[]): Set<string> {
     }
   }
   return tables;
+}
+
+/** The two workspace roots a migration set can sit under, one package deep. */
+const WORKSPACE_ROOTS = ["packages", "apps"];
+
+/** Every `drizzle/` migration set directly under a package or app, repo-relative and sorted. */
+export function migrationSets(repoRoot: string): string[] {
+  const sets: string[] = [];
+  for (const root of WORKSPACE_ROOTS) {
+    for (const entry of readdirSync(join(repoRoot, root))) {
+      const dir = join(repoRoot, root, entry, "drizzle");
+      if (existsSync(dir) && statSync(dir).isDirectory()) sets.push(relative(repoRoot, dir));
+    }
+  }
+  return sets.sort();
+}
+
+/**
+ * The snapshot drizzle holds for a set's HEAD — the schema as it stands, rather than the history
+ * that built it. The journal's highest `idx` names it, which is the pointer drizzle itself follows.
+ *
+ * `"empty"` is a set that declares no migrations at all: a real state, not a hole
+ * (`packages/fiscal-none` owns no tables). `"missing"` is a set with no journal, or whose journal
+ * names a head whose snapshot is not on disk — which would drop that set out of any check reading
+ * snapshots without saying so, so callers refuse it rather than skip it.
+ */
+export type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
+
+export function headSnapshot(repoRoot: string, set: string): HeadSnapshot {
+  const journal = join(repoRoot, set, "meta", "_journal.json");
+  if (!existsSync(journal)) return { kind: "missing" };
+  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
+  if (entries.length === 0) return { kind: "empty" };
+  const head = Math.max(...entries.map((entry) => entry.idx));
+  const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);
+  return existsSync(snapshot)
+    ? { kind: "file", path: relative(repoRoot, snapshot) }
+    : { kind: "missing" };
+}
+
+/**
+ * Every `.sql` file in a migration set, repo-relative and sorted — the order `tablesCreatedBy`
+ * needs. Walks the whole set rather than its top level, so a set that starts nesting its
+ * migrations is still read.
+ */
+export function migrationSqlFiles(repoRoot: string, set: string): string[] {
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) return walk(full);
+      return full.endsWith(".sql") ? [relative(repoRoot, full)] : [];
+    });
+  return walk(join(repoRoot, set)).sort();
 }

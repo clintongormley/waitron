@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import { headSnapshot, migrationSets } from "../packages/sync-enrolment/src/migration-tables.js";
 
 /**
  * Two database files, and nothing joining them at the database level.
@@ -16,7 +17,8 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
  * see both sides — the same reason `classification-complete.test.ts` lives here.
  *
  * WHAT IT READS. Drizzle's own head snapshot per migration set, resolved through `meta/_journal.json`
- * exactly as `no-tenant-column.test.ts` resolves it: the normalised schema drizzle-kit diffs to emit
+ * by `headSnapshot` in `packages/sync-enrolment/src/migration-tables.ts`, the reader
+ * `no-tenant-column.test.ts` shares: the normalised schema drizzle-kit diffs to emit
  * its SQL, which holds the graph directly as `tables[*].foreignKeys[*]`. Reading generated artifacts
  * rather than the TypeScript keeps this file free of the storage engine's types, which is what the
  * flip exists to avoid having to revisit.
@@ -46,7 +48,6 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
  */
 
 const repoRoot = join(import.meta.dirname, "..");
-const ROOTS = ["packages", "apps"];
 
 /** Which file a class lives in (topology design §2.1). */
 function fileOfClass(cls: string): string {
@@ -64,38 +65,6 @@ function classOfTable(): Map<string, string> {
   return classes;
 }
 
-/** Every `drizzle/` migration set directly under a package or app, as repo-relative paths. */
-function migrationSets(): string[] {
-  const sets: string[] = [];
-  for (const root of ROOTS) {
-    for (const entry of readdirSync(join(repoRoot, root))) {
-      const dir = join(repoRoot, root, entry, "drizzle");
-      if (existsSync(dir) && statSync(dir).isDirectory()) sets.push(relative(repoRoot, dir));
-    }
-  }
-  return sets.sort();
-}
-
-/**
- * The snapshot drizzle holds for a set's HEAD. `"empty"` is a set that declares no migrations at all
- * (`packages/fiscal-none` owns no tables); `"missing"` is a set with no journal at all, or one whose
- * journal names a head whose snapshot is not on disk. Either would drop that set out of the check
- * below without saying so, which is the case the suite refuses rather than skips.
- */
-type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
-
-function headSnapshot(set: string): HeadSnapshot {
-  const journal = join(repoRoot, set, "meta", "_journal.json");
-  if (!existsSync(journal)) return { kind: "missing" };
-  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
-  if (entries.length === 0) return { kind: "empty" };
-  const head = Math.max(...entries.map((entry) => entry.idx));
-  const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);
-  return existsSync(snapshot)
-    ? { kind: "file", path: relative(repoRoot, snapshot) }
-    : { kind: "missing" };
-}
-
 interface Edge {
   set: string;
   constraint: string;
@@ -107,8 +76,8 @@ interface Edge {
 /** Every foreign key in every set's head snapshot. */
 function declaredForeignKeys(): Edge[] {
   const edges: Edge[] = [];
-  for (const set of migrationSets()) {
-    const head = headSnapshot(set);
+  for (const set of migrationSets(repoRoot)) {
+    const head = headSnapshot(repoRoot, set);
     if (head.kind !== "file") continue;
     const snapshot = JSON.parse(readFileSync(join(repoRoot, head.path), "utf8")) as {
       tables: Record<
@@ -167,7 +136,9 @@ describe("the two database files are independent", () => {
   it("reads a head snapshot for every migration set that declares one", () => {
     // A set whose journal names a head with no snapshot on disk would drop out of the check above
     // without saying so, and an absence assertion cannot notice its own missing input.
-    expect(migrationSets().filter((set) => headSnapshot(set).kind === "missing")).toEqual([]);
+    expect(
+      migrationSets(repoRoot).filter((set) => headSnapshot(repoRoot, set).kind === "missing"),
+    ).toEqual([]);
   });
 
   // Vacuous-pass anchor. An empty graph — a snapshot shape that changed under us, a discovery that
