@@ -2187,7 +2187,7 @@ image constraints under *Detail → Box image*.
   and authenticator paths, the till's reader, kitchen-display and PIN back-off refusals, payment
   and backup refusals, print-agent screening and payment slips with nothing to print, and the
   recovery commands failing part-way; no source file changed; 99.18/99.21/99.29/97.33);
-  `apps/till` (**PR #TILL_PR**, 2026-09-23 — tests for the till app's table service, boot and
+  `apps/till` (**PR #536**, 2026-09-23 — tests for the till app's table service, boot and
   counter paths, the server router's start and error statuses, the session's wake lock and idle
   timer, tender entry by the Enter key, idle choices and weighed dishes, and nine screens; one bug
   fixed, a sale or a new table answering after the operator had logged out took the till off the
@@ -2566,7 +2566,7 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **What the till shows the NEXT operator when the previous one's request answers late — OPEN
-(found 2026-09-23, till coverage, PR #TILL_PR).** The till coverage branch fixed the case where a late answer
+(found 2026-09-23, till coverage, PR #536).** The till coverage branch fixed the case where a late answer
 reopened a logged-out till (it now stays on the lock screen). The same late answer can also arrive
 after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
 `apps/till/src/till-app.ts` then push the previous operator's ticket or table over the new session.
@@ -2578,7 +2578,7 @@ loses the one signal that it did. **Next action:** decide
 notice), then fix it test-first.
 
 **Till code that no test can reach, and small till defects — OPEN (found 2026-09-23, till
-coverage, PR #TILL_PR).** Left uncovered rather than deleted, each by reading its callers (none was
+coverage, PR #536).** Left uncovered rather than deleted, each by reading its callers (none was
 run without the code):
 
 - `till-app.ts`: the handlers for `show-station`, `show-expo`, `show-schedule`, `open-allergens`,
