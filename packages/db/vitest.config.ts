@@ -9,10 +9,12 @@ export default defineConfig({
     // one interrupted mutation run makes every later test run fail confusingly.
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // Most test files here run real SQL against a SQLite file under `os.tmpdir()`.
-    // `grep -rL useVenueDb --include="*.test.ts" src` lists the ones that do not open it through
-    // `useVenueDb`, which is not the same as the ones touching no database.
+    // `grep -rL useVenueDb --include="*.test.ts" src` lists the ones that do not NAME `useVenueDb`,
+    // which is not the same as the ones touching no database: a file can reach it through a shared
+    // factory (`src/schema/schema-conformance.test.ts` does) or open a database another way.
     //
-    // Thirty seconds is margin, not a need: measured 2026-09-23, every test passes under
+    // Thirty seconds is margin, not a need: measured 2026-09-23 on an 18-core Mac with no other
+    // package running, every test passes under
     // `--testTimeout=2000 --hookTimeout=2000` with `useVenueDb`'s default setup budget also cut to
     // 2s; the slowest test took 74ms and the slowest setup 83ms. A bound that fires under CI load
     // makes a suite people learn to rerun, and a suite people rerun no longer gates.
@@ -22,11 +24,12 @@ export default defineConfig({
     // the helper's `afterEach` reset and `afterAll` close and any untimed hook. Also margin: those
     // passed in the 2s run above.
     hookTimeout: 120_000,
-    // No `globalSetup`: each suite opens its own database through `useVenueDb`.
+    // No `globalSetup`: a suite that uses `useVenueDb` gets its own temporary database.
     //
     // A cap on workers, not a need for exactly four: measured 2026-09-23 on an 18-core Mac, the suite
     // took 20.3s at one worker, 6.4s at four and 5.9s at eight, and `test:coverage` at one and at
-    // four workers gave the same covered and total counts for every file.
+    // four workers gave the same covered and total counts for every file. CI's `test-heavy` shards
+    // pass no worker count of their own (`.github/workflows/ci.yml`), so they run with this one.
     maxWorkers: 4,
     coverage: {
       provider: "v8",

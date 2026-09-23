@@ -6,10 +6,10 @@ export default defineConfig({
     clearMocks: false,
     // `testTimeout` covers work inside an individual test. `hookTimeout` bounds a hook that passes
     // no timeout of its OWN; a hook given one overrides this config
-    // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does NOT bound
-    // `useVenueDb`'s setup, which carries its own 60s budget (`packages/db/src/testing/venue-db.ts:174`);
-    // what it bounds is that helper's untimed afterEach reset and afterAll close (`venue-db.ts:176`
-    // and `:183`), plus any hook a test file writes for itself.
+    // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does NOT bound `useVenueDb`'s
+    // setup, which carries its own 60s budget (`packages/db/src/testing/venue-db.ts`); what it
+    // bounds is that helper's untimed afterEach reset and afterAll close, plus any hook a test file
+    // writes for itself.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

@@ -3640,9 +3640,15 @@ What the preparation tasks left, with F1's own answers where it found them:
   not read — and this supersedes it. Most of the named claims had gone before this branch: "every
   test here boots a WASM PostgreSQL" in #467, "nowhere else in the repo" and the 2026-08-20
   single-fork receipt in #489, and `fiscal` and `fiscal-none` mentioned PGlite only as history,
-  which is now cut. What was left was corrected against runs. Every timeout comment now says
-  the value is margin, because each package passed `vitest run --testTimeout=2000
-  --hookTimeout=2000` with `useVenueDb`'s setup budget temporarily cut to 2s. No value changed.
+  which is now cut. What was left was corrected against runs. Each of the five packages' timeout
+  comments now says the value is margin, because each package passed `vitest run --testTimeout=2000
+  --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
+  18-core Mac with one package running at a time. No value changed. The review also dropped the
+  `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
+  a "(CLAUDE.md §4)" pointer that named no rule about worker pins. Follow-up: every other
+  `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`, which
+  carries its own measurement, still says the pin is needed without having measured it; the same
+  one-worker-against-several coverage comparison would settle each.
   - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
   - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
     identical summaries, so its one-worker pin is recorded as a precaution, not a need.
@@ -4091,7 +4097,8 @@ database and no clone-per-test seam any more — the storage switch deleted that
 it: a worker limit is still a per-package call, and the reason that is left is the
 `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
 package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
-`packages/db` keeps `maxWorkers: 4`, and its own comment says the cap now guards nothing it can name.
+`packages/db` keeps `maxWorkers: 4`, which CI's `test-heavy` shards inherit because they pass no
+worker count of their own; at one and at four workers its coverage counts were the same (2026-09-23).
 Either way a new package that copies one of those configs must either hold `98/98/98/95` and be
 added to `HIGH_BAR_PACKAGES`, or set the `90/90/85/85` floor until it is promoted (CLAUDE.md §2) —
 anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.

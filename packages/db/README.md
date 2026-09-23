@@ -47,14 +47,14 @@ state, and how to work out a set's prerequisites, is in
 concerned — so code moved in here arrives under this package's full thresholds. The coverage
 exclusion list in `vitest.config.ts` deliberately leaves this directory in, and says why.
 
-Keep `testTimeout: 30_000` in `vitest.config.ts` for the database-backed tests; do not replace it
-with the usual 5 s default. **Neither that budget nor the `hookTimeout: 120_000` beside it bounds
-the database's own setup**: `useVenueDb` hands its own `beforeAll` a 60-second default
-(`src/testing/venue-db.ts:12`, applied at `:232`), and a timeout passed to a hook overrides the
-config's. What `hookTimeout` reaches is every `afterEach`/`afterAll` that passes no budget of its
-own — which includes this helper's reset and its close. That last sentence has not been re-measured
-since the storage switch; the figure it replaced was taken against a test harness that no longer
-exists.
+The `testTimeout: 30_000` in `vitest.config.ts` is margin for a loaded CI runner, not a need: on
+2026-09-23, on an 18-core Mac with no other package running, every test passed with `testTimeout`,
+`hookTimeout` and `useVenueDb`'s default setup budget all cut to 2s (the measurement is in
+`vitest.config.ts`). **Neither that budget nor the
+`hookTimeout: 120_000` beside it bounds the database's own setup**: `useVenueDb` hands its own
+`beforeAll` a 60-second default (`src/testing/venue-db.ts`), and a timeout passed to a hook
+overrides the config's. What `hookTimeout` reaches is any hook that passes no budget of its own —
+which includes this helper's reset and its close.
 
 ## What CI runs
 

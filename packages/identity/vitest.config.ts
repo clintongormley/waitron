@@ -7,9 +7,10 @@ export default defineConfig({
     // `useVenueDb` passes its own budget to the `beforeAll` that migrates the database, and a hook's
     // own timeout overrides `hookTimeout`, so this one reaches only the helper's `afterEach` reset and
     // `afterAll` close (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test writes.
-    // Neither value is sized to a need: measured 2026-09-23, every test passes under
-    // `--testTimeout=2000 --hookTimeout=2000` with the helper's setup budget also cut to 2s; the
-    // slowest test took 185ms and the slowest setup 49ms. They are margin for a loaded CI runner.
+    // Neither value is sized to a need: measured 2026-09-23 on an 18-core Mac, every test passes
+    // under `--testTimeout=2000 --hookTimeout=2000` with the helper's setup budget also cut to 2s;
+    // the slowest test took 185ms and the slowest setup 49ms. They are margin for a loaded CI
+    // runner.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

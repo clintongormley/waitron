@@ -7,8 +7,8 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // A hook given its OWN timeout overrides `hookTimeout` rather than narrowing it, so this bounds
     // only hooks written without one — `useVenueDb`'s afterEach reset and afterAll close
-    // (`packages/db/src/testing/venue-db.ts:176` and `:183`) and any untimed hook a test file writes.
-    // It does not bound that helper's setup, which carries its own 60s budget (`venue-db.ts:174`).
+    // (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test file writes.
+    // It does not bound that helper's setup, which carries its own 60s budget (`venue-db.ts`).
     // testTimeout covers the several database round-trips a single `it` makes; errors.test.ts and
     // validate.test.ts are hermetic unit tests that need neither bound.
     testTimeout: 30_000,

@@ -28,7 +28,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 // `timeoutMs` restates the 60s the helper applies by default
-// (`packages/db/src/testing/venue-db.ts:12`) and replaces `vitest.config.ts`'s `hookTimeout` — the
+// (`packages/db/src/testing/venue-db.ts`) and replaces `vitest.config.ts`'s `hookTimeout` — the
 // same as record-sale.test.ts, which carries the pointer to the receipt.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
