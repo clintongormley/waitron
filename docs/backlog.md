@@ -2048,10 +2048,13 @@ image constraints under *Detail → Box image*.
   `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
   packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
   `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
-  `credentials`, `scheduler`, `identity`, `bookings` and `venue-service` have had one since, and
-  none found drift; re-run the command for the current list. `bookings` and `venue-service` have no
-  `src/schema/index.ts` barrel, so each call site hands the factory the one file its
-  `drizzle.config.ts` generates from (`src/schema/bookings.ts`, `src/schema/service.ts`).
+  `credentials`, `scheduler`, `identity`, `bookings`, `venue-service` and `media` have had one
+  since, and none found drift; re-run the command for the current list. `bookings`,
+  `venue-service` and `media` have no `src/schema/index.ts` barrel, so each call site hands the
+  factory the one file its `drizzle.config.ts` generates from (`src/schema/bookings.ts`,
+  `src/schema/service.ts`, `src/schema/images.ts`). `media`'s is blind to the eight triggers
+  `drizzle/0001_image_references.sql` creates, because the factory never reads a trigger; those
+  are guarded by `packages/media/src/image-references.test.ts`.
   `identity`'s is blind to one thing that matters there: three `persons` unique indexes are over a
   folded-key expression, and the factory compares an expression index by name, uniqueness, filter
   and where the expression sits among its parts, never by what it says — measured by changing
