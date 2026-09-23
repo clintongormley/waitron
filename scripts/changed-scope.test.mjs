@@ -387,6 +387,7 @@ describe("gateOutputs", () => {
   it.each([
     ["heavy", HEAVY_PACKAGE],
     ["ui", UI_PACKAGE],
+    ["ui", "@waitron/ui-core"],
     ["till", TILL_PACKAGE],
     ["dashboard", DASHBOARD_PACKAGE],
     ["setup", SETUP_PACKAGE],

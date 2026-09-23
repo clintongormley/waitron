@@ -8,7 +8,7 @@ import type { ThemeOverride } from "./canvas.js";
  * design system does not expose.
  *
  * PROVISIONAL SET. Every name here is a REAL token from the design-system registry
- * (`packages/ui/src/tokens/{colors,structure}.css`) — `theme-registry.test.ts` proves it every run,
+ * (`packages/ui-core/src/tokens/{colors,structure}.css`) — `theme-registry.test.ts` proves it every run,
  * failing on any name that is not declared there, so this allowlist can never drift onto a phantom
  * (an earlier draft allowlisted four tokens that never existed — `--wt-color-primary-text`,
  * `--wt-color-surface-text`, `--wt-color-accent`, bare `--wt-radius`). Nothing renders these in

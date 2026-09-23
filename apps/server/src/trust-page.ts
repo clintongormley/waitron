@@ -115,7 +115,7 @@ summary { cursor: pointer; font-weight: 600; }
 /* Four token pairs are inlined below, light then dark, and kept in step by hand: #5c626e/#a1a7b3
    is --wt-color-text-muted, #b3261e/#ff6b5e is --wt-color-danger, #1f6feb/#4c8dff is
    --wt-color-primary, and #ffffff/#06101f is --wt-color-on-primary, all declared in
-   packages/ui/src/tokens/colors.css. apps/server does not depend on @waitron/ui, and this page must
+   packages/ui-core/src/tokens/colors.css. apps/server does not depend on @waitron/ui, and this page must
    stay one self-contained string with no external assets, so it cannot read the custom properties.
    Same arrangement, and the same reason, as packages/ui/brand/README.md. */
 .note { color: light-dark(#5c626e, #a1a7b3); font-size: .92rem; }

@@ -65,7 +65,7 @@ export class SetupDoneScreen extends LitElement {
         word-break: break-all;
         user-select: all;
         /* --wt-color-surface-sunken is not a token this design system defines (see
-           packages/ui/src/tokens/colors.css), so the hardcoded light fallback that stood here
+           packages/ui-core/src/tokens/colors.css), so the hardcoded light fallback that stood here
            painted in BOTH themes: axe measured the code against the dark theme's text at a contrast
            of 1.06, i.e. the operator's one-and-only break-glass code was unreadable. */
         background: var(--wt-color-surface-raised);

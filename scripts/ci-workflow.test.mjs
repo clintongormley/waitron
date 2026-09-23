@@ -575,6 +575,32 @@ describe("ci.yml's job graph", () => {
 });
 
 describe("the test shards", () => {
+  it("runs both UI packages sequentially and verifies the tarball", () => {
+    const body = job("test-ui").body.join("\n");
+    expect(literalFilters(shardStep(job("test-ui").body)).sort()).toEqual([
+      "@waitron/ui",
+      "@waitron/ui-core",
+    ]);
+    expect(body).toContain(
+      'pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage',
+    );
+    expect(body.split("\n").map((line) => line.trim())).toContain(
+      "- run: pnpm --filter @waitron/ui-core test:package",
+    );
+  });
+
+  it("keeps weekly mutation checks for both UI packages", () => {
+    const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
+    const ui = workflow.slice(workflow.indexOf("  mutation:"), workflow.indexOf("  mutation-db:"));
+    expect(ui).toContain("package: [ui, ui-core]");
+    expect(ui).toContain("fail-fast: false");
+    expect(ui.split("\n").map((line) => line.trim())).toContain(
+      "- run: pnpm --filter @waitron/${{ matrix.package }} mutation",
+    );
+    expect(ui).toContain("name: mutation-report-${{ matrix.package }}");
+    expect(ui).toContain("path: packages/${{ matrix.package }}/reports/mutation/");
+  });
+
   it("isolates Bookings from the light bins", () => {
     const name = "@waitron/bookings";
     expect(OWN_SHARD_PACKAGES).toContain(name);
@@ -674,12 +700,16 @@ describe("the test shards", () => {
   });
 
   it(
-    "give each of those packages a shard that selects it and nothing else",
+    "give each package its dedicated shard, with the UI pair sharing one",
     () => {
       for (const name of OWN_SHARD_PACKAGES) {
         const dedicated = shards.filter((shard) => shard.filters.includes(name));
         expect(dedicated).toHaveLength(1);
-        expect(selects(dedicated[0].filters)).toEqual([name]);
+        expect(selects(dedicated[0].filters)).toEqual(
+          name === "@waitron/ui" || name === "@waitron/ui-core"
+            ? ["@waitron/ui", "@waitron/ui-core"]
+            : [name],
+        );
       }
     },
     PNPM_LS_TEST_TIMEOUT_MS,

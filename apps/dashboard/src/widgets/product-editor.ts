@@ -296,7 +296,7 @@ export class ProductEditor extends LitElement {
       }
       /* The name column is the one that grows; capping it keeps the actions on screen at phone
          width. The token is used in three different directions across the dashboard, which
-         packages/ui/src/tokens/structure.css describes. */
+         packages/ui-core/src/tokens/structure.css describes. */
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
       }

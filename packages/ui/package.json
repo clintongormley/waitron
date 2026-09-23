@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@waitron/shared": "workspace:*",
-    "lit": "^3.2.0"
+    "lit": "^3.2.0",
+    "@waitron/ui-core": "workspace:*"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",

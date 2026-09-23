@@ -57,6 +57,7 @@ export default defineConfig({
       exclude: [
         ...coverageConfigDefaults.exclude,
         "demo/**",
+        "**/ui-core/**",
         // Without this the hand-run generator counts as 0%-covered source and drags the package
         // under its coverage bar — measured at 88.87% against an earlier, shorter draft of it — which
         // would buy a test of a tool whose whole job is shelling out to a binary that is not a

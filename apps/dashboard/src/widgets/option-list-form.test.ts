@@ -363,7 +363,7 @@ it("paints its own error text with the danger token and keeps the row controls t
  * `accent-color` hands that drawing the brand colour — the same declaration
  * packages/ui/src/components/wt-data-table.ts and apps/dashboard/src/screens/printers-screen.ts give
  * their own native controls. The UNCHECKED fill is a separate matter settled by `color-scheme`
- * (packages/ui/src/tokens/colors.test.ts), which this says nothing about.
+ * (packages/ui-core/src/tokens/colors.test.ts), which this says nothing about.
  */
 it("hands the preselect radio the brand colour to draw its checked dot with", async () => {
   const { el, host } = await mount({ value: cooked });

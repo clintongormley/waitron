@@ -10,7 +10,7 @@
  * Two deliberate differences from the brand file. The page sets `color-scheme: light dark`, so the
  * fixed fills become classes and an inline `<style>` supplies both themes: `#1f6feb`/`#4c8dff` are
  * `--wt-color-primary` light and dark, `#16181d`/`#eceef2` are `--wt-color-text`, all four declared
- * in `packages/ui/src/tokens/colors.css` and, as `packages/ui/brand/README.md` says, kept in step
+ * in `packages/ui-core/src/tokens/colors.css` and, as `packages/ui/brand/README.md` says, kept in step
  * BY HAND. And the logo names the product at the top of the page, so it is `role="img"` with an
  * accessible name rather than decoration.
  */
