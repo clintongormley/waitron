@@ -3403,9 +3403,12 @@ imports re-export the same implementations. The standalone tarball fixture check
 browser behaviour, accessibility and declarations without workspace source aliases;
 CI covers both packages and the weekly mutation matrix retains both. See the
 [extraction design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md).
-Next, configure private package distribution and pin a release in Cloud before
-building its account screens. Cloud owns those follow-ups; no registry publication
-or Cloud screen delivery is included in this extraction.
+Cloud has published private `@waitron-io/ui-core@0.1.0` from Waitron commit
+`0a93f4d3557b669661ac8f589aad866e2cd9653f`; its installed-package Chromium and
+declaration checks pass locally. See the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md).
+Cloud owns the release workflow and account screens; its consumer integration is
+tracked in [Cloud PR #29](https://github.com/waitron-io/waitron-cloud/pull/29).
+Next, build Cloud account screens against its existing API.
 Read the first weekly mutation results for both UI packages after the split; this
 branch preserves the 90% gates but does not measure their new full mutation scores.
 
