@@ -41,9 +41,8 @@ which is what append-only means. The replace case depends on `PRAGMA recursive_t
 
 **They cannot refuse DDL.** SQLite has no trigger event for `DROP TABLE` and no `TRUNCATE` statement
 at all, and it has no roles: one process opens one file, so every caller is the owner-equivalent.
-The PostgreSQL shape this replaces protected a table twice over — the trigger, plus a `REVOKE` that
-made the application role a non-owner — and only the trigger has an equivalent here. What that costs,
-measured one statement at a time against both engines, is recorded at the top of
+The PostgreSQL shape this replaces protected a table twice over, and only the trigger has an
+equivalent here. What that costs, measured one statement at a time, is recorded at the top of
 `packages/db/src/immutability.test.ts`.
 
 ## Two things that did not change with the engine

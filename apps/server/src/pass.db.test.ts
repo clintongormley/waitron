@@ -24,10 +24,10 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
  *
  * ## The role this file was built around is gone, and is replaced by nothing
  *
- * **SQLite has no roles** and `connectAs` has no counterpart, so both cases now run on the one
- * venue handle. What is no longer checked by anything: that the deployment role can reach the
- * vault, the reconcile tables and the scheduler ledger, and no further. The two cases keep their
- * assertions unchanged; only the handle they run on changed.
+ * **SQLite has no roles**, so both cases now run on the one venue handle. What is no longer checked
+ * by anything: that the deployment role can reach the vault, the reconcile tables and the scheduler
+ * ledger, and no further. The two cases keep their assertions unchanged; only the handle they run
+ * on changed.
  *
  * The `nonInfo` assertion in the first case was doing double duty and now does single duty. It was
  * the outside-in signal for a MISSING GRANT, because `runDue` folds a permission-denied error into

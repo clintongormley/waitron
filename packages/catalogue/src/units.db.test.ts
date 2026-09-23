@@ -25,12 +25,11 @@ import { racePair } from "../test/fixtures.js";
  * `pg_blocking_pids`. `racePair` (`test/fixtures.ts`) carries what observes serialisation now, and
  * the measurement behind it.
  *
- * ONE CASE WENT, and it is named here because it has nothing left to run: "changes a product's
- * unit even while product_units is in a publication" created a PostgreSQL logical-replication
- * PUBLICATION over `product_units` and proved the table's primary key doubled as its REPLICA
- * IDENTITY, without which the reassignment upsert's UPDATE was refused. SQLite has no publications
- * and no replica identity, so there is no statement to make and no refusal to provoke. Nothing
- * else covers it, and nothing can.
+ * WHAT WENT, and why: "changes a product's unit even while product_units is in a publication"
+ * created a PostgreSQL logical-replication PUBLICATION over `product_units` and proved the table's
+ * primary key doubled as its REPLICA IDENTITY, without which the reassignment upsert's UPDATE was
+ * refused. SQLite has no publications and no replica identity, so there is no statement to make and
+ * no refusal to provoke. Nothing else covers it, and nothing can.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 

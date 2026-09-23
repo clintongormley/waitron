@@ -9,7 +9,7 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
 /**
  * The vault, end to end, on the engine the box now runs.
  *
- * ## The two things that went with PostgreSQL
+ * ## What went with PostgreSQL
  *
  * 1. **`hands the three sealed columns back as plain Uint8Arrays, not node Buffers` is DELETED,
  *    because on this engine it can no longer fail.** That case was put HERE deliberately, and

@@ -29,7 +29,7 @@ import "./errors.js";
 // `dining_tables` rows, move lines, abandon a tab) whose concurrency behaviour is proven in
 // `working-order.pay-and-dispatch.test.ts`; here we prove only the HTTP surface — the session
 // guard, the malformed-`:id` screen, and the verb's status mapping — which fires at the boundary
-// before/around a single query (CLAUDE.md §4). Harness ported from `till-api.test.ts`.
+// before/around a single query. Harness ported from `till-api.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 

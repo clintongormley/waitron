@@ -1,7 +1,7 @@
 /**
  * `verifyDailyCloseChain` catches a committed chain that was tampered with after it was frozen.
  *
- * ## What this suite was, and what converting it cost
+ * ## What this suite was
  *
  * It ran against real PostgreSQL through `useTemplateDb` and corrupted the chain with the trigger
  * disabled. PostgreSQL has `ALTER TABLE … DISABLE TRIGGER`; SQLite has no such statement, so

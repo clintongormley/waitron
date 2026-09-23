@@ -5273,11 +5273,14 @@ The description carries: the 66-test disposition table, the list of what the voc
 record what was planned, and three of their details did not survive contact:
 
 - The counts were written before the flip landed. The actual removal was **796 call lines and 179
-  import specifiers across 181 files**, not 1,285 across 266.
+  import specifiers**, not 1,285 call sites; the commit that made it touches **183 files**
+  (`git show --name-only --format= <sha> | grep -c .`), of which 179 carry a call or an import, two
+  are the deleted helper and its suite, and two are a re-export and a mock. Not 266.
 - It went as **one pull request with commits split by kind**, not one pull request per package.
 - Steps 1–5 do not mention the two sweeps that turned out to be most of the work: the comments that
   NAMED the function, and then the ones that cited its PATH or described the mechanism in prose
-  without naming either. That third key is the reusable lesson and it is in the pull request.
+  without naming either. That third key is the reusable lesson, and the pull request that lands this
+  branch is where it is written up.
 
 **Runner:** autonomous. **Depends on:** F1.
 

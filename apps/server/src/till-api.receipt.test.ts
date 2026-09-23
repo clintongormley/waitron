@@ -53,8 +53,6 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
 // back and paper enqueued for it. Setup mirrors `till-api.fiscal-sale-paths.test.ts` (a provisioned venue + a
 // seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
 // receipt-printer config helpers from `receipt-print.test.ts`.
-//
-// Nothing here establishes what an application role may read or write.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

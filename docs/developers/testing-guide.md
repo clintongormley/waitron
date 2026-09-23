@@ -17,12 +17,14 @@ the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
 
 **What went with them, so nobody assumes it is still covered.** SQLite has no roles and no grants —
 one process opens one file, and what a caller may do is decided outside the database. Every
-privilege assertion is deleted, and each deletion is recorded in the header of the file it was
-deleted from:
-`packages/db/src/allocate-number.test.ts` (a column-scoped `grant update (next_number)` was what
-made allocation fail in production and pass in every test that skipped the role switch — nothing
-now states which privileges that allocation needed),
-`packages/fiscal-verifactu/src/inmutabilidad.test.ts` and `apps/server/src/payments-api.test.ts`.
+privilege assertion is deleted. The record of what each one bought is in the pull requests that
+deleted them, not in the file headers: those carried it for a while and were then thinned, because a
+comment carries the invariant and not the history (CLAUDE.md §1).
+
+The one worth restating here, because it is the sharpest thing the grants ever caught: a
+column-scoped `grant update (next_number)` was what made invoice-number allocation fail in
+production and pass in every test that skipped the role switch. **Nothing now states which
+privileges that allocation needed**, and nothing checks it.
 
 Contention is a separate question and has its own section further down, "A contention test proves
 the write queue serialises writers, not that a lock blocked".
