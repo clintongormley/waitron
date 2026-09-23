@@ -444,7 +444,7 @@ export class ProductEditor extends LitElement {
     const table = this.shadowRoot?.querySelector("dashboard-variant-table");
     if (!row || !table) return;
     await table.updateComplete;
-    table.focusRow(Number(row[1]));
+    await table.focusRow(Number(row[1]));
   }
 
   get currentValue(): ProductEditorDraft {

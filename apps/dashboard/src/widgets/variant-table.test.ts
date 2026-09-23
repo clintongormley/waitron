@@ -439,3 +439,57 @@ it("names each row's availability switch without repeating the column heading be
   expect(toggle.hasAttribute("hide-label")).toBe(true);
   expect(toggle.getAttribute("label")).toBe(t("editor.available"));
 });
+
+/** Applies Remove and Restore the way the product editor does: the variant is handed back as a NEW
+ * object, or — one never saved — dropped. */
+function applyRemoveAndRestore(el: VariantTable) {
+  const set = (index: number, active: boolean) =>
+    el.variants.map((variant, i) => (i === index ? { ...variant, active } : variant));
+  el.addEventListener("wt-remove", (event) => {
+    const { index } = (event as CustomEvent<{ index: number }>).detail;
+    el.variants =
+      el.variants[index]!.id === undefined
+        ? el.variants.filter((_, i) => i !== index)
+        : set(index, false);
+  });
+  el.addEventListener("wt-restore", (event) => {
+    el.variants = set((event as CustomEvent<{ index: number }>).detail.index, true);
+  });
+}
+/** Chooses a row's action from its menu, the way a keyboard user does. */
+async function chooseFromMenu(el: VariantTable, action: string, index: number) {
+  el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(
+    `[data-test="actions-${index}"]`,
+  )!.show();
+  const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-${index}"]`)!;
+  button.focus();
+  button.click();
+  await el.updateComplete;
+}
+const focused = (el: VariantTable) => {
+  const active = el.shadowRoot!.activeElement;
+  return active?.getAttribute("data-test") ?? active?.getAttribute("name") ?? null;
+};
+
+it("keeps focus on a row's actions when Remove or Restore leaves the row on screen", async () => {
+  const el = await mountTable({ variants: withRemoved() });
+  applyRemoveAndRestore(el);
+  await showStatus(el, "all");
+  await chooseFromMenu(el, "restore", 1);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  await chooseFromMenu(el, "remove", 1);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  expect(el.variants[1]!.active).toBe(false);
+});
+
+it("moves focus to the next row on screen when Remove hides the row, and to the filter when none is left", async () => {
+  const el = await mountTable();
+  applyRemoveAndRestore(el);
+  await chooseFromMenu(el, "remove", 0);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  // Doble was never saved, so it leaves the list and there is no row after it: focus goes back up.
+  await chooseFromMenu(el, "remove", 2);
+  await expect.poll(() => focused(el)).toBe("actions-1");
+  await chooseFromMenu(el, "remove", 1);
+  await expect.poll(() => focused(el)).toBe("variant-status");
+});

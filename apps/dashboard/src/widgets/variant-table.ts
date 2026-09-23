@@ -148,6 +148,10 @@ export class VariantTable extends LitElement {
   @state() private rows: VariantRow[] = [];
   @state() private status: StatusFilter = "active";
   #nextKey = 0;
+  /** The row whose Remove or Restore was just chosen. The host hands that variant back as a new
+   * object, which re-keys the row and destroys the control holding focus, so focus is put back once
+   * the new variants arrive. */
+  #refocus: number | null = null;
 
   readonly #reorder = new ReorderController(this, {
     order: () => this.#visible().map((row) => row.key),
@@ -161,9 +165,12 @@ export class VariantTable extends LitElement {
 
   /** Puts focus on a row's actions trigger — the way into the window where that variant's own
    * fields are edited, and the only control on the row that is not itself an edit. The Edit button
-   * behind it cannot take focus while the menu is closed. */
-  focusRow(index: number): void {
-    this.shadowRoot?.querySelector<HTMLElement>(`[data-test="actions-${index}"]`)?.focus();
+   * behind it cannot take focus while the menu is closed. A row just drawn has a trigger only once
+   * its menu has rendered, so this waits for that. */
+  async focusRow(index: number): Promise<void> {
+    const menu = this.shadowRoot?.querySelector<LitElement>(`[data-test="actions-${index}"]`);
+    await menu?.updateComplete;
+    menu?.focus();
   }
 
   #shows(variant: ProductEditorVariant): boolean {
@@ -185,6 +192,19 @@ export class VariantTable extends LitElement {
         (this.errors[index] !== undefined || (added.includes(row) && row.variant.id === undefined)),
     );
     if (hidden) this.status = "all";
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("variants") || this.#refocus === null) return;
+    const index = this.#refocus;
+    this.#refocus = null;
+    // The same row while it is still on screen; otherwise the next row on screen (a variant never
+    // saved leaves the list, so the one after it now holds its index), then the last one, then the
+    // filter, which is all that is left once no row is shown.
+    const shown = this.rows.flatMap((row, i) => (this.#shows(row.variant) ? [i] : []));
+    const target = shown.find((i) => i >= index) ?? shown.at(-1);
+    if (target !== undefined) void this.focusRow(target);
+    else this.shadowRoot?.querySelector<HTMLElement>('[name="variant-status"]')?.focus();
   }
 
   /** Re-reads the host's variants into rows, returning the rows it had not seen before. */
@@ -245,6 +265,7 @@ export class VariantTable extends LitElement {
       @click=${(event: Event) => {
         event.stopPropagation();
         if (this.busy || blocked) return;
+        if (name === "remove" || name === "restore") this.#refocus = index;
         this.#emit(`wt-${name}`, { index });
       }}
       >${label}</wt-button
