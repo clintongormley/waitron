@@ -22,12 +22,13 @@ import { describe, expect, it } from "vitest";
  * with them.
  *
  * WHAT THIS GUARD CHECKS TODAY, AND WHAT IT DOES NOT. Nearly every set is a single regenerated
- * SQLite baseline — `packages/db` and `packages/media` carry two entries each, `packages/fiscal-none`
- * none at all, and every other set exactly one (counted 2026-09-22 over the journals on disk). A
+ * SQLite baseline — `packages/db`, `packages/identity` and `packages/media` carry two entries each,
+ * `packages/fiscal-none` none at all, and every other set exactly one (counted 2026-09-23 over the
+ * journals on disk). A
  * one-entry journal can never be out of order, so those sets' cases below hold BY CONSTRUCTION: they
  * are not evidence that any `when` value in the tree is right, and a reader must not take them as
  * such. What is really exercised today is `outOfOrder` itself, pinned by the synthetic negative
- * control, the two sets that do carry a second entry, and the anti-vacuity anchor: every set's
+ * control, the three sets that do carry a second entry, and the anti-vacuity anchor: every set's
  * journal is on disk, and they yield more entries BETWEEN them than sets. The tree-scanning half
  * becomes a real check for a given set the moment it gains a SECOND migration —
  * and it is in place for that push rather than written after it.

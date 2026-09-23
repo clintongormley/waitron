@@ -500,12 +500,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in hand-written migration SQL, is invisible to it. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
-- **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables or
-  puts a `CREATE TRIGGER … ON` one of them — and its descriptor's `requires` must name it.**
-  `packages/media/drizzle/0001_image_references.sql` does both kinds of thing today: its triggers sit
-  on tables core and catalogue create. Guard: `scripts/module-graph-honesty.test.ts`, weaker than its
-  name — it reads SQL as TEXT and never reads a trigger's BODY, so a trigger that writes another
-  set's table between `BEGIN` and `END` is a cross-set edge nothing sees.
+- **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
+  puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
+  descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has
+  triggers on tables core and catalogue create, and others whose bodies read them. Guard:
+  `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and never reads
+  a trigger's BODY, so a table named only between `BEGIN` and `END`, read or written, is an edge
+  nothing checks. The engine will not catch it either: measured on `node:sqlite` (Node v26.7.0), a
+  trigger whose body names a missing table is created without complaint and fails only when it
+  fires, with `no such table`.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its append-only classification
   travels with it — `applyMigrations` installs each set's triggers from the `appendOnlyTables` the
@@ -568,8 +571,8 @@ browser test** — most of these rules exist because a test passed while proving
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
-- **Only the rigs under `bench/` start containers; no suite under `packages/` or `apps/` does**, so a
-  package suite that seems to hang is not waiting on Docker. Run a rig with
+- **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do**, so
+  a package suite that seems to hang is not waiting on Docker. Run a rig with
   `TESTCONTAINERS_RYUK_DISABLED=true`; an INTERRUPTED run then leaks containers, and `pnpm reap`
   removes them by label and age — but not every rig stamps the label. Never a blanket
   `docker volume prune`, and `docker volume inspect` before any manual `rm`. Which rig is which:
@@ -629,8 +632,6 @@ browser test** — most of these rules exist because a test passed while proving
   the runtime, and only on macOS (no Linux penalty), so it speeds the local hook and not CI — measure
   first. Receipt (the per-file cost table, why `scripts/pre-push.test.mjs` was left alone, and how to
   prove the knobs still arrive): [testing-guide.md](docs/developers/testing-guide.md).
-- **A probe that needs a Unix SOCKET runs inside the container.** Bind-mounting a socket dir out of
-  Docker Desktop's VM gives `ECONNREFUSED` on macOS.
 - **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
   every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
   `GIT_DIR` before trusting it.
@@ -681,7 +682,8 @@ browser test** — most of these rules exist because a test passed while proving
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it. Cost: rewriting a job claim as one statement left
   `packages/printing`'s race suite passing with its locking clause deleted, while the suite's header
-  still recorded the old shape failing. Receipt: [testing-guide.md](docs/developers/testing-guide.md).
+  still recorded the old shape failing. The suite that then held the proof went with PostgreSQL, and
+  nothing holds it today. Receipt: [testing-guide.md](docs/developers/testing-guide.md).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
   `recordSale`; correcting it took 42 tests red-to-green across eight files and left three red that

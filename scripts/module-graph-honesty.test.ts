@@ -337,9 +337,9 @@ describe("the tree's module graph is honest", () => {
   // just as `workforce→identity`, so it stays a control for the one detector it exercises: strip the
   // backtick from the `REFERENCES` character class and this goes red.
   //
-  // What this anchor does NOT cover is the trigger detector — the tree contains no trigger at all
-  // since the SQLite regeneration, so that detector's only controls are the crafted cases above.
-  // See the header's known limitation headed THE TRIGGER DETECTOR HAS NO TREE ANCHOR.
+  // What this anchor does NOT cover is the trigger detector: the tree has real trigger edges again
+  // (media's), but no assertion here names one, so that detector's only controls are the crafted
+  // cases above. See the header's known limitation headed THE TRIGGER DETECTOR HAS A TREE ANCHOR AGAIN.
   it("discovers the modules and finds the known real cross-module edges", () => {
     for (const name of ["core", "identity", "payments", "workforce"]) {
       expect(modules).toContain(name);
