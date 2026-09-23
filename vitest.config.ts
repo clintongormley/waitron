@@ -110,7 +110,7 @@ export default defineConfig({
       // the three front-ends' `vite.config.ts`. Naming it drops this project's branch margin from
       // 1.07 to 0.18, for two branches: one no test can assert at all, and one assertable only by
       // writing a TLS leaf into the box's real state directory or by exercising a copy of this file
-      // (measured 2026-09-23; ci-and-gates.md -> "Coverage thresholds are split by package"). So it
+      // (measured 2026-09-23; ci-and-gates.md -> "What the storage switch did to the bars"). So it
       // is measured by no coverage table in the repository. There is
       // deliberately no `exclude` (a suite is never measured, so naming one changes nothing).
       include: ["scripts/**/*.mjs", "packages/db/src/english-only.ts"],

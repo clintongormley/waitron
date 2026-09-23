@@ -23,7 +23,7 @@ export default defineConfig({
       // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
       // reason packages/catalogue's own vitest.config.ts excludes its identical barrel.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

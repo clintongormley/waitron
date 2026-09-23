@@ -16,7 +16,7 @@ export default defineConfig({
       // The registry (src/index.ts) is the package's only shipped source; the honesty test imports it,
       // so it is measured here rather than excluded as a barrel — an exclude would leave the table empty.
       exclude: [...coverageConfigDefaults.exclude],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

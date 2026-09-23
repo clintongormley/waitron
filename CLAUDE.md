@@ -104,10 +104,12 @@ formatting; machinery-only changes stop after root guards; deletion-only pushes 
 Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
-**Coverage thresholds** are split (owner decision 2026-09-05): a high bar of `98/98/98/95` for the
-fiscal core and the data-layer foundations, the `90/90/85/85` floor everywhere else, browser packages
-included. **One place holds the high-bar list authoritatively**: `HIGH_BAR_PACKAGES` in
-`scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it.
+**Coverage thresholds: every package is to hold the high bar of `98/98/98/95`** (owner decision
+2026-09-23), retiring the 2026-09-05 split that reserved it for the fiscal core and the data layer.
+The `90/90/85/85` floor is where a package sits only until tests bring it to the bar; it is promoted
+in the same change, and the floor goes once none is left on it. **One place holds the high-bar
+list authoritatively**: `HIGH_BAR_PACKAGES` in `scripts/coverage-thresholds.test.ts`, which is
+also the guard that pins every config against it.
 Prose that re-enumerates the list drifts, and three places were wrong at once: two still named
 four packages after the flip made it five, and a third asserted six. More:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).

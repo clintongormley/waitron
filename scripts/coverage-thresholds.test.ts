@@ -5,14 +5,13 @@ import { PACKAGES_WITHOUT_TESTS } from "./changed-scope.mjs";
 import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
- * The coverage bar is split in two (owner decision 2026-09-05, Track A item 1): the fiscal core and
- * the data-layer foundations everything else builds on hold 98/98/98/95, and every other package
- * holds the 90/90/85/85 floor. Which packages those are is the owner's list, not a rule that
- * derives them (`apps/server` holds the AEAT transport and sits at the floor); `HIGH_BAR_PACKAGES`
- * below is that list. The root project holds the high bar too: its coverage table is the root
- * `scripts/*.mjs` plus the vocabulary module, and two of those scripts are the classifiers that
- * decide what CI and the pre-push hook run, whose failure mode is a scoped run that selects nothing
- * and reports success (CLAUDE.md §2).
+ * Every package is to hold 98/98/98/95 (owner decision 2026-09-23, retiring the 2026-09-05 split
+ * that reserved it for the fiscal core and the data layer). Until each gets there it sits at the
+ * 90/90/85/85 floor; `HIGH_BAR_PACKAGES` below is the list of those that have been promoted, and a
+ * package joins it in the same change that brings it to the bar. The root project holds the high
+ * bar too: its coverage table is the root `scripts/*.mjs` plus the vocabulary module, and two of
+ * those scripts are the classifiers that decide what CI and the pre-push hook run, whose failure
+ * mode is a scoped run that selects nothing and reports success (CLAUDE.md §2).
  *
  * Which package holds which bar is a decision no per-package suite can check — a package's own
  * config decides whether its tests run at all — so this guard pins it from the root project
@@ -45,6 +44,27 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/db",
   "@waitron/payments",
   "@waitron/store",
+  "@waitron/composition",
+  "@waitron/country",
+  "@waitron/country-es",
+  "@waitron/country-gb",
+  "@waitron/country-packs",
+  "@waitron/credentials",
+  "@waitron/dashboard-modules",
+  "@waitron/diagnostics",
+  "@waitron/fiscal",
+  "@waitron/layouts",
+  "@waitron/membership",
+  "@waitron/migrations",
+  "@waitron/module",
+  "@waitron/purchasing",
+  "@waitron/recipes",
+  "@waitron/reporting",
+  "@waitron/scheduler",
+  "@waitron/shared",
+  "@waitron/ui",
+  "@waitron/workforce",
+  "@waitron/workforce-es",
 ];
 
 /** The `coverage.include` every package config declares. Read as text, like the thresholds below:
