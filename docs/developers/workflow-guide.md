@@ -243,11 +243,13 @@ This paragraph is copied verbatim from the source `CLAUDE.md`. It summarises a r
 in full in the user's global `~/.claude/CLAUDE.md`, which every repo shares — this copy duplicates
 that file rather than being its own source of truth.
 
-**Model selection (owner decision 2026-09-06, revised the same evening for cost):** the rule lives in
-the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and Codex are separated.
-Opus 4.8 is the default and drives everything the owner reads (spec, plan, execution driver);
-Fable 5.1 is opt-in for the brainstorm plus two short dispatched reads (a spec touching §5, fix
-round five) and never drives execution — a hook denies it; dispatched seats run on Opus 5; Codex
+**Model selection (owner decision 2026-09-06; the Claude half replaced 2026-09-23):** the rule lives
+in the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and Codex are
+separated. Every Claude seat — the driver, every dispatched subagent, every review, and the
+unattended campaign runners — runs on the default model, Opus 5.5 at high effort, with no per-task
+model pin; Fable 5.1 is opt-in for the brainstorm only, does no reviews, and never drives execution
+— a hook denies it. The runners' `claude` must be 2.1.280 or newer: 2.1.278 refused Opus 5.5
+(measured 2026-09-23). Codex
 (`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
 fewer tokens, and it found the real defect that Sol at low missed)
 holds exactly one seat **in a Claude-driven session** — when Codex drives, the roles reverse and
