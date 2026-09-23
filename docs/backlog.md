@@ -2044,7 +2044,7 @@ image constraints under *Detail → Box image*.
   minor-unit amount, a reader cancel refused after a timeout or a network error, a restricted key
   of unknown environment, the default SDK factory, an on-device forward pass the device resolved
   none of and one with two declines sharing an incident, and the dashboard forms' single-flight,
-  dismiss, default-callback and error-copy paths; 100/100/100/100); `server-kit` (**PR #TBD**,
+  dismiss, default-callback and error-copy paths; 100/100/100/100); `server-kit` (**PR #515**,
   2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
   certificate with no CN, and refusing a second close; 100/100/100/98).
 
