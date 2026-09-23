@@ -349,7 +349,9 @@ describe("ServerRouter", () => {
 });
 
 describe("ServerRouter — polling, refusals and stored state", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("start() probes at once and then every interval; a second start() adds no second poller", async () => {
     vi.useFakeTimers();
