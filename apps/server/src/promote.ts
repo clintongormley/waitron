@@ -184,8 +184,10 @@ export interface MirrorPromoteDeps extends PromoteDeps {
    * commits, so a process crash between them reboots the box either still a mirror or `mode=primary` on the
    * CORRECT series — never `mode=primary` on the primary's series with no mirror-promote path left to
    * self-heal it. It does NOT close the narrower POWER-LOSS window: `writeFileAtomic` does not fsync
-   * (`fs-atomic.ts` — atomic visibility, no durability across power loss), while the PONR is a durable
-   * Postgres commit, so a power cut can leave the rename unflushed behind a durable commit. That residual is
+   * (`fs-atomic.ts` — atomic visibility, no durability across power loss), while the PONR is a
+   * durable database commit — measured on this tree, the venue file runs `journal_mode = wal` with
+   * `synchronous = 2` (FULL), so a commit is fsynced — and a power cut can therefore leave the
+   * rename unflushed behind a commit that survived. That residual is
    * benign in R3b (nothing sells against a promoted cloud until the deferred till-reroute slice) and is the
    * carry-in for closing it (fsync the env write, or resolve the series at boot). Ordering the persist
    * before the flip is a correctness invariant, so it lives here rather than in the caller.

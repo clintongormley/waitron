@@ -25,10 +25,11 @@ export const PENDING_ADOPTION_FILE = "pending-adoption.json";
  * `packages/provisioning/src/tenant-guard.ts`), neither it nor the adoption-pending boot path inserts
  * one, nothing copies the primary's rows here, and the only `locations` insert anywhere else in the
  * tree — `applyVenue`'s, `packages/provisioning/src/venue-apply.ts` — is reached only by a
- * venue-provisioning run (the rest are test fixtures and demo scripts seeding their own in-memory
- * PGlite). Measured: that
- * establish against a migrated but empty database throws SQLSTATE 23503 naming the constraint and
- * rolls back, leaving zero `nodes` rows. `runFinishAdoption` therefore logs
+ * venue-provisioning run (the rest are test fixtures and demo scripts seeding their own database).
+ * Measured on this tree, against a directory migrated with every manifest set: inserting that `nodes`
+ * row with a `location_id` naming no `locations` row is refused with `errcode 787` and the whole
+ * message `FOREIGN KEY constraint failed` — this engine names NO constraint, so nothing downstream
+ * can tell which key it was — and leaves zero `nodes` rows. `runFinishAdoption` therefore logs
  * `adoption.establish_failed` and keeps this latch, and an adopted mirror stays adoption-pending until
  * a replacement copy mechanism lands (`docs/backlog.md` → *Replication, membership & failover*).
  */

@@ -36,9 +36,9 @@ export const rosterVersionStatus = enumType(["draft", "published", "superseded"]
 /**
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
  * legal record. Unlike `time_entries` (the immutable working-time record), a roster version is
- * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0001_workforce_baseline_sql.sql) — a draft is edited or discarded, a published version can be
- * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
+ * ordinary mutable data — a draft is edited or discarded, a published version can be re-stamped or
+ * removed, and nothing in the database refuses any of it; the grant that used to name the permitted
+ * writes went with PostgreSQL. No append-only trigger and no hash chain: no Spanish statute requires a
  * *schedule* to be tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED,
  * which `time_entries` satisfies alone (design 2026-07-22 §2.1 / plan
  * 2026-08-02-workforce-d2-scheduling §2.1). Freezing
@@ -100,9 +100,10 @@ export const rosterVersions = table(
     check("roster_versions_period_ck", sql`${t.periodEnd} >= ${t.periodStart}`),
     // draft ⟺ not yet published: `published_at` is set exactly when the version leaves draft, so
     // publishing that forgot to stamp, or a stamp on a still-draft row, is rejected. Mirrors the
-    // `(a is null) = (b is null)` shape workforce_chains_pointer_ck uses. Safe to reference the
-    // 'draft' literal here — roster_version_status is CREATE'd (not ALTER ... ADD VALUE'd) in the same
-    // migration, so the 55P04 hazard that kept time_entries off its 'correction' literal never arises.
+    // `(a is null) = (b is null)` shape workforce_chains_pointer_ck uses. Referencing the 'draft'
+    // literal here needs no justification any more: the hazard that kept `time_entries` off its own
+    // 'correction' literal was PostgreSQL's (an enum value could not be used in the transaction that
+    // added it, 55P04), and on this engine the status column is plain text with the `check` below.
     check(
       "roster_versions_publish_shape_ck",
       sql`(${t.status} = 'draft') = (${t.publishedAt} is null)`,

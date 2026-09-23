@@ -132,7 +132,8 @@ export async function updateCategory(
   patch: Partial<CategoryInput>,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
-  // Take the content lock before the hierarchy lock, as creation does.
+  // Validate the translations before reading the hierarchy, as creation does. Neither step takes
+  // a lock any more: one write transaction runs on the venue file at a time.
   if (patch.name !== undefined) await validateContentTranslations(tx, patch.name, fallbackLanguage);
   const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;

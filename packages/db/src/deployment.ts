@@ -119,8 +119,11 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * unlike `stampDeployment`'s immutable environment, there is no "already stamped" guard. The only
  * non-test caller today is the adopt path, which sets `mirror` at setup (`adoptFromPrimary` → here,
  * `apps/server/src/adopt.ts`); the promotion path (design §10) that will set `primary` back is not
- * built yet. An OWNER-role write: `app_user` holds no UPDATE on `deployment` (the grant read-back
- * asserts it), so this runs on the provisioning/owner connection, never the app pool. Requires the
+ * built yet. **Nothing in the database refuses this write.** It was an owner-role write on
+ * PostgreSQL, where `app_user` held no UPDATE on `deployment`; this engine has no roles and no
+ * grants (`./testing/roles.ts`), and `deployment` carries no trigger, so an `update deployment …`
+ * on an ordinary handle succeeds — measured 2026-09-23 on Node v26.7.0 against the core migration
+ * set. Which code may set the mode is now a convention the callers keep, nothing more. Requires the
  * singleton row (stamp the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB,
  * which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
@@ -195,8 +198,8 @@ export async function readDeploymentAxes(
   };
 }
 
-/** Sets this database's singleton-ownership role. An OWNER-role write (app_user holds no UPDATE on
- * deployment), like `setDeploymentMode`; fail-loud on a 0-row update (stamp the environment first).
+/** Sets this database's singleton-ownership role. Nothing in the database refuses this write, for
+ * the reason `setDeploymentMode` states; fail-loud on a 0-row update (stamp the environment first).
  * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
  * read-only mirror cannot hold singletons; a promotion flips the mode first (the promote action's job). */
 export async function setSingletonRole(db: Database, role: SingletonRole): Promise<void> {
@@ -204,9 +207,9 @@ export async function setSingletonRole(db: Database, role: SingletonRole): Promi
 }
 
 /** Sets the singleton-ownership role on a caller-provided transaction (see `setSingletonRole` for the
- * full contract — owner-role write, fail-loud on a 0-row update, `deployment_role_valid_ck` refuses
- * `'primary'` on a mirror). Exists so a caller can commit this flip in the SAME transaction as a
- * related write (CLAUDE.md §3: a caller that must write atomically with another write shares one
+ * full contract — nothing in the database refuses it, fail-loud on a 0-row update,
+ * `deployment_role_valid_ck` refuses `'primary'` on a mirror). Exists so a caller can commit this
+ * flip in the SAME transaction as a related write (CLAUDE.md §3: a caller that must write atomically with another write shares one
  * transaction) — the promotion path (spec `2026-09-03-reserved-standby-identity-and-promotion-design.md`
  * §6 R1) commits it with the membership-document write (`writeNodeMembershipTx`), so both land or neither
  * does. `setSingletonRole` is this on its own transaction. */
@@ -230,9 +233,15 @@ export async function readBreakGlassVerifier(db: Database | Transaction): Promis
 }
 
 /** Writes the break-glass verifier onto the singleton `deployment` row, on a caller-provided
- * transaction so a promotion can commit it atomically with its other writes (CLAUDE.md §3). An
- * OWNER-role write: `app_user` holds no UPDATE on `deployment` (deployment.break-glass.test.ts's
- * real-PG receipt asserts the app-role write is refused 42501), so this runs on the owner connection.
+ * transaction so a promotion can commit it atomically with its other writes (CLAUDE.md §3).
+ *
+ * **Nothing refuses another writer this column.** The spec (§9.3) reserves it for the promotion
+ * path, and on PostgreSQL the database held that line: `app_user` was refused the UPDATE with
+ * `42501`. That case is gone with the roles — `deployment.break-glass.test.ts`'s own header records
+ * its deletion as a loss — and an `update deployment set break_glass_verifier = …` on an ordinary
+ * handle now succeeds, measured 2026-09-23 on Node v26.7.0 against the core migration set. The rule
+ * survives only as a convention the callers keep.
+ *
  * Requires the singleton row (stamp the environment first); on an unstamped database the UPDATE is a
  * silent 0-row no-op, which never happens for a node reaching promotion. */
 export async function setBreakGlassVerifierTx(tx: Transaction, verifier: string): Promise<void> {

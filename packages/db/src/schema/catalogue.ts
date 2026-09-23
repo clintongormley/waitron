@@ -86,9 +86,9 @@ export const products = table(
     // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
     // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
     // null here just means "no picture" — unlike `allergens`' null, which is a PENDING state the
-    // till surfaces. `GRANT SELECT, INSERT, UPDATE ON "products" TO app_user`
-    // (`packages/db/drizzle/0001_db_baseline_sql.sql`) names no column list, so it covers this column
-    // and every column added to the table afterwards.
+    // till surfaces. Nothing at the database decides who may write it: this engine has no roles and
+    // no grants (../testing/roles.ts), so a column added to this table needs no privilege change,
+    // where on PostgreSQL that followed from the table-wide GRANT naming no column list.
     image: label("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +

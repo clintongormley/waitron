@@ -183,8 +183,9 @@ describe("the caught error's own words on the page", () => {
     expect(body).toContain("smtp://mailer:***@smtp.example:587");
     // And the second control, for the CHOICE: stdout is the installer's channel (spec §4.4) and
     // keeps the line whole. Redacting there too would erase the difference between a wrong password
-    // and no password at all — both mask to `***` — which is exactly what an installer chasing
-    // `provisioning.database_unreachable` (28P01) has to tell apart.
+    // and no password at all — both mask to `***` — which is exactly what an installer chasing a
+    // refused outbound connection has to tell apart. This case drives an SMTP URL, which is the
+    // shape that still reaches the log; the box's own database is a file and carries no password.
     expect(stdout.join("")).toContain("hunter2");
   });
 });

@@ -405,16 +405,19 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   passes; it does not read test files; and it exempts, whole, each of the core migration files that
   historically carried the column, so a column re-added inside one of those is seen by nothing.
 - **`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
-  types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `uuid()`
-  or `numeric()` straight from `drizzle-orm/pg-core`, so the SQLite switch replaces one file rather
-  than every column in the tree. One scoped exception: `text` in
+  types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `text()`
+  or `integer()` straight from `drizzle-orm/sqlite-core`, so the NEXT engine change replaces one
+  file rather than every column in the tree. One scoped exception: `text` in
   `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the bytes the
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
   IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it,
-  and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `bigserial`,
-  met on the change-log table — is in no forbidden set and passes anywhere. A builder the
-  vocabulary STOPS importing would leave the set the same day, which `numeric` did; retired
-  builders are held by a hand-written list beside the derived one.
+  and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `blob`, a
+  real `drizzle-orm/sqlite-core` column builder — is in no forbidden set and passes anywhere
+  (measured 2026-09-23: a file importing `blob` and a file importing `text` added side by side
+  under `packages/fiscal-verifactu/src`, and the guard reported only the `text` one). A builder the
+  vocabulary STOPS importing would leave the set the same day; the hand-written list that holds
+  such a name forbidden sits beside the derived one, and it is empty, because its one entry named a
+  PostgreSQL builder and went with the engine.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
   (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
   for a raw-SQL read of an AMOUNT, which casts the expression `cast(x as text)` — this engine has no
@@ -487,7 +490,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   Guard: `scripts/module-graph-honesty.test.ts`, which reads text (and says so) for any
   cross-module `EXECUTE FUNCTION`, not one named function.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
-  table a module owns belongs to that module's own set, where its grants travel with it.
+  table a module owns belongs to that module's own set, where its append-only classification
+  travels with it — `applyMigrations` installs each set's triggers from the `appendOnlyTables` the
+  module declared. Not its grants: this engine has none, and a `grant` grep over every `.sql` under
+  `packages/` and `apps/` counted 0 on 2026-09-23.
 - **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
   and nothing else in the tree notices.** Declare every foreign key and every unique index in the
   TypeScript schema, so `drizzle-kit generate` carries it; where one genuinely cannot be declared,
@@ -520,9 +526,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   rather than serving a half-migrated schema.
 - **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
   `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
-  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: `waitron-provision
-instance`, the cold restore, `rejoin-command` and `dev-setup` each migrate a live database with no
-  ahead check. Cost: without it an ahead database re-migrates CLEANLY and surfaces later as an
+  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: the cold restore,
+  `rejoin-command` and `dev-setup` each migrate a live database with no ahead check. (A fourth,
+  `waitron-provision instance`, went when a venue became a directory of SQLite files — the reason
+  is recorded at `packages/provisioning/src/errors.ts`.) Cost: without it an ahead database re-migrates CLEANLY and surfaces later as an
   unclassified driver error.
 - **An empty connection string is a valid connection string** — it resolves to localhost with every
   default. Anything reading a URL from env or a prompt refuses `""` explicitly.
@@ -656,6 +663,15 @@ browser test** — most of these rules exist because a test passed while proving
   typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
   from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own
+  case.** Deletion shows the guard catches what it was written for; only a case in the other
+  direction — the legitimate call that must still be served — shows it is not too wide. Cost: a
+  write-queue re-entrancy guard written as a flag passed every case in its own file, including the
+  one about queued callers (whose three callers are dispatched in ONE tick, before any body starts,
+  so the flag is still false when each checks it), and turned every concurrent request in
+  `packages/payments` into a 500. The distinction the flag could not make — nested INSIDE a running
+  body, versus merely waiting BEHIND one — is now read from asynchronous context, and the missing
+  case is the second caller in `packages/store/src/write-queue.test.ts`.
 - **A proof-by-deletion belongs to the SHAPE of the code it was taken against.** Restructure that
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it. Cost: a one-statement job claim left `packages/printing`'s

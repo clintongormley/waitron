@@ -15,7 +15,7 @@ import type { PrintConfig } from "@waitron/printing";
 // many-to-many (Task 1): a station has zero-or-more printers (a screen-less prep
 // station gets paper; a group printer is attached to every station) and a printer serves
 // one-or-more stations. These are CONFIG verbs — plain live-check + INSERT/DELETE on the caller's
-// transaction as app_user; the `printer.manage` gate is applied at the ROUTE
+// transaction; the `printer.manage` gate is applied at the ROUTE
 // layer (Task 5), exactly as the kitchen.ts station/course verbs rely on the route's
 // `authorizeManager` rather than gating inside the verb. The scope is `PrintConfig` (the tenant +
 // location the till/route carries), the same type `enqueuePrintJob`/`createPrinter` run under. The
@@ -43,7 +43,7 @@ export interface StationPrinter {
  * will refuse.
  *
  * Then INSERT the `(station_id, printer_id)` row with `ON CONFLICT DO NOTHING`, so
- * attaching an already-attached pair is a silent no-op rather than a 23505 — the idempotency the
+ * attaching an already-attached pair is a silent no-op rather than a duplicate-key refusal — the idempotency the
  * config UI's multi-select relies on (re-saving a selection that already holds the pair must not
  * error). Both predicates bind as `$n` (never concatenated).
  */

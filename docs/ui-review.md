@@ -14,18 +14,28 @@ mode — no code, no approval step. Till PIN **5555**; dashboard **owner@demo.wa
 
 **Running the stack from a worktree.** Start it with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`
-(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. The dev Postgres is ONE
-container for every checkout (`docker-compose.yml`, port 5432) and `apps/server/.env` is a
-per-DATABASE artefact (venue ids + the credentials key), not a per-checkout one, so a fresh worktree
-has none and `worktree.py new` does not copy it. `wa-wt` brings the container up under the fixed
-compose project `waitron` (an unqualified `docker compose up` from a worktree names the project after
-the directory and starts a second `db` with an empty volume on the same port; the stray
-`waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db` volume is what that leaves behind),
-copies the current target's `.env` to the other checkouts and follows the log. Changing between demo
-and onboarding wipes the throwaway application database, preserves the shared development CA, and
-rebuilds the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to
-rebuild without changing target. In demo mode the till re-enrols itself on first load after that — no
-code, no approval step.
+(`~/workspace/tools/wa-wt`, since 2026-09-06), never with a bare `pnpm dev*`. **The dev database is
+one for every checkout**, and what makes it one is a shared STATE DIRECTORY rather than a container:
+`wa-wt` runs every worktree's `pnpm dev` and `pnpm dev:setup` with `WAITRON_STATE_DIR` set to the
+same `$HOME/workspace/.waitron-dev/box`, and the venue directory — two SQLite files on the host — is
+derived from it by `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`). `apps/server/.env` is
+a per-DATABASE artefact (venue ids + the credentials key), not a per-checkout one, so a fresh
+worktree has none and `worktree.py new` does not copy it; `wa-wt` copies the current target's `.env`
+to the other checkouts and follows the log.
+
+The compose `db` service in `docker-compose.yml` is still started (mailpit comes up with it) but it
+no longer holds the dev venue and nothing in the repository reads it — the file's own header says
+so. The reason to keep using `wa-wt` for it is unchanged: an unqualified `docker compose up` from a
+worktree names the compose project after the directory and starts a SECOND `db` on the same port,
+which is what left the stray `waitron-feat-onboarding-slice1b-setup-mode-boot_waitron-dev-db`
+volume behind. `wa-wt` brings it up under the fixed project `waitron`.
+
+Changing between demo and onboarding REMOVES the venue directory, preserves the shared development
+CA (`wa-wt` clears everything under the shared state directory except `tls`, then `dev:reset`
+`rm -rf`s the venue directory — `resetVenueDir` in `apps/server/scripts/dev-setup.ts`), and rebuilds
+the selected target. Use `wa-wt reset demo [name]` or `wa-wt reset onboarding [name]` to rebuild
+without changing target. In demo mode the till re-enrols itself on first load after that — no code,
+no approval step.
 
 The print agent starts with the stack and connects to the local server on port 8080. It waits for
 the server to listen, then uses HTTP or HTTPS to match the development box. With HTTPS, it reads

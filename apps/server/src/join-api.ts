@@ -106,8 +106,9 @@ function requireKind(value: string | undefined): JoinRequestKind {
 
 /**
  * A present-but-optional body UUID: absent OR explicit `null` → `null` (the field does not apply to
- * this profile's form factor); a present value must be UUID-SHAPED (a non-uuid would `22P02` at the
- * bare-uuid column) → `management.request_invalid` naming the field. `resolveDeviceBinding` decides
+ * this profile's form factor); a present value must be UUID-SHAPED — the id columns are plain
+ * `text` and refuse nothing, so this screen is the only one (`till-api.ts`'s note on
+ * `shared.invalid_id`) → `management.request_invalid` naming the field. `resolveDeviceBinding` decides
  * whether the field is REQUIRED for the chosen profile (`device.station_required` /
  * `device.register_required`).
  */
@@ -159,8 +160,8 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * — an unauthorised caller learns which ids are live from the 403-vs-404 split and enumerates the
    * venue's pending requests one guess at a time.
    *
-   * A MALFORMED id takes the same path as an unknown one: it never reaches a bare-uuid comparison
-   * (which would `22P02` → an opaque 500), and it is refused after the gate like any other miss.
+   * A MALFORMED id takes the same path as an unknown one: it never reaches the by-id comparison,
+   * which would refuse nothing and match nothing, and it is refused after the gate like any other miss.
    */
   const gatedByRowKind = <T>(
     sessionId: string,
@@ -305,8 +306,8 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const stationId = optionalBodyUuid(body.stationId, "stationId");
         const registerId = optionalBodyUuid(body.registerId, "registerId");
-        // A malformed id names no request — refused before it reaches a bare-uuid comparison (which
-        // would `22P02` → an opaque 500), exactly as an unknown one is.
+        // A malformed id names no request — refused before it reaches the by-id comparison, which
+        // would refuse nothing and match nothing, exactly as an unknown one is.
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
           choice,
@@ -345,8 +346,8 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const body = await readJsonBody<{ choice?: unknown }>(c);
       const result = await gated(sessionId, "printer.manage", (tx) => {
         const choice = requireString(body.choice, "choice");
-        // A malformed id names no request — refused before it reaches a bare-uuid comparison (which
-        // would `22P02` → an opaque 500), exactly as an unknown one is (oracle-free, decision M3).
+        // A malformed id names no request — refused before it reaches the by-id comparison, which
+        // would refuse nothing and match nothing, exactly as an unknown one is (oracle-free, decision M3).
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptPrintAgentJoinRequest(tx, deps.cfg, id, { choice });
       });

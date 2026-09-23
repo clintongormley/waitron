@@ -79,8 +79,16 @@ const ORDER_PATH_FILES = [
 /**
  * An advisory lock in any of its four spellings — `pg_advisory_lock`, `pg_advisory_xact_lock` and
  * the two `pg_try_…` variants. SQLite has no equivalent at all, so code that serialises on one has
- * to be rewritten rather than translated; the extras save serialises on a `select … for update` of
- * the rows it is about instead.
+ * to be rewritten rather than translated; the extras save serialises on the venue file's write
+ * queue instead — `packages/store/src/write-queue.ts` issues `begin immediate` and admits one
+ * write transaction on the file at a time, so every body it runs is serialised against every other
+ * one rather than only against whatever a clause named.
+ *
+ * The `select … for update` this note used to name was the intermediate step, and it is gone too.
+ * `scripts/postgres-sql-residue.test.ts` forbids that clause, but NOT here: its hand-written root
+ * list holds `apps/server/src`, `packages/reporting/src`, `packages/reporting/test`,
+ * `packages/workforce/src` and `packages/scheduler/src`, and `packages/catalogue/src` is not one
+ * of them. So nothing would refuse the clause coming back into this package.
  */
 const ADVISORY_LOCK = /pg_(?:try_)?advisory_[a-z_]*lock\b/;
 

@@ -17,14 +17,16 @@ import { isUnset } from "../src/env-value.js";
 
 /**
  * The venue directory for `env`: `WAITRON_VENUE_DIR` if it names one, otherwise `venue` under the
- * state directory — `config.ts:746`'s `join(resolvedStateDir, "venue")`, reached through the same
+ * state directory — the `venueDir` default in `config.ts`, `join(resolvedStateDir, "venue")`, reached through the same
  * `resolveConfigDir` so an unset-or-empty value falls back rather than resolving to the cwd.
  *
  * `defaultStateRoot` is the last-resort root, and omitting it imports `boot.ts`'s
  * `DEFAULT_STATE_ROOT` — the constant the server itself defaults to. The import is DYNAMIC and
  * happens only on the path that needs it, for two reasons: a script run with `WAITRON_VENUE_DIR`
  * set never pays for `boot.ts`'s whole module graph, and a test can drive every other case without
- * loading it (the same choice `dev-setup.ts:125` makes for the same constant). It is still paid for
+ * loading it — the same choice `dev-setup.ts`'s `main` makes for the same constant, where
+ * `DEFAULT_STATE_ROOT` is reached through `await import("../src/boot.js")` rather than a top-level
+ * import). It is still paid for
  * at BUILD time — esbuild inlines the dynamic import, which measured 2.7 MB on
  * `dist/register-till.js` (7.12 MB with it, 4.41 MB with the constant replaced by a literal,
  * 2026-09-22). The alternative is respelling `new URL("state", import.meta.url)` here, where it

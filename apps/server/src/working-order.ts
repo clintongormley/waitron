@@ -487,8 +487,9 @@ async function priceOrderLines(
 
   // KDS-2 (A1): screen each non-null course OVERRIDE against the SAME live-course definition the config
   // verbs use, so this — the ONE course-write path that skipped it — no longer accepts a crafted id. A
-  // malformed (non-uuid) override would `22P02` at `requireLiveCourse`'s own `id = $1` uuid cast, so fold
-  // it to the SAME `course.not_found` first (the shape the fire route's `isUuid` screen uses);
+  // malformed (non-uuid) override reaches `requireLiveCourse`'s own `id = $1` read, which neither
+  // objects to it nor matches it, so fold it to the SAME `course.not_found` first (the shape the fire
+  // route's `isUuid` screen uses);
   // `requireLiveCourse` then refuses an absent / DIFFERENT-venue (its FK does not carry the venue) / retired
   // id — location-scoped, `course.not_found`. Only the OVERRIDE is screened: the product DEFAULT
   // (`product.course_id`, resolved below) is an already-valid stored FK, and re-validating it would
@@ -765,12 +766,12 @@ export function toVatBreakdown(
  *
  * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
  * That id is what makes park IDEMPOTENT — a re-sent park (a lost-response retry) PK-collides on
- * `working_orders.id`, and `parkOrder` catches that 23505 and REPLAYS the existing OPEN order's
+ * `working_orders.id`, and `parkOrder` catches that refusal and REPLAYS the existing OPEN order's
  * `{ id, orderNumber }` rather than surfacing the collision, so at most one order is ever parked for the
  * id and the retry sees the original result. This mirrors PAY's own replay (`payWorkingOrder`, which
  * re-returns an already-settled order's ticket rather than filing a second chained record). The ONE
  * exception is a colliding id whose committed row is no longer `open` (abandoned/settled/placed) — a
- * pathological id reuse, not a held-order retry — which is re-thrown as the raw 23505 unchanged.
+ * pathological id reuse, not a held-order retry — which is re-thrown raw and unchanged.
  * `quantity` is a positive decimal string validated against the selected unit's snapshotted precision.
  *
  * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
@@ -937,12 +938,12 @@ export async function parkOrder(
     if (!isUniqueViolation(error)) {
       throw error;
     }
-    // A 23505 on `working_orders_pkey`: a re-sent park (see `ParkOrderRequest` for the stable client id)
-    // collides on the id an EARLIER park already committed. That row is READABLE now in a fresh
-    // transaction — the unique violation fires only against a COMMITTED conflicting row (an UNCOMMITTED
-    // concurrent insert of the same key would BLOCK on the index until its writer commits or aborts, not
-    // error), which is exactly why `payWorkingOrder`'s 23505 backstop (`till-sale.ts`) replays in a fresh
-    // tx too. Replay the committed OPEN order's number, filing and inserting nothing.
+    // A duplicate-key refusal on `working_orders`' primary key: a re-sent park (see `ParkOrderRequest`
+    // for the stable client id) collides on the id an EARLIER park already committed. That row is
+    // READABLE in a fresh transaction, because `packages/store/src/write-queue.ts` admits one write
+    // transaction on the venue file at a time — so the colliding row was committed before this
+    // transaction began, and there is no uncommitted writer to wait for. That is why
+    // `payWorkingOrder`'s duplicate-key backstop (`till-sale.ts`) replays in a fresh tx too. Replay the committed OPEN order's number, filing and inserting nothing.
     return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [existing] = await tx
@@ -950,7 +951,7 @@ export async function parkOrder(
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // Not a replayable held order — the colliding id is not `open` (abandoned/settled/placed, a
-      // pathological id reuse) — so re-throw the raw 23505 unchanged per the docstring's exception, never fabricating a result.
+      // pathological id reuse) — so re-throw the raw refusal unchanged per the docstring's exception, never fabricating a result.
       if (existing === undefined) {
         throw error;
       }
@@ -988,7 +989,7 @@ export async function parkOrder(
  * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
  * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
  * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
- * CALLER's transaction as app_user. `table.not_found`/`table.inactive` guard the
+ * CALLER's transaction. `table.not_found`/`table.inactive` guard the
  * table itself.
  */
 export async function openTab(
@@ -1093,9 +1094,9 @@ async function assertAnchoredTabOpen(
  *
  * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
  * denormalised grouping key; `working_order_line_id` is the fired line, whose `(
- * working_order_line_id)` unique makes a double-fire collide (23505) rather than duplicate. The two
+ * working_order_line_id)` unique makes a double-fire collide rather than duplicate. The two
  * catalogue reads (the venue default once, then all lines' product/category routes in one batched
- * `inArray`) and the insert all run on the CALLER's transaction as app_user. An
+ * `inArray`) and the insert all run on the CALLER's transaction. An
  * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
  *
  * SIDE EFFECT (KDS-4 print-on-fire, §3b): after the insert, the newly-fired items (the insert's
@@ -1308,7 +1309,7 @@ export async function fireLines(
     });
   } catch (error) {
     // A line already fired collides on `ticket_items`' per-line `(working_order_line_id)`
-    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
+    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that refusal to the domain
     // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
     // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
     // path (placeOrder / sendToPrep / addTabRound) is covered by construction. Any other error re-throws.
@@ -1677,8 +1678,8 @@ export async function voidTabLine(
   // FIX 2: a parent dish takes its modifiers with it (design §6). Resolve the named line's id first so
   // its child modifier lines (`parent_line_id = <that id>`) can be removed in the SAME delete — the
   // self-referential `working_order_lines_parent_fk` is NO ACTION (0080), checked at statement END, so
-  // deleting the parent alone would orphan its children and raise 23503 (an opaque `server.internal`
-  // 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
+  // deleting the parent alone would orphan its children and be refused by the foreign key (an opaque
+  // `server.internal` 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
   // Voiding a CHILD line directly matches only itself (a modifier has no children), so this is a plain
   // one-row delete in that case — unchanged behaviour.
   // A6: resolve the named line AND its (at most one) ticket item in ONE round trip via a LEFT JOIN, still
@@ -1879,7 +1880,7 @@ export async function unmarkLineServed(
  * allocation against a concurrent append, is covered by the same one-writer property
  * (`addTabRound` says the same about its own allocation).
  *
- * Runs on the CALLER's transaction as app_user.
+ * Runs on the CALLER's transaction.
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -2547,7 +2548,8 @@ async function carveOffLines(
     }
     // FIX 2: a modifier CHILD line may not be named directly — it transfers only WITH its dish (a
     // parent whole-line move cascades its children below). Naming it alone would orphan it: the source
-    // child would reference a deleted parent (23503) or land ungrouped on the destination. Refuse.
+    // child would reference a deleted parent (refused by the foreign key) or land ungrouped on the
+    // destination. Refuse.
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
@@ -3942,7 +3944,7 @@ export interface StationQueueGroup {
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
  * order fixes that group's position (oldest-first) and its `queuedAt`. Venue-wide (till-reroute §3.6 —
  * not node-scoped): the station's queue is the whole venue's, so a promoted node keeps serving the
- * dead node's fired items. Runs on the CALLER's transaction as app_user. PGlite
+ * dead node's fired items. Runs on the CALLER's transaction. PGlite
  * proves the join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
  * real-Postgres's job (working-order.pay-and-dispatch.test.ts), the CLAUDE.md §4 split.
  */
@@ -4299,7 +4301,7 @@ export interface ExpoOrder {
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction as `app_user`. PGlite proves the join, the
+ * Runs on the CALLER's transaction. PGlite proves the join, the
  * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
  * venue-wide, cross-node read is real-Postgres's job (working-order.pay-and-dispatch.test.ts), the same split
  * `listStationQueue` uses (CLAUDE.md §4).
@@ -4366,8 +4368,9 @@ export async function listExpoQueue(
       // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
       // listTablesWithState while the READ itself is venue-wide (§3.6). The `order by` — a seated-tab match
       // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
-      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table AND
-      // a table it delivers to — and PostgreSQL could then return either label across calls).
+      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table
+      // AND a table it delivers to — and nothing makes an unordered `limit 1` pick the same one
+      // twice, whatever the engine; the `order by` is what does).
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}

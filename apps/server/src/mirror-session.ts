@@ -33,8 +33,8 @@ const KEEPALIVE_INTERVAL_MS = 60_000;
 /**
  * Ensures the mirror's ambient read-only viewer exists: one `admin` person (every permission, so every
  * gated dashboard read passes `authorizeManager` — the §5 gate is what enforces read-only, not this
- * role) and one live management session for it. Idempotent — safe to call on every boot. Runs under the
- * as `app_user` (which already holds INSERT/UPDATE on both tables; no new grant).
+ * role) and one live management session for it. Idempotent — safe to call on every boot. Runs under
+ * one `withTransaction`.
  */
 export async function ensureMirrorViewer(db: Database): Promise<void> {
   await withTransaction(db, async (tx) => {

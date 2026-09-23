@@ -43,15 +43,18 @@ export const nodes = table("nodes", {
   // PRIVATE half is sealed in the vault (apps/server/node-identity.ts), never here. Nothing carries
   // the primary's nodes row to a mirror today: the bundle carries identity and dial details only
   // (mirror-bundle.ts's header), and the row copy that used to went with the deleted replication.
-  // Set owner-role at provision (setNodePublicKey); app_user holds SELECT only.
+  // Set at provision by setNodePublicKey. Nothing in the database refuses another writer: this
+  // engine has no roles and no grants (../testing/roles.ts), where PostgreSQL granted app_user
+  // SELECT alone on this table.
   publicKey: label("public_key"),
   // The primary's ENDORSEMENT of this node's public_key (design §4/§6 R2): a signed
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document
   // this node later signs, chaining back to setup. Public data — the exact sibling of `public_key`
   // above — so it lives here, not in the secret vault (whose exact-match string-only payload cannot
   // hold it). Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
-  // NULL. Set owner-role at adopt (insertReservedNodeTx); app_user holds SELECT only. Read at R3
-  // promotion to attach to the minted membership document.
+  // NULL. Set at adopt by insertReservedNodeTx, which is the only writer by convention — see
+  // public_key above for what the database used to hold and no longer does. Read at R3 promotion to
+  // attach to the minted membership document.
   endorsement: json<Endorsement>("endorsement"),
   createdAt: ts("created_at").notNull().$defaultFn(now),
 });

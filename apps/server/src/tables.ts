@@ -86,8 +86,8 @@ export interface DiningTable {
 }
 
 /**
- * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
- * CALLER's transaction as app_user. A duplicate `(location, label)` collides
+ * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
+ * the CALLER's transaction. A duplicate `(location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `table.label_taken` rather than the raw refusal. A `zoneId` naming no `floor_zones`
  * row throws `zone.not_found`, from {@link requireZone} before the insert.
@@ -182,8 +182,18 @@ export async function updateTable(
   }
 }
 
-/** Deactivate a table (`active = false`) — never a hard delete (the table has order history; app_user
- *  holds no DELETE on `dining_tables`). An absent id throws `table.not_found`. */
+/**
+ * Deactivate a table (`active = false`) — never a hard delete, because the table has order history.
+ * An absent id throws `table.not_found`.
+ *
+ * THIS VERB IS THE WHOLE GUARD, and this note says it once for the deactivate family across
+ * `tables.ts`, `kitchen.ts`, `till-api.ts`, `management-api.ts`, `device-api.ts` and `print-api.ts`,
+ * which point back here. The database used to refuse a hard delete on its own: the application role
+ * held no `DELETE` on these tables, so even a wrong code path could not lose the history. This
+ * engine has no roles and no grants at all — `asAppUser` is now an empty function
+ * (`packages/db/src/index.ts` states that) — so a `delete from dining_tables` issued by any code in
+ * this process would simply run. Nothing below the verb objects.
+ */
 export async function deactivateTable(
   tx: Transaction,
   // Unused here for the same reason as `updateTable` — kept for the uniform verb surface.
@@ -203,7 +213,7 @@ export async function deactivateTable(
 /**
  * The deployment holds one tenant per database. Place a table on the FP-2 spatial floor plan
  * (design §placement): write its zone + canvas coordinates + shape + rotation. Runs on the
- * CALLER's transaction as app_user. LOCATION-scoped to `cfg.locationId` (like
+ * CALLER's transaction. LOCATION-scoped to `cfg.locationId` (like
  * the sibling read {@link listTables}): a tenant can hold several venues, so both the table and
  * the zone must belong to THIS venue — a caller supplying another location's table or zone UUID
  * is refused, not allowed to reach across venues. Validates IN ORDER, each with its own precise
@@ -303,9 +313,9 @@ export interface FloorZone {
 
 /**
  * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction as app_user. A duplicate `(location, name)`
+ * the CALLER's transaction. A duplicate `(location, name)`
  * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
+ * surfaced as `zone.name_taken` rather than the raw refusal — the same shape {@link createTable} maps
  * `table.label_taken` with.
  */
 export async function createZone(
@@ -387,8 +397,9 @@ export async function updateZone(
   }
 }
 
-/** Deactivate a zone (`active = false`) — never a hard delete (a `dining_tables.zone_id` may reference
- *  it; app_user holds no DELETE on `floor_zones`). An absent id throws `zone.not_found`. */
+/** Deactivate a zone (`active = false`) — never a hard delete: a `dining_tables.zone_id` may
+ *  reference it, and the verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). An
+ *  absent id throws `zone.not_found`. */
 export async function deactivateZone(
   tx: Transaction,
   // Unused here for the same reason as `updateZone` — kept for the uniform verb surface.
@@ -570,8 +581,9 @@ export async function updateStatus(
   }
 }
 
-/** Deactivate a status (`active = false`) — never a hard delete (a table may reference it; app_user
- *  holds no DELETE on `table_service_statuses`). Manager/admin only. Absent id → `status.not_found`. */
+/** Deactivate a status (`active = false`) — never a hard delete: a table may reference it, and the
+ *  verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). Manager/admin only.
+ *  Absent id → `status.not_found`. */
 export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; id: string },
@@ -593,7 +605,7 @@ export async function deactivateStatus(
  * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
  * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
  * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction as app_user. The status is occupancy-INDEPENDENT: a
+ * CALLER's transaction. The status is occupancy-INDEPENDENT: a
  * `free` table may carry one, so this never consults the tab state.
  */
 export async function setTableStatus(

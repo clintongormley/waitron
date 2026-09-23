@@ -36,12 +36,28 @@ export const workforceCorrectionStatus = enumType(["requested", "approved"]);
 /**
  * The single append-only stream of clock events — the working-time record floor (art. 34.9).
  *
- * IMMUTABLE, unlike `persons`/`employments`: the app role holds only SELECT, INSERT, and
- * UPDATE/DELETE/TRUNCATE are revoked and backstopped by triggers
- * (drizzle/0001_workforce_baseline_sql.sql). A clock event is never rewritten or deleted; a mistake is
- * corrected by APPENDING a correction row (Slice 3), never by editing history. This is the same
- * role-revocation floor `registros_facturacion` carries, and the reason the record lives in Postgres
- * (which has a privilege system) rather than SQLite (which does not).
+ * IMMUTABLE, unlike `persons`/`employments`: a clock event is never rewritten or deleted; a mistake
+ * is corrected by APPENDING a correction row (Slice 3), never by editing history. What holds that
+ * floor is a pair of triggers, `time_entries_append_only_update` and
+ * `time_entries_append_only_delete`, which `installAppendOnlyTriggers`
+ * (`packages/store/src/append-only.ts`) creates on every migrating path from the
+ * `appendOnly("time_entries", …)` entry in ../classification.ts. Measured against a migrated
+ * database on Node v26.7.0: an `UPDATE`, a `DELETE` and an `INSERT OR REPLACE` over this table are
+ * each refused with `time_entries is append-only`, and the row is left as it was.
+ * `registros_facturacion` carries the same floor by the same mechanism.
+ *
+ * THE ARGUMENT THAT USED TO SIT HERE went the other way, and is settled. It said the record lived on
+ * PostgreSQL BECAUSE PostgreSQL has a privilege system and SQLite has none: the app role was granted
+ * SELECT and INSERT alone, and the triggers were only the backstop behind that. The storage swap
+ * moved the record to SQLite anyway
+ * (`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` §6.3), so the triggers
+ * are the whole floor now. Two things the revocation gave that nothing here replaces: a refusal
+ * aimed at the APPLICATION in particular — these triggers refuse every caller alike, this package's
+ * own writers included — and the TRUNCATE-blocking trigger, which has no equivalent, because SQLite
+ * has neither that statement nor a trigger event for `DROP TABLE`
+ * (`packages/store/src/append-only.ts` states that gap). In the same measurement
+ * `drop table time_entries` WAS refused, but with `FOREIGN KEY constraint failed` — by the foreign
+ * keys the venue store switches on, not by anything append-only.
  *
  * `event_at` + `event_offset_minutes` are the trusted event timestamp and its wall offset (the
  * `sales.issued_at`/`issued_offset_minutes` pattern). `recorded_at` is the recording node's own clock
@@ -92,9 +108,8 @@ export const timeEntries = table(
     // (../chain.ts), never by the device: one chain per (node, location), one active writer per
     // chain. `time_entries_chain_position_uq` below is what refuses a forked position, measured on
     // this engine by chain.test.ts's `rejects a second entry claiming an occupied chain position`.
-    // IMMUTABLE like the rest of the row — the existing
-    // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_baseline_sql.sql) already covers these
-    // new columns, since they are written once at INSERT and the app holds no UPDATE.
+    // IMMUTABLE like the rest of the row: the append-only triggers named in this table's doc comment
+    // refuse an UPDATE whatever column it names, so these carry nothing of their own.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: label("entry_hash").notNull(),
     /** The predecessor's `entry_hash`; null on the genesis entry (hashed as empty). */
@@ -157,11 +172,16 @@ export const timeEntries = table(
     // Same wall-offset domain sales uses (±14h) — a stored offset outside it is a bug, not a zone.
     check("time_entries_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),
     // A row is EITHER a base clock event (all four correction columns null) OR a correction (all
-    // four non-null) — never half of one. Deliberately does NOT reference the `'correction'` enum
-    // literal: PostgreSQL forbids using an enum value in the same transaction that added it
-    // (55P04), and a fresh-DB migration run adds `'correction'` and creates this constraint in one
-    // go. The application sets `entry_kind = 'correction'` whenever these columns are populated; the
-    // projection keys off that. All-null-or-all-non-null is what the database enforces.
+    // four non-null) — never half of one. The application sets `entry_kind = 'correction'` whenever
+    // these columns are populated; the projection keys off that. All-null-or-all-non-null is what
+    // the database enforces.
+    //
+    // It does not reference the `'correction'` literal, and no longer needs a reason not to. The
+    // reason was PostgreSQL's: `entry_kind` was a real enum TYPE there, a value could not be used in
+    // the same transaction that added it (55P04), and a fresh-database migration run added
+    // `'correction'` and created this constraint in one go. On this engine `enumType` is a plain
+    // text column, and what lists the values is the separate `time_entries_entry_kind_ck` at the
+    // foot of this list — so nothing would refuse the literal.
     check(
       "time_entries_correction_shape_ck",
       sql`(${t.correctsEntryId} is null and ${t.correctionReason} is null

@@ -149,11 +149,6 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     action:
       "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, ask whoever installed this box for help: the box's database is a file on its disk, and the software cannot read it.",
   },
-  "provisioning.database_not_owned": {
-    title: "The box's database belongs to another program.",
-    action:
-      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
-  },
   "migrations.incomplete": {
     // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
     // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this

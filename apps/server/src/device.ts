@@ -74,15 +74,15 @@ export async function requireDeviceBinding(
 /** The UNIQUE index that makes a duplicate register name at one venue unrepresentable, as the table
  * and columns a refusal on it names: `tills_tenant_location_name_key`, over
  * `(location_id, name)` — no longer the tenant column its name still carries — at
- * `packages/db/drizzle/0000_baseline.sql:49`. {@link createRegister} keys its 23505 translation on this
- * target so an unrelated unique violation is rethrown raw, not mislabelled. */
+ * `packages/db/drizzle/0000_baseline.sql:49`. {@link createRegister} keys its duplicate-key
+ * translation on this target so an unrelated unique violation is rethrown raw, not mislabelled. */
 const TILL_NAME_UNIQUE: ConstraintTarget = { table: "tills", columns: ["location_id", "name"] };
 
 /**
  * Auto-create the cash register a `till`-form-factor device rings against, named after the device, and
  * return its id. Runs on the caller's transaction (never its own), so the enclosing enrolment's throw —
  * including this function's own — discards the register with the device (no orphan till, CLAUDE.md §3).
- * A name already used at this venue trips {@link TILL_NAME_UNIQUE} (23505) → `device.register_name_taken`
+ * A name already used at this venue trips {@link TILL_NAME_UNIQUE} → `device.register_name_taken`
  * (the operator renames the device rather than ending up with two indistinguishable registers); the
  * unique index is the whole guard (`tills` is a `state` table), keyed by the table and columns the
  * refusal names so an unrelated unique violation is rethrown raw — the `translateWriteError` idiom
@@ -95,8 +95,11 @@ async function createRegister(tx: Transaction, locationId: string, name: string)
   } catch (error) {
     if (isUniqueViolation(error)) {
       const target = constraintTarget(error);
-      // A 23505 that names no key is translated too: the only unique this narrow insert can trip is
-      // the venue-scoped name index (the `translateWriteError` fallback).
+      // A duplicate-key refusal that names no key is translated too: the only unique this narrow
+      // insert can trip is the venue-scoped name index (the `translateWriteError` fallback). This
+      // engine does name the key in its message for an ordinary index, so `undefined` here means an
+      // index over an EXPRESSION, which reports the index name instead
+      // (`packages/db/src/constraint-target.ts`).
       if (target === undefined || sameTarget(target, TILL_NAME_UNIQUE)) {
         throw new AppError("device.register_name_taken", {});
       }

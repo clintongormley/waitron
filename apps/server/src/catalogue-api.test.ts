@@ -2336,7 +2336,7 @@ describe("mountCatalogueApi — extras lists", () => {
       expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
     }
     // A well-formed id naming no list, on each of the four `:id` routes — the read reaches
-    // `getExtraList`, the update and the delete reach `lockExtraList`, the preview reaches
+    // `getExtraList`, the update and the delete reach `assertExtraListForWrite`, the preview reaches
     // `assertExtraList`, and all four must answer 404 rather than the boundary's 400 default. The
     // PATCH body is a VALID one, or the contract would refuse it before the list is looked up.
     const absentId = "33333333-3333-4333-8333-333333333333";

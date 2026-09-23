@@ -179,11 +179,20 @@ announce_ready() {
 # so a box whose server was pointed elsewhere is read where that server writes.
 #
 # Three answers, because is_production needs three. The environment on stdout; nothing at all, exit
-# 0, when there is no venue file or no stamp row — a read that SUCCEEDED and found nothing, and a box
-# with no records to protect; and a non-zero exit for everything else, which is_production treats as
-# "cannot establish" and fails closed on. Where config.ts falls back to a state root boot computed,
-# this has none to fall back to, so an unset directory is REFUSED: joining onto an empty string would
-# read a relative path under the container's working directory, find nothing, and report a clean box.
+# 0, when there is no venue file, no deployment TABLE, or no stamp row — a read that SUCCEEDED and
+# found nothing, and a box with no records to protect; and a non-zero exit for everything else, which
+# is_production treats as "cannot establish" and fails closed on. Where config.ts falls back to a
+# state root boot computed, this has none to fall back to, so an unset directory is REFUSED: joining
+# onto an empty string would read a relative path under the container's working directory, find
+# nothing, and report a clean box.
+#
+# The table is probed through sqlite_master BEFORE the stamp row is selected, for the reason
+# `packages/db/src/deployment.ts` gives at `deploymentTableExists`: the file exists long before the
+# table does. `openVenueStore` creates `venue.db` on any open and the server opens the venue
+# directory for its own stamp probe before it runs migrations, so a box that booted and then failed
+# sits with the file present and the table absent — and that is exactly the box being reset. Without
+# the probe the select raises `no such table: deployment` and reset is refused as production on a box
+# that was never provisioned.
 #
 # scripts/waitron-sh.test.mjs extracts this text and RUNS it against real databases — the docker stub
 # answers for it everywhere else, so nothing else in that suite can see whether it reads a file right.
@@ -197,6 +206,8 @@ if (!dir) throw new Error("neither WAITRON_VENUE_DIR nor WAITRON_STATE_DIR is se
 const file = join(dir, "venue.db");
 if (!existsSync(file)) process.exit(0);
 const db = new DatabaseSync(file, { readOnly: true });
+const present = db.prepare("select name from sqlite_master where type = ? and name = ?").get("table", "deployment");
+if (!present) process.exit(0);
 const row = db.prepare("select environment from deployment where id = 1").get();
 if (row && row.environment) process.stdout.write(String(row.environment));
 '
@@ -210,8 +221,9 @@ if (row && row.environment) process.stdout.write(String(row.environment));
 # treated as production and refused. Each signal ends in one of three states — a VALUE, "nothing
 # there" (a read that succeeded and found the box unprovisioned — safe to wipe), or ERRORED (the
 # read itself failed). We fail CLOSED only when a read ERRORED and no signal returned a value; a
-# genuinely unprovisioned box (trading.env absent, stamp empty) reads cleanly and stays resettable,
-# which keeps the demo workflow working. The operator overrides a false refusal with --force-production.
+# genuinely unprovisioned box (trading.env absent, stamp empty or its table not created yet) reads
+# cleanly and stays resettable, which keeps the demo workflow working. The operator overrides a false
+# refusal with --force-production.
 is_production() {
   local env_out env_rc stamp_out stamp_rc env_value="" stamp_value="" errored=0
   # trading.env from the state volume via a throwaway container. The __ABSENT__ sentinel separates an

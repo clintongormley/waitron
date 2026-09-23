@@ -18,7 +18,8 @@ import {
 import { registroSif } from "./sif.js";
 
 /**
- * Immutable fiscal records keep query keys in columns and structured, non-hashed payloads in jsonb.
+ * Immutable fiscal records keep query keys in columns and structured, non-hashed payloads in a
+ * `json` column, which on this engine is text (`packages/db/src/schema/columns.ts`).
  * Huella inputs retain their original text representation; JSON key ordering must not affect a hash.
  */
 // The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
@@ -142,11 +143,12 @@ export const registrosFacturacion = table(
     creadoEn: ts("creado_en").notNull().$defaultFn(now),
   },
   // Drizzle invokes this extraConfig callback lazily — via `drizzle(client, { schema })`
-  // walking each table for its metadata — not merely from `pgTable(...)` running at import
-  // time. Every test in this package obtains its database through `@waitron/db`'s
-  // `createPgliteDb()`, which is wired to CORE's schema (packages/db/src/client.ts) and talks
-  // to this package's own tables only via raw `sql` execution, so this callback body never
-  // runs inside this package's own test process. It runs for real in exactly one place today:
+  // walking each table for its metadata — not merely from the `table(...)` call above running at
+  // import time. Every test in this package obtains its database through `@waitron/db`'s
+  // `useVenueDb`, whose handle is wired to CORE's schema barrel (packages/db/src/client.ts hands
+  // `./schema/index.js` to `openVenueStore`, and that barrel names none of this package's tables),
+  // so this package's own tables are reached by raw `sql` execution alone and this callback body
+  // never runs inside this package's own test process. It runs for real in exactly one place today:
   // `drizzle-kit generate`, in its own separate CLI process, the same reason
   // packages/db/src/schema/sales.ts's two-argument `.references(..., { onDelete })` thunks
   // carry `/* v8 ignore start */` … `/* v8 ignore stop */`. The markers bracket the WHOLE arrow

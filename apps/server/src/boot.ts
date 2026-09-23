@@ -713,17 +713,20 @@ function makeStartedServer(
 /**
  * The one place the real implementations meet. Everything above is injected, so this function is
  * thin by construction. `tsc` pins every field mapping below against each callee's own signature;
- * `boot.test.ts` is this function's own test subject — calling it against a real container, as the
- * deployment role, and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
+ * `boot.test.ts` is this function's own test subject — calling it against a real migrated venue
+ * directory (`openVenueDatabase`; `grep -c 'useRealPostgres\|Testcontainers' apps/server/src/boot.test.ts`
+ * prints 0, run 2026-09-23) and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
  * mapping (via the logged `loop.sleeping` line, since a duty-neutral pass alone cannot distinguish a
  * swapped mapping from a correct one), both sides of the `settlementLagMs` conditional spread, and
- * `close()`'s own sequencing including its idempotency guard. `pass.db.test.ts` does NOT import
- * this file — it builds its own, separate composition of the same pieces to prove the composed pass
- * runs as the non-superuser role; that predates `boot.test.ts` and remains evidence for the same
- * SHAPE of wiring, not a substitute for testing this function directly. The manual end-to-end boot
- * recorded in the Task 11 report (`node dist/server.js` against a fresh container, through to a
- * clean `/health` and a graceful `SIGTERM`) remains the only evidence that the BUNDLE, not just the
- * source, boots — `boot.test.ts` runs from source, matching every other suite in this package.
+ * `close()`'s own sequencing including its idempotency guard. `pass.db.test.ts` does NOT import this
+ * file — it builds its own, separate composition of the same pieces and runs the REAL duties against
+ * a migrated database; it predates `boot.test.ts` and remains evidence for the same SHAPE of wiring,
+ * not a substitute for testing this function directly. What it USED to add — running that
+ * composition as a non-superuser role, so a missing grant failed it — is gone with the roles, and is
+ * replaced by nothing; its own header states that. The manual end-to-end boot recorded in the Task
+ * 11 report (`node dist/server.js` through to a clean `/health` and a graceful `SIGTERM`) remains
+ * the only evidence that the BUNDLE, not just the source, boots — `boot.test.ts` runs from source,
+ * matching every other suite in this package.
  *
  * Boot failures ESCAPE, deliberately: invalid config, an unloadable key ring, a failed migration or
  * an unreachable database exit non-zero and let the supervisor decide. A host that boots
@@ -788,8 +791,10 @@ export async function startServer(
   // that file's tail to anyone on the venue's LAN with no login. The STDOUT half is left whole: it is
   // the installer's channel (spec §4.4), reachable only with a shell on the box, and masking it would
   // erase the difference between a wrong password and no password at all — both render `***` — which
-  // is exactly what an installer chasing `provisioning.database_unreachable` (SQLSTATE `28P01`) has
-  // to tell apart. Pinned by `recovery-surface.test.ts` → "the caught error's own words on the page",
+  // is exactly what an installer chasing a refused outbound connection has to tell apart. The
+  // credentialed URLs that reach the log are the box's OUTBOUND ones now (SMTP, the mirror relay, a
+  // payment provider); the box's own database is a file on its disk and carries no password, so the
+  // database example this reasoning used to carry is gone with the cluster. Pinned by `recovery-surface.test.ts` → "the caught error's own words on the page",
   // which asserts both directions on one logged line.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —

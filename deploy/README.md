@@ -166,7 +166,11 @@ without a terminal (an unattended script) it needs `--yes` instead.
 filed with the Spanish tax agency that cannot be recreated, and `reset` would destroy them — see
 `CLAUDE.md` §5 on why that data is unrecoverable. A box that has never been set up, or is still in
 demo/test mode, is not stamped and resets freely with no extra flag; that is the normal demo
-workflow. The only way past the refusal on a genuinely production box is deliberate: pass
+workflow. A half-finished box counts as never set up: the server creates the venue database file
+before it runs its migrations, so a box that failed partway through setup has the file with no
+stamp table in it, and that reads as unstamped rather than as a read that failed. What is still
+refused is a box whose venue file cannot be read at all, because nothing about it can be
+established. The only way past the refusal on a genuinely production box is deliberate: pass
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
 Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §4.
 

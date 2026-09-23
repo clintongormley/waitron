@@ -41,10 +41,11 @@ export const contentLanguages = table(
     // array_position(languages, null) is null`. The count carries across to `json_array_length`,
     // which also refuses text that is not JSON at all (`malformed JSON`, measured). **The second
     // half does NOT carry**: a JSON array holding a null entry, `[null]`, is accepted here, and
-    // there is no way to refuse it in a CHECK — SQLite answers
+    // neither of the two shapes tried refuses it — SQLite answers
     // `subqueries prohibited in CHECK constraints` to the `json_each` form, and `array_position`
-    // does not exist. What refuses a null entry now is the column's own `string[]` type and the
-    // writer above it; the database does not.
+    // does not exist. Whether some third expression could is not established; nobody has looked
+    // further. What refuses a null entry today is the column's own `string[]` type and the writer
+    // above it; the database does not.
     check("content_languages_list_ck", sql`json_array_length(${t.languages}) between 1 and 200`),
   ],
 );

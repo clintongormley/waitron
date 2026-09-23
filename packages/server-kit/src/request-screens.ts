@@ -10,9 +10,16 @@ import { AppError, isUuid } from "@waitron/shared";
  * `schedule-api.ts` (the management-dashboard and staff-schedule routes) and `till-api.ts` (the
  * sale/pay/park body working-order ids). Extracted here so the surfaces that import them validate
  * identically rather than each re-implementing a screen "subtly differently" (`catalogue-api.ts` keeps
- * its own local `requireUuidParam`): a malformed date, uuid or nullable field is refused BEFORE it
- * reaches a `::date`/`::timestamptz`/`uuid` column (where it would raise a 22xxx/22P02 → an opaque
- * `server.internal` 500) with a structured 400.
+ * its own local `requireUuidParam`): a malformed date, uuid or nullable field is refused with a
+ * structured 400 rather than reaching a column.
+ *
+ * **These screens are now the ONLY refusal, not a second one.** They were written over a database
+ * that refused the same values itself — a malformed id raised `22P02` at a `uuid` column, a
+ * malformed date `22007` at a `::date` — so a screen that was removed fell back on an opaque 500.
+ * Every id column is `text` now and every timestamp column is `text`
+ * (`packages/db/src/schema/columns.ts`), and text refuses nothing: an unparseable value is STORED,
+ * and an id that is merely the wrong spelling of a real one matches no row rather than being
+ * folded onto it. Removing a screen here does not degrade an error — it removes the check.
  *
  * Two codes, chosen by WHAT the field is (not by its position): a BRANDED id — a path `:id`, OR a
  * body/query id such as a `locationId` query or the till's sale/pay `workingOrderId` — is

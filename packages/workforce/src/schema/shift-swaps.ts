@@ -18,9 +18,9 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
 /**
  * A request to swap shifts between two people — person A (the requester) offers their `from_shift` to
  * person B (`to_person`), optionally taking B's `to_shift` in return. PLANNING data, ordinary mutable
- * rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain (design 2026-07-22
- * §2.1 / plan §2.1).
+ * rows: no append-only trigger and no chain (design 2026-07-22 §2.1 / plan §2.1), so nothing in the
+ * database refuses an edit or a delete here — the grant that used to name the permitted writes went
+ * with PostgreSQL.
  *
  * `from_shift_id` cascades on delete — a swap is meaningless once the offered shift is gone, so
  * discarding that shift discards the swap. `to_shift_id` is nullable (a one-sided give-away) and SET

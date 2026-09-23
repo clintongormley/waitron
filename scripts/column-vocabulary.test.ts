@@ -230,11 +230,17 @@ function importedFromEngine(text: string): string[] {
  * per-ENGINE: its one entry was `numeric`, a `drizzle-orm/pg-core` builder retired by task P6, and
  * a name imported from a module this guard no longer reads can never be reported by it. Nothing
  * has yet been retired from `drizzle-orm/sqlite-core`. The separate rule that no file may import
- * from the PostgreSQL module AT ALL is not stated here and is not enforced by anything today —
- * the tree's `*.test.ts` files still import it while task F1's step group 7 converts them.
+ * from the PostgreSQL module AT ALL is not stated here and is not enforced by anything today. It
+ * also has nothing left to catch: measured 2026-09-23,
+ * `grep -rn "drizzle-orm/pg-core" --include='*.ts' packages apps` exits 1 with no output, and so
+ * does the same grep for `pgTable`. The only mentions left in the repository are prose in this
+ * header and a fixture string in `scripts/catalogue-engine-neutral.test.ts`.
  *
  * It cannot cover the names the vocabulary never imported at all — root `CLAUDE.md` §3 states that
- * gap, with `bigserial` as the standing example.
+ * gap, and the standing example is now `blob`, a real `drizzle-orm/sqlite-core` column builder the
+ * vocabulary does not use. Measured the same day, with two throwaway files added side by side
+ * under `packages/fiscal-verifactu/src` — one importing `blob`, one importing `text` — this suite
+ * reported the `text` one alone.
  */
 const RETIRED: ReadonlySet<string> = new Set([]);
 

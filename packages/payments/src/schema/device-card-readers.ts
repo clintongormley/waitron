@@ -5,9 +5,10 @@ import { cardReaders } from "./card-readers.js";
 /**
  * A device's DEFAULT card reader — a mutable mapping, not a ledger: at most one row per device
  * (PK `device_id`), replaced or removed as the manager re-points a device's reader.
- * Classified `state` (manager configuration, copied to a standby, never drained back); the grant
- * idiom in 0001_payments_baseline_sql.sql includes DELETE for that reason, unlike `card_readers`
- * itself.
+ * Classified `state` (manager configuration, copied to a standby, never drained back). Under
+ * PostgreSQL the grant on this table included DELETE for that reason, unlike `card_readers` itself;
+ * that grant went with the engine and nothing replaced it — this table carries no trigger, and
+ * nothing references it, so a mapping row can be removed by anything that can reach the file.
  */
 export const deviceCardReaders = table(
   "device_card_readers",

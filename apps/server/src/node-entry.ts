@@ -274,11 +274,15 @@ function paramsLine(params: unknown): string {
  * level carries them — all through `redactSecrets`, because this is the one place the caught error's
  * own words may appear (spec §4.4) and it is `docker logs`, never the page.
  *
- * The chain is walked because the outer error is usually not the reason. Drizzle wraps the driver's
- * error rather than re-exposing it: measured against real PostgreSQL 18, `select absent_column`
- * gives an outer `Failed query: select absent_column` and puts `column "absent_column" does not
- * exist` in `cause` alone — so reporting the outer error is reporting the query wrapper and nothing
- * else. Params travel for the same reason: `migrations.incomplete`'s counts and
+ * The chain is walked because the outer error is often not the whole reason — but it is NO LONGER
+ * the query layer that makes it so. Measured on this tree, through `withTransaction` + `tx.execute`:
+ * `select absent_column` arrives as a plain `Error` whose own message is
+ * `no such column: absent_column`, with `cause` undefined. The wrapper the PostgreSQL driver added
+ * — an outer `Failed query: …` with the real message in `cause` alone — is gone, so on this engine
+ * the outer error IS the driver's words. What still nests is ours: an `AppError` raised over a
+ * caught cause, and a boot path that re-throws one around another. Walking the chain costs nothing
+ * when there is one level and is what reports the reason when there are several. Params travel for
+ * the same reason: `migrations.incomplete`'s counts and
  * `provisioning.database_ahead`'s hashes ARE the diagnosis, and the code alone was already in the
  * structured `server.boot_failed` line.
  *

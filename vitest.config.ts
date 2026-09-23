@@ -14,8 +14,8 @@ import { defineConfig } from "vitest/config";
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
 //   "<regime package>"` prefix, coverage-thresholds pins
 //   which package holds which coverage bar, column-vocabulary reads every `.ts` file under both
-//   roots for a column builder imported straight from `drizzle-orm/pg-core` — which only
-//   `packages/db/src/schema/columns.ts` may do, so that the SQLite switch replaces one file —
+//   roots for a column builder imported straight from `drizzle-orm/sqlite-core` — which only
+//   `packages/db/src/schema/columns.ts` may do, so that the NEXT engine change replaces one file —
 //   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, a retired helper no
 //   source file under either root may write again,
 //   brand-icons pins each app's `index.html` icon

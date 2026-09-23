@@ -213,14 +213,19 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  */
 export const SETUP_PACKAGE = "@waitron/setup";
 
-/** The venue configuration module combines PGlite tests with a Chromium dashboard project. */
+/**
+ * The venue configuration module splits into two Vitest projects: a `node` one whose suites open a
+ * venue database through `useVenueDb`, and a `browser` one that drives its dashboard panel in real
+ * headless Chromium. It is the Chromium half that earns it a shard.
+ */
 export const VENUE_SERVICE_PACKAGE = "@waitron/venue-service";
 
 /**
- * The two card-payment provider modules. Each combines a real-Postgres node project with a Chromium
- * dashboard-panel project — the same shape as bookings and venue-service — so each gets a shard of
- * its own rather than sharing a light bin: a browser package in the shared light shard is the shape
- * UI_PACKAGE's receipt warns against, and its Chromium install would also weigh down its bin-mates.
+ * The two card-payment provider modules. Each splits into a `node` project whose suites open a
+ * venue database through `useVenueDb` and a Chromium dashboard-panel project — the same shape as
+ * bookings and venue-service — so each gets a shard of its own rather than sharing a light bin: a
+ * browser package in the shared light shard is the shape UI_PACKAGE's receipt warns against, and
+ * its Chromium install would also weigh down its bin-mates.
  */
 export const PAYMENTS_STRIPE_PACKAGE = "@waitron/payments-stripe";
 export const PAYMENTS_SUMUP_PACKAGE = "@waitron/payments-sumup";

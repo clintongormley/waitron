@@ -6,7 +6,7 @@
 // deleted and its replacement has not landed.
 //
 // The deployment holds one tenant per database. The tenant row and the designated node row are
-// selected by id; `app_user` holds SELECT on both in the core baseline.
+// selected by id.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -77,12 +77,13 @@ export interface MirrorBundle {
 }
 
 /**
- * `appDb` reads the venue rows as `app_user` and runs the modules' reservations: `app_user` holds the
- * reads and writes each enabled module's `provisioning.standby.reserve` needs (for fiscal,
- * SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`, and SELECT on
- * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
- * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
- * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the four ids
+ * `appDb` reads the venue rows and runs each enabled module's `provisioning.standby.reserve` (for
+ * fiscal, reads and writes over `contadores_instalacion`/`registro_sif`/`cadenas` and a read of
+ * `invoice_series`). That used to be a statement about privilege — a connection deliberately holding
+ * no more than those grants. There are no roles and no grants on this engine, so the name now records
+ * which PATH the work belongs on and nothing more; `scripts/write-path-tables.test.ts` is what keeps
+ * a protected table's write in a named file. `ring` unseals the primary's identity PRIVATE key
+ * (`readNodeIdentityKey`) to sign the standby's endorsement; `standby` is the node the primary vouches for. `designated` are the four ids
  * the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
  * `relayUrl`/`boxHostname` are the box's dial-in.
  */

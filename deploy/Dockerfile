@@ -56,17 +56,30 @@ WORKDIR /app
 CMD ["node", "/app/print-agent.js"]
 
 # ---------------------------------------------------------------------------
-# Runtime stage — the build outputs, a Postgres client and a non-root user.
+# Runtime stage — the build outputs, a left-over Postgres client and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
 
 ARG WAITRON_BUILD_ID
 
-# The Postgres CLIENT major, which MUST track the SERVER major hardcoded in TWO other places:
-# deploy/compose.yml's db (postgres:18-alpine) and deploy/waitron.sh's HELPER_IMAGE (a third
-# postgres:18-alpine). Bumping one without the others reintroduces the failure this repo comes from:
-# pg_dump 17 refuses an 18 server ("aborting because of server version mismatch"), which breaks the
-# backup duty while everything else keeps working.
+# The Postgres CLIENT major. NOTHING IN THIS IMAGE RUNS A POSTGRES CLIENT PROGRAM any more. The
+# backup duty was the only thing that ever did, and it no longer starts a separate program at all:
+# it copies the venue database file with the engine's own `vacuum into`
+# (`packages/store/src/archive.ts`), and `apps/server/src/backup-keys.ts` records in its own header
+# that it used to be pg-dump.ts and used to hold that shell-out.
+#
+# Checked 2026-09-23 with
+# `grep -rnE '\b(psql|pg_dump|pg_restore|pg_isready|createdb|dropdb|pg_ctl)\b' packages apps deploy scripts`:
+# every hit under `packages/` and `apps/` is a comment describing what the storage switch removed.
+# Two hits are live, and neither of them runs in this image — `deploy/compose.yml`'s `pg_isready`
+# healthcheck runs inside the `postgres:18-alpine` container, and `scripts/schema-equivalence.sh`
+# reaches its `psql` and `pg_dump` through `docker exec` into a throwaway Postgres container.
+#
+# So the install below is left-over, and it is kept rather than removed because dropping a package
+# from the box image is its own decision and its own change. Two other files still spell the same
+# 18 — deploy/compose.yml's `db` service and deploy/waitron.sh's HELPER_IMAGE, whose comment points
+# back at this note. What used to couple the three numbers was a version check that no longer runs
+# anywhere: `pg_dump` 17 refusing an 18 server ("aborting because of server version mismatch").
 ARG PG_MAJOR=18
 
 # postgresql-client comes from PGDG, not Debian: node:26-slim is Debian 13 (trixie), whose own repos
@@ -130,9 +143,10 @@ COPY --from=build --chown=waitron:waitron /src/apps/server/scripts/demo-seed/med
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
 # NOT here: a destination without WAITRON_BACKUP_RECOVERY_KEY is fail-closed (backup-config.ts's
 # loadBackupConfig throws), so setting the path alone would take a provisioned box down at boot.
-# WAITRON_BACKUP_DATABASE_URL is OPTIONAL — the box derives the backup read connection from its own
-# owner connection when unset (BR-1 Task 2, 2026-09-09). compose.yml passes the dir and recovery key
-# (and the optional db url) from the box's .env.
+# There is no backup connection setting: the backup duty opens the box's own venue directory
+# (backup-config.ts's header, and backup-supervisor.ts, which takes `venueDir` and calls the venue
+# handle's own archiveTo). compose.yml passes the dir and the recovery key from the box's .env —
+# those two backup values and no third.
 #
 # WAITRON_HTTP_HOST must be 0.0.0.0: config.ts defaults it to 127.0.0.1, which is right for a dev
 # machine and wrong for every container — the phone is the screen, so a server bound to the

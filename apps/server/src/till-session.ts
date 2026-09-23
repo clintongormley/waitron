@@ -21,15 +21,21 @@ export const SESSION_COOKIE = "waitron_till_session";
 export { isUuid };
 
 /**
- * Canonicalise a UUID to the lowercase-hyphenated form Postgres stores, or `null` when the value is
- * not a UUID in any spelling Postgres accepts. Postgres canonicalises UUIDs on CAST — an uppercase,
- * a dash-free 32-hex, or a brace-wrapped spelling all resolve to the SAME row — so any code that KEYS
- * on a UUID string, rather than casting it to the `uuid` column, must canonicalise first or the same
- * id in two spellings becomes two distinct keys. The wrong-PIN throttle is exactly that case
- * (`pin-throttle.ts`, keyed per `(deviceId, personId)`): keyed on the raw body value, a brute-forcer
- * cycles spellings of one personId to get a fresh back-off bucket each time and evades the window (§5).
- * Strips optional wrapping braces and every hyphen, lowercases, and rebuilds the 8-4-4-4-12 form; a
- * value that is not exactly 32 hex digits after stripping is not a UUID and returns `null`.
+ * Canonicalise a UUID to the lowercase-hyphenated form this codebase stores — which is what `newId`
+ * mints — or `null` when the value is not a UUID in any spelling. Strips optional wrapping braces and
+ * every hyphen, lowercases, and rebuilds the 8-4-4-4-12 form; a value that is not exactly 32 hex
+ * digits after stripping is not a UUID and returns `null`.
+ *
+ * TWO REASONS TO CALL IT, and only one of them is the one this function was written for. The wrong-PIN
+ * throttle keys on the STRING (`pin-throttle.ts`, per `(deviceId, personId)`), so a caller that keys on
+ * the raw body value lets a brute-forcer cycle spellings of one personId for a fresh back-off bucket
+ * each time and evade the window (§5). That reason is unchanged.
+ *
+ * The second reason is new, and it is the opposite of what the old comment here said. Every id column
+ * is plain `text` now and this engine folds no spellings at all: measured on Node v26.7.0 against
+ * `node:sqlite`, a row stored under the lowercase-hyphenated spelling is matched by that spelling and
+ * by NEITHER the uppercase one nor the dash-free one. So an uppercase id that a `uuid` column used to
+ * resolve on cast now names nobody unless it is canonicalised first. One canonical value serves both.
  */
 export function canonicaliseUuid(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -93,8 +99,9 @@ export async function requireSession(
 ): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);
   // Screen the cookie's SHAPE before the DB: a missing OR non-UUID cookie is `session.required` (401)
-  // without a round-trip. Passing a non-UUID into the `uuid` column would raise 22P02 → an opaque 500
-  // (see `isUuid`), so the shape check is what keeps a forged cookie a 401 rather than a 500.
+  // without a round-trip. Nothing below objects to a non-UUID — `sessions.id` is plain `text`, so the
+  // lookup would just match no row — so this shape check is the only thing that reads the cookie's
+  // shape, and what keeps a forged cookie a clean 401 (`till-api.ts`'s note on `shared.invalid_id`).
   if (id === null || !isUuid(id)) throw new AppError("session.required", {});
   const personId = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);

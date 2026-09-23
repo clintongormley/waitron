@@ -71,7 +71,7 @@ export interface DevOnboardResult {
 }
 
 /**
- * Migrate a local Postgres and write a venue-less `.env`, so the server boots in SETUP MODE. Unlike
+ * Migrate a local venue directory and write a venue-less `.env`, so the server boots in SETUP MODE. Unlike
  * `dev-setup`, it provisions NOTHING (CLAUDE.md §5 — a venue is a SIF and a hash chain). Two cases:
  *
  *  - the database holds no venue (a fresh/wiped volume, or one migrated but never provisioned) →

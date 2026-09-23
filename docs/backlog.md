@@ -797,14 +797,23 @@ What the order path (the plan's Task 7) left behind:
   (`packages/catalogue/src/product-modifiers.ts`), all four reached from one body,
   `resolveAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`, which the sale path
   enters through `resolveBasketModifiers` (`apps/server/src/working-order.ts`). Their writers
-  serialise deliberately (`lockExtraList`'s `for update` in `packages/catalogue/src/extras.ts`, and
-  `writeProductModifiers`'s per-list `for key share` in
-  `packages/catalogue/src/product-modifiers.ts`), so a list edit committing mid-read could give one
-  order a snapshot mixing pre- and post-edit wording. NOT MEASURED — no probe was run, and nothing
-  establishes the window is reachable. **Next action:** unchanged, and simpler now that no lock is
-  involved at all — decide it deliberately rather than slipping a lock in: adding one late is its own
-  deadlock risk, which Task 6 of this plan already paid for once (`40P01` from lock ordering,
-  recorded below).
+  serialise, but no longer by taking a lock, and the two functions this entry used to name are both
+  gone: `lockExtraList`'s `for update` is now `assertExtraListForWrite`, a plain existence read
+  (`packages/catalogue/src/extras.ts`), and `writeProductModifiers`'s per-list `for key share` is
+  now `listExists` (`packages/catalogue/src/product-modifiers.ts`). What serialises writers is the
+  venue file's write queue — one write transaction on the file at a time
+  (`packages/store/src/write-queue.ts`). The concern this entry records is that a list edit
+  committing mid-read could give one order a snapshot mixing pre- and post-edit wording. NOT
+  MEASURED — no probe was run, and nothing establishes the window is reachable. **Whether the
+  storage switch closed it is also unestablished**, and it is the first thing to check: the sale
+  path's reads reach the engine through `withTransaction`, which IS the write lock
+  (`packages/db/src/tenancy.ts`), so a reader that goes through it cannot overlap a writer at all —
+  but nobody has traced the sale path's reads to establish they all do.
+  **Next action:** trace those reads first — if every one of them goes through `withTransaction`,
+  the entry closes on that alone. If any does not, the original decision stands and is simpler now
+  that no lock is involved: decide it deliberately rather than slipping one in, because adding a
+  lock late is its own deadlock risk, which Task 6 of this plan already paid for once (`40P01` from
+  lock ordering, recorded below — a PostgreSQL code, and this engine has no row locks to order).
 
 What the product attachment (#456, the plan's Task 6) left behind:
 
@@ -881,18 +890,20 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
   took both out with their tables, leaving a list that ends at `menu_items`. **Next action:** revisit
   when a screen that actually publishes an extras list on a menu offer is built; nothing in the
   dashboard reads either table today.
-- **Nobody has decided whether the application role should hold `UPDATE` on the two publication
-  tables.** `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql` grants it — it was
-  `0009_menu_extra_publication_grants.sql` until Task 13 regenerated that set — and no production
-  path uses it: `setMenuItemExtraLists` replaces rows rather than editing them. So the
-  grants walkthrough in
-  `packages/catalogue/src/extra-projection.test.ts` exercises `UPDATE` with direct statements, which
-  is the only way to establish the role really holds what the migration granted it. **Next action:**
-  decide whether to narrow the grant to `SELECT, INSERT, DELETE`, or record that `UPDATE` stays.
-  Narrowing it is not a one-file change: `packages/fiscal-verifactu/src/privileges.expected.ts` pins
-  `SIUD` for both tables, its own header says a deliberate grant change edits it in the same commit,
-  and `packages/fiscal-verifactu/src/privileges.test.ts` compares that table against the live catalog
-  with `toEqual`, so the migration and that file move together or the comparison disagrees.
+- **CLOSED by the storage switch, 2026-09-23 — there is no grant to decide about.** This entry
+  asked whether the application role should hold `UPDATE` on the two extras-publication tables, on
+  the strength of a `GRANT` in the catalogue migration set. Every premise it rested on has been
+  deleted: there is no application role and no `GRANT` statement anywhere in the migrations
+  (`grep -rln GRANT packages/*/drizzle/*.sql` matches no file), the migration that carried the
+  grant is gone — the thirteen PostgreSQL chains became one baseline per set, and
+  `packages/catalogue/drizzle/` holds `0000_baseline.sql` alone — the grants walkthrough in
+  `packages/catalogue/src/extra-projection.test.ts` was removed with the grants and that file says
+  so at its own header, and `packages/fiscal-verifactu/src/privileges.test.ts` no longer exists.
+  `privileges.expected.ts` does survive, but its header now calls itself a frozen record of what
+  was granted BEFORE the switch, with nothing checking those letters against anything. The
+  underlying design fact is unchanged and still worth knowing: no production path updates a row in
+  either table — `setMenuItemExtraLists` replaces rows rather than editing them. What refuses a
+  stray write today is nothing at all.
 
 **Product selling units — LANDED #342 (2026-09-13).** You say what you sell a product by — the each
 (the default), or by weight or volume — and how many decimal places (0 to 3) its quantity may have; a
@@ -1884,11 +1895,22 @@ image constraints under *Detail → Box image*.
   Needs a native app; parked behind the go-native decision.
 - **`runAgentOnce` catches a database refusal and then writes again on the same transaction, with no
   savepoint** (`packages/printing/src/runtime.ts`; found reviewing `feat/sqlite-slice1-change-log`,
-  2026-09-21). If it is the WRITE that PostgreSQL refuses, the aborted transaction makes the `catch`'s
-  own `reportPrintJob` fail `25P02` and takes the whole batch down instead of marking one job failed
-  (`CLAUDE.md` §3). No caller reaches it today; it becomes real the moment a local-mode agent host is
-  wired up (the item above). **Next action:** a savepoint (a nested `tx.transaction`) around the
-  report, or move the report out of the `try`.
+  2026-09-21, and NARROWED by the storage switch — the code and its comment were corrected on
+  `feat/sqlite-slice1-flip`). The batch-down failure this used to describe is gone with PostgreSQL:
+  it rested on an aborted transaction making the `catch`'s own `reportPrintJob` fail `25P02`, and on
+  this engine a refused statement backs ITSELF out and leaves the transaction usable
+  (`CLAUDE.md` §3; measurement in `bench/sqlite-failover/README.md` → "What S5 measures, and the
+  savepoint it does not need"). What is still wrong, and is the whole of the item now: when the
+  refusal is the `reportPrintJob` inside the `try` rather than `transport.send`, that refused
+  report's own partial work stays in the caller's transaction with nothing confining it, and the
+  `catch` then writes a second report over the top of it. No caller in the tree reaches it —
+  `apps/server/src/print-api.ts` uses the split `claimPrintJobs`/`reportPrintJob`, and
+  `runAgentOnce`'s only callers are this package's own `runtime.test.ts`, `runtime.race.test.ts` and
+  `runtime.reclaim.test.ts` — but it is exported from the package's `index.ts`, so that is a fact
+  about today's tree rather than a property of the API. It becomes real the moment a local-mode
+  agent host is wired up (the item above). **Next action:** confine the report — a nested
+  `tx.transaction` around it, which on this engine is a savepoint that rolls back only its own
+  writes — or move the report out of the `try`.
 
 ### B7. Provisioning and build debt
 
@@ -2124,24 +2146,32 @@ image constraints under *Detail → Box image*.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **Comments across the tree still say PGlite cannot check a database permission** — the belief
-  CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
-  session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
-  permissions included (receipt in `docs/developers/testing-guide.md`). Many test comments give the
-  old belief as their reason for using a real PostgreSQL container, often citing "CLAUDE.md §4" by
-  number, which now points at text saying the opposite. The ones in source files the onboarding
-  corrections touched were fixed; that branch's dated plan still quotes the old belief in a code
-  snippet and is left as written. Find the rest with `grep -rn "PGlite" apps packages scripts`. A
-  sweep, not a one-liner: for each suite, check whether anything else still needs the container
-  (concurrency, triggers running as the deployment role, or who connected) before moving it, and
-  correct the comment either way. Five of them name one of the four tables P9's guard is about, and
-  P9 ran the probe they call impossible — `packages/db/src/deployment.break-glass.test.ts`,
-  `packages/db/src/reserved-identity.test.ts`, `packages/db/src/node-identity.test.ts`,
-  `apps/server/src/boot.singleton.test.ts` and `apps/server/src/boot.promote.test.ts` each say PGlite
-  cannot show the `42501`, while an
-  insert and an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete
-  from `mirror_config` each returned exactly that in PGlite after `asAppUser`. Left standing rather
-  than corrected in passing, because moving a suite off its container is the decision above.
+- **Comments across the tree still explain themselves in terms of PGlite, a container tier and
+  choosing between targets — none of which exists.** The item is real; its ACTION changed with the
+  storage switch and was rewritten on 2026-09-23.
+
+  Two beliefs stack up in these comments. The older one is that PGlite cannot check a database
+  permission, which CLAUDE.md §4 corrected on 2026-09-13. The newer one is the whole frame: a
+  comment that says "PGlite, not real Postgres" and then justifies the choice is describing a
+  decision no suite makes any more. CLAUDE.md §4 at HEAD says there is ONE target — a suite that
+  needs a database gets a real one through `useVenueDb` — with nothing lighter to pick and nothing
+  heavier to justify. So the old action, "check whether each suite still needs the container before
+  moving it", asks a question with no answer: there is no container tier, no `describeEachTarget`,
+  and no second target to move to.
+
+  **Next action:** a plain comment sweep, one file at a time, with no test moved. Find candidates
+  with `grep -rn PGlite apps packages scripts` (many hits are legitimate history — a sentence of
+  the shape "under PGlite this was X, here it is Y" is correct and stays). For each one that
+  presents the old world as today's, replace it with what the suite actually establishes now, or
+  delete it. Two of the five files this entry used to name were corrected on
+  `feat/sqlite-slice1-flip` and no longer mention PGlite at all
+  (`apps/server/src/boot.singleton.test.ts`, `apps/server/src/boot.promote.test.ts`), and a third,
+  `packages/db/src/deployment.break-glass.test.ts`, now records the case it LOST rather than the
+  old belief. The two still standing, each opening with "PGlite, not real Postgres … cannot show
+  the GRANT enforcement" and each pointing at a grant matrix and at `scripts/schema-equivalence.sh`
+  for receipts that no longer hold: `packages/db/src/reserved-identity.test.ts` and
+  `packages/db/src/node-identity.test.ts`. Both already call `useVenueDb`, so only the prose is
+  wrong.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`)
   — CLOSED 2026-09-19: `apps/server/src/replication-arc.e2e.test.ts` was deleted with the PostgreSQL
   failover machinery, so this cannot recur in that file. The deletion changes nothing about vitest
@@ -2204,6 +2234,107 @@ can serve another request inside that window. Adding a read connection per file 
 `packages/store` and whatever routes reads, not the 1,556 `withTransaction` call sites. The full
 measurement, with the owner's options, is in the flip's pull request and in the campaign's
 `questions.md`.
+
+**The media library reads the whole `media_images` table on every page load, inside the venue write
+lock — OPEN (found 2026-09-23, task F1's review wave).** `packages/media/src/images.ts` selects
+every row and every column, then filters by label, scores the search, sorts and pages in JavaScript.
+On PostgreSQL this was a GIN-indexed `tsvector` query with SQL `order by`, `limit` and `offset`. The
+route (`GET /management-api/images`) runs through `withTransaction`, which on this engine is the
+venue's exclusive write lock — so the scan blocks every writer on the file, a sale included. `limit`
+is capped at 100 but the READ is unbounded. `listImageLabels` and `listImageTranslationGaps` have
+the same shape. **What can and cannot go back to SQL:** the relevance ranking genuinely cannot, and
+`images.ts` argues why at the site; the label filter, the date and name sorts and the paging can —
+`labels` is a JSON text column and this SQLite has `json_each`, and a page with no search term needs
+no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
+path is a separate decision.
+
+**Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
+2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
+inside `withWriteLock` and then drains `change_log` unconditionally, which is a `delete … returning`.
+There are 274 non-test call sites, plain GETs among them — box status, the unauthenticated
+content-languages route, and two management reads. The drain-on-every-transaction predates the
+storage switch; what is new is that it now runs under `begin immediate`. The single writer is the
+engine's and is not removable. The unconditional DELETE on a read-only body is: `node:sqlite` exposes
+a change counter. But it interacts with a documented behaviour — the drain deliberately collects the
+rows an orphaned writer left — so this is a design decision, not a cleanup. **Next action:** decide
+whether a read-only body should take the lock at all.
+
+**Six hand-rolled "does this table exist?" probes, three copies of one SQL identifier validator, and
+two cause-chain walkers — OPEN (found 2026-09-23, task F1's review wave).** All created by the flip,
+each replacing a PostgreSQL one-liner. The table probe is spelled out in `packages/db`'s
+`deployment.ts`, `node-membership.ts` and `mirror-config.ts`, in `packages/migrations`'
+`schema-version.ts` and `journal-hashes.ts`, and generically (but privately) in
+`packages/catalogue/src/categories.ts` as `tablePresent`. The identifier validator is in
+`packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
+`packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
+in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
+that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
+local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
+one `tableExists` from `@waitron/db` and one validator from `@waitron/shared`; `packages/store`
+depends on nothing today, and `@waitron/shared` depends on nothing either, so that edge closes no
+loop. Task T2's business.
+
+**`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch
+table — OPEN (found 2026-09-23, task F1's review wave).** `packages/provisioning/src/environment.ts`
+and `apps/server/src/config.ts`. They agree today, checked line for line. The stated reason — a
+package cannot import an app — is true and skips the third option: `@waitron/db` already owns the
+`DeploymentEnvironment` type and both sides depend on it. Nothing in the tree runs both over one
+input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
+two copies held together by hand is the wrong shape for it.
+
+**`packages/migrations` opens its own raw `node:sqlite` connection — OPEN (found 2026-09-23, task
+F1's review wave).** `apply.ts` imports `DatabaseSync` directly and re-does `openConnection`'s
+"busy_timeout first" discipline by hand. It is the only non-test file outside `packages/store` that
+names the engine, which is the thing `packages/store` exists to prevent — the same argument
+`columns.ts` makes for column types. The lock file does need a connection the store does not offer
+today, so the fix is a small `openLock(path)` export, not a restructure. Nothing guards this.
+
+**The store's file layout is re-declared in two app files — OPEN (found 2026-09-23, task F1's review
+wave).** `packages/store/src/index.ts` declares `VENUE_FILE`, `NODE_FILE` and the sidecar suffixes
+privately; `apps/server/src/db-wipe.ts` and `apps/server/src/restore.ts` each name them again. Which
+files a venue directory holds is the store's property. Add a file or a sidecar and the wipe and the
+restore silently miss it — and the restore is the cold-recovery path (`CLAUDE.md` §5). **Next
+action:** export the names from `@waitron/store` and read them.
+
+**`RESTRICT_VIOLATION` and `TRIGGER_ABORT` are the same number, and only one has a message-aware
+predicate — OPEN (found 2026-09-23, task F1's review wave).** Both are `[1811]`, because SQLite
+gives a foreign key's `ON DELETE RESTRICT` and every hand-written `RAISE(ABORT)` the same result
+code. `triggerRaised` exists for the trigger direction and matches the exact words. The restrict
+direction has no equivalent, so `isPgError(err, RESTRICT_VIOLATION)` is true for EVERY trigger
+refusal as well — including the append-only ones. Two callers take it:
+`packages/layouts/src/canvas-store.ts` and `packages/layouts/src/device-profile-store.ts`. Both give
+the right answer TODAY, and only because exactly one trigger sits on each path — the device-profile
+one is `device_profile_form_factor_locked`, whose meaning happens to match `device_profile.in_use`.
+A second refusing trigger on either path would be translated as the first. **Next action:** match by
+the words, using the constants `packages/db/src/trigger-refusals.ts` already declares for exactly
+this reason.
+
+**`VenueMigrationOptions.appendOnlyTables` is optional while `MigrationSet.appendOnlyTables` is
+required — OPEN (found 2026-09-23, task F1's review wave).** `applyMigrations` reads it as `?? []`,
+so a caller passing a plain `MigrationOptions[]` gets a migrated database with NO append-only
+triggers, silently. It is a stated hedge rather than an accident — the type's own comment says such
+a caller "migrates and installs nothing, which is what the package's own suites do" — and there are
+no standing violations: all ten product callers go through `migrationOptionsFor`, which always
+carries the set's tables (checked at this head). Given `CLAUDE.md` §5, the property deserves a guard
+rather than a paragraph. **Next action:** a root guard that every non-test `applyMigrations` call
+passes a `migrationOptionsFor(...)` result.
+
+**A person row written from outside `packages/identity` still folds its key ASCII-only — OPEN
+(found 2026-09-23, task F1's review wave).** SQLite's `lower()` folds ASCII and nothing else, so the
+three unique indexes on `persons` stopped refusing two staff whose names differ only in the case of
+an accented letter — José García beside JOSÉ GARCÍA, on a Spanish product. Measured with the ASCII
+pair as the control, which WAS still refused. The repair stores a folded key in its own column
+(`packages/identity/src/fold.ts`: trim, NFC, lower, NFC) and each index reads
+`case when <folded> is null then lower(<raw>) else <folded> end`.
+
+**The `case` is why this entry exists.** A bare index on the folded column alone would put every row
+that did not carry one OUTSIDE the uniqueness check, which is worse than the defect — and 83 files
+outside `packages/identity` write `persons` directly, three of them real paths (`venue-apply.ts`'s
+admin insert, `mirror-session.ts`, `break-glass-command.ts`). The fallback gives those rows exactly
+the key they had before. So a row written outside the package is still compared ASCII-only.
+**Next action:** decide whether the column becomes mandatory — which means routing all 83 writers
+and breaking them at the compiler rather than silently — or whether the three real paths alone are
+routed and the rest left as test fixtures.
 
 **An append-only trigger can be dropped, or quietly replaced, from the application's own database
 handle — OPEN (found 2026-09-22, task F1).** PostgreSQL protected an append-only table with two

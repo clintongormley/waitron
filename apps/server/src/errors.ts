@@ -676,8 +676,8 @@ declare module "@waitron/shared" {
      *  - a transfer entry names a CHILD modifier line directly (its `line_no` carries a
      *    `parent_line_id`) — a modifier is part of its dish, so it moves only WITH the dish: naming the
      *    parent whole-line move cascades its children automatically, and naming the child on its own is
-     *    refused here rather than orphaning it (the source child would reference a deleted parent →
-     *    23503, an opaque 500; the destination child would land ungrouped);
+     *    refused here rather than orphaning it (the source child would reference a deleted parent,
+     *    which the foreign key refuses as an opaque 500; the destination child would land ungrouped);
      *  - a PARTIAL split (`quantity` < the line's quantity) names a PARENT dish that carries modifier
      *    children — there is no per-option quantity this slice, so splitting the dish would desync its
      *    modifiers' quantity from the dish; refused rather than filing an inconsistent draft.
@@ -815,7 +815,7 @@ declare module "@waitron/shared" {
      * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
      * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
      * line; a second fire of a line already sent collides on `ticket_items`' per-line
-     * `(working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * `(working_order_line_id)` unique. `fireLines` catches that violation
      * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
      * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
      * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
@@ -1079,7 +1079,7 @@ declare module "@waitron/shared" {
      * already used by another register at the same venue. `resolveDeviceBinding` names the register after
      * the device and reject-not-suffixes the clash (the admin renames the device), so two
      * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
-     * unique index (`packages/db/drizzle/0000_baseline.sql:49`) is the guard, and this is its 23505
+     * unique index (`packages/db/drizzle/0000_baseline.sql:49`) is the guard, and this is its refusal
      * translated to a clean domain code rather than a raw 500.
      *
      * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
@@ -1091,12 +1091,18 @@ declare module "@waitron/shared" {
     "device.register_name_taken": Record<string, never>;
     /**
      * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
-     * that matches no row in this database. Surfaced by translating the `23503` an FK on `devices` raises
-     * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the TABLE AND COLUMN the refusal
-     * names (`devices.device_profile_id` / `devices.receipt_printer_id`) — the `isZoneFkViolation` idiom
-     * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
-     * venue a FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
-     * never reaches this, and a 23503 naming any OTHER key is rethrown raw rather than mislabelled.
+     * that matches no row in this database. Every raise is a READ taken BEFORE the write, and all
+     * three live in `device.ts`: `requireDeviceBinding` for the assign-device-profile UPDATE and the
+     * hardware PATCH, and `requireLiveRegister` for the accept path's register, which also checks
+     * the venue a foreign key cannot. A `null` target clears the binding, names no row, and is
+     * accepted without a read.
+     *
+     * NOTHING translates a database refusal into this code, and nothing could: this engine reports a
+     * foreign-key refusal as `errcode 787` with the whole message `FOREIGN KEY constraint failed` —
+     * no table, no column, no constraint name (measured on Node v26.7.0 against `node:sqlite`; the
+     * predicate that reads it is `packages/db/src/constraint-target.ts`). `devices` carries several
+     * foreign keys, so one refusal cannot be told from another, which is exactly why the check moved
+     * in front of the write. `device.ts` states that reasoning where the read is taken.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
      * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape

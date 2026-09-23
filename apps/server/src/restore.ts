@@ -313,6 +313,17 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * first so `writeFile` CREATES it and `mode` is actually applied, the reason `fs-atomic.ts` gives
  * for the same call. `rename` within one directory is atomic on POSIX, so `venue.db` is never
  * observed half-written.
+ *
+ * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
+ * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db` and
+ * its two sidecars only, so a restored box keeps whatever `node.db` it already had. That is harmless
+ * TODAY because the file is empty: `applyMigrations` sends every set to the venue handle
+ * (`packages/migrations/src/apply.ts`), and a migrate of every manifest set into an empty directory
+ * measurably leaves `node.db` with zero rows in `sqlite_master`. What changes when the
+ * class-to-file split lands and `local` tables move into `node.db`: a restore would then be putting
+ * an archive's venue data beside the OLD box's membership, sessions and pairing codes, which is a
+ * decision — carry them, clear them, or restore them too — and not something this function should
+ * fall into by leaving a file untouched. Whoever lands that split has to come back here.
  */
 export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;

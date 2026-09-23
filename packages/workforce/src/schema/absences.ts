@@ -29,10 +29,11 @@ export type AbsenceStatus = (typeof absenceStatus.enumValues)[number];
 
 /**
  * A person's planned absence over a date range — a holiday, sick leave, or other leave. PLANNING
- * data, NOT the legal record (the inverse of `time_entries`): ordinary mutable rows, so the app role
- * holds SELECT, INSERT, UPDATE and DELETE (drizzle/0001_workforce_baseline_sql.sql). No append-only
- * trigger and no hash chain — no Spanish statute requires an absence schedule to be tamper-evident
- * (design 2026-07-22 §2.1 / plan 2026-08-02-workforce-d2-scheduling §2.1).
+ * data, NOT the legal record (the inverse of `time_entries`): ordinary mutable rows, with no
+ * append-only trigger and no hash chain — no Spanish statute requires an absence schedule to be
+ * tamper-evident (design 2026-07-22 §2.1 / plan 2026-08-02-workforce-d2-scheduling §2.1). Nothing in
+ * the database refuses an edit or a delete here; the grant that used to name the permitted writes
+ * went with PostgreSQL.
  *
  * The range is inclusive on both ends: a single-day absence is `starts_on = ends_on`. Two absences
  * for the same person may not overlap — `createAbsence` (../absences.ts) rejects an overlapping range

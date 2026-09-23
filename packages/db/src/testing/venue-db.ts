@@ -50,12 +50,21 @@ export interface VenueDb {
 /**
  * What one reset runs, captured once because the schema is stable after `setup`.
  *
- * Three lists rather than one because the ORDER between them is the whole mechanism: every
- * append-only trigger is dropped, then every table is emptied, then each trigger is recreated from
- * the exact `CREATE TRIGGER` text SQLite stored for it. `RAISE(ABORT)` in a `BEFORE DELETE` trigger
- * refuses the reset's own `delete` (`1811`, measured 2026-09-21 on Node v26.7.0), and SQLite has no
- * `ALTER TABLE … DISABLE TRIGGER` to reach for instead — so drop and recreate is the only way
+ * Three lists rather than one because the ORDER between them is the whole mechanism: EVERY trigger
+ * in `sqlite_master` is dropped, then every table is emptied, then each trigger is recreated from
+ * the exact `CREATE TRIGGER` text SQLite stored for it. SQLite has no
+ * `ALTER TABLE … DISABLE TRIGGER` to reach for instead, so drop and recreate is the only way
  * through, and losing one would let a later test mutate a ledger table (`CLAUDE.md` §5).
+ *
+ * **Every trigger, not only the append-only ones — do not narrow this query.** Two different
+ * triggers would break the reset and each breaks it a different way. An append-only trigger's
+ * `RAISE(ABORT)` on a `BEFORE DELETE` refuses the reset's own `delete` outright (`1811`, measured
+ * 2026-09-21 on Node v26.7.0). A change-feed trigger (`../change-feed.ts`) does something quieter
+ * and worse: it INSERTS into `change_log` on every delete, and `deletes` runs in name order, so
+ * `change_log` is emptied near the start and the later deletes fill it up again. Measured
+ * 2026-09-23 on Node v26.7.0 — with the feed installed on `tills`, emptying `change_log` and then
+ * deleting one `tills` row leaves `change_log` holding a row, so the next test starts on a table
+ * the reset was supposed to have cleared.
  */
 interface ResetPlan {
   /** `drop trigger "<name>"`, one per trigger. */

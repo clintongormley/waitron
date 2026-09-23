@@ -993,9 +993,14 @@ export class WorkforceBackend {
   ): Promise<TimeEntryRecord[]> {
     // Widen the query window by a day on each side so a session whose LOCAL date falls in the period
     // is fetched even when its UTC instant sits just outside it (max wall offset ±14h < 1 day); the
-    // precise local-date filter is `summarisePeriod`'s. `event_at` is read through the timestamptz
-    // column's mode:"string", normalised to a UTC ISO instant so the projection's `Date.parse` sees
-    // a string under either driver (node-postgres returns a Date, PGlite a string — `registro-row.ts`).
+    // precise local-date filter is `summarisePeriod`'s. `event_at` is a `tsString` column
+    // (`packages/db/src/schema/columns.ts`), which this engine stores and returns as the exact
+    // string that was written — no `Date` is ever constructed on the way out, so the projection's
+    // `Date.parse` always gets a string. Measured 2026-09-23 by printing the value from this
+    // method while `src/index.test.ts` ran: `typeof` was `string` and the value
+    // `2026-01-05T09:00:00.000Z`. What keeps the string parseable is the write side plus
+    // `time_entries_event_at_second_ck` (`./schema/time-entries.ts`), the CHECK that pins the
+    // whole-second UTC ISO spelling now that a text column refuses nothing on its own.
     const windowStart = shiftDay(query.period.start, -1);
     const windowEnd = shiftDay(query.period.end, 1);
     // Corrections are fetched alongside base events (no `entry_kind` filter) so `projectWorkSessions`

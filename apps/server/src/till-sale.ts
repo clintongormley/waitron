@@ -594,7 +594,7 @@ async function readSettledTicket(
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
-    // Normalise the stored `timestamptz` text back to a canonical ISO-8601 instant, so the replayed
+    // Normalise the stored timestamp text back to a canonical ISO-8601 instant, so the replayed
     // ticket's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
     // `sales.total` stores a count of whole cents; the replayed ticket carries the amount.
@@ -685,7 +685,7 @@ async function fileImmediateSale(
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     // The persisted working order this sale is filed from. It is the sale-idempotency key: a second
-    // pay for the same id collides on `sales_working_order_id_key` (23505) and replays.
+    // pay for the same id collides on `sales_working_order_id_key` and replays.
     workingOrderId: brandWorkingOrderId(workingOrderId),
     locale: cfg.locale,
     invoiceLocales: cfg.invoiceLocales,
@@ -849,7 +849,7 @@ async function readOutstandingSaleForOrder(
  *    `open`/`placed` order (a lost-T2: `collect` committed its capture but P3 never ran). `recover`
  *    files a fresh sale from the stored lock (ordering 2, via `finalizeRecovery`); `recover-settle`
  *    instead SETTLES an already-issued invoice (ordering 1, via `finalizeSettleRecovery`) when one is
- *    outstanding, since a second `recordSale` would 23505 against it. Neither re-drives P2 — the
+ *    outstanding, since a second `recordSale` would collide with it. Neither re-drives P2 — the
  *    capture already happened.
  *  - `settle` — ordering 1 (invoice-first): a `placed` order already carries an unsettled issued
  *    invoice (`readOutstandingSaleForOrder`) and no lost capture is pending, so P2 collects the
@@ -922,7 +922,7 @@ export async function payWorkingOrderIntegrated(
       });
       if (captured !== undefined && captured.saleId === null) {
         // Recover WITHOUT re-charging. When the invoice was ALREADY ISSUED (ordering 1), recover by
-        // SETTLING it (`finalizeSettleRecovery`) — a second `recordSale` would 23505 against the issued
+        // SETTLING it (`finalizeSettleRecovery`) — a second `recordSale` would collide with the issued
         // invoice; otherwise file a fresh sale from the stored lock (ordering 2, `finalizeRecovery`).
         return outstanding !== undefined
           ? { kind: "recover-settle" as const, captured, outstanding }
@@ -1081,7 +1081,7 @@ async function finalizeCapture(
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
         // The persisted working order this sale is filed from — the sale-idempotency key
-        // (`sales_working_order_id_key`), and what the 23505 backstop below keys the replay on.
+        // (`sales_working_order_id_key`), and what the duplicate-key backstop below keys the replay on.
         workingOrderId: brandWorkingOrderId(req.id),
         locale: cfg.locale,
         invoiceLocales: cfg.invoiceLocales,
@@ -1152,7 +1152,7 @@ async function finalizeCapture(
       // `fileImmediateSale`'s enqueue, POST-filing and INSERT-only on THIS tx. Card → receipt, no kick,
       // no drawer_opens. NOTHING here can block/fail the sale (CLAUDE.md §5 — see `receipt-print.ts`);
       // it must not, doubly so here, because P2 already charged the card, so a throw would roll back a
-      // paid sale into the lost-T2 window. The 23505 REPLAY branch below stays UNHOOKED, so a concurrent
+      // paid sale into the lost-T2 window. The duplicate-key REPLAY branch below stays UNHOOKED, so a concurrent
       // winner's ticket is never re-printed — exactly one receipt per filed sale.
       await enqueueSaleReceipt(tx, cfg, ticket);
       return ticket;
@@ -1164,10 +1164,11 @@ async function finalizeCapture(
     if (!isUniqueViolation(error)) {
       throw error;
     }
-    // A 23505 on `sales_working_order_id_key`: a concurrent pay for this id won the race and committed
-    // its sale first, aborting this one. Replay the winner's settled ticket in a fresh transaction
-    // (the unique violation fires only against a COMMITTED conflicting row, so it is readable now),
-    // filing nothing.
+    // A duplicate-key refusal on `sales_working_order_id_key`: a concurrent pay for this id won the
+    // race and committed its sale first, aborting this one. Replay the winner's settled ticket in a
+    // fresh transaction — the winner's row is readable there, because
+    // `packages/store/src/write-queue.ts` admits one write transaction on the venue file at a time, so
+    // the conflicting row was committed before this transaction began. Files nothing.
     return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return readSettledTicket(deps.backend, tx, cfg, req.id);
@@ -1473,7 +1474,7 @@ async function finalizeSettle(
  * the ORDERING-1 recovery, the settle analogue of {@link finalizeRecovery}. Dispatched from P1's §4
  * pre-check when it finds a captured/offline-accepted `payments` row (`sale_id` NULL) AND an
  * outstanding issued invoice for the order. It `settleSale`s the existing invoice and associates THIS
- * captured row — never a second `collect`, and never `recordSale` (which would 23505 against the issued
+ * captured row — never a second `collect`, and never `recordSale` (which would collide with the issued
  * invoice). All in ONE transaction (settlement + tender + association + `placed → settled`), committed
  * as one unit or rolled back together.
  *

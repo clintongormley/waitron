@@ -61,8 +61,19 @@ taken locally instead. `docs/backlog.md` carries the work item.
 
 A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
 guards. A documentation-only push stops after formatting. Deletion-only pushes run no checks.
-Unknown ranges keep the full local gate, including workspace typechecking. The hook no longer
-runs `pnpm reap`; run it manually before local database suites when needed.
+Unknown ranges keep the full local gate, including workspace typechecking.
+
+The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
+its two halves. `pnpm reap` (`scripts/reap-testcontainers.mjs`) removes stale containers and, as a
+separate pass, kills orphaned vitest workers. **The container half no longer has a subject in any
+package suite.** It matches the `com.waitron.reapable` label alone, and
+`grep -rn com.waitron.reapable` over the repository on 2026-09-23 finds exactly one stamp outside
+that script and its own suite — `bench/sqlite-failover/src/store.ts` — in a bench that declares a
+`bench` script and no `test` script at all, so no suite under `packages/` or `apps/` can leave a
+container for it to find. **The worker half is unchanged and has nothing to do with the storage
+engine:** an interrupted vitest run still reparents its workers to ppid 1, where they spin at ~100%
+CPU until killed. So the occasion to run it is after an interrupted run of ANY suite, not before a
+database one.
 
 Run the normal hook once through the push, then verify CI scope and required checks on the current
 head. A green hook proves only its own checks; it is not evidence of package tests or coverage.
@@ -110,10 +121,14 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
 Three hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
-is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: two files are out of
-its `mutate` set — `src/english-only.ts`, whose only suite lives in the root project, and
-`src/testing/global-setup.ts`, which vitest runs in the main process where Stryker records no
-coverage — each with its receipt at `scripts/mutation-shard.mjs`'s `NOT_MUTATED`. And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
+is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
+`mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
+nothing under `packages/db` imports, so every one of its mutants survives by construction. The
+receipt is at `scripts/mutation-shard.mjs`'s `NOT_MUTATED`, which holds that one entry and no other
+(read at HEAD, 2026-09-23: `export const NOT_MUTATED = ["src/english-only.ts"];`). The second
+entry this paragraph used to name, `src/testing/global-setup.ts`, no longer exists:
+`git log --diff-filter=D` on that path returns the single commit d0c5589,
+"Delete the PostgreSQL test harness the box no longer needs". And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
 holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's bar, so a step
 that reached the same command through a variable would be invisible to it.
 
@@ -208,8 +223,15 @@ original job log, which the same seat pulled with
 **What this entry does NOT establish:** why that one call went unanswered. The SIGNATURE was
 reproduced deliberately (above); the incident was not, and the re-run that passed is evidence rather than proof — the second run
 (35356264571) was on a head differing from the first only in prose, and all three `test-server`
-shards passed. The shard runs four test workers plus the main process on a four-vCPU runner with a
-PostgreSQL container alongside, so starvation is the obvious suspect and remains unmeasured.
+shards passed. Starvation was the obvious suspect and was never measured: when this happened the
+shard ran four test workers plus the main process on a four-vCPU runner **with a PostgreSQL
+container alongside**. That last part is no longer true of the shard you would reproduce it on.
+`test-server` starts no container at all now — `grep -rn 'Container\|testcontainers\|docker'` over
+`apps/server/scripts/dev-setup.test.ts` and `apps/server/scripts/dev-onboard.test.ts`, the two files
+the job's own comment still names as container starters, returns nothing on 2026-09-23, and no other
+file under `apps/server` imports a Testcontainers package. The worker count is unchanged
+(`apps/server/vitest.config.ts` sets `maxWorkers: 4`), so if the signature returns, the one load
+source this theory rested on is gone and the theory has to be rebuilt rather than reused.
 
 **What to do when you meet it.** Keep the job's log and its printed counts BEFORE you re-run: nobody
 knows the cause, and a second sighting's log is the cheapest evidence there is. The house rule, in

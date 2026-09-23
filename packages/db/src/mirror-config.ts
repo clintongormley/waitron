@@ -6,15 +6,14 @@ import { mirrorConfig } from "./schema/mirror-config.js";
 /**
  * A cloud mirror's non-secret connection config (sync cloud-mirror C2b): where the mirror dials to
  * reach its box and how it trusts the box's TLS. The per-peer sync token is NOT here — it lives in
- * the credentials vault (`sync.mirror_token`). Written owner-role at adopt time; read by `app_user`
- * at mirror boot.
+ * the credentials vault (`sync.mirror_token`). Written at adopt time, read at mirror boot.
  */
 export interface MirrorConnection {
   relayUrl: string;
   boxHostname: string;
   boxCaPem: string;
   // The nodeId of the PRIMARY this mirror was adopted from — its ORIGIN, distinct from this node's
-  // OWN identity (`config.till.nodeId`). Written owner-role at adopt (the primary's nodeId); read at
+  // OWN identity (`config.till.nodeId`). Written at adopt (the primary's nodeId); read at
   // mirror boot into `boot.ts`'s `dataNodeId`, which scopes the node-scoped read paths (report-api's
   // per-till and fiscal reports) to the id the venue's rows carry. See the schema doc on
   // `origin_node_id`.
@@ -56,11 +55,15 @@ export async function readMirrorConfig(db: Database): Promise<MirrorConnection |
 }
 
 /**
- * Owner-role UPSERT of the singleton (`id = 1`). Re-adopting a mirror overwrites the config in
- * place — there is no immutability rule here (unlike `deployment.environment`), because a box can
- * legitimately move relays or rotate its CA. `app_user` holds no INSERT/UPDATE on `mirror_config`
- * (the grant read-back asserts it), so this runs on the provisioning/owner connection, never the
- * app pool.
+ * UPSERT of the singleton (`id = 1`). Re-adopting a mirror overwrites the config in place — there
+ * is no immutability rule here (unlike `deployment.environment`), because a box can legitimately
+ * move relays or rotate its CA.
+ *
+ * **Nothing in the database refuses another writer this table.** On PostgreSQL `app_user` held no
+ * INSERT or UPDATE on `mirror_config`, so only the provisioning connection could write it. This
+ * engine has no roles and no grants (`./testing/roles.ts`), and `mirror_config` carries no trigger:
+ * an ordinary insert succeeds, measured 2026-09-23 on Node v26.7.0 against the core migration set.
+ * That the adopt path is the only writer is now a convention, not something the database holds.
  */
 export async function writeMirrorConfig(db: Database, cfg: MirrorConnection): Promise<void> {
   // Uses the Drizzle table object (not raw SQL) — the same split `deployment.ts` uses, where

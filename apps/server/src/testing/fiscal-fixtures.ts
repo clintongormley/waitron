@@ -85,7 +85,8 @@ export interface SeedParentsOptions {
   numeroInstalacion?: number;
   /**
    * Skip the `sales` insert, leaving the rest of the closure. Used by the FK-order apply gate to seed a
-   * mirror that is missing exactly the `sale_id` parent, so a delivered registro parks on `23503` until
+   * mirror that is missing exactly the `sale_id` parent, so a delivered registro parks on the
+   * foreign-key refusal until
    * {@link insertFiscalSale} plants the sale (Task 8).
    */
   skipSale?: boolean;

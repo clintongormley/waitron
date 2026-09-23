@@ -14,10 +14,10 @@ import {
 
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
- * generated. PLANNING data, ordinary mutable rows: the app role holds SELECT, INSERT, UPDATE and
- * DELETE (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain (design
- * 2026-07-22 §2.1 / plan §2.1). A template names no person — it is a slot on a weekday, not a rostered
- * shift.
+ * generated. PLANNING data, ordinary mutable rows: no append-only trigger and no chain (design
+ * 2026-07-22 §2.1 / plan §2.1), so nothing in the database refuses an edit or a delete here — the
+ * grant that used to name the permitted writes went with PostgreSQL. A template names no person — it
+ * is a slot on a weekday, not a rostered shift.
  *
  * `weekday` is 0–6; `starts_minute`/`ends_minute` are minutes past local midnight in [0, 1440]. Unlike
  * `shifts`, a template carries NO interval CHECK: a template may legitimately wrap past midnight

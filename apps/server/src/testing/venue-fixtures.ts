@@ -19,9 +19,11 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { TillConfig } from "../till-config.js";
 
-// Shared venue provisioning for the real-Postgres device/join-request suites — extracted from
-// device-api.test.ts (which had the original) so join-requests.test.ts can stand up the same
-// fixture without duplicating it. Lives under apps/server/src/testing/ (coverage-excluded, per
+// Shared venue provisioning for the device/join-request suites — extracted from device-api.test.ts
+// (which had the original) so join-requests.test.ts can stand up the same fixture without
+// duplicating it. Neither suite opens a container any more:
+// `grep -c 'useRealPostgres\|Testcontainers' apps/server/src/device-api.test.ts
+// apps/server/src/join-requests.test.ts` prints 0 for both (run 2026-09-23). Lives under apps/server/src/testing/ (coverage-excluded, per
 // vitest.config.ts) alongside fiscal-fixtures.ts, which follows the same pattern.
 
 const LOCALE = "es-ES";

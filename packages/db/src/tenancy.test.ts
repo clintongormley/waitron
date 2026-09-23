@@ -24,11 +24,18 @@ afterEach(async () => {
  * a sibling CHECK on the same table, and the message alone also accepts any error whose text
  * happens to name the constraint — a wrapper reproducing the failed SQL among them.
  *
- * The identity comes from `errcode` rather than from a wrapped driver error because this driver
- * wraps nothing. Measured on Node v26.7.0 by logging the rejection of the empty-list case below:
+ * The identity comes from `errcode` on the error itself, because on the path this suite takes
+ * nothing wraps it. Every case below rejects from an awaited drizzle query builder, and that path
+ * hands back the engine's own error: measured on Node v26.7.0 by logging the empty-list case below,
  * a plain `Error` whose own properties are `stack`, `message`, `code`, `errcode` and `errstr`, with
  * `code` the constant `"ERR_SQLITE_ERROR"`, `errcode` 275 and `cause` undefined — which is why the
  * `.cause` this helper used to require is not there to require.
+ *
+ * **That is a fact about this path, not about the driver.** `db.run` wraps the same refusal in
+ * drizzle's `DrizzleError` and puts the engine's error on `.cause` (the same refusal, taken down
+ * both paths on the same runtime, 2026-09-23). Nothing breaks either way: `refusalCode` walks the
+ * cause chain and `pgErrorMessage` falls back across it, so a case added here through `run` would
+ * still be read correctly — it would just not match the shape described above.
  */
 async function rejectsWithRefusal(
   promise: Promise<unknown>,

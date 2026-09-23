@@ -28,12 +28,24 @@ export interface ClaimSpec {
   /**
    * What the claim hands back, spelled by every caller.
    *
+   * **Write the TABLE's name here, never the alias `j`.** `j` names the inner selection's copy of
+   * the table; {@link claimRows}'s outer `update` is unaliased, so this clause cannot see it.
+   * {@link claimable}, {@link order} and {@link claimableJoin} are the three written against `j`,
+   * and this one is the odd one out.
+   *
    * To read a neighbour of the claimed row — the printer a print job names — write a correlated
    * subquery here. There was a `join` option that put a second table into the statement's `FROM`
-   * for this clause to read; SQLite refuses that. Measured on SQLite 3.53.4:
-   * `update j set … from p where p.id = j.p … returning j.id, p.host` is refused
-   * `no such column: p.host`, while the same statement returning only `j`'s own columns succeeds,
-   * and `returning j.id, (select host from p where p.id = j.p) as host` returns the neighbour.
+   * for this clause to read; SQLite refuses that.
+   *
+   * All four re-driven on 2026-09-23 against SQLite 3.53.4 (`node:sqlite`, Node v26.7.0), on the
+   * exact statement `claimRows` builds — a job table `pj`, a printer table `pr`:
+   *  - `… returning j.id` — refused, `no such column: j.id`;
+   *  - `… returning pj.id`, and a bare `… returning id` — both return the claimed row;
+   *  - `… returning pj.id, (select host from pr where pr.id = pj.p) as host` — returns the
+   *    neighbour, which is what `packages/printing/src/runtime.ts` writes;
+   *  - `update pj set … from pr where pr.id = pj.p returning pj.id, pr.host` — refused,
+   *    `no such column: pr.host`, which is the `join` option's obituary.
+   *
    * A table the PREDICATE reads is a different thing and still joins — {@link claimableJoin}.
    */
   readonly returning: SQL;

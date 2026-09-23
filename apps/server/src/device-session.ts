@@ -200,8 +200,8 @@ function toDeviceBinding(
  * stored hash — returns the SAME `null`, so `requireDevice`'s `device.unauthorized` confirms neither a
  * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
  *
- * The deployment holds one tenant per database. The lookup runs as `app_user` inside
- * `withTransaction`; it filters by id and active state only. The `active = true` filter makes
+ * The deployment holds one tenant per database. The lookup runs inside `withTransaction` and
+ * filters by id and active state only. The `active = true` filter makes
  * revocation INSTANT: a revoked row is simply not found, with no token lifetime to expire.
  * `verifySecret` (scrypt, `@waitron/identity`) is constant-time — the token is NEVER compared
  * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at` stamped from this
@@ -255,9 +255,9 @@ export async function tryReadDevice(
   if (dot <= 0 || dot === raw.length - 1) return null;
   const deviceId = raw.slice(0, dot);
   const token = raw.slice(dot + 1);
-  // Screen the selector's SHAPE before the DB: a non-UUID id looked up against the `uuid` column would
-  // raise `22P02` → an opaque 500 (the `isUuid` reasoning in `till-session.ts`), so a forged cookie
-  // stays a clean miss instead.
+  // Screen the selector's SHAPE before the DB: `devices.id` is plain `text`, so a non-UUID id would
+  // be looked up without complaint and simply match nothing (the `isUuid` reasoning in
+  // `till-session.ts`). This screen is what keeps a forged cookie a clean miss.
   if (!isUuid(deviceId)) return null;
 
   return withTransaction(deps.db, async (tx) => {
@@ -338,7 +338,7 @@ export async function requireDevice(
  * DeviceBinding} carries no node/series — the SIF/chain key is the node, not the device).
  *
  * Modelled on {@link requireDevice}/{@link assertDeviceCapability}: it reads the binding via
- * {@link tryReadDevice} (the `app_user` role) and fails CLOSED. Both refusals are documented
+ * {@link tryReadDevice} and fails CLOSED. Both refusals are documented
  * SETUP preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous
  * to the boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a
  * setup fault surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):

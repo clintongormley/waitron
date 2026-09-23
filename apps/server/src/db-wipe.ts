@@ -17,13 +17,20 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * Discard this node's whole local database — the wipe half of R3 rejoin (spec §4.4). The caller
  * re-migrates the directory afterwards, and `applyMigrations` recreates both files.
  *
- * **BOTH files go, and that is the whole point rather than tidiness.** The class a table is
- * declared with chooses the file it lives in — `local` in `node.db`, `ledger` and `state` in
- * `venue.db` (`packages/sync-enrolment/src/classification.ts`) — and `node_membership`, the
- * fenced standing this command exists to discard, is `local`
- * (`packages/db/src/classification.ts:85`). A wipe that kept `node.db` would leave the wiped box
- * holding its own membership record, its sessions and its pairing codes, and the next boot's
- * setup mode would be adopting a node that still believes it is a member.
+ * **BOTH files go, and today only one of them holds anything.** `applyMigrations` sends every set
+ * to the VENUE handle and leaves the node file empty (`packages/migrations/src/apply.ts`) — the
+ * same fact `rejoin-command.ts` and `break-glass-command.ts` record where they open their own
+ * handles. Measured on this tree: a migrate of every manifest set into an empty directory leaves
+ * `node.db` created but with ZERO rows in `sqlite_master`, against hundreds in `venue.db`. So
+ * `node_membership` — the fenced standing this command exists to discard — is removed with
+ * `venue.db`, and `node.db` goes because it is the other file the venue directory is made of, not
+ * because emptying it discards anything.
+ *
+ * What makes keeping that second removal worth its line: `node_membership` is declared `local`
+ * (`packages/db/src/classification.ts`), and the class a table is declared with is intended to
+ * choose the FILE it lives in. On the day that split lands, the membership record moves into
+ * `node.db` and this loop is already right. Until then the claim to hold onto is the measured one
+ * above, not the split.
  *
  * **What a leftover sidecar does NOT do here, stated so nobody carries `restore.ts`'s reading
  * across.** A restore REPLACES `venue.db` with another database, and there a stale `-wal` is

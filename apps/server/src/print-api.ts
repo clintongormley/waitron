@@ -385,8 +385,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const dot = bearer.indexOf(".");
       const joinId = dot > 0 ? bearer.slice(0, dot) : "";
       const secret = dot > 0 ? bearer.slice(dot + 1) : "";
-      // A non-uuid selector names nothing — answered `not_approved` HERE, before it reaches a bare-uuid
-      // comparison (which would `22P02` → an opaque 500), the device sibling's guard.
+      // A non-uuid selector names nothing — answered `not_approved` HERE, before it reaches a by-id
+      // comparison that would neither refuse it nor match it, the device sibling's guard.
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
       const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
@@ -486,7 +486,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
       // A non-uuid job id is a clear client bug (the agent builds this URL from a claimed job's id) →
-      // a clean `shared.invalid_id` 400, never a `22P02` 500 in the `uuid` column.
+      // a clean `shared.invalid_id` 400. The `text` id column refuses nothing, so this is the only
+      // refusal (the id-screen note on `shared.invalid_id` in `till-api.ts`).
       const jobId = requireUuidParam(c.req.param("id"), "PrintJobId");
       const body = await readJsonBody<{ status?: unknown; error?: unknown }>(c);
       // `status` is the ONE field the agent MUST get right for the report to mean anything — screened to
@@ -560,8 +561,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintAgentId");
       // Revoke = flip `active = false` (instant — `requireAgent` rejects it), NEVER a hard
-      // DELETE: an agent is a durable identity referenced by job claims and `app_user` holds
-      // no DELETE. 0 rows (unknown id) → `agent.not_found`.
+      // DELETE: an agent is a durable identity referenced by job claims, and this route is the only
+      // thing arranging that (`tables.ts`'s `deactivateTable` note). 0 rows (unknown id) →
+      // `agent.not_found`.
       const updated = await gated(sessionId, (tx) =>
         tx
           .update(printAgents)
@@ -1005,8 +1007,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ── Attach a printer to a station (printer.manage) ───────────────────────────────────────────────
   // KDS-4 §3a/§3e — record that a fire at `:sid` prints at `:pid`. Station-centric (the mapping is
   // symmetric; attach/detach stay on the station route). Both ids are `requireUuidParam`-screened to a
-  // clean `shared.invalid_id` (400) before any query — un-screened a non-uuid would `22P02` the `uuid`
-  // column → an opaque 500. `attachPrinterToStation` live-checks BOTH ends (`station.not_found` /
+  // clean `shared.invalid_id` (400) before any query — un-screened a non-uuid reaches a `text` column
+  // that refuses nothing, and simply matches no row. `attachPrinterToStation` live-checks BOTH ends (`station.not_found` /
   // `printer.not_found`, 404) and is idempotent (ON CONFLICT DO NOTHING), so re-attaching a pair is a
   // 204 no-op. Runs through the shared `gated` helper so `printer.manage` is enforced identically.
   app.post("/management-api/stations/:sid/printers/:pid", (c) =>
@@ -1096,10 +1098,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // printer routes here, funnelled through the SAME `gated` helper so `printer.manage` is enforced
   // identically (the by-deletion proof on that helper covers this route too). `:id` is
   // `requireUuidParam`-screened (`shared.invalid_id`, 400) before any query; a present `printerId` must
-  // be UUID-shaped (else a `22P02` → 500) via `requireBodyUuid`. A named printer is validated to be an
+  // be UUID-shaped via `requireBodyUuid`, which is the only thing checking its shape. A named printer is validated to be an
   // ACTIVE printer in the till's OWN location (the picker's source) — absent/inactive/foreign/other-location
-  // → `printer.not_found` (404, reused from Slice A), which also keeps the FK from 23503-ing an
-  // opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
+  // → `printer.not_found` (404, reused from Slice A), which also keeps the foreign key from refusing
+  // with an opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
   // (400) — there is no `till.*` code (retired at the node-id rekey, errors.ts), and naming a
   // non-existent till in a config PATCH is a request-shape fault, the generic code these routes already use.
   app.patch("/management-api/tills/:id/receipt-printer", (c) =>

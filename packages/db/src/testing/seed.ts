@@ -18,9 +18,9 @@ export function freshNif(): string {
 }
 
 /**
- * Makes sure the database's ONE taxpayer row exists. Run as the connection owner; app_user has no
- * INSERT grant. Idempotent: `tenants.id` is pinned to 1 by its primary key and
- * `tenants_singleton_ck`, so a second call adds nothing and returns nothing to scope a query by.
+ * Makes sure the database's ONE taxpayer row exists. Idempotent: `tenants.id` is pinned to 1 by its
+ * primary key and `tenants_singleton_ck`, so a second call adds nothing and returns nothing to
+ * scope a query by.
  */
 export async function seedTenant(db: Database): Promise<void> {
   await db
@@ -29,10 +29,8 @@ export async function seedTenant(db: Database): Promise<void> {
     .onConflictDoNothing({ target: tenants.id });
 }
 
-/** Seeds one node at `location` and returns its id. Run as the connection owner
- * for fixture setup, exactly like {@link seedTenant}. The name
- * is a fixed fixture value, mirroring seedTenant's hardcoded legal_name: callers that care about a
- * node's name insert it themselves. */
+/** Seeds one node at `location` and returns its id. The name is a fixed fixture value, mirroring
+ * seedTenant's hardcoded legal_name: callers that care about a node's name insert it themselves. */
 export async function seedNode(db: Database, location: LocationId): Promise<NodeId> {
   const [row] = await db
     .insert(nodes)

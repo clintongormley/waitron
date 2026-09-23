@@ -10,10 +10,13 @@ export type IncidentSeverity = "warning" | "error";
  * Incidents: problems recorded as they happen, shown as alerts on the management dashboard to anyone
  * holding the permission for their area, who can mark them handled there.
  *
- * The only table in this plan that the application role may UPDATE, and only two of its
- * columns — see the migration below, which uses a column-level GRANT. An incident is a record
- * of what happened, not a note anyone may rewrite; acknowledging one is the sole permitted
- * mutation.
+ * An incident is a record of what happened, not a note anyone may rewrite: acknowledging one is the
+ * sole permitted mutation. **Nothing in the database enforces that any more.** PostgreSQL held it
+ * with a column-level GRANT that let the application role UPDATE `acknowledged_at` and
+ * `acknowledged_by` and nothing else; this engine has no roles and no grants
+ * (`../testing/roles.ts`), and the table carries no trigger — an update of `code` and a
+ * `delete from incidents` both succeed, measured 2026-09-23 on Node v26.7.0 against the core
+ * migration set. The rule is now the code's to keep.
  *
  * `code` and `params` come from a structured code+params pair rather than from a message
  * string, so the dashboard can word each alert in English or Spanish

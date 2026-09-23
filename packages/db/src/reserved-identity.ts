@@ -21,8 +21,11 @@ export interface ReservedNodeInput {
 /**
  * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
  * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
- * Owner-role: `nodes` grants app_user SELECT only (`drizzle/0001_db_baseline_sql.sql`), so these writes need the
- * owner (adopt already runs on ownerDb). Caller supplies a `withTransaction` tx so this commits with the
+ * Nothing in the database refuses another writer this table: on PostgreSQL `nodes` granted
+ * `app_user` SELECT alone, and this engine has no roles and no grants (`./testing/roles.ts`) — an
+ * ordinary insert into `nodes`, and an update of `public_key` or `endorsement`, both succeed
+ * (measured 2026-09-23 on Node v26.7.0 against the core migration set). Adopt is the only writer by
+ * convention now. Caller supplies a `withTransaction` tx so this commits with the
  * reserved SIF + sealed key in one transaction (CLAUDE.md §3 — a write-path helper takes a `tx`).
  */
 export async function insertReservedNodeTx(
@@ -39,8 +42,8 @@ export interface ReservedSeriesInput {
 }
 
 /**
- * Insert the standby's reserved invoice series (next_number defaults to 1). Owner-role under the
- * caller's tenant tx, alongside the reserved node + SIF (see `insertReservedNodeTx`). A no-op on an
+ * Insert the standby's reserved invoice series (next_number defaults to 1). Runs under the caller's
+ * transaction, alongside the reserved node + SIF (see `insertReservedNodeTx`). A no-op on an
  * empty list rather than emitting an INSERT with no rows.
  */
 export async function insertReservedSeriesTx(
@@ -97,16 +100,18 @@ export async function readStandardSeriesIdTx(tx: Transaction, nodeId: string): P
   return row.id;
 }
 
-/** {@link readStandardSeriesIdTx} under its own `withTransaction` (app_user SELECT suffices). */
+/** {@link readStandardSeriesIdTx} under its own `withTransaction`. */
 export function readStandardSeriesId(db: Database, nodeId: string): Promise<string> {
   return withTransaction(db, (tx) => readStandardSeriesIdTx(tx, nodeId));
 }
 
 /**
  * Retire every LIVE series of a node, stamping `retired_at`, and return how many were retired.
- * Owner-role only: `app_user`'s UPDATE on this table is column-scoped to `next_number`
- * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
- * privileged connection, before opening the node's replacement series.
+ * **Nothing in the database refuses this update.** PostgreSQL scoped `app_user`'s UPDATE on this
+ * table to `next_number` alone, so stamping `retired_at` needed the owner; this engine has no roles
+ * and no grants (`./testing/roles.ts`) and the update succeeds on an ordinary handle, measured
+ * 2026-09-23 on Node v26.7.0 against the core migration set. What is still true is the code half:
+ * no runtime path retires a series — a restore does, before opening the node's replacement series.
  */
 export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx

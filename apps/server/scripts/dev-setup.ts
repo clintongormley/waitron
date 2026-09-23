@@ -318,7 +318,7 @@ async function provisionVenue(
   };
 
   // Stand up the whole demo restaurant on the fresh venue: catalogues/floor/staff/media in one
-  // app_user tx, then the back-dated preproduction sales (its own per-sale tx). This replaces
+  // transaction, then the back-dated preproduction sales (its own per-sale tx). This replaces
   // the former inline "Delicatessen + one Cajera" stub — the demo now seeds real menus and staff.
   await seedDemoRestaurant(db, { venue: ids, locale: seedLocale, salesDays });
 

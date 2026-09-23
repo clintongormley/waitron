@@ -2,10 +2,14 @@
 --
 -- Regenerating every migration set from the TypeScript schema for the storage switch dropped every
 -- hand-written trigger: a trigger has never been declarable in TypeScript, so all of them lived in
--- `--custom` SQL and went with the regeneration. The eighteen APPEND-ONLY ones came back at runtime
+-- `--custom` SQL and went with the regeneration. The APPEND-ONLY ones came back at runtime
 -- (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`, called from
--- `packages/migrations/src/apply.ts`, from names each module declares). These nine came back as
--- nothing, and this file is where they come back.
+-- `packages/migrations/src/apply.ts`, from names each module declares): one trigger per event,
+-- `update` and `delete`, for each table a module classified `appendOnly` — so the set is whatever
+-- those classifications hold rather than a fixed number. Comparing totals with PostgreSQL would
+-- mislead. It wrote two per table as well, but split differently: an `UPDATE OR DELETE` trigger and
+-- a TRUNCATE-blocking one, and SQLite has no TRUNCATE at all. These nine came back as nothing, and
+-- this file is where they come back.
 --
 -- WHY ALL NINE ARE TRIGGERS AGAIN, rather than checks moved into the callers: each is a
 -- database-level backstop that survives ANY caller, SQLite expresses all nine, and restoring them

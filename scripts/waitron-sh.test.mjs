@@ -544,11 +544,28 @@ describe("the venue stamp reader inside waitron.sh", () => {
     expect(r.stdout.trim()).toBe("");
   });
 
-  // The third state: the file is there and cannot be read for what it should hold. is_production
-  // treats that as "cannot establish" and fails closed, which is only safe if the reader really does
-  // exit non-zero here rather than printing an empty line.
-  it("fails when the venue file carries no deployment table", () => {
+  // A third shape of "nothing there", and the one an operator actually meets: `openVenueStore`
+  // CREATES `venue.db` on any open, and `apps/server/src/boot.ts` opens the venue directory for its
+  // stamp probe before it applies migrations — so every box that got as far as booting and then
+  // failed sits with the file present and the `deployment` table absent. That box has no records to
+  // protect and must stay resettable with no extra flag.
+  it("succeeds with no output when the venue file exists but was never migrated", () => {
     const r = readStamp({ WAITRON_VENUE_DIR: venueDir({ migrated: false }) });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  // The third state, and the only one that still fails closed: bytes at venue.db that are not a
+  // SQLite database at all, so nothing about this box can be established. is_production treats a
+  // non-zero exit as "cannot establish" and refuses the reset, which is only safe if the reader
+  // really does exit non-zero here rather than printing an empty line. This case used to be driven
+  // by an unmigrated file, which is a readable database and now reads as "nothing there" — the case
+  // directly above.
+  it("fails when the venue file is not a database", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "venue.db"), "these bytes are not a SQLite database");
+    const r = readStamp({ WAITRON_VENUE_DIR: dir });
     expect(r.status).not.toBe(0);
     expect(r.stdout.trim()).toBe("");
   });

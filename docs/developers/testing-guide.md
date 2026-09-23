@@ -826,12 +826,23 @@ advice retired with the engine: there is no PGlite, no PostgreSQL container tier
 chain.pglite-cannot-test-contention.test.ts, beside the chain suites in
 `packages/fiscal-verifactu/src` and again in `packages/workforce/src` until the SQLite flip deleted
 both — existed to keep someone from dropping those two packages' Testcontainers dependency, and
-neither package declares one now. (Testcontainers has not left the repository: `packages/db` and
-`bench/sqlite-failover` still declare it, and `bench/sqlite-failover` is the only one that imports
-it — from `grep -rn '"testcontainers"' over every package manifest, taken 2026-09-22.)
-That suite is named here without a backticked path deliberately: the pointer guard
-(`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and this one no longer
-does.
+neither package declares one now. That suite is named here without a backticked path deliberately:
+the pointer guard (`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and
+this one no longer does.
+
+Testcontainers itself has not left the repository, and which members still declare it is a property
+to check rather than a list to remember. **The bare key is only half the search.** `testcontainers`
+and `@testcontainers/postgresql` are two separate dependency names, and most of the members that
+kept one kept only the second, so a `grep -rn '"testcontainers"'` over the manifests reports a
+handful and misses the rest. The grep that answers the question is
+`grep -rn testcontainers --include=package.json . | grep -v node_modules`, which catches both
+spellings. What still IMPORTS one of them is a much shorter list:
+`grep -rn 'from "testcontainers"\|from "@testcontainers/postgresql"'` over `packages`, `apps`,
+`bench` and `scripts`, taken 2026-09-23, returned `bench/sqlite-failover/src/store.ts` and
+`bench/pglite-throughput/src/bench.ts` and nothing else — nothing under `packages/` or `apps/` at
+all. Neither of those two is a test suite: both benches declare a `bench` script and no `test`
+script, so no suite in this repository starts a container by importing them. Every remaining
+declaration is a leftover the flip did not remove.
 
 What a contention suite asserts now is that one writer holds the venue file at a time
 (`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is

@@ -15,8 +15,12 @@ export interface ConstraintTarget {
 /**
  * Every object in an error's `cause` chain, outermost first.
  *
- * The walk exists because the fields below are not on the error a caller catches: Drizzle wraps the
- * driver's error rather than re-exposing them. It cannot be a predicate over `@waitron/shared`'s
+ * The walk exists because WHERE those fields sit depends on how the statement was run. A refusal
+ * from `db.run` arrives as drizzle's `DrizzleError`, which carries none of them and holds the
+ * engine's error on `.cause`; one from `db.all`, `db.get`, `db.execute` or an awaited drizzle query
+ * builder is the engine's own error, carrying them itself (measured 2026-09-23 on Node v26.7.0, one
+ * real refusal down each path). Walking the chain reads both without the caller saying which it
+ * has. It cannot be a predicate over `@waitron/shared`'s
  * `firstCodeInCauseChain`, which hands its predicate a `code` and returns only that string, where
  * this file needs the engine's `message` off a layer as well — and {@link refusalOn} needs both
  * off the SAME layer. It takes that module's BOUND rather than its own, which is the convention
@@ -47,11 +51,14 @@ const KEY_PREFIXES = ["UNIQUE constraint failed: ", "NOT NULL constraint failed:
  * The key named in a refusal's message: `UNIQUE constraint failed: child.code, child.tag` →
  * `{ table: "child", columns: ["code", "tag"] }`, or `undefined` when the message names no key.
  *
- * Three shapes return `undefined`, and each is a real message rather than a defensive guess:
- *  - a class that names no key at all (`FOREIGN KEY constraint failed`, `CHECK constraint failed:
- *    child_amount_ck`);
- *  - an index over an EXPRESSION, which SQLite reports as `UNIQUE constraint failed: index
- *    'expr_lower_uq'` — the index's name, and no columns;
+ * Two shapes return `undefined`, one per way out of the body below, and each is a real message
+ * rather than a defensive guess:
+ *  - a class that names no key at all, which fails the prefix test (`FOREIGN KEY constraint
+ *    failed`, `CHECK constraint failed: child_amount_ck`);
+ *  - an index over an EXPRESSION, which carries the right prefix but no `table.column` entry:
+ *    SQLite reports `UNIQUE constraint failed: index 'expr_lower_uq'` — the index's name, and no
+ *    columns. {@link indexViolated} is that index's question.
+ *
  * The table comes from the FIRST entry and the rest are read as columns, because a unique index
  * belongs to one table and SQLite repeats that table's name on every entry.
  *

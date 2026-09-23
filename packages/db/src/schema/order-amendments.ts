@@ -19,8 +19,19 @@ export const orderAmendmentKind = enumType(["order_placed", "order_cancelled"]);
 /**
  * The append-only, tamper-evident amendment log (art. 29.2.j LGT — the legal term lives only in
  * this comment; the table is English, design §4). IMMUTABLE like `sale_lines`/`time_entries`, NOT
- * the mutable `working_orders`: `REVOKE ALL` + `GRANT SELECT, INSERT` + reject_mutation + a
- * TRUNCATE-block (migration SQL). Tamper-evidence is a per-order fiscal-fingerprint-style hash of content plus
+ * the mutable `working_orders`.
+ *
+ * **What holds that immutability today is two triggers and nothing else.** The table is named in
+ * the core set's append-only list (`../classification.ts`), from which `@waitron/store` installs
+ * `order_amendments_append_only_update` and `order_amendments_append_only_delete`; each refuses
+ * with `order_amendments is append-only`, result code 1811 (measured 2026-09-23 on Node v26.7.0
+ * against the core migration set). The other two halves of the PostgreSQL arrangement are gone
+ * rather than replaced: there are no roles and no grants on this engine
+ * (`../testing/roles.ts`), so the `REVOKE ALL` + `GRANT SELECT, INSERT` pair has no counterpart,
+ * and SQLite has no TRUNCATE statement to block (`truncate table order_amendments` is refused at
+ * parse time, `near "truncate": syntax error`).
+ *
+ * Tamper-evidence is a per-order fiscal-fingerprint-style hash of content plus
  * the predecessor's hash (Decision 2): `entry_hash = SHA-256(content ‖ prev_entry_hash)`, with the
  * reason, actor and capturing till/node all INSIDE the hash (#52), and precedence tie-breaking on
  * the hashed `sequence_no` (#52). Local wall-clock (`event_at` + `event_offset_minutes`,
