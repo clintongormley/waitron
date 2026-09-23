@@ -17,7 +17,9 @@ import * as declarations from "./bookings.js";
 describeSchemaConformance({
   subjectName: "bookings",
   // Core first: `bookings` carries foreign keys into its `locations`, `dining_tables` and
-  // `working_orders`.
+  // `working_orders`, and `drizzle/0000_baseline.sql` names no other set's table and creates no
+  // trigger. Most of the package's other database suites apply the whole manifest
+  // (`src/testing/migrations.ts`); this set needs only core.
   prerequisites: [CORE_MIGRATIONS],
   subject: BOOKINGS_MIGRATIONS,
   declarations,

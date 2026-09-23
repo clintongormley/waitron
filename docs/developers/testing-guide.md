@@ -113,7 +113,9 @@ sentence on each field; this is the shape of it. Four fields are required:
 - `subjectName` — the name the suite's own case names will use, `core` or `catalogue`. It names the
   SET, not the package, and it is read by whoever reads a failure.
 - `declarations` — the package's schema barrel, handed in as `import * as barrel from "./index.js"`.
-  These are the declarations the subject set is supposed to have built.
+  These are the declarations the subject set is supposed to have built. A package with no barrel
+  hands in the schema file its `drizzle.config.ts` generates from, as `packages/bookings` does;
+  the suite reads only the exports that are tables.
 - `declaresClosedVocabularies` — whether any column in this set is declared with a closed
   vocabulary. The caller states it and the suite checks the statement, rather than the suite
   counting. The vocabulary block is one case per such column, so a set with none leaves that list
@@ -124,7 +126,7 @@ Three more are optional:
 
 - `prerequisites` — the sets that must be applied BEFORE the subject, in order. Omit it for a set
   that has none; core is one, and so is any module set whose SQL names no other set's table.
-- `reload` — an arrow function that re-imports that same barrel from inside a test. It earns its
+- `reload` — an arrow function that re-imports that same module from inside a test. It earns its
   keep only in a package that runs a mutation test, which among these callers is `packages/db`
   alone, and that is the one call site passing it; the reason is written out at the field itself.
   If you do pass it, it has to be written in the CALLING module: a relative specifier such as
