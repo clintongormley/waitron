@@ -1,12 +1,13 @@
 /**
- * Device join-and-accept binding, on the engine the box now runs.
+ * Device join-and-accept binding, on the engine the box now runs, plus direct cases over
+ * `resolveDeviceBinding` and `requireDeviceBinding`.
  *
  * ## What this file does not check
  *
- * **SQLite has no roles and no grants**: one process opens one file. The grant half of every case
- * below is checked by nothing, here or elsewhere.
+ * **SQLite has no roles and no grants**: one process opens one file. The grant half of every
+ * join-and-accept case below is checked by nothing, here or elsewhere.
  *
- * What survives is the binding RULE, which is what the seven case names describe:
+ * What survives is the binding RULE, which is what the join-and-accept case names describe:
  * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
  * shape through `device_binding_rule_insert` / `_update`, created by
  * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
@@ -17,8 +18,8 @@
  * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records this file as "convert 6, BLOCKER 1",
  * on the ground that `tills_tenant_location_name_key` was absent from the SQLite baseline, so a
  * duplicate register name would insert cleanly and the refusal would never come. That is no longer
- * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and all SEVEN
- * cases pass. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
+ * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and the
+ * register-name collision case passes. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
  * giving the colliding device a name that does NOT collide ("Caja 2") fails the case with
  * `promise resolved "{ …(2) }" instead of rejecting`, and the name restored, it passes again.
  */

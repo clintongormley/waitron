@@ -8,7 +8,7 @@
  *
  * SQLite has no roles and no grants, so every call below runs on the one handle and nothing
  * here now says anything about which identity the routes reach the database as. No case was deleted
- * for it: each one names a route's behaviour, and all thirty-nine still run.
+ * for it: each one names a route's behaviour, and every case still runs.
  *
  * ## TWO CASES KEPT THEIR ANSWERS AND CHANGED SUBJECT, which is worth more than a passing count
  *
@@ -1279,10 +1279,10 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     // A live ceremony left over from when Google was configured: the callback must not spend it.
     const state = "state-from-an-earlier-configuration";
     const stateHash = createHash("sha256").update(state, "utf8").digest("hex");
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     await suite.db.execute(sql`
       insert into google_oidc_states (id, person_id, mode, state_hash, nonce, verifier, expires_at)
-      values (${randomUUID()}, null, 'login', ${stateHash}, 'nonce', 'verifier',
-              ${new Date(Date.now() + 5 * 60_000).toISOString()})`);
+      values (${randomUUID()}, null, 'login', ${stateHash}, 'nonce', 'verifier', ${expiresAt})`);
     const responses = [
       await app.request("/management-api/google/login", { method: "POST" }),
       await app.request("/management-api/session/me/google", {

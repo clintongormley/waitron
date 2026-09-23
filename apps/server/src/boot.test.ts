@@ -404,23 +404,14 @@ async function freePort(): Promise<number> {
 /**
  * Waits until `port` accepts a TCP connection — the listener is actually up.
  *
- * `startServer` resolves BEFORE its listener has bound. `startListening` calls `serve()`, which
- * returns synchronously while the socket binds asynchronously (`boot.ts`'s own comment on the
- * `listeningListener` argument says so), and nothing in `startServer` waits for Node's `listening`
- * callback. A test that closes WITHOUT first dialling therefore reaches `server.close()` while the
- * socket is still unbound, and Node rejects it with `ERR_SERVER_NOT_RUNNING` — "Server is not
- * running." — which `close()` propagates.
- *
- * This was invisible on PostgreSQL, where the boot's remaining round trips gave the bind a turn of
- * the event loop; it is the same class as the `promote-endpoint-e2e` spy the ledger records.
- * Measured 2026-09-22 with three variants of one trading boot in this package, printing the error
- * `close()` rejected with: closing immediately → `Server is not running.`; a 50ms delay first →
- * none; a single `fetch` first → none. So the wait is what the three tests below were getting for
- * free from PostgreSQL, not a workaround for a flaky assertion.
- *
- * Only the three tests that never dial their server call this. Every other boot below fetches
- * something first, which is why they are unaffected. A TCP connect rather than a `fetch`, so this
- * observes the BIND and nothing about what the app answers.
+ * `startServer` resolves before its listener has bound: `serve()` returns while the socket binds
+ * asynchronously, and nothing in `startServer` waits for Node's `listening` callback. Closing a
+ * server whose socket is still unbound rejects with `ERR_SERVER_NOT_RUNNING` ("Server is not
+ * running."), which `close()` propagates — measured 2026-09-22 on one trading boot: closing at
+ * once rejected with it, closing after a 50ms delay or after one `fetch` did not. A test calls
+ * this after `startServer` so that its next step, whether a close or a dial, meets a bound
+ * listener. A TCP connect rather than a `fetch`, so it observes the bind and nothing about what
+ * the app answers.
  */
 async function awaitListening(port: number): Promise<void> {
   for (let i = 0; i < POLL_TRIES; i += 1) {
@@ -1271,7 +1262,7 @@ describe("startServer, against a migrated venue directory", () => {
         return [s, found] as const;
       });
       server = started;
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       // Names the soft-disabled module — the operator-visible signal that scheduler's schema is in the
       // DB but no longer enabled. `toMigrate` is empty: every ENABLED set was already migrated in the
@@ -2113,7 +2104,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_ENV: "production",
     });
     try {
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       expect(runTunnelClient).not.toHaveBeenCalled();
     } finally {
@@ -2142,7 +2133,7 @@ describe("startServer, against a migrated venue directory", () => {
       return [started, event] as const;
     });
     try {
-      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
       expect(disabled.event).toBe("backup.disabled");
     } finally {
@@ -2915,10 +2906,9 @@ describe("startServer — what a trading boot wires behind its management routes
 
   afterAll(async () => {
     if (server !== undefined) await server.close();
-    if (venue !== undefined) {
-      await venue.store.close();
-      await rm(venue.directory, { recursive: true, force: true });
-    }
+    const store = venue?.store;
+    if (store !== undefined) await store.close();
+    if (venue !== undefined) await rm(venue.directory, { recursive: true, force: true });
   });
 
   async function invite(email: string): Promise<unknown> {
@@ -3196,13 +3186,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   it("finishes a provision whose venue had already committed, re-using that venue rather than minting another", async () => {
     const venue = await freshVenue();
+    const precommittedStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-precommitted-"));
     try {
       const committed = await provisionVenue(
         {
           ownerDb: venue.store.venue,
           moduleConfig: ES_MODULE_CONFIG,
           database: venue.directory,
-          stateDir: await mkdtemp(join(tmpdir(), "waitron-boot-precommitted-")),
+          stateDir: precommittedStateDir,
         },
         { environment: "preproduction", venue: hashedVenueRequest("60000010W") },
       );
@@ -3218,6 +3209,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(trading.WAITRON_TILL_NODE_ID).toBe(committed.nodeId);
         expect(trading.WAITRON_TILL_TILL_ID).toBe(committed.tillId);
         await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });
       const nodeCount = await venue.store.venue.execute<{ n: number }>(
         sql`select cast(count(*) as int) as n from nodes`,
@@ -3226,6 +3218,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
+      await rm(precommittedStateDir, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -3289,13 +3282,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const modules = enabledModules(ALL_MODULES, ES_MODULE_CONFIG);
     const source = await freshVenue();
     const target = await freshVenue();
+    const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-config-source-"));
     try {
       const sourceIds = await provisionVenue(
         {
           ownerDb: source.store.venue,
           moduleConfig: ES_MODULE_CONFIG,
           database: source.directory,
-          stateDir: await mkdtemp(join(tmpdir(), "waitron-boot-config-source-")),
+          stateDir: sourceStateDir,
         },
         { environment: "preproduction", venue: hashedVenueRequest(TAX_ID) },
       );
@@ -3353,6 +3347,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         expect(await provisioned.json()).toEqual({ provisioned: true, restarting: true });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });
 
       const imported = await withTransaction(target.store.venue, (tx) =>
@@ -3364,6 +3359,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await target.store.close();
       await rm(source.directory, { recursive: true, force: true });
       await rm(target.directory, { recursive: true, force: true });
+      await rm(sourceStateDir, { recursive: true, force: true });
     }
   }, 120_000);
 });

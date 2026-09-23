@@ -1137,11 +1137,23 @@ describe("mountMeApi — own credentials and second factor", () => {
       cookie,
       body: { currentPassword: PASSWORD },
     });
-    const { enrollmentId } = (await begun.json()) as { enrollmentId: string };
+    const { enrollmentId, secret } = (await begun.json()) as {
+      enrollmentId: string;
+      secret: string;
+    };
+    // Any fixed code is valid for some secret, so pick one that no step the verifier accepts
+    // around now produces for this secret.
+    const now = Math.floor(Date.now() / 1000);
+    const accepted = new Set(
+      [-60, -30, 0, 30, 60].map((offset) => generateSync({ secret, epoch: now + offset })),
+    );
+    const wrong = ["000000", "111111", "222222", "333333", "444444", "555555"].find(
+      (code) => !accepted.has(code),
+    )!;
 
     const res = await send(app, "POST", "/management-api/session/me/totp/finish", {
       cookie,
-      body: { enrollmentId, code: "000000" },
+      body: { enrollmentId, code: wrong },
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "totp.invalid", params: {} } });
