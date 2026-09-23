@@ -30,16 +30,13 @@ import { productUnits, units } from "../src/schema/units.js";
 /** The unit a product's OWN `product_units` row names, or null when it has none (it reads as Each).
  * Throws when no such product exists, so a null always means "no unit row", never "wrong id". */
 export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
-  const [product] = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(eq(products.id, productId));
-  if (product === undefined) throw new Error(`storedUnitId: no product with id ${productId}`);
   const [row] = await tx
     .select({ unitId: productUnits.unitId })
-    .from(productUnits)
-    .where(eq(productUnits.productId, productId));
-  return row?.unitId ?? null;
+    .from(products)
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .where(eq(products.id, productId));
+  if (row === undefined) throw new Error(`storedUnitId: no product with id ${productId}`);
+  return row.unitId;
 }
 
 export interface SeededVenue {

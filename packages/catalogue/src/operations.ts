@@ -42,10 +42,11 @@ import {
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
 import {
-  categoryOwnerId,
+  categoryOwnerJoin,
   effectiveProductColumns as effective,
+  parentJoin,
   parentProducts,
-  unitOwnerId,
+  unitOwnerJoin,
 } from "./variant-fallback.js";
 import type { Product } from "./product-types.js";
 import type { AccessibleCatalogue, AvailableProduct, MenuItem, MenuOffer } from "./menu-types.js";
@@ -154,7 +155,7 @@ const CATALOGUE_COLUMNS = {
 };
 
 /** A product's own identity and names, and its EFFECTIVE inherited values: a query selecting these
- * left-joins {@link parentProducts} (`variant-fallback.ts`). */
+ * has `.leftJoin(parentProducts, parentJoin)` (`variant-fallback.ts`). */
 const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
@@ -454,8 +455,8 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
     .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
     .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
     .innerJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
@@ -758,8 +759,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(eq(products.id, row!.id));
   return toProduct(
@@ -775,10 +776,10 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
       categoryIds: categoryIdArray,
     })
     .from(products)
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(productCategories, eq(productCategories.productId, categoryOwnerId))
+    .leftJoin(productCategories, categoryOwnerJoin)
     .where(catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId))
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
@@ -818,8 +819,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     variantsByProduct.set(productId, held);
   }
   return rows.map((row) => ({
-    // `categoryIdArray` hands back the JSON text SQLite built, never an array (categories.ts).
-    ...toProduct(row, JSON.parse(row.categoryIds) as string[], variantsByProduct.get(row.id) ?? []),
+    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }
@@ -1129,8 +1129,8 @@ export async function listAvailableProducts(
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .leftJoin(contentLanguages, sql`true`)

@@ -9,10 +9,11 @@ import { readProductModifiers, writeProductModifiers } from "./product-modifiers
 import { productCategories } from "./schema/categories.js";
 import { productUnits } from "./schema/units.js";
 import {
-  categoryOwnerId,
+  categoryOwnerJoin,
   effectiveProductColumns as effective,
+  parentJoin,
   parentProducts,
-  unitOwnerId,
+  unitOwnerJoin,
 } from "./variant-fallback.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
@@ -50,9 +51,9 @@ export async function readProductEditor(
   const [row] = await tx
     .select(columns)
     .from(products)
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
-    .leftJoin(productCategories, eq(productCategories.productId, categoryOwnerId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(productCategories, categoryOwnerJoin)
     .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
@@ -61,8 +62,6 @@ export async function readProductEditor(
     unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    // `categoryIdArray` hands back the JSON text SQLite built, never an array (categories.ts).
-    categoryIds: JSON.parse(row.categoryIds) as string[],
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],

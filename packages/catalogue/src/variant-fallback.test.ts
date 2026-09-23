@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import {
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
   kitchenCourses,
   kitchenStations,
   products,
@@ -31,7 +33,7 @@ import { createUnit } from "./units.js";
 import {
   effectiveProductColumns,
   INHERITED_KEYS,
-  inheritFromParent,
+  parentJoin,
   parentProducts,
 } from "./variant-fallback.js";
 import { seedVenue } from "../test/fixtures.js";
@@ -41,9 +43,9 @@ import { seedVenue } from "../test/fixtures.js";
  * its parent's (spec §1.2, §15.2, §15.3). No write path creates one yet, so every variant here is
  * inserted straight into the table.
  *
- * The parent and the two variants carry DIFFERENT values on every field a case reads, and each
- * product's three names are three different texts, so a reader that takes the wrong row or the
- * wrong name fails rather than passing on a shared value.
+ * The parent and the two variants carry DIFFERENT values on every field a case reads, and the
+ * parent and Wine 175 each carry three different names (Wine 125 has only its staff name), so a
+ * reader that takes the wrong row or the wrong name fails rather than passing on a shared value.
  */
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -461,7 +463,7 @@ describe("effectiveProductColumns, entry by entry", () => {
       tx
         .select({ id: products.id, ...effectiveProductColumns })
         .from(products)
-        .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+        .leftJoin(parentProducts, parentJoin)
         .where(inArray(products.id, [f.wine125, f.wine175])),
     );
     const parentRaw = raw.find((row) => row.id === f.parentId)!;
@@ -519,7 +521,10 @@ describe("what the products table refuses", () => {
         parentId: f.parentId,
         name: "Stray variant",
       }),
-    ).rejects.toMatchObject({ errcode: 787, message: "FOREIGN KEY constraint failed" });
+    ).rejects.toMatchObject({
+      errcode: FOREIGN_KEY_VIOLATION[0],
+      message: "FOREIGN KEY constraint failed",
+    });
   });
 
   // The accepting control for the case above: the same insert in the parent's catalogue.
@@ -541,7 +546,7 @@ describe("what the products table refuses", () => {
         vatClass: null,
       }),
     ).rejects.toMatchObject({
-      errcode: 275,
+      errcode: CHECK_VIOLATION[0],
       message: "CHECK constraint failed: products_top_level_owns_ck",
     });
   });
@@ -556,7 +561,7 @@ describe("what the products table refuses", () => {
         vatClass: "general",
       }),
     ).rejects.toMatchObject({
-      errcode: 275,
+      errcode: CHECK_VIOLATION[0],
       message: "CHECK constraint failed: products_top_level_owns_ck",
     });
   });
@@ -600,55 +605,7 @@ describe("dietary declarations on a variant", () => {
   });
 });
 
-describe("inheritFromParent", () => {
-  const parent: Record<string, unknown> = {
-    name: "Wine by the glass",
-    customerName: { en: "House wine" },
-    kitchenName: "WINE",
-    active: true,
-    vatClass: "reduced",
-    unitPrice: "4.00",
-    image: "parent.jpg",
-    description: { en: "A dry white" },
-  };
-
-  it("takes the parent's value for a null inherited key and keeps a set one", () => {
-    const variant: Record<string, unknown> = {
-      name: "Wine 175",
-      customerName: null,
-      kitchenName: null,
-      active: false,
-      vatClass: "general",
-      unitPrice: null,
-      image: null,
-      description: null,
-    };
-    expect(inheritFromParent(variant, parent)).toEqual({
-      name: "Wine 175",
-      customerName: null,
-      kitchenName: null,
-      active: false,
-      vatClass: "general",
-      unitPrice: "4.00",
-      image: "parent.jpg",
-      description: { en: "A dry white" },
-    });
-  });
-
-  it("never takes a name or the active flag from the parent, even when the variant's is null", () => {
-    const variant: Record<string, unknown> = {
-      name: null,
-      customerName: null,
-      kitchenName: null,
-      active: null,
-    };
-    expect(inheritFromParent(variant, parent)).toEqual(variant);
-  });
-
-  it("returns a top-level product unchanged", () => {
-    expect(inheritFromParent(parent, null)).toEqual(parent);
-  });
-
+describe("INHERITED_KEYS", () => {
   // Spec §1.2 minus the three names (§15.2), with the price (§15.3) and the photo (V11). Pinned
   // whole, so a key added or dropped is a decision somebody makes here rather than by accident.
   it("inherits exactly the spec's set, and none of the names, flags or identity", () => {

@@ -28,16 +28,19 @@ export interface ProductCategoryInput {
   primaryCategoryId?: string | null;
 }
 /**
- * A product's category ids, gathered in one column as a JSON array.
+ * A product's category ids, gathered in one column and decoded to an array.
  *
- * `json_group_array` is what SQLite has in place of `array_agg`, and the value arrives as the JSON
- * TEXT it built, never as a JavaScript array — so every caller parses. Measured on SQLite 3.53.4
- * (Node v26.7.0): with the `filter` removing every row the aggregate returns the string `[]`, not
- * null, which is why the `coalesce` that wrapped the PostgreSQL form is gone rather than
- * translated. The filter itself stays, because a product with no membership reaches this through a
- * left join and would otherwise gather one null.
+ * `json_group_array` is what SQLite has in place of `array_agg`, and the driver hands back the JSON
+ * TEXT it built, never a JavaScript array — the `.mapWith` parses it, so a caller gets the array.
+ * Measured on SQLite 3.53.4 (Node v26.7.0): with the `filter` removing every row the aggregate
+ * returns the string `[]`, not null, which is why the `coalesce` that wrapped the PostgreSQL form is
+ * gone rather than translated. The filter itself stays, because a product with no membership
+ * reaches this through a left join and would otherwise gather one null.
  */
-export const categoryIdArray = sql<string>`json_group_array(${productCategories.categoryId} order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null)`;
+export const categoryIdArray =
+  sql`json_group_array(${productCategories.categoryId} order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null)`.mapWith(
+    (value: string): string[] => JSON.parse(value) as string[],
+  );
 
 const columns = {
   id: categories.id,
@@ -238,7 +241,7 @@ export async function readProductCategories(
     .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!product) throw new AppError("product.not_found", { productId });
-  return { ...product, categoryIds: JSON.parse(product.categoryIds) as string[] };
+  return product;
 }
 export async function replaceProductCategories(
   tx: Transaction,
@@ -334,5 +337,5 @@ export async function listCategoryProducts(tx: Transaction, categoryId: string) 
     .innerJoin(productCategories, eq(productCategories.productId, products.id))
     .groupBy(products.id)
     .orderBy(products.id);
-  return rows.map((row) => ({ ...row, categoryIds: JSON.parse(row.categoryIds) as string[] }));
+  return rows;
 }

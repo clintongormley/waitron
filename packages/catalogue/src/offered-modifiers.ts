@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { readMenuExtras, readProductExtras } from "./extra-projection.js";
 import type { ResolvedExtraList } from "./extra-projection.js";
@@ -8,7 +8,7 @@ import { expandDietaryDeclarations, validateDietaryDeclarations } from "./dietar
 import type { OptionList } from "./modifier-list-types.js";
 import type { ProductModifierRef } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
-import { effectiveProductColumns, parentProducts } from "./variant-fallback.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { OfferedExtraItem, OfferedModifier } from "./menu-types.js";
 
 /**
@@ -126,12 +126,16 @@ async function walkAttachedModifiers(
  * map plus the allergens and dietary labels a picker draws. */
 type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "preselected">;
 
-/** One query for every product any offered list names, and none at all when no list names one. */
-async function readExtraProducts(
-  tx: Transaction,
-  productIds: string[],
-): Promise<Map<string, OfferedExtraItemFacts>> {
-  if (productIds.length === 0) return new Map();
+/**
+ * The `products` row behind each extras item: its own three names, as stored, and the EFFECTIVE VAT
+ * class, allergens and dietary labels — a variant's own, or its parent's where it leaves one blank.
+ * One query for every id, and none at all when there are none. Both the sell-side read below and
+ * the order path (`resolveBasketModifiers`, `apps/server/src/working-order.ts`) read an extras
+ * item's product through this, so what a till draws and what an order is taxed at come from the
+ * same query.
+ */
+export async function readExtraItemProducts(tx: Transaction, productIds: readonly string[]) {
+  if (productIds.length === 0) return [];
   const rows = await tx
     .select({
       id: products.id,
@@ -143,8 +147,17 @@ async function readExtraProducts(
       dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(products)
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
-    .where(inArray(products.id, productIds));
+    .leftJoin(parentProducts, parentJoin)
+    .where(inArray(products.id, [...productIds]));
+  return rows.map((row) => ({ ...row, vatClass: row.vatClass as VatClass }));
+}
+
+/** {@link readExtraItemProducts}, in the shape a picker draws. */
+async function readExtraProducts(
+  tx: Transaction,
+  productIds: string[],
+): Promise<Map<string, OfferedExtraItemFacts>> {
+  const rows = await readExtraItemProducts(tx, productIds);
   return new Map(
     rows.map((row) => [
       row.id,
@@ -153,7 +166,7 @@ async function readExtraProducts(
         name: row.name,
         customerName: row.customerName,
         kitchenName: row.kitchenName,
-        vatClass: row.vatClass as VatClass,
+        vatClass: row.vatClass,
         addAllergens: row.allergens,
         suitableFor: expandDietaryDeclarations(
           validateDietaryDeclarations(row.dietaryDeclarations),

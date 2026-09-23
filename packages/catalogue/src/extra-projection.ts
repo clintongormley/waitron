@@ -1,10 +1,10 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { effectiveProductColumns, parentProducts } from "./variant-fallback.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import type { ExtraList, ExtraListItem } from "./extra-contract.js";
 import type { ProductModifierRef } from "./product-modifiers.js";
 
@@ -49,7 +49,7 @@ async function borrowedUnitPrices(
   const rows = await tx
     .select({ id: products.id, unitPrice: effectiveProductColumns.unitPrice })
     .from(products)
-    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(products.id, named));
   return new Map(
     rows.map((product) => [product.id, { unitPrice: centsToDecimal(product.unitPrice) }]),
