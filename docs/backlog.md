@@ -3579,7 +3579,7 @@ it; and a correction must not decrement a count where it should drop it.
 - **Stale PGlite prose — DONE by T2**, and it was roughly a hundred files rather than the dozen this
   line guessed at. `scripts/schema-equivalence.{sh,md}` went with it: deleted, not swept, because the
   script's whole subject was dumping and diffing a PostgreSQL schema.
-- **The four helpers named after PostgreSQL — DONE (2026-09-23, `chore/rename-pg-helpers`).**
+- **The four helpers named after PostgreSQL — DONE (2026-09-23, PR #524).**
   Renamed, with no behaviour change: `isPgError` is `isRefusal`, `pgErrorCode` is
   `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and `storeF3AsAppUser` in
   `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
