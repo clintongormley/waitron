@@ -82,7 +82,11 @@ export interface SchemaConformanceOptions {
    * not the package, and it is read by whoever reads a failure.
    */
   readonly subjectName: string;
-  /** The barrel holding the declarations that set is supposed to build. */
+  /**
+   * The module holding the declarations that set is supposed to build — the package's schema barrel,
+   * or, where it has none, the file its `drizzle.config.ts` generates from. Of its exports, only
+   * the tables are read.
+   */
   readonly declarations: Record<string, unknown>;
   /**
    * Whether any column in this set is declared with a closed vocabulary — the `enumText`/`enumCheck`
@@ -95,7 +99,7 @@ export interface SchemaConformanceOptions {
    */
   readonly declaresClosedVocabularies: boolean;
   /**
-   * Re-imports that same barrel from INSIDE a test. Omitted, the cases read the `declarations` the
+   * Re-imports that same module from INSIDE a test. Omitted, the cases read the `declarations` the
    * caller already passed, and nothing is re-imported.
    *
    * It is here for the MUTATION run, and `packages/db` is the only caller that collects one
@@ -120,7 +124,7 @@ export interface SchemaConformanceOptions {
 
 const dialect = new SQLiteSyncDialect();
 
-/** Every table a barrel exports. */
+/** Every table a module exports. */
 function tablesIn(module: Record<string, unknown>): SQLiteTable[] {
   return Object.values<unknown>(module).filter((value): value is SQLiteTable =>
     is(value, SQLiteTable),
@@ -569,7 +573,7 @@ export function describeSchemaConformance(options: SchemaConformanceOptions): vo
   describe(`the drizzle schema matches the database the ${options.subjectName} migrations build`, () => {
     it(`declares every table the ${options.subjectName} migrations build`, () => {
       // An inventory, not a count. A count only says how many declarations there are, so a table
-      // dropped from the schema barrel takes its own case away with it and the suite goes green with
+      // dropped from the declarations takes its own case away with it and the suite goes green with
       // fewer cases than before — which is how a missing table would arrive.
       expect(declared.map((table) => getTableConfig(table).name).sort()).toEqual(
         [...builtTables].sort(),
