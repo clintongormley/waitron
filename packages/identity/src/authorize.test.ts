@@ -8,10 +8,8 @@ import { authorize } from "./authorize.js";
 import { endSession } from "./login.js";
 import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: authorize() is pure LOGIC — the operator-holds path, the override
-// path's not-found / suspended / bad-PIN / lacks-permission gates, and the open-session guard.
-// Nothing here depends on the privilege set (a PGlite connection is superuser holding every grant,
-// so a grant assertion would be a false pass, CLAUDE.md §4).
+// authorize() is LOGIC — the operator-holds path, the override path's not-found / suspended /
+// bad-PIN / lacks-permission gates, and the open-session guard.
 
 const suite = useVenueDb({
   resetPerTest: false,

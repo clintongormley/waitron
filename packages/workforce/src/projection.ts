@@ -4,10 +4,8 @@
  * full history retained"). Slice 2 has no corrections yet, so this is a plain fold; Slice 3 layers
  * reprojection on top of the SAME functions.
  *
- * Pure and DB-free on purpose: overtime is projection LOGIC over `time_entries`, and CLAUDE.md §4
- * says pick the lighter target when the heavier one's justification does not apply — there are no
- * privileges, no concurrency here, so this is unit-tested on PGlite/directly, never
- * against a real-role Postgres.
+ * Pure and DB-free on purpose: overtime is projection LOGIC over `time_entries`, so
+ * ./projection.test.ts drives these functions with hand-built entry arrays and no database at all.
  *
  * Overtime has TWO lawful readings under Spanish labour law, and the code returns BOTH rather than
  * choosing (which one binds is collective-agreement/contract-dependent — an asesor-laboral decision, not a code

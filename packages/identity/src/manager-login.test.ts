@@ -19,9 +19,7 @@ vi.mock("./verify-password.js", async (importOriginal) => {
   return { ...actual, verifyPassword: vi.fn(actual.verifyPassword) };
 });
 
-// PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
-// branches and the role gate. A PGlite connection is superuser holding every grant, so a privilege
-// or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
+// This suite tests the verifier LOGIC — the password/TOTP/suspended branches and the role gate.
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],

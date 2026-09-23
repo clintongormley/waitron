@@ -32,7 +32,7 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
 }
 
 describe("createAbsence", () => {
-  // A FRESH person per test: the suite shares one PGlite db, and the overlap guard is scoped per
+  // A FRESH person per test: the suite shares one database, and the overlap guard is scoped per
   // person, so a person reused across tests would carry an earlier test's absence and make
   // these order-dependent (CLAUDE.md §4). Seeding a new person is cheaper than an afterEach cleanup
   // and cannot be forgotten.
@@ -121,9 +121,9 @@ describe("createAbsence", () => {
     // The cross-field ordering guard: 10 May starts, 1 May ends — end before start. Both are real
     // calendar days (so the route's requirePeriod screen passes each in isolation), but the interval
     // is malformed. createAbsence must refuse it here with `absence.invalid` BEFORE the insert, not
-    // let it reach the `absences_range_ck` (ends_on >= starts_on) 23514 → a raw driver error. Delete
-    // the guard in createAbsence and this reddens: the code becomes the raw PGlite constraint error,
-    // not `absence.invalid` (CLAUDE.md §4 prove-by-deletion).
+    // let it reach the `absences_range_ck` (ends_on >= starts_on) and come back as a raw driver
+    // error. Delete the guard in createAbsence and this reddens: the code becomes that raw
+    // constraint error, not `absence.invalid` (CLAUDE.md §4 prove-by-deletion).
     const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const code = await codeOfRejection(() =>
       run((tx) =>
@@ -222,7 +222,7 @@ describe("setAbsenceStatus", () => {
 
 describe("listPendingAbsences", () => {
   it("returns only requested absences, ordered by created_at", async () => {
-    // The shared PGlite DB persists across the file, and the `createAbsence` tests leave several
+    // The shared database persists across the file, and the `createAbsence` tests leave several
     // `requested` absences behind. The queue reads every absence in the database (one tenant per
     // database), so clear the earlier tests' absences to keep the ordered assertion below
     // order-independent (CLAUDE.md §4) — mirrors listPendingSwaps in shift-swaps.test.ts.

@@ -25,7 +25,9 @@ import {
   removeOwnPasskey,
 } from "./profile.js";
 
-// PGlite covers profile behavior; the me API's real-PG suite exercises deployment-role writes.
+// The own-profile behaviour: reads, detail saves with a credential re-check on an email change,
+// password and PIN changes with the sessions they end, passkey listing and removal, authenticator
+// enrolment, recovery codes and disable, and the Google unlink.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 async function fixture() {
   await seedTenant(suite.db);

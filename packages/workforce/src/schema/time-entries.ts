@@ -182,11 +182,14 @@ export const timeEntries = table(
           or (${t.correctsEntryId} is not null and ${t.correctionReason} is not null
              and ${t.correctionStatus} is not null and ${t.correctionActorId} is not null)`,
     ),
-    // THE backstop against two writers claiming one chain position — a real risk when several tills
-    // at one location clock in the same instant. On real Postgres a naive read-then-write loses the
-    // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Keyed on the
-    // full chain key (node, location), so two nodes at one location never collide across a
-    // promotion.
+    // THE backstop against a fork of the working-time chain: it refuses a taken position whatever
+    // wrote it, INCLUDING a row that never went through `appendToChain` — proved by deletion in
+    // ../chain.test.ts's "rejects a second entry claiming an occupied chain position". What it is
+    // not backstopping is a lost read-then-write race between two overlapping appends: one write
+    // transaction runs on the venue file at a time, so there is no second append to overlap with
+    // (`selectHead`, ../chain.ts), and the retry there stays for the reason stated on
+    // `MAX_APPEND_ATTEMPTS`. Keyed on the full chain key (node, location), so two nodes at one
+    // location never collide across a promotion.
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
     // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`,
     // including the rewrite away from `~ '^[0-9A-F]{64}$'` and the NUL gap that rewrite does not

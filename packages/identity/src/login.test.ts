@@ -7,10 +7,8 @@ import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { endSession, loginWithPin } from "./login.js";
 import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: loginWithPin/endSession are LOGIC — the not-found / suspended / bad-PIN
-// gates and the open→closed transition. Nothing here depends on the privilege set (a PGlite
-// connection is superuser holding every grant, so a grant assertion would be a false pass,
-// CLAUDE.md §4).
+// loginWithPin/endSession are LOGIC — the not-found / suspended / bad-PIN gates and the open→closed
+// transition, which is what the cases below assert.
 
 const suite = useVenueDb({
   resetPerTest: false,
