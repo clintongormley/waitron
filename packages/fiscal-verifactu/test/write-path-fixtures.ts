@@ -8,8 +8,8 @@ const BASE = new Date("2026-03-01T13:05:00+01:00");
 
 /**
  * `VerifactuBackendOptions.resolveClient` (Task 5) is required by the constructor, and is read by
- * both `drain` and `reconcile` (`drain.test.ts`, `acks.test.ts`, `drain.concurrency.test.ts`, and
- * others across this package all call `backend.drain`/`backend.reconcile`). A single module-scope
+ * both `drain` (`../src/drain.ts`) and `reconcile` (`../src/reconcile.ts`), which suites across
+ * this package call — `drain.test.ts` and `acks.test.ts` among them. A single module-scope
  * fake AEAT transport, shared across every `new VerifactuBackend(...)` site in this package via
  * `staticResolver` below, is therefore enough: nothing in those tests submits anything
  * distinguishable, so which fake instance answers is irrelevant, and minting a fresh

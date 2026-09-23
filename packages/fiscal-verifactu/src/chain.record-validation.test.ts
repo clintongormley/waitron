@@ -13,9 +13,9 @@ import { anulacionFor } from "./testing/seed.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-// PGlite, deliberately (CLAUDE.md §4): every case here asserts a refusal decided in application
-// code before the insert. Nothing tested depends on grants being enforced or on two writers
-// racing, which are the two properties PGlite cannot show.
+// What this file asserts is decided in application code, before or instead of the insert — a
+// refusal, or a warning incident raised beside a record that is written anyway. Nothing here
+// depends on two writers racing.
 let backend: VerifactuBackend;
 let tillId: TillId;
 let nodeId: NodeId;

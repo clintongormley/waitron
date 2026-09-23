@@ -11,11 +11,9 @@ import {
 import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
-// PGlite, not real Postgres: this suite exercises the SHAPE validator and the seal ROUND-TRIP (write
-// then read back the three fields), never a privilege as the deployment role — so the lighter target
-// applies (CLAUDE.md §4). Nothing here needs a taxpayer row: `tenant_credentials` is keyed by
-// `purpose` alone and references no other table, and `withTransaction` only opens a transaction —
-// it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that).
+// This suite exercises the SHAPE validator and the seal ROUND-TRIP: write, then read back the three
+// fields. Nothing here needs a taxpayer row — `tenant_credentials` is keyed by `purpose` alone
+// (`packages/credentials/src/schema/tenant-credentials.ts`) and references no other table.
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],

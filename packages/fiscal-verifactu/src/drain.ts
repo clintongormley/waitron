@@ -530,10 +530,11 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * `fiscal.environment_mismatch` is a configuration fact, and correcting `WAITRON_ENV` and
  * restarting is what releases the row. `fiscal.environment_unknown` is not — the row's `entorno`
  * is NULL, and no value of `WAITRON_ENV` ever makes NULL agree with it, so this guard leaves it
- * `pendiente` forever with no configuration change able to release it. The only honest remedies
- * are re-registering the node as a SIF (which starts a fresh chain and leaves this record
- * permanently unfiled) or superuser DDL — see `errors.ts`'s own `fiscal.environment_mismatch`/
- * `fiscal.environment_unknown` doc comments.
+ * `pendiente` forever with no configuration change able to release it. The only honest remedy is
+ * re-registering the node as a SIF (which starts a fresh chain and leaves this record permanently
+ * unfiled): the stored registro's own `entorno` cannot be corrected in place, because
+ * `registros_facturacion` is append-only (`CLAUDE.md` §5) — see `errors.ts`'s own
+ * `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
  *
  * `blockedSifIds` is the chain-order half of the guard, and is exactly as load-bearing as the
  * per-row check above. Rows arrive ordered `(sif_id, secuencia)`, so a refused row's SUCCESSORS on
@@ -555,8 +556,7 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * alone makes its own entorno agree again, and the very next pass reclaims the whole chain in
  * order with no database repair. For a predecessor whose `entorno` is NULL, no configuration
  * change ever makes it agree — the chain stays blocked, pass after pass, until a human
- * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled) or
- * runs superuser DDL.
+ * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled).
  *
  * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
  * accepted limitation. `blockedSifIds` is a plain in-memory `Set`, process-local to this one
@@ -636,15 +636,14 @@ async function claimBatch(
   if (sendable.length > 0) {
     const ids = sendable.map((r) => r.id);
     // NOT `= any(${ids})`, and NOT `in (${ids})` either: drizzle-orm's `sql` tag expands a JS
-    // array parameter into an ALREADY-PARENTHESISED placeholder list — `($1, $2, $3)` — for
-    // exactly this `IN` shape, not a single Postgres array value. `any(${ids})` sends
-    // `any(($1, $2, $3))`, which Postgres rejects (42809, "op ANY/ALL (array) requires array on
-    // right side"); `in (${ids})` double-wraps into `in (($1, $2, $3))`, a one-element list
-    // containing a ROW, not three scalars, which fails with 42883 ("operator does not exist: uuid
-    // = record"). Both confirmed live against PGlite while implementing this task. `in ${ids}`,
-    // with no extra parens of our own, is the form drizzle's own expansion is already shaped for.
-    // The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment above relies
-    // on for its own array parameter.
+    // array parameter into an ALREADY-PARENTHESISED placeholder list for exactly this `IN` shape,
+    // so `in ${ids}`, with no extra parens of our own, is the form that expansion is already
+    // shaped for. The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment
+    // above relies on for its own array parameter. What the two other spellings do on THIS engine
+    // is not established here; the refusals recorded when this was written were PostgreSQL's,
+    // confirmed live against PGlite — `any(($1, $2, $3))` rejected 42809 ("op ANY/ALL (array)
+    // requires array on right side"), and `in (($1, $2, $3))` 42883 ("operator does not exist:
+    // uuid = record"), a one-element list holding a ROW rather than three scalars.
     // Named by id alone, with no `and estado = 'pendiente'` of its own — the SELECT above already
     // applied that, and these ids came from it. The distinction `claimRows`' doc comment draws
     // between a caller whose predicate excludes the state it stamps and one whose does not puts
@@ -948,9 +947,9 @@ async function applyOutcome(
  *
  * `codigoError`/`mensajeError` are cast to `String(...)` explicitly rather than left as the raw
  * `number` `resolveEstadoEfectivo`'s caller reads off `RespuestaLinea.CodigoErrorRegistro` —
- * `codigo_error` (`./schema/envios.ts`) is a `text` column, and relying on whichever Postgres
- * driver happens to be underneath (PGlite here, `pg` in production) to stringify a bound numeric
- * parameter the same way for a `text` column is not a guarantee this file should lean on.
+ * `codigo_error` (`./schema/envios.ts`) is a text column (`label`, from the column vocabulary), so
+ * this file converts the value itself rather than leaving the conversion to the driver. What the
+ * driver would store for a bound numeric parameter against that column is not established here.
  */
 async function setEstado(
   tx: Transaction,

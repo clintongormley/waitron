@@ -91,11 +91,9 @@ describe("the write path against the real Veri*Factu backend", () => {
 
   it("marks the first record of a chain as PrimerRegistro", async () => {
     // **Deviation from the brief.** `db.select().from(registrosFacturacion)` with no `where` at
-    // all reads whichever row happens to be first in the WHOLE table — harmless in the brief's
-    // own implied fresh-database-per-test world, but this suite shares one PGlite instance
-    // across every test in the file (booting a fresh WASM PostgreSQL per test would be far
-    // slower) and reseeds a new node per test rather than truncating, so an earlier test's row
-    // would otherwise be read here instead of this test's own. Scoped by `saleId`.
+    // all reads whichever row happens to be first in the WHOLE table, and this suite seeds a new
+    // node per test on one shared database rather than asserting against an empty table. Scoped by
+    // `saleId`, so the row read here is this test's own however many others the table holds.
     const { saleId } = await sell();
     const [row] = await pg.db
       .select()
@@ -496,7 +494,7 @@ describe("a line's note is not part of the huella", () => {
 describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () => {
   // Changing only till_id must preserve the hash and chain position. Roll back each sale
   // so the next sale uses the same invoice number and empty chain. Both tills share a location.
-  // PGlite checks determinism here; apps/server/src/sale-till-source.receipt.test.ts
+  // What is checked here is that determinism; apps/server/src/sale-till-source.receipt.test.ts
   // exercises device resolution and the sale route.
   const ROLLBACK = new Error("rollback: record captured");
 

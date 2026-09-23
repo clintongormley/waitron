@@ -42,8 +42,8 @@ const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
-  // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the void path
-  // under test now needs an authorizer, mirroring packages/core/src/record-correction.test.ts.
+  // Seed a manager (holds `sale.void`) and open its session — the void path under test now needs an
+  // authorizer, mirroring packages/core/src/record-correction.test.ts.
   const { rows } = await pg.db.execute<{ id: string }>(
     // `id` and `created_at` are supplied here rather than left to the table: both come from a
     // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs for

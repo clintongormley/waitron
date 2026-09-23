@@ -260,10 +260,9 @@ describe("recordVoid — date reconstruction", () => {
 });
 
 describe("recordCorrection — refusals", () => {
-  // PGlite, deliberately (CLAUDE.md §4): both cases assert a REFUSAL that happens before
-  // `appendToChain` runs at all — the original-registro lookup and the F2 gate — so neither
-  // exercises the chain append under the deployment role or under contention. The chain-append
-  // path and the concurrency property are `correction-path.e2e.test.ts`'s real-PG job.
+  // Both cases assert a REFUSAL that happens before `appendToChain` runs at all — the
+  // original-registro lookup and the F2 gate — so neither exercises the chain append. That path,
+  // and the five-callers-started-together case, are `correction-path.e2e.test.ts`'s.
 
   /** A minimal corrective `SaleForFiscalRecord`. Its own fields are never read on the refusal
    * paths below (both throw before assembling anything from `sale`), but a well-formed value keeps
@@ -349,11 +348,10 @@ describe("recordCorrection — refusals", () => {
 });
 
 describe("recordSubstitution — refusals", () => {
-  // PGlite, deliberately (CLAUDE.md §4): every case asserts a REFUSAL that happens before
-  // `appendToChain` runs at all — the empty-list and recipient guards, the substituted-alta lookup,
-  // and the F2 gate — so none exercises the chain append under the deployment role or under
-  // contention. The chain-append path and the concurrency property are
-  // `substitution-path.e2e.test.ts`'s real-PG job.
+  // Every case asserts a REFUSAL that happens before `appendToChain` runs at all — the empty-list
+  // and recipient guards, the substituted-alta lookup, and the F2 gate — so none exercises the
+  // chain append. That path, and the five-callers-started-together case, are
+  // `substitution-path.e2e.test.ts`'s.
 
   /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and a NON-null counterparty, which the
    * interface REQUIRES here and leaves optional on `recordSale`, because a full invoice must always
@@ -397,9 +395,8 @@ describe("recordSubstitution — refusals", () => {
     // invoice (F1) is not a canje, and mis-filing an F3 is unrepairable (§5), so this asserts rather
     // than assumes. Build a real F1 alta directly (core only ever issues F2), then try to substitute
     // it — the same setup `recordCorrection`'s own F1 refusal uses.
-    // A distinct id from the `recordCorrection` F1 refusal test above: this PGlite db is shared
-    // across the file and the node is fresh each `beforeEach`, but `sales_pkey` is global, so a
-    // reused literal id would collide with that sibling test's row.
+    // A distinct id from the `recordCorrection` F1 refusal test above: `sales` is keyed by `id`
+    // alone, so each case keeps its own literal rather than sharing one with a sibling.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
     await withTransaction(pg.db, async (tx) => {
       await tx.insert(sales).values({
@@ -653,13 +650,13 @@ describe("pendingCount", () => {
 });
 
 /**
- * Idempotent replay returns the filed desglose and derives its QR from the stored record.
- * PGlite exercises this read-back without concurrent writers. The server
- * working-order.pay-and-dispatch.test.ts and till-api.fiscal-sale-paths.test.ts suites exercise replay through the backend.
+ * Idempotent replay returns the filed desglose and derives its QR from the stored record. The
+ * server's working-order.pay-and-dispatch.test.ts and till-api.fiscal-sale-paths.test.ts suites
+ * exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
   it("returns the filed issuer after the taxpayer's own identity changes", async () => {
-    // PGlite covers this read-back: the assertion concerns persisted values, not privileges or concurrency.
+    // The assertion concerns persisted values: the issuer as FILED, not the taxpayer's current one.
     const { saleId } = await sell();
     const original = await pg.db.execute<{ legal_name: string; tax_id: string }>(
       sql`select legal_name, tax_id from tenants limit 1`,
