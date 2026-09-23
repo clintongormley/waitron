@@ -2433,7 +2433,7 @@ forgetting it. **Next action:** decide whether the column becomes mandatory — 
 fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
 
 **The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
-review wave; the other two thirds of this entry closed with T2, #TBD).** The shard counts and their
+review wave; the other two thirds of this entry closed with T2, #492).** The shard counts and their
 sizing arguments were all measured against PGlite and none has been re-measured —
 `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose comment says so explicitly.
 Read the next weekly run's shard durations before treating any of them as current. **This is the part
@@ -3286,18 +3286,34 @@ deliberately deferred are in that pull request and in its commits.
 
 **Task T1, the role-assumption sweep, LANDED as #490 on 2026-09-23** (main `fcc2d432`). `asAppUser`
 and its 796 call sites are gone, and so is the prose that described them. **Task T2, dropping
-PostgreSQL from the dependencies and the dev stack, is on the branch
-`fix/drop-postgresql-dependencies`.** It takes the cluster out of the box and out of the dev stack,
+PostgreSQL from the dependencies and the dev stack, LANDED as #492 on 2026-09-23** (main
+`fc8753a6`). It takes the cluster out of the box and out of the dev stack,
 the client packages out of every manifest that did not import them, the two unread Docker switches out
 of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
 of `@waitron/db`, and the target-choice framing out of the comments. **T3 is what remains**, and it
 depends on T2.
 
+**What T2's review wave found, and it is the reason the run-it seat keeps its seat — OPEN as a
+lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**. It read the
+box's settings as `[ -e f ] && cat f || echo __ABSENT__`, so a `cat` that FAILED fell into the `||`,
+printed the sentinel meaning "no such file" and exited 0 — and the caller wiped a production box with
+no `--force-production`. The shape predates T2; T2 made it REACHABLE by moving the read out of a root
+container into one running as an ordinary user. Reproduced against real Docker in both directions.
+Two shapes worth carrying: **(1) the guard suite could not have caught it at all**, because its docker
+stub answers a `trading.env` command from a variable and never executes the shell text — the defect
+lived in a string no test ran, and the fix's tests now extract the one-liner from the shipped script
+and run it under a real `sh`; **(2) the FIRST fix was itself incomplete** — it closed the file case
+and left the same hole one level up, because `[ -e "$d/trading.env" ]` cannot tell a missing file from
+a directory it may not look inside. The scoped re-read caught that, which is `CLAUDE.md` §1's
+"the correction is a new claim" paying for itself twice on one branch.
+
 Two things from T2 worth reading before T3 or anything near the box:
 
 - **The box's throwaway state-volume containers no longer name an image.** They go through
   `docker compose run --rm --no-deps -T --entrypoint sh app`, so the helper is by construction the
-  image the box runs. The `--entrypoint` is not cosmetic: measured against the real app image, the old
+  image the box runs — **and it therefore runs as an ordinary user where the old helper image ran as
+  root, which is what made the fail-open below reachable.** The `--entrypoint` is not cosmetic:
+  measured against the real app image, the old
   call shape appends its arguments to the image's ENTRYPOINT and BOOTS A SERVER, exiting non-zero,
   which `is_production` reads as "cannot establish" and then refuses every reset as production. The
   guard suite could not see it — its docker stub matched `*trading.env*` anywhere in the argument
