@@ -150,10 +150,10 @@ export async function setProductVariants(
     const active =
       input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
     // The staff `name` is plain text and needs no translation check; the customer-facing map is what
-    // must satisfy the enabled languages. A null customer name is legal — it falls back to `name`.
-    // An Inactive variant is on no menu offer and in no translation-gap report, so it is checked when
-    // next saved Active; checking it here would let a language enabled after its removal block every
-    // save of its parent.
+    // must satisfy the venue's default content language. A null customer name is legal — it falls
+    // back to `name`. An Inactive variant is on no menu offer and in no translation-gap report, so
+    // it is checked when next saved Active; checking it here would let a change of default content
+    // language after its removal block every save of its parent.
     if (active && input.customerName != null)
       await validateContentTranslations(tx, input.customerName, fallbackLanguage);
     normalized.push({ ...input, active });
