@@ -54,7 +54,10 @@ declare module "@waitron/shared" {
     "diet.invalid_label": { field: string; value: string };
     /** A diet override both adds and removes the same contains-tag — a contradiction. */
     "diet.add_remove_conflict": { tag: string };
-    /** An image upload carried no file part in the multipart body. Thrown by the server route. */
+    /**
+     * Not thrown: an upload with no file part is refused as `image.invalid_metadata`
+     * (`packages/media`). Kept because a shipped code is never renamed or removed.
+     */
     "media.missing": Record<string, never>;
     /**
      * The uploaded bytes are not an accepted image type (JPEG/PNG/WEBP). `detected` names the type
