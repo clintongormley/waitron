@@ -2014,41 +2014,42 @@ image constraints under *Detail → Box image*.
   comment handling. Until then the hedge is in `CLAUDE.md` §3.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
-  (**PR #491**, 2026-09-23, main `8428395a`).** The comparison the core set had —
-  build a database from the migrations, then check every table, column, key, index and check
-  constraint against what the drizzle declarations say — is now a reusable suite factory,
+  (**PR #491**, 2026-09-23, main `8428395a`).** The comparison the core set had — build a database
+  from the migrations, then check every table, column, key, index and check constraint against what
+  the drizzle declarations say — is now a reusable suite factory,
   `packages/db/src/testing/schema-conformance.ts`, published from `@waitron/db`'s enumerated
   `exports` map as `@waitron/db/testing/schema-conformance.js`. Each set that calls it does so from
   its own `packages/<pkg>/src/schema/schema-conformance.test.ts`; the first five were core,
-  `catalogue`, `payments`, `workforce` and `workforce-es`. **No drift was found in any of the four modules** — the guard went in over a
-  clean tree, which is worth writing down so the next reader does not assume it has already caught
-  something here. What it replaced: P6 got away with a one-off probe of `workforce-es` (its only
-  scaled column had no default and appeared in none of its table's constraints), and #475 found its
-  instances by hand.
+  `catalogue`, `payments`, `workforce` and `workforce-es`. **No drift was found in any of the four
+  modules** — the guard went in over a clean tree, which is worth writing down so the next reader
+  does not assume it has already caught something here. What it replaced: P6 got away with a one-off
+  probe of `workforce-es` (its only scaled column had no default and appeared in none of its table's
+  constraints), and #475 found its instances by hand.
 - **The migration sets that did NOT get a call site are still unguarded — OPEN (2026-09-23), being
   closed one set per pull request.** To list them, take every set with
-  `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the packages
-  holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`,
-  `credentials`, `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and
-  `venue-service`. `credentials` has had one since, and it found no drift; re-run the command for
-  the current list. Three of those — `fiscal-verifactu`, `identity` and `scheduler` — each carry a `src/schema/index.ts` barrel, their own migration set and a
-  `src/schema-ownership.test.ts` beside it, which is everything a call site needs to be written
-  from, so each is roughly ten lines now that the factory exists. (That is not a comparison with the
-  four that landed: `catalogue` has no `schema-ownership.test.ts` and did not need one — the barrel
-  and the set are what the factory reads.) They were left out deliberately, not overlooked: a set getting its first
-  guard may also turn up real drift, and fixing unrelated schema drift would have turned a guard
-  branch into a schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory
-  holds `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds
-  nothing for a declaration to be compared against. **Next action:** add a call site per set, one
-  branch at a time, and treat any drift each one reports as its own piece of work.
+  `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
+  packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
+  `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
+  `credentials` has had one since, and it found no drift; re-run the command for the current list.
+  Three of those — `fiscal-verifactu`, `identity` and `scheduler` — each carry a
+  `src/schema/index.ts` barrel, their own migration set and a `src/schema-ownership.test.ts` beside
+  it, which is everything a call site needs to be written from, so each is roughly ten lines now
+  that the factory exists. (That is not a comparison with the four that landed: `catalogue` has no
+  `schema-ownership.test.ts` and did not need one — the barrel and the set are what the factory
+  reads.) They were left out deliberately, not overlooked: a set getting its first guard may also
+  turn up real drift, and fixing unrelated schema drift would have turned a guard branch into a
+  schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory holds
+  `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
+  for a declaration to be compared against. **Next action:** add a call site per set, one branch at
+  a time, and treat any drift each one reports as its own piece of work.
 - **Two comments in `packages/credentials` name a foreign key the set no longer builds — OPEN
   (2026-09-23).** `src/migrations.ts` says core must migrate first because of "the baseline's
   `tenants` foreign key", and `src/migrations.test.ts` that "the credentials baseline references
   `tenants`". `drizzle/0000_baseline.sql` declares no foreign key at all, and the set's
   schema-conformance suite, which reads the built keys with `pragma foreign_key_list`, finds none.
-  The key, `tenant_credentials_tenant_fk`, went with the tenant column in #378 (2026-09-16). The ORDER is still right for a different
-  reason — `credentialProvisioned` in `src/store.ts` reads `tenants` — so the fix is to restate the
-  reason, not to drop the ordering.
+  The key, `tenant_credentials_tenant_fk`, went with the tenant column in #378 (2026-09-16). The
+  ORDER is still right for a different reason — `credentialProvisioned` in `src/store.ts` reads
+  `tenants` — so the fix is to restate the reason, not to drop the ordering.
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,

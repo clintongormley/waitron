@@ -324,13 +324,12 @@ restructured since, so this describes the version the row was measured against. 
 kinds, and only one of them is a gap anybody would call a gap. Some were defensive refusals the core
 set's shape never trips — a declared default that renders with bind parameters, an unnamed unique
 constraint, a declared table the database stored no CREATE TABLE for. The rest were the prerequisite
-sets: the factory applied them itself, in a loop of its own, and core is the only migration set with
-no prerequisites, so that loop's body never ran inside `packages/db`. The four module suites written
-later did reach it, but they run in their own packages, where their coverage counts. That loop no
-longer
-exists — the factory now hands the prerequisites to `useVenueDb` as its `migrations` and keeps only
-a `?? []` for the set that has none (`packages/db/src/testing/schema-conformance.ts`) — so this half
-of the explanation is history, while the row above it is a measurement that stands.
+sets: the factory applied them itself, in a loop of its own, and core was then the only caller
+passing no prerequisites, so that loop's body never ran inside `packages/db`. The four module suites
+written later did reach it, but they run in their own packages, where their coverage counts. That
+loop no longer exists — the factory now hands the prerequisites to `useVenueDb` as its `migrations`
+and keeps only a `?? []` for the set that has none (`packages/db/src/testing/schema-conformance.ts`)
+— so this half of the explanation is history, while the row above it is a measurement that stands.
 
 **Where the package ended up.** Getting back above the bar took a unit suite written against the
 moved code from inside `packages/db`. Measured 2026-09-23 on the finished branch with the same

@@ -151,9 +151,11 @@ shifts point at its `locations`, `tills` and `nodes`, then identity because `emp
 `time_entries` point at its `persons`, then workforce itself. Ordering across packages is the
 runtime's job and nothing enforces it, which is why each call site writes the reason down rather
 than just the list. A package's suites can apply MORE than its set's tables need, though:
-`packages/credentials` applies core in every suite because its code reads `tenants`, while its
-migrations point at nothing in core, so its call site passes no prerequisites. Check the list
-against the foreign keys in the set's own `drizzle/*.sql` and keep only the sets they name.
+`packages/credentials`'s other database suites apply core — `credentials.test.ts` because
+`credentialProvisioned` reads `tenants` — while its migrations point at nothing in core, so its
+schema-conformance call site passes no prerequisites. Check the list against the other sets' tables
+the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES` or a trigger body — and keep
+only those sets, in runtime order.
 
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix
