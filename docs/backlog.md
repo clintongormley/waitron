@@ -2062,11 +2062,11 @@ image constraints under *Detail → Box image*.
   2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
   certificate with no CN, and refusing a second close; 100/100/100/98); `sync-enrolment` (**PR
   #518**, 2026-09-23 — tests for a drop and re-create inside one migration file and for table names
-  read without regard to case; 100/100/100/100); `dashboard-kit` (2026-09-23 — tests for the
-  live event stream's default credentialed open, a stream it has replaced, a reset, an error the
-  stream retries itself, malformed change and session-invalid messages, a stop before the first
-  open, and the query controller's reads without a live-data session and a throwing apply; one
-  unreachable guard in `live-data.ts` deleted; 100/100/100/100).
+  read without regard to case; 100/100/100/100); `dashboard-kit` (**PR #521**, 2026-09-23 — tests
+  for the live event stream's default credentialed open, a stream it has replaced, a reset, an
+  error the stream retries itself, malformed change and session-invalid messages, a stop before the
+  first open, and the query controller's reads without a live-data session and a throwing apply;
+  one unreachable guard in `live-data.ts` deleted; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
