@@ -411,7 +411,10 @@ reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails 
 - **A variant offers its parent's lists and cannot override them.** The attachment list is the one
   thing a variant does not override (§4.4); a per-variant attachment row is a possible later
   addition, recorded in §14. Everything else about a variant — price, names, photo, VAT, category,
-  unit, routing, allergens, dietary declarations — IS editable per variant.
+  unit, kitchen station, allergens, dietary declarations — IS editable per variant. A product-level
+  preparation route cannot name a variant: `createPreparationRoute`
+  (`packages/venue-service/src/operations.ts`) refuses one with `route.subject_not_found`, and a
+  variant line takes its parent's routes.
 
 **Two gaps Task 13 did not create but did leave standing in the open, both worth a decision:**
 
@@ -454,7 +457,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 4 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 to 5 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
 the menus' extras publications, their per-item extras prices and the variant price overrides, or,
 once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
@@ -472,7 +475,7 @@ venue `main` had already migrated aborts at the rebuild of `products` with
 back, so the box does not boot until it is wiped (re-run 2026-09-23 through `applyMigrations`).
 What it left open, each already written into the plan's later tasks: the kitchen station routing,
 preparation routes and the kitchen screen's allergens and dietary labels still read a variant
-line's raw columns (Task 5, dish and extras); and republishing a variant's allergens and diet must
+line's raw columns (Task 5, dish and extras — done by #537); and republishing a variant's allergens and diet must
 not write values that hide its parent's (Task 6). Deliberately left: the counts of `products`'
 columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
 are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
@@ -492,9 +495,9 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   refuse only a quantity increase (the server already refuses the increase). A follow-up item, not
   part of the variants plan's nine tasks. **Next action:** build it.
 - **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
-  section has been switched off** — only its product and extras. Task 3 did not take it, so it
-  remains open; Task 5 ("A variant is sold as the product it is"), which reworks the sale line, may
-  be its natural home.
+  section has been switched off** — only its parent product and extras. Neither Task 3 nor Task 5
+  (#537) took it, so it remains open. **Next action:** on a quantity raise, check the line's own
+  product (the variant, since #537) for Active and Available, and its menu and menu section.
 - **The units screen's "Availability" column shows the Active flag.** `productsUsingUnit`
   (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
   that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
@@ -554,8 +557,41 @@ now that it has landed. What it left open, both put to the owner in #532 and nei
 - **The menu's offers list shows the price each offer is charged at, and nothing marks one that is
   blank and following the product.** The spec does not decide it. **Next action, if wanted:** mark
   such a price in the list cell (`packages/venue-service/src/dashboard/venue-operations-screen.ts`).
-The till's "+€" label on a variant, priced from the parent's resolved price, is Task 5's work: the
-offer already carries that price (`MenuOffer.unitPrice`).
+The till's "+€" label on a variant, priced from the parent's resolved price, was Task 5's work and
+landed with #537.
+
+**Task 5 LANDED as #537 (2026-09-23): a variant is sold as the product it is.** The order line's
+product is now the variant itself, priced and taxed at the variant's own values (a value it leaves
+blank is its parent's), and printed under the variant's own names on the receipt, kitchen ticket,
+basket, tab and expo queue — a blank customer or kitchen name falls back to the variant's own staff
+name, never the parent's. The sale line still keeps the parent's names beside the variant's, so
+a report can group by parent (Task 8). A product with an Active variant rung up from a menu without one is
+refused (`product.variant_required`). On the till, every Active, Available product on a menu gets a
+button whether or not it is sold alone; tapping one with variants opens a picker that lists only
+the variants, with the first available one preselected and a "+€1.50"-style label on a variant
+priced differently from its parent. A variant line takes its parent's preparation routes, and its
+parent's kitchen station, course, allergens and dietary labels unless the variant sets its own. The two `variant_id` columns (`working_order_lines`, `sale_lines`) are dropped with
+`ALTER TABLE … DROP COLUMN` (`packages/db/drizzle/0006_drop_line_variant_id.sql`), which keeps the
+rows: **this task needs no venue reset of its own.** What it left open:
+- **A held order brought back to the till shows a variant line with its PARENT's VAT class,
+  category and allergens.** The till reads them from the offer snapshot saved in
+  `working_line_contexts`, which is the parent's. Filing is unaffected — the price and rate billed
+  come from the line's own stored values — and today the product editor sets only a variant's names, photo, price and
+  availability (`packages/catalogue/src/product-editor-input.ts`), never its VAT, category or
+  allergens. **Next action (Task 6, which opens a variant's own page):** save or read the
+  chosen variant's values for a retrieved line.
+- **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
+  (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
+  the line's. I believe this predates the branch: #537 leaves that check untouched. The till now
+  offers only whole numbers for such a line, using the line's frozen unit precision. **Next
+  action:** refuse a quantity finer than the line's `unit_precision` on the server too.
+- **On a venue with no service zones, the plain product path sells a parent with Active variants
+  as itself** — the "never sold itself" rule holds only on the menu-offer path. I believe this
+  predates Task 5. **Next action:** decide whether that path refuses such a parent with
+  `product.variant_required`, or whether a venue with variants must have a service zone.
+- **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
+  test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
+  shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
