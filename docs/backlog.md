@@ -454,7 +454,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Task 1 has landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 and 2 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
@@ -471,6 +471,24 @@ not write values that hide its parent's (Task 6). Deliberately left: the counts 
 columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
 are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
 compares.
+
+**Task 2 LANDED as #517 (2026-09-23): a product's one on/off switch is now two — Active (it exists)
+and Available (sold out for now).** Delete makes a product Inactive, the products list gained a
+Status filter that starts on Active, and the till offers a product or an extra only when it is
+both. Its migration adds a column and needs no reset of its own. What it left open:
+- **Reopening a held order on the till drops a sold-out item** — an extra the menu no longer lists,
+  and every extra of a dish that has sold out — with a "no longer available" message. The same
+  already happened to an Inactive product. `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`
+  §10 says marking a product unavailable must not cancel existing work. Put to the owner (lane B
+  question Q1). **Recommended next action:** keep a sold-out line in held work, flag it on the
+  till, and refuse only a quantity increase (the server already refuses the increase).
+- **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
+  section has been switched off** — only its product and extras. Natural home: Task 3, which moves
+  variants into `products`.
+- **The units screen's "Availability" column shows the Active flag.** `productsUsingUnit`
+  (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
+  that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
+  **Next action:** rename the field to `active` and head the column "Status", in one change.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
@@ -1043,10 +1061,6 @@ What it left open:
   two, the second becomes unreachable from the dashboard, silently. **Next action:** decide whether
   more than one catalogue is a case Waitron actually supports. If it is, the picker comes back; if it
   is not, the list-of-catalogues shape should stop pretending otherwise.
-- **Deactivated products cannot be hidden.** They sort to the bottom and carry an Inactive badge, but
-  the Active column has no filter dropdown, so a venue that retires a lot of products ends up
-  scrolling past all of them. **Next action:** add a filter on that column — the table already
-  supports one per column — rather than inventing a separate hide control.
 - **There is still no permanent delete.** Nothing in the dashboard removes a product that was never
   sold and was only created by mistake. **Next action:** decide whether that is worth a second,
   differently-worded action, or whether deactivating is simply the answer.
