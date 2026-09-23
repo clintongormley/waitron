@@ -72,7 +72,12 @@ async function main(): Promise<number> {
       // Code and structured params only, through `cli.ts`'s own formatter rather than a second copy
       // of the template — this file is excluded from coverage, so a copy here is the one that could
       // drift without a test noticing. `src/errors.ts` is the constraint that makes the line safe:
-      // every param declared there says at its own code that it is "never a secret".
+      // its header forbids a generated password, a key or a connection string as a param anywhere
+      // in the registry, and each code then says what its OWN params do not carry. Most of them say
+      // some form of "never a secret"; a few instead name the specific thing withheld, such as
+      // `provisioning.key_generation_failed`'s "a size, never material". So read the param's own
+      // sentence — grepping for a form of words both misses those and undercounts the rest, whose
+      // wording wraps across comment lines.
       process.stderr.write(`${formatAppError(error)}\n`);
       return 1;
     }

@@ -594,13 +594,15 @@ async function claimBatch(
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   // A plain SELECT that stamps nothing: the claim is this transaction, per the paragraph above.
-  const claimed = tx.execute<Record<string, unknown>>(sql`
+  const claimed = (
+    await tx.execute<Record<string, unknown>>(sql`
     select r.*, e.intentos from envios e
     join registros_facturacion r on r.id = e.registro_id
     where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
     order by r.sif_id, r.secuencia
-    limit ${maxPorEnvio}`).rows;
+    limit ${maxPorEnvio}`)
+  ).rows;
   // `r.*` reaches no drizzle column mapper, so the registro's JSON columns arrive as text and
   // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `e.intentos` is not this table's
   // column and passes through untouched.

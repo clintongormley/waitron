@@ -13,8 +13,14 @@ import "./errors.js";
  * papercut for whoever operates it.
  *
  * This engine has no database name — a venue is a DIRECTORY, resolved by `resolveVenueDir`
- * (`./cli.ts`) — so nothing in the tree calls this now: the only names of it are `./identifiers.test.ts`
- * and the barrel re-export in `./index.ts`.
+ * (`./cli.ts`) — so no product code calls `assertIdentifier` any more. Checked with
+ * `grep -rn assertIdentifier --include='*.ts' packages apps`: outside `./identifiers.test.ts`
+ * every hit is this file, the barrel re-export in `./index.ts`, or a sentence about it.
+ * Deferred rather than overlooked: removing it is a deletion, not a comment fix, and it reaches
+ * past this file — the suite goes with it, and `provisioning.invalid_identifier` loses its only
+ * thrower while three sibling codes still anchor their "format-check family" wording to it
+ * (`./errors.ts:96`, `:222`, `:239`). That is its own pass; `docs/backlog.md` carries it, under
+ * "Small renames and dead exports the sweep found and could not make".
  */
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
 
