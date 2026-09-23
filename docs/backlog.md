@@ -2043,25 +2043,12 @@ image constraints under *Detail → Box image*.
   does not assume it has already caught something here. What it replaced: P6 got away with a one-off
   probe of `workforce-es` (its only scaled column had no default and appeared in none of its table's
   constraints), and #475 found its instances by hand.
-- **Every migration set that builds a table now has a call site — DONE (2026-09-23), one set per
-  pull request.** To check, take every set with
-  `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
-  packages holding a `src/schema/schema-conformance.test.ts`; run on 2026-09-23 after the last one,
-  that leaves `fiscal-none` alone. `fiscal-none` needs no suite — its `drizzle/` directory holds
-  `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
-  for a declaration to be compared against. The seven added were `credentials`, `scheduler`,
-  `identity`, `bookings`, `venue-service`, `media` and `fiscal-verifactu`, and **none found drift**
-  — each went in over a clean tree and was proven by deleting a declared foreign key or index.
-  `bookings`, `venue-service` and `media` have no `src/schema/index.ts` barrel, so each call site
-  hands the factory the one file its `drizzle.config.ts` generates from (`src/schema/bookings.ts`,
-  `src/schema/service.ts`, `src/schema/images.ts`). Two blind spots reach these sets. The factory
-  never reads a trigger: `media`'s eight in `drizzle/0001_image_references.sql` are guarded by
-  `packages/media/src/image-references.test.ts`, and `fiscal-verifactu`'s append-only pair on
-  `registros_facturacion` by `packages/fiscal-verifactu/src/inmutabilidad.test.ts` and
-  `scripts/append-only-triggers.test.ts`. And it compares an expression index by name, uniqueness,
-  filter and where the expression sits among its parts, never by what it says — which reaches
-  `identity`'s three folded-key `persons` unique indexes, measured by changing `foldedKey`'s `lower`
-  to `upper` in `src/schema/persons.ts`, which left that suite at 13 of 13.
+- **Every migration set that builds a table now has a call site — LANDED (2026-09-23), one set per
+  pull request:** `credentials` (**PR #497**), `scheduler` (**PR #499**), `identity` (**PR #501**),
+  `bookings` (**PR #502**), `venue-service` (**PR #504**), `media` (**PR #505**) and
+  `fiscal-verifactu` (this entry's PR); none found drift. `fiscal-none` needs none — its `drizzle/`
+  holds an empty journal and no `.sql` file, so its set builds nothing. Each call site states the
+  factory's blind spots that reach its own set.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
   longer build — OPEN (2026-09-23).** In `packages/credentials`, `src/migrations.ts` says core
   must migrate first because of "the baseline's `tenants` foreign key", and
@@ -3535,8 +3522,8 @@ What the preparation tasks left, with F1's own answers where it found them:
   for the four named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
   `src/schema/schema-conformance.test.ts` now, calling the shared suite factory
   `@waitron/db/testing/schema-conformance.js`, and the core set calls the same factory. None of the
-  four turned out to have any drift. The sets with no call site yet are still unguarded, and the
-  full entry — which ones, and why they were left — is in **B9. CI and test infra** above.
+  four turned out to have any drift. Every other set that builds a table has had one since; see
+  **B9. CI and test infra** above.
 - **Two coverage gaps under a 5-second default bound** — `scripts/changed-packages.test.mjs` needs an
   explicit `testTimeout` above a loaded machine's worst case (P5); and no suite covers the
   deterministic middle of a chain refusal followed by a SUCCESSFUL retry, which

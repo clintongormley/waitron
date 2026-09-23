@@ -20,6 +20,8 @@ describeSchemaConformance({
   // other set's table, so this is the database those keys resolve in. Not because the migration
   // needs it: with an empty list the set still builds and all nine cases still pass, measured
   // 2026-09-23 — this engine creates a table whose parent does not exist yet (CLAUDE.md §3).
+  // The package's own suites that migrate this set apply the whole manifest instead
+  // (`TEST_MIGRATIONS`, `../../test/migrations.ts`), which adds sets no fiscal SQL names.
   prerequisites: [CORE_MIGRATIONS],
   subject: FISCAL_MIGRATIONS,
   declarations: barrel,
