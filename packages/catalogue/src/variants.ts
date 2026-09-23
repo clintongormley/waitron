@@ -10,18 +10,13 @@ import { resolveOfferPrice } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
 import {
   effectiveProductColumns as effective,
+  INHERITED_KEYS,
   parentJoin,
   parentProducts,
 } from "./variant-fallback.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
-
-/**
- * A variant is a `products` row with a `parent_id` (spec §15). It follows its parent onto every
- * menu the parent is on; `menu_item_variant_overrides` holds a row for it only while one menu
- * overrides its price there or switches it off (plan V13).
- */
 
 /** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
 export interface MenuVariant {
@@ -51,6 +46,17 @@ function validatePrice(price: string | null, field: string): Decimal | null {
 
 function validateFlag(value: boolean, field: string): void {
   if (typeof value !== "boolean") throw new AppError("product.variant_invalid", { field });
+}
+
+/**
+ * Every inherited field `written` does not set, stored blank so it reads the parent's. Explicitly
+ * null rather than omitted: a column default (`dietary_declarations`' is `[]`) would be a value of
+ * the variant's own.
+ */
+function blankInherited(written: object): Partial<Record<(typeof INHERITED_KEYS)[number], null>> {
+  return Object.fromEntries(
+    INHERITED_KEYS.filter((key) => !(key in written)).map((key) => [key, null]),
+  );
 }
 
 const priceOrNull = (cents: number | null): string | null =>
@@ -154,22 +160,7 @@ export async function setProductVariants(
         parentId: productId,
         catalogueId: parent.catalogueId,
         soldAlone: true,
-        // Every other inherited field stored blank, so it reads the parent's. Explicitly: the
-        // `dietary_declarations` column's own default is `[]`, which would be a value of the
-        // variant's own.
-        description: null,
-        vatClass: null,
-        pricingUnit: null,
-        categoryId: null,
-        stationId: null,
-        courseId: null,
-        allergens: null,
-        manualAllergens: null,
-        recipeDerivation: null,
-        dietDerivation: null,
-        dietOverride: null,
-        diet: null,
-        dietaryDeclarations: null,
+        ...blankInherited(values),
       });
     } else {
       await tx

@@ -438,6 +438,74 @@ export async function deactivateMenuItem(
 }
 
 /**
+ * What an offer and each of its variants both carry beyond their names and prices, as one column
+ * set and one mapping, so a field added here reaches both. A query selecting these must
+ * also have `.leftJoin(parentProducts, parentJoin)`, `.leftJoin(productUnits, unitOwnerJoin)`,
+ * `.leftJoin(units, …)` and `.leftJoin(categories, …)`.
+ */
+const offerLineColumns = {
+  unitId: units.id,
+  unitName: units.name,
+  unitAbbreviation: units.abbreviation,
+  unitPrecision: units.precision,
+  hardwareUnit: units.hardwareUnit,
+  pricingUnit: effective.pricingUnit,
+  vatClass: effective.vatClass,
+  category: categories.name,
+  allergens: effective.allergens,
+  diet: effective.diet,
+  dietDerivation: effective.dietDerivation,
+  dietOverride: effective.dietOverride,
+  dietaryDeclarations: effective.dietaryDeclarations,
+  courseId: effective.courseId,
+};
+
+type ProductRow = typeof products.$inferSelect;
+type UnitRow = typeof units.$inferSelect;
+
+/** A row selecting {@link offerLineColumns}; the unit and category are LEFT-joined, so nullable. */
+interface OfferLineRow {
+  unitId: UnitRow["id"] | null;
+  unitName: UnitRow["name"] | null;
+  unitAbbreviation: UnitRow["abbreviation"] | null;
+  unitPrecision: UnitRow["precision"] | null;
+  hardwareUnit: UnitRow["hardwareUnit"] | null;
+  pricingUnit: NonNullable<ProductRow["pricingUnit"]>;
+  vatClass: NonNullable<ProductRow["vatClass"]>;
+  category: (typeof categories.$inferSelect)["name"] | null;
+  allergens: ProductRow["allergens"];
+  diet: ProductRow["diet"];
+  dietDerivation: ProductRow["dietDerivation"];
+  dietOverride: ProductRow["dietOverride"];
+  dietaryDeclarations: NonNullable<ProductRow["dietaryDeclarations"]>;
+  courseId: ProductRow["courseId"];
+}
+
+function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
+  return {
+    unit: sellableUnit(
+      row.unitId,
+      row.unitName,
+      row.unitPrecision,
+      row.hardwareUnit,
+      row.unitAbbreviation,
+    ),
+    pricingUnit: row.pricingUnit as PricingUnit,
+    vatClass: row.vatClass as VatClass,
+    category:
+      row.category === null
+        ? null
+        : resolveContentText(row.category, defaultLanguage, defaultLanguage),
+    allergens: row.allergens,
+    diet: row.diet as DietProfile | null,
+    dietDerivation: row.dietDerivation as DietDerivation | null,
+    dietOverride: row.dietOverride as DietOverride | null,
+    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
+    courseId: row.courseId,
+  };
+}
+
+/**
  * The Active offers on the given menus. Unavailable (sold-out) products are left out unless the
  * caller is a management read passing `includeUnavailable`: spec §15.6 lets Available hide an item
  * from the till, never from the dashboard. Only a top-level product is an offer; each Active
@@ -463,20 +531,7 @@ export async function listMenuOffers(
       name: products.name,
       customerName: products.customerName,
       kitchenName: products.kitchenName,
-      unitId: units.id,
-      unitName: units.name,
-      unitAbbreviation: units.abbreviation,
-      unitPrecision: units.precision,
-      hardwareUnit: units.hardwareUnit,
-      pricingUnit: effective.pricingUnit,
-      vatClass: effective.vatClass,
-      category: categories.name,
-      allergens: effective.allergens,
-      diet: effective.diet,
-      dietDerivation: effective.dietDerivation,
-      dietOverride: effective.dietOverride,
-      dietaryDeclarations: effective.dietaryDeclarations,
-      courseId: effective.courseId,
+      ...offerLineColumns,
     })
     .from(menuItems)
     .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
@@ -525,25 +580,7 @@ export async function listMenuOffers(
     name: row.name,
     customerName: row.customerName,
     kitchenName: row.kitchenName,
-    unit: sellableUnit(
-      row.unitId,
-      row.unitName,
-      row.unitPrecision,
-      row.hardwareUnit,
-      row.unitAbbreviation,
-    ),
-    pricingUnit: row.pricingUnit as PricingUnit,
-    vatClass: row.vatClass as VatClass,
-    category:
-      row.category === null
-        ? null
-        : resolveContentText(row.category, content.defaultLanguage, content.defaultLanguage),
-    allergens: row.allergens,
-    diet: row.diet as DietProfile | null,
-    dietDerivation: row.dietDerivation as DietDerivation | null,
-    dietOverride: row.dietOverride as DietOverride | null,
-    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    courseId: row.courseId,
+    ...offerLineValues(row, content.defaultLanguage),
     offeredModifiers: offeredByItem.get(row.id) ?? [],
     variants: variantsByItem.get(row.id) ?? [],
   }));
@@ -574,20 +611,7 @@ async function readOfferVariants(
       menuPrice: menuItemVariantOverrides.price,
       offered: menuItemVariantOverrides.offered,
       available: products.available,
-      unitId: units.id,
-      unitName: units.name,
-      unitAbbreviation: units.abbreviation,
-      unitPrecision: units.precision,
-      hardwareUnit: units.hardwareUnit,
-      pricingUnit: effective.pricingUnit,
-      vatClass: effective.vatClass,
-      category: categories.name,
-      allergens: effective.allergens,
-      diet: effective.diet,
-      dietDerivation: effective.dietDerivation,
-      dietOverride: effective.dietOverride,
-      dietaryDeclarations: effective.dietaryDeclarations,
-      courseId: effective.courseId,
+      ...offerLineColumns,
     })
     .from(menuItems)
     .innerJoin(products, eq(products.parentId, menuItems.productId))
@@ -624,25 +648,7 @@ async function readOfferVariants(
       menuPrice: row.menuPrice === null ? null : centsToDecimal(row.menuPrice),
       offered,
       available: row.available && offered,
-      unit: sellableUnit(
-        row.unitId,
-        row.unitName,
-        row.unitPrecision,
-        row.hardwareUnit,
-        row.unitAbbreviation,
-      ),
-      pricingUnit: row.pricingUnit as PricingUnit,
-      vatClass: row.vatClass as VatClass,
-      category:
-        row.category === null
-          ? null
-          : resolveContentText(row.category, defaultLanguage, defaultLanguage),
-      allergens: row.allergens,
-      diet: row.diet as DietProfile | null,
-      dietDerivation: row.dietDerivation as DietDerivation | null,
-      dietOverride: row.dietOverride as DietOverride | null,
-      dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-      courseId: row.courseId,
+      ...offerLineValues(row, defaultLanguage),
     });
     grouped.set(row.menuItemId, held);
   }
