@@ -2042,7 +2042,7 @@ image constraints under *Detail → Box image*.
   `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
   for a declaration to be compared against. **Next action:** add a call site per set, one branch at
   a time, and treat any drift each one reports as its own piece of work.
-- **Comments in `packages/credentials` and `packages/scheduler` name a foreign key their sets no
+- **Comments and a test name in several packages give a `tenants` foreign key their sets no
   longer build — OPEN (2026-09-23).** In `packages/credentials`, `src/migrations.ts` says core
   must migrate first because of "the baseline's `tenants` foreign key", and
   `src/migrations.test.ts` that "the credentials baseline references `tenants`".
@@ -2053,10 +2053,20 @@ image constraints under *Detail → Box image*.
   so the fix is to restate the reason, not to drop the ordering.
   `packages/scheduler` carries the same stale reason twice: `src/migrations.ts` says core runs first
   because "this set's baseline references core's `tenants` table", and `src/migrations.test.ts` says
-  the same. That baseline lost its key, `scheduled_runs_tenant_fk`, in the same #378, and
-  `grep -rn tenants packages/scheduler/src` finds no read of the table there — only those comments,
-  a test comment and `schema-ownership.test.ts`'s list of core names — so for the scheduler the
-  comment needs a different reason for the order, or none.
+  the same. That baseline lost its key, `scheduled_runs_tenant_fk`, in the same #378, and `grep -rn
+  tenants packages/scheduler/src` finds no read of the table there — only those comments, a test
+  comment, `schema-ownership.test.ts`'s list of core names and the set's schema-conformance call
+  site, which records the next point. That grep cannot see `seedTenant`, which writes `tenants` from
+  four of the package's suites (`store.test.ts`, `run.test.ts`, `store.concurrency.test.ts`,
+  `resweep.test.ts`), so those suites do need core; it is the stated REASON in the two comments that
+  has to change. Further twins of the same reason, found by review of the scheduler's call site:
+  `packages/migrations/src/manifest.test.ts` names a test "puts core first, because every other set
+  has a tenants foreign key" — a grep for `` REFERENCES `tenants` `` across
+  `packages/*/drizzle/*.sql` matches no file; `packages/workforce-es/src/migrations.test.ts` and
+  `src/work-summary.test.ts` give "tenants/locations" foreign keys as core's reason, where that
+  baseline references `locations` alone; and `apps/server/scripts/daily-close-demo.ts` and
+  `modelo-303-demo.ts` say identity's `persons`/`sessions` carry a foreign key onto core's
+  `tenants`/`tills`, where identity's baseline references only its own `persons`.
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,

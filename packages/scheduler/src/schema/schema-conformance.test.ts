@@ -15,7 +15,8 @@ import * as barrel from "./index.js";
 describeSchemaConformance({
   subjectName: "scheduler",
   // No prerequisites: `drizzle/0000_baseline.sql` names no other set's table — no foreign key, no
-  // trigger — so nothing it builds depends on core.
+  // trigger — so nothing it builds depends on core. Four of the package's other database suites
+  // do need core: their setup calls `seedTenant`, which writes core's `tenants`.
   subject: SCHEDULER_MIGRATIONS,
   declarations: barrel,
   // False: `state` is a plain `label()` beside its own hand-written check,
