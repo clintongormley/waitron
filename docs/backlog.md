@@ -3897,6 +3897,8 @@ its database to a bucket the owner supplies, and a dead box is rebuilt from it. 
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
 (#540) — the values later tasks read are under "What later
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+Task 0, shrink every uploaded photo, is in #543, not yet landed; what it does and what it leaves
+open are under the image library in Track A.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
 **Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
@@ -4236,16 +4238,6 @@ What the preparation tasks left, with F1's own answers where it found them:
     the engine could never produce stay hand-written on purpose. A few other suites still build
     engine-shaped refusals by hand, among them `packages/provisioning/src/cli.test.ts` and
     `packages/scheduler/src/store.concurrency.test.ts`; converting them was not part of P10.
-
-**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
-[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)). When it is done, the
-venue streams its database to a bucket the owner supplies, and a dead box is rebuilt from that bucket
-with one recovery kit; none of that is built yet. The tasks land one pull request each, in the plan's
-order.
-
-- **Task 0, shrink every uploaded photo — built on `feat/sqlite-slice2-image-shrink`, not yet
-  landed.** What it does and what it leaves open are under the image library in Track A.
-- **Next action:** Task 1a (per-machine rows keyed by node id), once Task 0 lands.
 
 ---
 
