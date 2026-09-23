@@ -2008,7 +2008,7 @@ image constraints under *Detail → Box image*.
   comment handling. Until then the hedge is in `CLAUDE.md` §3.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
-  (2026-09-23, branch `feat/module-schema-conformance-guard`).** The comparison the core set had —
+  (**PR #491**, 2026-09-23, main `8428395a`).** The comparison the core set had —
   build a database from the migrations, then check every table, column, key, index and check
   constraint against what the drizzle declarations say — is now a reusable suite factory,
   `packages/db/src/testing/schema-conformance.ts`, published from `@waitron/db`'s enumerated
@@ -3295,8 +3295,8 @@ What the preparation tasks left, with F1's own answers where it found them:
   `printers_character_table_ck`, SQLSTATE `23514`) to the operator as a `transport_fields` problem,
   because `printers.ts` translates by CLASS not by key; the fix is a per-constraint `refusalOn` target,
   now available (from the P10 review, #482).
-- **No guard holds a MODULE migration set to its declared schema — LANDED 2026-09-23 for the four
-  named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
+- **No guard holds a MODULE migration set to its declared schema — LANDED as PR #491, 2026-09-23,
+  for the four named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
   `src/schema/schema-conformance.test.ts` now, calling the shared suite factory
   `@waitron/db/testing/schema-conformance.js`, and the core set calls the same factory. None of the
   four turned out to have any drift. The sets with no call site yet are still unguarded, and the
