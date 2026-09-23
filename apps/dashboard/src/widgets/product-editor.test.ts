@@ -1179,6 +1179,41 @@ it("marks the variant row a reported problem belongs to", async () => {
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
 });
 
+// The server names a variant by its place in the whole list it was sent, Inactive rows included,
+// while the table hides an Inactive row by default: the refusal has to reach the row it names.
+it("puts a server refusal of variants.2 on the third variant's row, past a hidden Inactive one", async () => {
+  const medium: EditorVariant = {
+    id: "medium",
+    name: "Medium",
+    customerName: { en: "Medium cup", es: "Taza mediana" },
+    kitchenName: "MD",
+    image: null,
+    unitPrice: "2.50",
+    available: true,
+    active: true,
+  };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, { ...large, active: false }, medium] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const message = t("editor.field_rejected");
+  el.fieldErrors = { [productEditorField("variants.2.unitPrice", "en")!]: message };
+  await el.updateComplete;
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  expect(table.errors).toEqual({ 2: message });
+  expect(table.shadowRoot!.querySelector("[data-test=row-1]")).toBeNull();
+  const row = table.shadowRoot!.querySelector("[data-test=row-2]")!;
+  expect(row.textContent).toContain("Medium");
+  expect(row.querySelector("[data-test=error-2]")!.textContent!.trim()).toBe(message);
+  await expect
+    .poll(() => table.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("actions-2");
+});
+
 it("keeps a variant's mark on that variant when the rows are reordered", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
