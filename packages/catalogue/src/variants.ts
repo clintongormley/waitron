@@ -120,7 +120,8 @@ export async function variantsOfProducts(
 
 /**
  * Save a product's variants: each one in the input is written Active or Inactive as its `active`
- * says, in the input's order; each current variant the input leaves out is made Inactive and kept
+ * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
+ * current state — in the input's order; each current variant the input leaves out is made Inactive and kept
  * (spec §15.6), ordered after the ones sent. The caller owns the transaction, including product
  * fields and supporting associations.
  */

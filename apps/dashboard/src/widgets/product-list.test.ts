@@ -636,7 +636,7 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w175",
               name: "Wine 175",
-              customerName: { es: "Copa grande de vino" },
+              customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
               effective: {
@@ -686,7 +686,7 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w175",
               name: "Wine 175",
-              customerName: { es: "Copa grande de vino" },
+              customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
               kitchenName: "VINO 175",
               unitPrice: "4.75",
               effective: {
@@ -700,7 +700,7 @@ describe("product-list", () => {
               ...bunVariant,
               id: "w125",
               name: "Wine 125",
-              customerName: { es: "Copa pequeña de vino" },
+              customerName: { en: "Small glass of wine", es: "Copa pequeña de vino" },
               kitchenName: "VINO 125",
               unitPrice: null,
             },

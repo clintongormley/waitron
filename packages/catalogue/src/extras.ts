@@ -170,7 +170,7 @@ async function assertExtraListForWrite(tx: Transaction, extraListId: string): Pr
 
 /**
  * The staff `name` and `kitchenName` are plain text and need no translation check; the optional
- * customer-facing MAP is what must satisfy the configured content languages, and a null one is legal
+ * customer-facing MAP is what must have text in the venue's default content language, and a null one is legal
  * because it falls back to `name` — the rule `setProductVariants` follows (variants.ts).
  *
  * An extras list holds exactly ONE such map, where an options list holds one per label as well as

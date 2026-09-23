@@ -2081,7 +2081,8 @@ describe("mountCatalogueApi — products", () => {
     expect(cleared.status).toBe(204);
     expect(await readBack()).toMatchObject({ name: "Café solo", customerName: null });
 
-    // A customer name that names no enabled language at all is a translation gap, not a clear.
+    // A customer name with no text in the venue's default content language is a translation gap,
+    // not a clear.
     const partial = await send(app, "PATCH", `/management-api/products/${productId}`, {
       body: { customerName: { fr: "Café frais" } },
     });

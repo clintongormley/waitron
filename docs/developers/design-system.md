@@ -552,7 +552,9 @@ variant's VAT, unit, station or photo from its parent product, an extra's price 
 **empty while it falls back**, and shows the value it falls back to as a hint, so the operator sees
 what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
 a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
-required.
+required. A translated field inherited as ONE value across its languages (a variant's description)
+shows its hints only while every language is blank; once any language has text, the record's own
+value applies and its blank languages show no hint.
 
 - **Text and price fields** (`wt-input`, `wt-price-input`, a `<textarea>`): the fallback value is the
   field's `placeholder`. Both primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`

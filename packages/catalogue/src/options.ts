@@ -110,7 +110,7 @@ async function assertOptionList(tx: Transaction, optionListId: string): Promise<
 
 /**
  * The staff `name` and `kitchenName` are plain text and need no translation check; the optional
- * customer-facing MAP is what must satisfy the configured content languages, and a null one is legal
+ * customer-facing MAP is what must have text in the venue's default content language, and a null one is legal
  * because it falls back to `name` — the rule `setProductVariants` follows (variants.ts).
  *
  * One save submits a map for the list and one per label, so they go to the database TOGETHER: the
