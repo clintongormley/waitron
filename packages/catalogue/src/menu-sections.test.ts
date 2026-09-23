@@ -8,6 +8,7 @@ import {
   listMenuSections,
   updateMenuSection,
 } from "./operations.js";
+import { menuSections } from "./schema/menu.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
@@ -46,17 +47,24 @@ describe("listing a menu's sections", () => {
   });
 
   it("breaks a display-order tie by section id", async () => {
-    const created = await run(async (tx) => [
-      await createMenuSection(tx, { menuId, name: { en: "Tapas" } }),
-      await createMenuSection(tx, { menuId, name: { en: "Raciones" } }),
-      await createMenuSection(tx, { menuId, name: { en: "Postres" } }),
-    ]);
+    // Fixed ids, so id order (a, b, c) is neither insertion order (b, c, a), which is also name
+    // order, nor its reverse (a, c, b).
+    const a = "00000000-0000-4000-8000-000000000a01";
+    const b = "00000000-0000-4000-8000-000000000a02";
+    const c = "00000000-0000-4000-8000-000000000a03";
+    await run(async (tx) => {
+      await tx.insert(menuSections).values({ id: b, menuId, name: { en: "Postres" } });
+      await tx.insert(menuSections).values({ id: c, menuId, name: { en: "Raciones" } });
+      await tx.insert(menuSections).values({ id: a, menuId, name: { en: "Tapas" } });
+    });
 
     const sections = await run((tx) => listMenuSections(tx, menuId));
 
-    expect(sections.map((section) => section.id)).toEqual(
-      created.map((section) => section.id).sort(),
-    );
+    expect(sections.map((section) => [section.id, section.displayOrder])).toEqual([
+      [a, 0],
+      [b, 0],
+      [c, 0],
+    ]);
   });
 
   it("answers an empty list for a menu with no sections", async () => {

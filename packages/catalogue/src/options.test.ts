@@ -20,13 +20,12 @@ import {
   updateOptionList,
 } from "./options.js";
 
-// One SQLite file with the real migrations applied. The grants walkthrough this file used to end
-// with is gone with the grants themselves.
+// One SQLite file with the real migrations applied.
 // Nothing is seeded at the suite level: with no `content_languages` row, `readContentLanguages`
 // falls back to the language passed in (packages/catalogue/src/content-languages.ts), and
 // `useVenueDb` empties every data table after each test on its own
-// (packages/db/src/testing/venue-db.ts). One test seeds the taxpayer row for itself, because it is
-// the only one that creates products, and it says so where it does it.
+// (packages/db/src/testing/venue-db.ts). The tests that create products seed the taxpayer row
+// themselves.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -309,8 +308,6 @@ describe("option list CRUD", () => {
 
   it("names the products carrying the list, and the menu offers of those dishes", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
-    // The only test in this file that needs the taxpayer row, because it is the only one that
-    // creates products and a menu; `useVenueDb` empties the table again afterwards.
     await seedTenant(fx.db);
     const dishes = await run(async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Deli" });

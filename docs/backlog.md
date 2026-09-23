@@ -2144,9 +2144,7 @@ image constraints under *Detail → Box image*.
   Unavailable or not offered on a menu, a product with no variant sold as itself, a delete
   preview's menus in offer-id order, a product extras read handed a wider attachment map or one
   naming a deleted list, and non-text names and ids in the extras and options contracts; no
-  source file changed; 98.82/99.53/100/97.37). Noticed, not acted on: `resolveMenuVariant`
-  (`packages/catalogue/src/variants.ts`) has no caller outside its own tests — the order path
-  uses `selectMenuVariant`.
+  source file changed; 98.82/99.53/100/97.37).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
