@@ -157,9 +157,9 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
   // a lost-response re-tap re-drives the SAME PaymentIntent and Stripe charges once. It is derived
   // from `workingOrderId`, NOT from the per-call random `paymentRef` (which stays the `payments`
   // row's idempotency anchor, one row per attempt). `FakeStripe.lastCreateIntent` records the key the
-  // provider handed Stripe, so this asserts the derivation on the hermetic target — the key is pure
-  // logic, so PGlite is the right target here (the wiring-test pattern), and the real SDK's
-  // honouring of that key is the nightly sandbox suite's half (collect.sandbox.test.ts).
+  // provider handed Stripe, so this asserts the derivation against a fake client and a local venue
+  // file — the key is pure logic (the wiring-test pattern), and the real SDK's honouring of that
+  // key is the nightly sandbox suite's half (collect.sandbox.test.ts).
   it("passes a stable wo-derived key across two collects for one working order, with distinct payment rows", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());

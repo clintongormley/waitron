@@ -10,7 +10,8 @@ import {
   workingOrders,
   type Database,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -27,6 +28,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
+import { preparationRoutes } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -56,16 +58,29 @@ import "./errors.js";
 // names the field — is the commit body's grep). Two tabs built from the IDENTICAL basket, one with
 // every line served and one with none, must file registros with the IDENTICAL huella.
 //
-// Real Postgres, not PGlite: a genuine chained fiscal record filed by the app role through the real
-// pay path, the same reason `till-sale.test.ts` uses `useTemplateDb`. The huella comparison itself is
+// A genuine chained fiscal record filed through the real pay path against a real migrated venue
+// database, the same reason `till-sale.test.ts` seeds one. The huella comparison itself is
 // deterministic either way; the value is a stronger end-to-end receipt.
+//
+// It reached this engine as two `useTemplateDb({ template: "manifest" })` calls, each a clone of a
+// shared PostgreSQL template. The `asAppUser(tx)` calls below are now inert
+// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
+// what the deployment role, which no longer exists, may read or write.
 const LOCALE = "es-ES";
 
 // TWO databases, one shop in each — the one-tenant-per-database rework of what used to be two tenants
-// in one clone (see `seedShop`). `useTemplateDb` clones the template per file, so these are two
-// independent databases; each holds exactly one tenant and one fiscal chain.
-const suite = useTemplateDb({ template: "manifest" });
-const suiteB = useTemplateDb({ template: "manifest" });
+// in one clone (see `seedShop`). Each `useVenueDb` call makes its OWN temporary directory inside its
+// OWN `beforeAll` and closes over its own handle (`packages/db/src/testing/venue-db.ts`, the
+// `let directory` / `mkdtemp` pair inside `useVenueDb`), so these are two independent databases;
+// each holds exactly one tenant and one fiscal chain.
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
+const suiteB = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /**
  * A clock FROZEN at one instant, so both pays stamp the SAME `issued_at` — and therefore the SAME
@@ -107,9 +122,9 @@ function makeBackend(db: Database): FiscalBackend {
   });
 }
 
-// A fresh, unique NIF per test. Each clone this file runs against is its own database (useTemplateDb
-// clones per file, and there are two), so a NIF never collides across databases; the counter keeps
-// repeated tests in THIS file order-independent.
+// A fresh, unique NIF per test. Each of the two databases this file runs against is its own, so a
+// NIF never collides across databases; the counter keeps repeated tests in THIS file
+// order-independent.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -337,8 +352,8 @@ describe("served_at is not part of the huella", () => {
     // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, `served_at` is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopServed = await seedShop(suite.admin, emisorNif);
-    const shopUnserved = await seedShop(suiteB.admin, emisorNif);
+    const shopServed = await seedShop(suite.db, emisorNif);
+    const shopUnserved = await seedShop(suiteB.db, emisorNif);
 
     const served = await openServeAndPay(shopServed, true); // every line served
     const unserved = await openServeAndPay(shopUnserved, false); // no line served
@@ -377,22 +392,35 @@ async function placeTable(shop: Shop): Promise<void> {
       from zone_service_policies
       where location_id = ${shop.cfg.locationId}
       limit 1`);
+    // Three statements where PostgreSQL took one. `zone_service_policies_default_allowed_fk` — the
+    // composite key on (zone_id, default_menu_id) into `zone_menus` — was DEFERRABLE INITIALLY
+    // DEFERRED there, and sqlite-core has no deferrable option, so it lands at the statement
+    // (`packages/venue-service/src/schema/service.ts`, the comment above that key). The two tables
+    // point at each other, so neither can be inserted complete first: the policy row goes in with a
+    // NULL default (which satisfies the key), then `zone_menus`, then the policy is updated to name
+    // it. Measured: naming the menu in the INSERT gives `FOREIGN KEY constraint failed`, and the
+    // control is this ordering, which the case now passes on. The end state is the same row.
     await tx.execute(sql`
       insert into zone_service_policies
         (location_id, zone_id, department_id, service_mode, default_menu_id)
       values (
         ${shop.cfg.locationId}, ${zone.id},
-        ${department.rows[0]!.department_id}, 'table_tab', ${shop.menuId}
+        ${department.rows[0]!.department_id}, 'table_tab', null
       )`);
     await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${zone.id}, ${shop.menuId})`);
     await tx.execute(sql`
-      insert into preparation_routes
-        (location_id, category_id, station_id, no_preparation)
-      values (
-        ${shop.cfg.locationId}, ${shop.categoryId}, null, true
-      )`);
+      update zone_service_policies set default_menu_id = ${shop.menuId}
+      where zone_id = ${zone.id}`);
+    // Through the table definition: `preparation_routes.id` is a `$defaultFn` generator
+    // (`packages/venue-service/src/schema/service.ts:180`), which a raw statement never reaches.
+    await tx.insert(preparationRoutes).values({
+      locationId: shop.cfg.locationId,
+      categoryId: shop.categoryId,
+      stationId: null,
+      noPreparation: true,
+    });
     await setTablePlacement(tx, shop.cfg, shop.tableId, {
       zoneId: zone.id,
       posX: 500,
@@ -441,8 +469,8 @@ describe("table placement is not part of the huella", () => {
     // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, table PLACEMENT is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopPlaced = await seedShop(suite.admin, emisorNif);
-    const shopWalkup = await seedShop(suiteB.admin, emisorNif);
+    const shopPlaced = await seedShop(suite.db, emisorNif);
+    const shopWalkup = await seedShop(suiteB.db, emisorNif);
 
     // Place shopPlaced's table on the canvas; shopWalkup's table stays unplaced (a walk-up).
     await placeTable(shopPlaced);
@@ -592,8 +620,8 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
     // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, the order's KDS STATE is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopKitchen = await seedShop(suite.admin, emisorNif);
-    const shopPlain = await seedShop(suiteB.admin, emisorNif);
+    const shopKitchen = await seedShop(suite.db, emisorNif);
+    const shopPlain = await seedShop(suiteB.db, emisorNif);
 
     const kitchen = await openKitchenLifecycleAndPay(shopKitchen); // fired → ready → collected
     const plain = await openServeAndPay(shopPlain, false); // never fired; not collected
@@ -772,8 +800,8 @@ describe("an extra's allergen declaration is not part of the huella", () => {
     // (name/price/vat) + chain-position + (frozen) clock all fixed, the extra's allergen DECLARATION is
     // the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopOverlay = await seedShop(suite.admin, emisorNif);
-    const shopPlain = await seedShop(suiteB.admin, emisorNif);
+    const shopOverlay = await seedShop(suite.db, emisorNif);
+    const shopPlain = await seedShop(suiteB.db, emisorNif);
 
     // Both extra products are byte-identical in name/price/vatClass (the constants) so the child
     // sale_lines are identical; only the catalogue allergen declaration differs.

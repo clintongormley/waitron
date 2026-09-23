@@ -5,8 +5,8 @@ import type { LocationId } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
-import type { MigrationSet } from "@waitron/migrations";
-import type { ClassifiedTable } from "@waitron/sync-enrolment";
+import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
+import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
@@ -308,8 +308,10 @@ export interface WaitronModule {
   };
   /** mandatory (core) | provision-only (fiscal) | toggleable (rest). Recorded now; acted on in SP-1b. */
   readonly tier: "mandatory" | "provision-only" | "toggleable";
-  /** Manifest-shaped migration info — NOT an import.meta.url-derived folder (spec §4). */
-  readonly migrations: MigrationSet;
+  /** Manifest-shaped migration info — NOT an import.meta.url-derived folder (spec §4). The
+   * SOURCE half only: the append-only table names belong to `classification`, and
+   * `orderedMigrationSets` is what puts the two together into a `MigrationSet`. */
+  readonly migrations: MigrationSetSource;
 
   // Optional module capabilities are assembled by composition without importing domain packages here.
   /** Swap S1: every table this module's migrations create, classified `ledger`/`state`/`local`
@@ -376,6 +378,13 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
  * call site cannot skip the check. Kahn's algorithm with the INPUT list order as the tie-break among
  * ready nodes reproduces today's manifest order for `ALL_MODULES` (spec §5 trace; the SP-1a pin holds
  * and now also proves the sort reproduces the manifest).
+ *
+ * Each returned set also carries `appendOnlyTables`, the tables the module's own `classification`
+ * seat declared with `appendOnly()`, which `applyMigrations` turns into refusal triggers once that
+ * set has run. Reading the seat is how the protection reaches the engine without this generic
+ * function learning a module's name. It is NOT derived from the `ledger` CLASS: nine
+ * `ledger`-classified tables are updated or deleted by ordinary product code, and one append-only
+ * table is classified `state` (`ClassifiedTable.appendOnly` carries that receipt).
  *
  * Throws (loud, before any caller migrates): `module.requires_invalid` (a malformed range — a
  * descriptor bug), `module.dependency_missing` (a required module absent from the set — trippable
@@ -446,7 +455,13 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
     throw new AppError("module.dependency_cycle", { modules: remaining.map((m) => m.name) });
   }
 
-  return ordered.map((m) => m.migrations);
+  // A fresh object per set, never the descriptor's own `migrations` — `ALL_MODULES` is a
+  // module-level constant shared by every caller, and returning it by reference would let one
+  // caller's edit reach all of them.
+  return ordered.map((m) => ({
+    ...m.migrations,
+    appendOnlyTables: appendOnlyTablesIn(m.classification ?? []),
+  }));
 }
 
 /** `../<pkg>/drizzle` — the shape every descriptor's `migrations.from` has (spec §4). */

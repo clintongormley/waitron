@@ -1,9 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -21,6 +21,14 @@ import { isUuid } from "./till-session.js";
  * management SESSION cookies, this is a long-lived DEVICE identity, so it earns its own distinct name.
  */
 export const DEVICE_COOKIE = "waitron_device";
+
+/**
+ * How stale a recorded sighting has to be before an authenticated read writes a fresh one.
+ *
+ * It was the SQL literal `interval '1 minute'`; it is a named millisecond count because the cutoff
+ * is computed in JavaScript and bound now, not built in SQL — see the gate in {@link tryReadDevice}.
+ */
+const SIGHTING_INTERVAL_MS = 60_000;
 
 /**
  * The DEV-ONLY per-tab device override header (SP-C). When this host runs in `devMode` (config), a
@@ -192,11 +200,12 @@ function toDeviceBinding(
  * stored hash — returns the SAME `null`, so `requireDevice`'s `device.unauthorized` confirms neither a
  * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
  *
- * The deployment holds one tenant per database. The lookup runs as `app_user` inside
- * `withTransaction`; it filters by id and active state only. The `active = true` filter makes
+ * The deployment holds one tenant per database. The lookup runs inside `withTransaction` and
+ * filters by id and active state only. The `active = true` filter makes
  * revocation INSTANT: a revoked row is simply not found, with no token lifetime to expire.
  * `verifySecret` (scrypt, `@waitron/identity`) is constant-time — the token is NEVER compared
- * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at = now()`, gated
+ * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at` stamped from this
+ * process's clock, gated
  * to at most one write per minute — see the UPDATE below) and the binding returned; nothing is
  * logged, and the token never leaves this function. That `last_seen_at` write happens ONLY on the
  * cookie success path, so a firewall probe on a non-device request is a pure read — and so is the
@@ -213,7 +222,7 @@ export async function tryReadDevice(
   // that device with NO token check. The header WINS over the cookie and does not fall back to it
   // — an override that names a bad device is a clean miss (`null` → `device.unauthorized`), not a
   // silent switch to the cookie's identity. Resolved by the SAME id-selected, `active = true`
-  // read the cookie path uses below, minus `verifySecret` AND minus the `last_seen_at = now()`
+  // read the cookie path uses below, minus `verifySecret` AND minus the `last_seen_at`
   // sighting write that path performs — intentional: the dev backdoor is a pure read, mutating no
   // real device's last-seen state.
   if (deps.devMode === true) {
@@ -246,9 +255,9 @@ export async function tryReadDevice(
   if (dot <= 0 || dot === raw.length - 1) return null;
   const deviceId = raw.slice(0, dot);
   const token = raw.slice(dot + 1);
-  // Screen the selector's SHAPE before the DB: a non-UUID id looked up against the `uuid` column would
-  // raise `22P02` → an opaque 500 (the `isUuid` reasoning in `till-session.ts`), so a forged cookie
-  // stays a clean miss instead.
+  // Screen the selector's SHAPE before the DB: `devices.id` is plain `text`, so a non-UUID id would
+  // be looked up without complaint and simply match nothing (the `isUuid` reasoning in
+  // `till-session.ts`). This screen is what keeps a forged cookie a clean miss.
   if (!isUuid(deviceId)) return null;
 
   return withTransaction(deps.db, async (tx) => {
@@ -275,14 +284,27 @@ export async function tryReadDevice(
     // written, the differential proof the test pins) and one write per minute thereafter. Deferring the
     // write until `last_seen_at` is ≥1 minute stale means the DISPLAYED last-seen can lag true activity by
     // up to ~1 minute (not strictly sub-minute) — an acceptable bound for a coarse "last seen" indicator.
-    // Parameterised by Drizzle — `id` binds as `$n`; the interval is a constant literal, never user input.
+    // Parameterised by Drizzle — the id and both stamps bind, never user input and never
+    // concatenated.
+    //
+    // `last_seen_at` is a text column, so `<` on it is a STRING comparison, and that orders two
+    // instants correctly only for the one spelling every writer of this column uses: `toISOString()`,
+    // which is what `nowIso` returns and what `devices.created_at` takes its own default from. The
+    // clock is read once so the stamp written and the staleness cutoff are the same moment — which
+    // is what PostgreSQL's `now()`, being transaction-start time, gave for free. This is the shape
+    // `packages/printing/src/agent.ts` already gates its own sighting write with, and its comment
+    // carries the measurement of the three spellings that sort wrong.
+    const seenAt = nowIso();
+    const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
     await tx
       .update(devices)
-      .set({ lastSeenAt: sql`now()` })
+      .set({ lastSeenAt: seenAt })
       .where(
         and(
           eq(devices.id, deviceId),
-          sql`(${devices.lastSeenAt} is null or ${devices.lastSeenAt} < now() - interval '1 minute')`,
+          // A never-seen device has NULL here and `<` is UNKNOWN for NULL, so the first sighting
+          // needs its own alternative or it would never be written.
+          or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore)),
         ),
       );
     return toDeviceBinding(deviceId, row);
@@ -316,7 +338,7 @@ export async function requireDevice(
  * DeviceBinding} carries no node/series — the SIF/chain key is the node, not the device).
  *
  * Modelled on {@link requireDevice}/{@link assertDeviceCapability}: it reads the binding via
- * {@link tryReadDevice} (the `app_user` role) and fails CLOSED. Both refusals are documented
+ * {@link tryReadDevice} and fails CLOSED. Both refusals are documented
  * SETUP preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous
  * to the boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a
  * setup fault surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):

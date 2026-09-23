@@ -18,22 +18,27 @@ describe("loadBoxEnv", () => {
 
   it("loads all three files", async () => {
     const dir = await boxWith({
-      "instance.env": "DATABASE_URL=postgres://app\n",
       "secrets.env": "WAITRON_CREDENTIALS_KEY=k\n",
       "trading.env": "WAITRON_ENV=production\n",
+      "backup.env": "WAITRON_BACKUP_DESTINATION=/mnt/usb\n",
     });
     const env = await loadBoxEnv({}, dir);
-    expect(env.DATABASE_URL).toBe("postgres://app");
     expect(env.WAITRON_CREDENTIALS_KEY).toBe("k");
     expect(env.WAITRON_ENV).toBe("production");
+    expect(env.WAITRON_BACKUP_DESTINATION).toBe("/mnt/usb");
   });
 
-  it("trading.env beats instance.env — the promote rewrites trading.env", async () => {
+  it("trading.env beats secrets.env — the promote rewrites trading.env", async () => {
     const dir = await boxWith({
-      "instance.env": "DATABASE_URL=postgres://from-instance\n",
-      "trading.env": "DATABASE_URL=postgres://from-trading\n",
+      "secrets.env": "WAITRON_ENV=from-secrets\n",
+      "trading.env": "WAITRON_ENV=from-trading\n",
     });
-    expect((await loadBoxEnv({}, dir)).DATABASE_URL).toBe("postgres://from-trading");
+    expect((await loadBoxEnv({}, dir)).WAITRON_ENV).toBe("from-trading");
+  });
+
+  it("ignores instance.env — nothing writes it, so reading it would resurrect a retired file", async () => {
+    const dir = await boxWith({ "instance.env": "WAITRON_ENV=production\n" });
+    expect(await loadBoxEnv({}, dir)).toEqual({});
   });
 
   it("THE ENVIRONMENT BEATS EVERY FILE — when non-empty", async () => {

@@ -1,15 +1,9 @@
 import "./errors.js";
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
-import {
-  UNIQUE_VIOLATION,
-  constraintTarget,
-  isUniqueViolation,
-  refusalOn,
-  sameTarget,
-} from "@waitron/db";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { indexViolated, isUniqueViolation, nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
+import { liveDisplayNameKey, loginEmailKey, pendingEmailKey, persons } from "./schema/persons.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import { sessions } from "./schema/sessions.js";
@@ -17,6 +11,7 @@ import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
+import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
@@ -30,18 +25,45 @@ import {
 export { MIN_PIN_LENGTH } from "./verify-pin.js";
 
 /**
+ * A person id may arrive in either case, and settling it is this file's job rather than the
+ * column's.
+ *
+ * It USED to be the column's: `persons.id` was a PostgreSQL `uuid`, which compares either case in
+ * SQL. It is a plain `text` column now (`packages/db/src/schema/columns.ts`) and text compares byte
+ * for byte, so an id a caller sent in upper case finds no row. Measured against the migrated
+ * identity database on 2026-09-22 with a control in the other direction: one seeded row, the id
+ * bound upper-case returns `[]` and the id bound as stored returns that row, with the emitted SQL
+ * (`.toSQL()`) a plain `select "id" from "persons" where "persons"."id" = ?` either way — so it is
+ * the comparison, not the statement, that changed.
+ *
+ * The shape that made this worth fixing rather than leaving to fail loudly: three functions here
+ * ALREADY folded the id for their `authorizedBy` comparison and left the query unfolded. Given an
+ * upper-case id, {@link suspendPerson} refused a self-suspension correctly and updated NOTHING for
+ * anybody else — no rows, no error. One value now serves both uses.
+ *
+ * `packages/catalogue/src/product-modifiers.ts` settles its caller's ids at the same kind of
+ * boundary, for the same reason and with the same one-line body. A refusal still echoes the
+ * caller's own bytes rather than the folded value, which is the rule `normaliseUuid`
+ * (`packages/shared/src/ids.ts`) states: the message exists to show them what they sent.
+ */
+const settleId = (value: string) => value.toLowerCase();
+
+/**
  * Translate the ONE driver error the email write paths care about — a collision on the login-email
  * index — into the domain `person.email_taken`, and re-throw anything else untouched.
  *
- * `refusalOn` asks for the SQLSTATE and the key together, which is what keeps a unique violation on
- * a different `persons` key — the `id` PK, or any index added later — re-thrown untouched rather
- * than mislabelled `person.email_taken` (which would also break the `{ email }` param contract when
- * `email` is null). `email` is normalized before it reaches here, so the error carries the value
- * that actually collided. Exported for the crafted-error unit test in staff.test.ts, NOT from the
- * package barrel.
+ * `indexViolated` asks which INDEX refused, by name, which is what keeps a unique violation on a
+ * different `persons` key — the `id` PK, the google-subject index, the pending-email index, or any
+ * index added later — re-thrown untouched rather than mislabelled `person.email_taken` (which would
+ * also break the `{ email }` param contract when `email` is null). The name is the only thing the
+ * engine reports for an index over an expression; `person-constraints.ts` says why, and the
+ * google-subject case in `person-constraints.db.test.ts` is the control that this question
+ * discriminates rather than matching every unique violation on the table. `email` is normalized
+ * before it reaches here, so the error carries the value that actually collided. Exported for the
+ * crafted-error unit test in staff.test.ts, NOT from the package barrel.
  */
 export function asEmailTaken(err: unknown, email: string): never {
-  if (refusalOn(err, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
+  if (indexViolated(err, PERSONS_EMAIL)) {
     throw new AppError("person.email_taken", { email });
   }
   throw err;
@@ -57,12 +79,11 @@ export function asPersonUniqueViolation(
   err: unknown,
   input: { email?: string; displayName: string },
 ): never {
-  const target = isUniqueViolation(err) ? constraintTarget(err) : undefined;
-  if (sameTarget(target, PERSONS_LIVE_DISPLAY_NAME)) {
+  if (indexViolated(err, PERSONS_LIVE_DISPLAY_NAME)) {
     throw new AppError("person.display_name_taken", { displayName: input.displayName });
   }
   if (
-    (sameTarget(target, PERSONS_EMAIL) || sameTarget(target, PERSONS_PENDING_EMAIL)) &&
+    (indexViolated(err, PERSONS_EMAIL) || indexViolated(err, PERSONS_PENDING_EMAIL)) &&
     input.email !== undefined
   ) {
     throw new AppError("person.email_taken", { email: input.email });
@@ -86,6 +107,17 @@ function requiredText(value: string, field: string): string {
   return normalized;
 }
 
+/** The predicate reads `liveDisplayNameKey()`, which is the SAME expression
+ * `persons_tenant_live_display_name_uq` is declared over — one function builds both
+ * (`./schema/persons.ts`) — so this pre-check and the index cannot disagree about which names
+ * collide. They used to be written out separately, and this one folded the caller's name in
+ * JavaScript while the index folded the stored name in SQL; the two agreed on `Ana` and disagreed
+ * on `José`.
+ *
+ * The caller's name is folded by `foldForUniqueness`, which trims as well as lower-cases, matching
+ * the `trim` inside that expression. SQLite has no `btrim`: `select btrim('  Ada  ')` throws
+ * `no such function: btrim` where `trim('  Ada  ')` returns `Ada`, driven on node:sqlite
+ * (Node v26.7.0). */
 export async function assertDisplayNameAvailable(
   tx: Transaction,
   displayName: string,
@@ -96,7 +128,7 @@ export async function assertDisplayNameAvailable(
     .from(persons)
     .where(
       and(
-        eq(sql`lower(btrim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
+        eq(liveDisplayNameKey(), foldForUniqueness(displayName)),
         ne(persons.status, "suspended"),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
@@ -114,7 +146,13 @@ export async function assertEmailAvailable(
     .from(persons)
     .where(
       and(
-        or(eq(sql`lower(${persons.email})`, email), eq(sql`lower(${persons.pendingEmail})`, email)),
+        // Both expressions are the ones their indexes are declared over, for the reason
+        // {@link assertDisplayNameAvailable} states. `email` arrives normalized; folding it again
+        // is what settles how its accents are encoded.
+        or(
+          eq(loginEmailKey(), foldForUniqueness(email)),
+          eq(pendingEmailKey(), foldForUniqueness(email)),
+        ),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
     );
@@ -124,21 +162,31 @@ export async function assertEmailAvailable(
 async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.personId, personId), isNull(sessions.endedAt)));
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   await tx
     .update(managementAccountActions)
-    .set({ usedAt: sql`now()` })
+    .set({ usedAt: nowIso() })
     .where(
       and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
 }
 
-/** Saves one complete administrative edit after serializing the active-admin invariant. */
+/**
+ * Saves one complete administrative edit.
+ *
+ * The last-admin refusal below counts the active admins and then writes, and on PostgreSQL both
+ * reads took `for update` so that a second edit could not land between the count and the write and
+ * leave the venue with no admin at all. One write transaction runs on the venue file at a time, so
+ * the count is still true when the update runs — the pattern is stated once, with its measurement
+ * and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same
+ * applies to {@link deactivatePerson}, {@link resetPersonLogin} and
+ * {@link reactivatePersonForInvitation}, which each dropped the same clauses.
+ */
 export async function updatePersonDetails(
   tx: Transaction,
   input: {
@@ -161,15 +209,13 @@ export async function updatePersonDetails(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
+    .orderBy(persons.id);
   const [person] = await tx
     .select()
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
+  if (input.status === "suspended" && authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
   if (input.status !== person.status && input.status !== "suspended") {
@@ -203,10 +249,12 @@ export async function updatePersonDetails(
       .update(persons)
       .set({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
         email,
+        emailFolded: foldForUniqueness(email),
         emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
         role: input.role,
         status: input.status,
@@ -232,15 +280,13 @@ export async function deactivatePerson(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
+    .orderBy(persons.id);
   const [person] = await tx
     .select({ id: persons.id, role: persons.role, status: persons.status })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  if (authorizedBy === input.personId.toLowerCase()) {
+  if (authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
@@ -263,13 +309,13 @@ export async function clearPersonPin(
   const updated = await tx
     .update(persons)
     .set({ pinHash: null })
-    .where(eq(persons.id, input.personId))
+    .where(eq(persons.id, settleId(input.personId)))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
-    .where(and(eq(sessions.personId, input.personId), isNull(sessions.endedAt)));
+    .set({ endedAt: nowIso() })
+    .where(and(eq(sessions.personId, settleId(input.personId)), isNull(sessions.endedAt)));
 }
 
 /** Clears every login method and returns an account to Pending before issuing a new invitation. */
@@ -285,8 +331,7 @@ export async function resetPersonLogin(
     .select({ id: persons.id })
     .from(persons)
     .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id)
-    .for("update");
+    .orderBy(persons.id);
   const [person] = await tx
     .select({
       id: persons.id,
@@ -295,8 +340,7 @@ export async function resetPersonLogin(
       status: persons.status,
     })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
   if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
@@ -314,8 +358,8 @@ export async function resetPersonLogin(
     })
     .where(eq(persons.id, person.id));
   await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, person.id));
-  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, input.personId));
-  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, input.personId));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, settleId(input.personId)));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, settleId(input.personId)));
   await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
   await revokePersonAccess(tx, person.id);
 }
@@ -332,8 +376,7 @@ export async function reactivatePersonForInvitation(
   const [person] = await tx
     .select({ id: persons.id, displayName: persons.displayName, status: persons.status })
     .from(persons)
-    .where(eq(persons.id, input.personId))
-    .for("update");
+    .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
   await assertDisplayNameAvailable(tx, person.displayName, person.id);
@@ -390,6 +433,7 @@ export async function invitePerson(
       .insert(persons)
       .values({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
@@ -398,15 +442,16 @@ export async function invitePerson(
         role: input.role,
         status: "pending",
         email,
+        emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (error) {
-    // The NEGATION, which `refusalOn` cannot express, so this stays on the primitives. A 23505
-    // whose key this cannot identify takes this branch deliberately: the insert leaves
+    // The NEGATION, which `indexViolated` cannot express, so this stays on the primitives. A unique
+    // violation this cannot identify takes this branch deliberately: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
-    if (isUniqueViolation(error) && !sameTarget(constraintTarget(error), PERSONS_EMAIL)) {
+    if (isUniqueViolation(error) && !indexViolated(error, PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(error, email);
@@ -442,18 +487,20 @@ export async function createPerson(
       .insert(persons)
       .values({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         pinHash: hashPin(input.pin),
         role: input.role,
         email,
+        emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
     return { id: row!.id };
   } catch (err) {
-    // The NEGATION, which `refusalOn` cannot express, so this stays on the primitives. A 23505
-    // whose key this cannot identify takes this branch deliberately: the insert leaves
+    // The NEGATION, which `indexViolated` cannot express, so this stays on the primitives. A unique
+    // violation this cannot identify takes this branch deliberately: the insert leaves
     // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
     // index is the only other key it can collide on.
-    if (isUniqueViolation(err) && !sameTarget(constraintTarget(err), PERSONS_EMAIL)) {
+    if (isUniqueViolation(err) && !indexViolated(err, PERSONS_EMAIL)) {
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(err, email);
@@ -470,7 +517,10 @@ export async function setRole(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx.update(persons).set({ role: input.role }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ role: input.role })
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** Resets a person's PIN. Gated on `person.manage`; the new PIN is length-checked, then stored
@@ -487,7 +537,7 @@ export async function resetPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
-    .where(eq(persons.id, input.personId));
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** Grants (or replaces) a person's dashboard password. Gated on `person.manage`:
@@ -506,16 +556,17 @@ export async function setPassword(
   await tx
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
-    .where(eq(persons.id, input.personId));
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
  * `person.manage`, mirroring `setPassword`: `authorizeManager` runs FIRST, so a caller without the
  * permission is rejected before any write. The email is normalized then screened (malformed →
  * `person.email_invalid`) before the UPDATE; a collision with any other person's email surfaces as
- * `person.email_taken` — `persons_tenant_email_uq` is `UNIQUE (lower(email)) WHERE email IS NOT
- * NULL`, so one address across the whole database, case-insensitively. (The index NAME still reads
- * `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
+ * `person.email_taken` — `persons_tenant_email_uq` holds one address across the whole database,
+ * case-insensitively and whichever way its accents are encoded, among the people who have one.
+ * This path writes `email_folded` beside `email`, which is what the index reads. (The index NAME
+ * still reads `tenant`; renaming it is its own slice, `docs/backlog.md`.) */
 export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
@@ -528,8 +579,8 @@ export async function setEmail(
   try {
     await tx
       .update(persons)
-      .set({ email, emailVerifiedAt: null })
-      .where(eq(persons.id, input.personId));
+      .set({ email, emailFolded: foldForUniqueness(email), emailVerifiedAt: null })
+      .where(eq(persons.id, settleId(input.personId)));
   } catch (err) {
     asEmailTaken(err, email);
   }
@@ -546,7 +597,10 @@ export async function setPersonLocale(
   input: { personId: string; locale: string },
 ): Promise<void> {
   const locale = assertSupportedLocale(input.locale);
-  await tx.update(persons).set({ locale }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ locale })
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** Suspends a person: keeps the row (and its history) while refusing login. Gated on
@@ -559,9 +613,11 @@ export async function suspendPerson(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  if (authorizedBy === input.personId.toLowerCase())
-    throw new AppError("person.self_deactivation", {});
-  await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, input.personId));
+  if (authorizedBy === settleId(input.personId)) throw new AppError("person.self_deactivation", {});
+  await tx
+    .update(persons)
+    .set({ status: "suspended" })
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** Reactivates a suspended person, restoring login. Gated on `person.manage`. */
@@ -573,7 +629,10 @@ export async function reactivatePerson(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx.update(persons).set({ status: "active" }).where(eq(persons.id, input.personId));
+  await tx
+    .update(persons)
+    .set({ status: "active" })
+    .where(eq(persons.id, settleId(input.personId)));
 }
 
 /** One entry in the pre-login roster: the id the lock screen logs in with, and the name it shows. */

@@ -14,18 +14,14 @@ import { defineConfig } from "vitest/config";
 //   non-test source file under `packages/provisioning/src` and `apps/server/src` for a `from
 //   "<regime package>"` prefix, coverage-thresholds pins
 //   which package holds which coverage bar, column-vocabulary reads every `.ts` file under both
-//   roots for a column builder imported straight from `drizzle-orm/pg-core` — which only
-//   `packages/db/src/schema/columns.ts` may do, so that the SQLite switch replaces one file —
-//   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, which under those roots
-//   only `packages/db` may write now that a suite which would once have called it calls
-//   `useVenueDb` (`createPgliteDb` and `describeEachTarget` are separate doors, and task F1's),
+//   roots for a column builder imported straight from `drizzle-orm/sqlite-core` — which only
+//   `packages/db/src/schema/columns.ts` may do, so that the NEXT engine change replaces one file —
+//   venue-db-helper reads the same two roots for the NAME `usePgliteDb`, a retired helper no
+//   source file under either root may write again,
 //   brand-icons pins each app's `index.html` icon
 //   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
-//   enum-add-value-safety reads every migration set named by
-//   `packages/migrations/migrations.manifest.json` for a migration that NAMES an enum label a
-//   migration in the same pending batch ADDED — drizzle applies a set's pending migrations in one
-//   transaction, so PostgreSQL rejects that on an existing database while a fresh one passes — and
-//   journal-monotonic reads the same sets' `meta/_journal.json` for a `when` value at or below one
+//   and journal-monotonic reads every migration set named by
+//   `packages/migrations/migrations.manifest.json` for a `when` value at or below one
 //   already recorded, which drizzle's `max(created_at)` watermark skips with no error;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.

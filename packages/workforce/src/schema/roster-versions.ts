@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
-import { day, id, locations, table, tsString } from "@waitron/db";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  day,
+  enumCheck,
+  enumType,
+  id,
+  locations,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -15,22 +25,20 @@ import { persons } from "@waitron/identity";
  * GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado` rendering, if ever
  * needed, belongs to packages/workforce-es.
  *
- * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` precedent: the
- * three values are settled, and one declaration yields both the TypeScript union and the DB
- * constraint.
+ * A closed vocabulary rather than free text, matching @waitron/identity's
+ * `personStatus`/`personRole` precedent: the three values are settled, and one declaration yields
+ * both the TypeScript union and the constraint. It was a `pgEnum` until the storage switch; on this
+ * engine `enumType` is a text column and the named `check()` beside it is what refuses a fourth
+ * value.
  */
-export const rosterVersionStatus = pgEnum("roster_version_status", [
-  "draft",
-  "published",
-  "superseded",
-]);
+export const rosterVersionStatus = enumType(["draft", "published", "superseded"]);
 
 /**
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
  * legal record. Unlike `time_entries` (the immutable working-time record), a roster version is
- * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0001_workforce_baseline_sql.sql) — a draft is edited or discarded, a published version can be
- * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
+ * ordinary mutable data — a draft is edited or discarded, a published version can be re-stamped or
+ * removed, and nothing in the database refuses any of it; the grant that used to name the permitted
+ * writes went with PostgreSQL. No append-only trigger and no hash chain: no Spanish statute requires a
  * *schedule* to be tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED,
  * which `time_entries` satisfies alone (design 2026-07-22 §2.1 / plan
  * 2026-08-02-workforce-d2-scheduling §2.1). Freezing
@@ -44,7 +52,7 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
 export const rosterVersions = table(
   "roster_versions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** The workplace this schedule covers. */
     locationId: id("location_id").notNull(),
     /** First day of the scheduled period, inclusive. */
@@ -59,7 +67,7 @@ export const rosterVersions = table(
      * only writer. */
     publishedByPersonId: id("published_by_person_id"),
     status: rosterVersionStatus("status").notNull().default("draft"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
@@ -79,11 +87,12 @@ export const rosterVersions = table(
     index("roster_versions_location_idx").on(t.locationId),
     // At most one PUBLISHED version per (location, exact period). Partial (WHERE status =
     // 'published'), so drafts and superseded rows accumulate freely — only the live published row is
-    // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish: the
-    // FOR UPDATE lock it takes on the incumbent published row serialises the common case, but a
-    // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
-    // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
-    // translates to roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
+    // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish, and it
+    // always was the whole guarantee: the `for update of prior` that used to sit beside it only made
+    // the common case orderly and could not cover a first publish, which has no incumbent row to
+    // lock. That clause is gone (clocking.ts's `supersedePriorPublished`); THIS index still refuses
+    // any second published row for a period, which publishRoster translates to
+    // roster.period_already_published. Like `registro_sif_activo_uq` (fiscal-verifactu),
     // it binds across the whole table.
     uniqueIndex("roster_versions_published_period_uq")
       .on(t.locationId, t.periodStart, t.periodEnd)
@@ -91,12 +100,17 @@ export const rosterVersions = table(
     check("roster_versions_period_ck", sql`${t.periodEnd} >= ${t.periodStart}`),
     // draft ⟺ not yet published: `published_at` is set exactly when the version leaves draft, so
     // publishing that forgot to stamp, or a stamp on a still-draft row, is rejected. Mirrors the
-    // `(a is null) = (b is null)` shape workforce_chains_pointer_ck uses. Safe to reference the
-    // 'draft' literal here — roster_version_status is CREATE'd (not ALTER ... ADD VALUE'd) in the same
-    // migration, so the 55P04 hazard that kept time_entries off its 'correction' literal never arises.
+    // `(a is null) = (b is null)` shape workforce_chains_pointer_ck uses. Referencing the 'draft'
+    // literal here needs no justification any more: the hazard that kept `time_entries` off its own
+    // 'correction' literal was PostgreSQL's (an enum value could not be used in the transaction that
+    // added it, 55P04), and on this engine the status column is plain text with the `check` below.
     check(
       "roster_versions_publish_shape_ck",
       sql`(${t.status} = 'draft') = (${t.publishedAt} is null)`,
     ),
+    // The refusal the PostgreSQL enum TYPE performed, put back as a constraint: the SQLite column
+    // is plain text and refuses nothing on its own (see enumText in
+    // packages/db/src/schema/columns.ts).
+    check("roster_versions_status_ck", enumCheck(t.status)),
   ],
 );

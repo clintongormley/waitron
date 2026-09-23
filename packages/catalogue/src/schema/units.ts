@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, products, table } from "@waitron/db";
+import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
+import { count, id, json, label, newId, products, table } from "@waitron/db";
 
 export const units = table(
   "units",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     seedKey: label("seed_key"),
     name: json<Record<string, string>>("name").notNull(),
     abbreviation: json<Record<string, string>>("abbreviation").notNull(),
@@ -42,10 +42,11 @@ export const productUnits = table(
     unitId: id("unit_id").notNull(),
   },
   (t) => [
-    // A PRIMARY KEY on `product_id` alone, not a bare UNIQUE: one unit per product, and the key
-    // doubles as the table's REPLICA IDENTITY, without which Postgres refuses to UPDATE (the upsert
-    // that changes a product's unit) a table that is in a publication. Nothing in the tree publishes
-    // this table today; `units.pg.test.ts` creates a publication itself to exercise that path.
+    // A PRIMARY KEY on `product_id` alone, not a bare UNIQUE: one unit per product. It also used
+    // to double as the table's REPLICA IDENTITY, without which PostgreSQL refused to UPDATE (the
+    // upsert that changes a product's unit) a table that was in a publication. SQLite has neither
+    // publications nor a replica identity, so that second reason is gone, and so is the case that
+    // created a publication to reproduce it (`units.db.test.ts` names it among what it lost).
     primaryKey({ columns: [t.productId] }),
     foreignKey({
       columns: [t.productId],

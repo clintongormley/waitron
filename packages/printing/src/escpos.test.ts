@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FEED_BEFORE_CUT, esc } from "./escpos.js";
 
 // Byte-level assertions PIN each ESC/POS command's exact sequence (design §3d). The builder is a
-// pure, DB-free byte assembler, so these are ordinary unit tests — no PGlite, no container. Every
+// pure, DB-free byte assembler, so these are ordinary unit tests — no database at all. Every
 // constant is the canonical ESC/POS spelling, cited in escpos.ts; a hardware printer is verified
 // MANUALLY (design §5 / the deli-hardware fake-sink approach), so the guard here is that the bytes
 // are DETERMINISTIC and correct, not that a physical printer accepts them.

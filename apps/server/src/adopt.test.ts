@@ -1,21 +1,16 @@
-import { sql } from "drizzle-orm";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  locations,
   readDeploymentEnvironment,
   readDeploymentMode,
   readMirrorConfig,
-  type Database,
+  tenants,
 } from "@waitron/db";
-import {
-  cloneTemplate,
-  nextCloneName,
-  pickTemplate,
-  resolveSharedHandle,
-} from "@waitron/db/testing/lifecycle.js";
-import { type RealPostgres } from "@waitron/db/testing/postgres.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
@@ -24,9 +19,27 @@ import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 
-// Real Postgres, not PGlite: adopt stamps `deployment`, writes `mirror_config` and mints the
-// break-glass verifier on the OWNER connection while the read-back / foreign-tenant guard run as the
-// same owner — a two-role split PGlite's superuser-only connection cannot model. CLAUDE.md §4.
+// One migrated venue database for the whole file; `useVenueDb` empties the data after every case, so
+// each one starts from an unstamped `deployment` and an empty `tenants`.
+//
+// It reached this engine as a per-case clone of a shared PostgreSQL template, opened TWICE: an owner
+// connection for the stamp/`mirror_config`/verifier writes, and a second connection logged in as
+// `app_login` → `app_user` that the break-glass read-back was taken on. That second connection is
+// gone with the roles and the grants (`packages/db/src/testing/roles.ts`), and one file has one
+// writer here, so every case runs on the single handle.
+//
+// LOST with it, and covered by nothing: that the application role may READ the break-glass verifier
+// while holding none of the writes adopt makes — the split `adopt.ts:40` still describes. The round
+// trip itself survives below and is not vacuous: with `+ "x"` appended to the secret the assertion
+// reads `expected false to be true`, so the stored scrypt verifier is genuinely being checked. It is
+// only the "on a connection that is NOT the owner" half that no longer has a subject.
+//
+// Per-case independence now rests on `useVenueDb`'s default `resetPerTest`, not on a fresh clone.
+// Measured with `resetPerTest: false` as the control: five cases go red. Three read
+// `expected 'preproduction' to be null`, because the first case's stamp survives into them; the
+// same-tenant case dies earlier still, on `UNIQUE constraint failed: tenants.id` from the previous
+// case's seed; and the module-overrides case throws `provisioning.foreign_tenant`, on the foreign
+// tenant a case three earlier left behind.
 
 // The four ids the mirror mirrors — a hand-built `AdoptResult` (adopt inserts no rows any more, so no
 // venue provisioning is needed here). A fixed set is enough: adopt never reads these back from the DB.
@@ -73,30 +86,22 @@ const CREDENTIAL: AdoptCredential = {
 const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;
 const ADVERTISED_ORIGIN = "https://standby.deli.test";
 
-let mirror: RealPostgres;
-let mirrorAdmin: Database; // owner connection to the fresh mirror clone
-let mirrorApp: Database; // app_login → app_user: the break-glass verify path
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
+
+// Still per-case: `pending-adoption.json` is the one thing adopt writes outside the database, and a
+// case reads it back by path.
 let stateDir: string;
 
 beforeEach(async () => {
-  const handle = resolveSharedHandle(undefined);
-  mirror = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-  mirrorAdmin = await mirror.connect();
-  mirrorApp = await mirror.connectAs("app_login", "app_pw");
   stateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-state-"));
 });
 
 afterEach(async () => {
-  const app = mirrorApp;
-  const admin = mirrorAdmin;
-  const clone = mirror;
   const dir = stateDir;
-  mirrorApp = undefined as unknown as Database;
-  mirrorAdmin = undefined as unknown as Database;
-  mirror = undefined as unknown as RealPostgres;
-  if (app !== undefined) await app.close();
-  if (admin !== undefined) await admin.close();
-  if (clone !== undefined) await clone.stop();
+  stateDir = undefined as unknown as string;
   if (dir !== undefined) await rm(dir, { recursive: true, force: true });
 });
 
@@ -114,20 +119,18 @@ function deps(
   } = {},
 ) {
   return {
-    ownerDb: mirrorAdmin,
+    ownerDb: suite.db,
     advertisedOrigin: ADVERTISED_ORIGIN,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
     stateDir,
-    databaseUrl: "postgres://app@mirror/db",
-    migrationsDatabaseUrl: "postgres://owner@mirror/db",
     database: "mirror_db",
   };
 }
 
-describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
+describe("adoptFromPrimary (mirror adopt)", () => {
   it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];
@@ -150,9 +153,9 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
     );
 
     // The mirror is stamped + flipped, mirror_config written with the PRIMARY's node as the origin.
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBe("preproduction");
-    expect(await readDeploymentMode(mirrorAdmin)).toBe("mirror");
-    const cfg = (await readMirrorConfig(mirrorAdmin))!;
+    expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
+    expect(await readDeploymentMode(suite.db)).toBe("mirror");
+    const cfg = (await readMirrorConfig(suite.db))!;
     expect(cfg.relayUrl).toBe("https://relay.test:9000/");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 
@@ -173,7 +176,7 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
     expect(persistedModules).toHaveLength(1);
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(await verifyBreakGlass(mirrorApp, result.breakGlassSecret)).toBe(true);
+    expect(await verifyBreakGlass(suite.db, result.breakGlassSecret)).toBe(true);
   });
 
   it("writes the pending-adoption latch (dormant identity for the boot finish worker)", async () => {
@@ -237,31 +240,35 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
     });
     // Nothing ran: nothing stamped, no trading persisted.
     expect(tradingPersisted).toBe(false);
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
   it("refuses a FOREIGN tenant before any mutation (§5, one tenant per database)", async () => {
     // Seed a DIFFERENT tenant into the mirror, then adopt a bundle for our tenant identity: refused.
-    await mirrorAdmin.execute(
-      sql`insert into tenants (id, country, tax_id, legal_name)
-          values (1, 'ES', '99999999R', 'Incumbent SL')`,
-    );
+    // Through the table definition, like every other fixture row in this package: a raw insert
+    // reaches no `$defaultFn` generator (`tenants.created_at` is one), and the sibling location
+    // insert below carried `array[...]`, which this engine refuses at prepare.
+    await suite.db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
     const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
     // Refused before any mutation: the database carries no deployment stamp.
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
   it("refuses a same-tenant venue before any mutation", async () => {
-    await mirrorAdmin.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name)
-      values (1, 'ES', '80000001K', 'Incumbent SL')`);
-    await mirrorAdmin.execute(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Existing venue', array['en-GB'], 'Hospitality')`);
+    await suite.db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
+    await suite.db.insert(locations).values({
+      name: "Existing venue",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
     const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
   it("refuses (fail-closed) a bundle naming an unknown module, before any mutation", async () => {
@@ -273,7 +280,7 @@ describe("adoptFromPrimary (mirror adopt, real Postgres)", () => {
     ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("module.config_unknown");
     // Validated up-front, before any mutation.
-    expect(await readDeploymentEnvironment(mirrorAdmin)).toBeNull();
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
   it("bootstraps the mirror's module set from the bundle overrides", async () => {

@@ -1,10 +1,20 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, type Database, withTransaction } from "@waitron/db";
+import {
+  asAppUser,
+  CORE_MIGRATIONS,
+  locations,
+  printAgents,
+  printJobs,
+  printers,
+  type Database,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import {
+  cardReaders,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   PAYMENTS_MIGRATIONS,
@@ -111,11 +121,20 @@ function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
+// Every seed below inserts through its table definition rather than as raw SQL, the change
+// `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
+// this engine: each table's `id` (and `print_jobs.created_at`, `print_agents.enrolled_at`) is a
+// `$defaultFn` generator a raw insert never reaches while the column is NOT NULL, and
+// `invoice_locales` is a JSON array in a text column, which refused the `array[...]` constructor
+// with `near "['es-ES']": syntax error`. `print_jobs.payload` is a blob here, so the one-byte
+// payload is bound as bytes instead of through PostgreSQL's `decode('01', 'hex')`
+// (`no such function: decode`).
 async function seedLocation(): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Counter', array['es-ES'], 'Retail') returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .returning({ id: locations.id });
+  return row!.id;
 }
 
 async function seedPrinter(t: {
@@ -123,11 +142,17 @@ async function seedPrinter(t: {
   name: string;
   active?: boolean;
 }): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into printers (location_id, name, transport, host, active)
-    values (${t.locationId}, ${t.name}, 'network_tcp', '10.0.0.1', ${t.active ?? true})
-    returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(printers)
+    .values({
+      locationId: t.locationId,
+      name: t.name,
+      transport: "network_tcp",
+      host: "10.0.0.1",
+      active: t.active ?? true,
+    })
+    .returning({ id: printers.id });
+  return row!.id;
 }
 
 async function seedAgent(t: {
@@ -136,11 +161,17 @@ async function seedAgent(t: {
   lastSeenAt: string | null;
   active?: boolean;
 }): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into print_agents (location_id, name, token_hash, active, last_seen_at)
-    values (${t.locationId}, ${t.name}, 'hash', ${t.active ?? true}, ${t.lastSeenAt})
-    returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(printAgents)
+    .values({
+      locationId: t.locationId,
+      name: t.name,
+      tokenHash: "hash",
+      active: t.active ?? true,
+      lastSeenAt: t.lastSeenAt,
+    })
+    .returning({ id: printAgents.id });
+  return row!.id;
 }
 
 async function seedJob(t: {
@@ -151,10 +182,15 @@ async function seedJob(t: {
   status?: "queued" | "printing" | "done" | "failed";
   attempts?: number;
 }): Promise<void> {
-  await suite.db.execute(sql`
-    insert into print_jobs (location_id, printer_id, payload, kind, status, attempts, created_at)
-    values (${t.locationId}, ${t.printerId}, decode('01', 'hex'),
-            ${t.kind ?? "document"}, ${t.status ?? "queued"}, ${t.attempts ?? 0}, ${t.createdAt})`);
+  await suite.db.insert(printJobs).values({
+    locationId: t.locationId,
+    printerId: t.printerId,
+    payload: Uint8Array.from([0x01]),
+    kind: t.kind ?? "document",
+    status: t.status ?? "queued",
+    attempts: t.attempts ?? 0,
+    createdAt: t.createdAt,
+  });
 }
 
 /** Run the source as the app role in one transaction, exactly as the registry does. */
@@ -304,11 +340,20 @@ async function seedReader(t: {
   name: string;
   active?: boolean;
 }): Promise<string> {
-  const { rows } = await batterySuite.db.execute<{ id: string }>(sql`
-    insert into card_readers (provider, provider_ref, name, active)
-    values (${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
-    returning id`);
-  return rows[0]!.id;
+  // Through the table definition, like the printing seeds above. `card_readers.id` and
+  // `created_at` are `$defaultFn` generators, and `active` is an integer column here, so a raw
+  // template binding a JavaScript boolean was refused outright with
+  // `TypeError: Provided value cannot be bound to SQLite parameter 4`.
+  const [row] = await batterySuite.db
+    .insert(cardReaders)
+    .values({
+      provider: t.provider ?? "stub",
+      providerRef: t.providerRef,
+      name: t.name,
+      active: t.active ?? true,
+    })
+    .returning({ id: cardReaders.id });
+  return row!.id;
 }
 
 /** A card-provider seat whose only live method is `readers.status`: it returns the battery reading a

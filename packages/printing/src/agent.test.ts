@@ -1,41 +1,58 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, locations, printAgents, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
 import { authenticateAgent } from "./agent.js";
 import type { PrintAgentConfig } from "./agent.js";
 import "./errors.js";
 
-// Real Postgres (a `core` template clone), not PGlite: auth exercises the REAL deployment role and its
-// exact grants — every call runs through `withTransaction` + `asAppUser`, the shape the Task-6 route uses.
-// (Agent enrolment is join-and-accept, in apps/server/src/join-requests.ts; this suite covers only the
-// bearer-token auth core that stays here.)
+// One venue file. The suite asked for real PostgreSQL to exercise the deployment role's grants,
+// which this engine has neither of: one process opens one file and `asAppUser` does nothing
+// (`packages/db/src/testing/roles.ts`). What is left is the bearer-token auth core itself — the
+// scrypt check, the revocation filter and the last-seen gate — none of which turns on who
+// connected. (Agent enrolment is join-and-accept, in apps/server/src/join-requests.ts.)
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "core" });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /**
- * A fresh tenant + venue, seeded on the superuser admin connection. Each test gets its OWN tenant
- * so agent/code counts are order-independent across the shared clone.
+ * A fresh tenant + venue. Each test gets its OWN tenant so agent/code counts are order-independent.
+ *
+ * Written through the table definitions rather than raw SQL: `locations.id` and `print_agents.id`
+ * are supplied by `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
+ * `NOT NULL constraint failed`.
  */
 async function setup(): Promise<PrintAgentConfig> {
-  const admin = suite.admin;
-  await seedTenant(admin);
-  const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array[${LOCALE}], 'Sale on premises') returning id`);
-  return { locationId: loc.rows[0]!.id };
+  await seedTenant(suite.db);
+  const [row] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Bar",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Sale on premises",
+    })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
-/** Run `fn` as the real deployment role: one transaction that first switches to
- * `app_user`, exactly the shape the Task-6 route wraps each core call in. */
+/** One transaction, the shape the Task-6 route wraps each core call in. */
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
+}
+
+/** This agent's recorded sighting, read through the table so the column's own mapping runs. */
+async function lastSeenAt(agentId: string): Promise<string | null> {
+  const [row] = await suite.db
+    .select({ lastSeenAt: printAgents.lastSeenAt })
+    .from(printAgents)
+    .where(eq(printAgents.id, agentId));
+  return row!.lastSeenAt;
 }
 
 /** The AppError code a thrown rejection carries, or undefined if `fn` resolved. */
@@ -54,56 +71,84 @@ describe("authenticateAgent", () => {
   async function enrolled(): Promise<{ cfg: PrintAgentConfig; agentId: string; token: string }> {
     const cfg = await setup();
     const secret = randomBytes(32).toString("base64url");
-    const [{ id }] = (
-      await suite.admin.execute<{ id: string }>(sql`
-        insert into print_agents (location_id, name, token_hash, active) values (${cfg.locationId}, 'Auth agent', ${hashSecret(secret)}, true)
-        returning id`)
-    ).rows;
+    const [row] = await suite.db
+      .insert(printAgents)
+      .values({
+        locationId: cfg.locationId,
+        name: "Auth agent",
+        tokenHash: hashSecret(secret),
+        active: true,
+      })
+      .returning({ id: printAgents.id });
+    const id = row!.id;
     return { cfg, agentId: id, token: `${id}.${secret}` };
   }
 
   it("a valid token resolves to its agentId and stamps last_seen_at", async () => {
     const { agentId, token } = await enrolled();
-    const before = await suite.admin.execute<{ last_seen_at: string | null }>(
-      sql`select last_seen_at from print_agents where id = ${agentId}`,
-    );
-    expect(before.rows[0]!.last_seen_at).toBeNull(); // NULL until first seen
+    expect(await lastSeenAt(agentId)).toBeNull(); // NULL until first seen
 
-    const result = await asApp(suite.admin, (tx) => authenticateAgent(tx, token));
+    const result = await asApp(suite.db, (tx) => authenticateAgent(tx, token));
     expect(result.agentId).toBe(agentId);
 
-    const after = await suite.admin.execute<{ last_seen_at: string | null }>(
-      sql`select last_seen_at from print_agents where id = ${agentId}`,
-    );
-    expect(after.rows[0]!.last_seen_at).not.toBeNull(); // the sighting was recorded
+    expect(await lastSeenAt(agentId)).not.toBeNull(); // the sighting was recorded
+  });
+
+  // The sighting gate's cutoff is now a bound ISO-8601 string rather than `now() - interval
+  // '1 minute'`, so both directions of the comparison are pinned: the write it must skip and the
+  // write it must still make. Time is moved by writing `last_seen_at`, not by faking the clock —
+  // the value under test is the one the gate reads.
+  it("skips the sighting write inside the interval and makes it once the sighting is older", async () => {
+    const { agentId, token } = await enrolled();
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+    // INSIDE the interval — a fresh sighting is left exactly as it was.
+    const fresh = ago(1_000);
+    await suite.db
+      .update(printAgents)
+      .set({ lastSeenAt: fresh })
+      .where(eq(printAgents.id, agentId));
+    await asApp(suite.db, (tx) => authenticateAgent(tx, token));
+    expect(await lastSeenAt(agentId)).toBe(fresh);
+
+    // OUTSIDE it — the stale sighting is replaced.
+    const stale = ago(90_000);
+    await suite.db
+      .update(printAgents)
+      .set({ lastSeenAt: stale })
+      .where(eq(printAgents.id, agentId));
+    await asApp(suite.db, (tx) => authenticateAgent(tx, token));
+    const written = await lastSeenAt(agentId);
+    expect(written).not.toBe(stale);
+    expect(Date.parse(written!)).toBeGreaterThan(Date.parse(stale));
   });
 
   it("a wrong token (tampered secret) → agent.unauthorized", async () => {
     const { agentId } = await enrolled();
     const forged = `${agentId}.${randomBytes(32).toString("base64url")}`;
-    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, forged)))).toBe(
+    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, forged)))).toBe(
       "agent.unauthorized",
     );
   });
 
   it("a revoked (active=false) agent → agent.unauthorized", async () => {
     const { agentId, token } = await enrolled();
-    await suite.admin.execute(sql`update print_agents set active = false where id = ${agentId}`);
-    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, token)))).toBe(
+    await suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
+    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, token)))).toBe(
       "agent.unauthorized",
     );
   });
 
   it("an unknown agent id → agent.unauthorized", async () => {
     const token = `${randomUUID()}.${randomBytes(32).toString("base64url")}`;
-    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, token)))).toBe(
+    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, token)))).toBe(
       "agent.unauthorized",
     );
   });
 
   it("a malformed token — no separator, trailing dot, or non-uuid selector — → agent.unauthorized", async () => {
     for (const bad of ["nodothere", "abc.", "not-a-uuid.somesecret"]) {
-      expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, bad)))).toBe(
+      expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, bad)))).toBe(
         "agent.unauthorized",
       );
     }

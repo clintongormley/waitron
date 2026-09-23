@@ -22,11 +22,8 @@ import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
 import { seedVenue } from "../test/fixtures.js";
 
-/**
- * The attachment walk is authoring configuration read back, so PGlite is the lighter target that
- * still runs the real migrations (CLAUDE.md §4). Nothing here turns on who CONNECTED or on two
- * writers overlapping, which are the two things that would need a real backend.
- */
+/** The attachment walk is authoring configuration read back, against one SQLite file with the real
+ * migrations applied. */
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 

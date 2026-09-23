@@ -14,10 +14,13 @@ export async function computeCloseCounts(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<CloseCounts> {
+  // `filter (where …)` survives the engine change — SQLite has had it since 3.30 and this build is
+  // 3.53.4 (`select sqlite_version()`, node 26.7.0). What went is the `::int`: `count(*)` already
+  // answers an integer here, measured on the same build.
   const issued = await tx.execute<{ sales: number; corrections: number }>(sql`
     select
-      count(*) filter (where s.corrects_sale_id is null)::int as sales,
-      count(*) filter (where s.corrects_sale_id is not null)::int as corrections
+      count(*) filter (where s.corrects_sale_id is null) as sales,
+      count(*) filter (where s.corrects_sale_id is not null) as corrections
     from sales s
     where ${businessDayClause(sql`s.issued_at`, input)}
       ${nodeScopeClause(input.nodeId)}
@@ -25,7 +28,7 @@ export async function computeCloseCounts(
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`
-    select count(*)::int as voids
+    select count(*) as voids
     from sale_voids sv
     join sales s on s.id = sv.sale_id
     where ${businessDayClause(sql`sv.voided_at`, input)}

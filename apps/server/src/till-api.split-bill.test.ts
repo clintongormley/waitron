@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToLocation,
@@ -31,8 +31,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { joinTable, openTab } from "./working-order.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting, item
-// partition, quantity conservation, the FOR UPDATE lock ordering, fiscal filing multiplicity) is proven
+// PGlite, not real Postgres: `splitOffCheck`/`unjoinTable`'s own WRITE behaviour (check minting,
+// item partition, quantity conservation, the concurrency properties the venue file's write queue now
+// carries, fiscal filing multiplicity) is proven
 // in the TS-5 verb + fiscal suites (Tasks 1-5); this suite proves only the HTTP surface — the session
 // guard, the malformed-`:id`/`tableId` screens, the happy-path result shapes, and the STATUS mapping for
 // the new `table.not_joined` code — the same shape `till-api.transfer.test.ts`/`till-api.move-merge.test.ts`
@@ -51,21 +52,30 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
-    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
     // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
     // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
@@ -80,7 +90,7 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+      await assignCatalogueToLocation(tx, loc!.id, cat.id);
       return p;
     });
     cafeId = product.id;
@@ -250,16 +260,16 @@ describe("POST /api/tabs/:id/split", () => {
     // `working_order_lines.quantity` is a count of whole THOUSANDTHS, read as text so the assertion
     // is about the stored number and not about which engine renders an eight-byte integer as what.
     const check = await suite.db.execute<{ status: string; quantity: string }>(sql`
-      select wo.status, wol.quantity::text as quantity
+      select wo.status, cast(wol.quantity as text) as quantity
       from working_orders wo join working_order_lines wol on wol.working_order_id = wo.id
       where wo.id = ${body.checkId}`);
     expect(check.rows).toEqual([{ status: "open", quantity: "1000" }]);
     const anchored = await suite.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from dining_tables where tab_id = ${body.checkId}`,
+      sql`select cast(count(*) as int) as count from dining_tables where tab_id = ${body.checkId}`,
     );
     expect(anchored.rows[0]!.count).toBe(0);
     const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
     // 3 − 1 = 2 units remain on the origin tab, stored as 2000 thousandths
     expect(origin.rows).toEqual([{ quantity: "2000" }]);
@@ -424,11 +434,11 @@ describe("POST /api/tabs/:id/unjoin", () => {
     );
     expect(anchored.rows[0]!.tab_id).toBe(body.tabId);
     const moved = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${body.tabId}`,
+      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${body.tabId}`,
     );
     expect(moved.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
     const origin = await suite.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from working_order_lines where working_order_id = ${tabA}`,
+      sql`select cast(count(*) as int) as count from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(origin.rows[0]!.count).toBe(0);
   });
@@ -449,7 +459,7 @@ describe("POST /api/tabs/:id/unjoin", () => {
     );
     expect(freed.rows[0]!.tab_id).toBeNull();
     const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(origin.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
   });

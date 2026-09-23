@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
+import { eq } from "drizzle-orm";
+import { withTransaction, CORE_MIGRATIONS, catalogues, products } from "@waitron/db";
+import { CATALOGUE_MIGRATIONS, productVariants, writeContentLanguages } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -15,13 +16,51 @@ import {
   listImageTranslationGaps,
   listImages,
 } from "./images.js";
+import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
-// PGlite exercises content persistence; the real-Postgres suite covers grants and races.
+// One real migrated SQLite venue database, carrying the core, catalogue and media sets. There is no
+// second target, and no grant or race coverage anywhere: the suite that held those was
+// `images.pg.test.ts`, deleted with the PostgreSQL harness — `image-data.test.ts`'s header lists
+// exactly what went with it and which parts have counterparts.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+
+// WHAT THE STORAGE SWITCH TOOK OUT OF THIS FILE.
+//
+// ONE CASE IS GONE. "maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages on
+// simple tokens" held that `media_text_config(language)` returned a real text-search configuration
+// for each of thirty languages, that the set it could return was exactly PostgreSQL's bundled list,
+// and that `no`, `nb` and `nn` all resolved to the same one. It asked `pg_ts_config` — a PostgreSQL
+// catalogue — about a stored SQL function, and neither survives: `grep -rn "media_text_config"
+// packages/media` finds no definition, and `packages/media/drizzle/*.sql` creates no function at
+// all. Nothing holds the property now, and nothing needs to: there is no language-to-dictionary
+// mapping left to get wrong, because there are no dictionaries. Recover the case with
+// `git show origin/main:packages/media/src/images.test.ts` if the engine ever regains them.
+//
+// STEMMING IS GONE, AND WITH IT THREE MORE CASES. The "matches 'ca'/'eu' word forms" pair is
+// deleted outright, and two assertions are deleted from the search case below (the `bread` query
+// expecting the alt-text row "Breads on a plate" to rank second, and the `pera` query expecting the
+// Spanish name "Peras maduras"). PostgreSQL ran each translation through the snowball dictionary for
+// its own language — `media_text_config` mapped thirty language codes, Basque and Catalan among
+// them — so a singular found a plural in any of them. `listImages` now matches whole lowercased
+// tokens in JavaScript (`packages/media/src/images.ts`, `searchTokens`), so a plural in the text is
+// found only by that plural. The `ca`/`eu` pair could not have been narrowed in any case: its
+// control was `to_tsvector`/`plainto_tsquery`, PostgreSQL statements with no SQLite spelling.
+//
+// WHAT WOULD RECOVER IT, so the next reader does not re-derive it: this SQLite does ship one
+// stemmer. `select sqlite_compileoption_used('ENABLE_FTS5')` returns 1 on the bundled SQLite
+// 3.53.4 under node v26.7.0, and an FTS5 table tokenized `porter unicode61` stems `Breads`→`bread`,
+// `Peras`→`pera` and `formatges`→`formatge` — measured 2026-09-22, reading the stored terms back
+// through `fts5vocab`. It is the ENGLISH porter algorithm, so the Spanish and Catalan hits are its
+// `-s`/`-es` rule landing by luck, not per-language stemming; the Basque `etxeak`→`etxe` of the
+// deleted `eu` case it does NOT make (measured the same way: `etxeak` stores as `etxeak`, the query
+// `etxe` stems to `etx`, and the match is false). Taking it would mean an FTS5 virtual table and
+// triggers to keep it in step, which is a migration change and a product decision about search
+// quality, not a conversion. Recover any deleted case with
+// `git show origin/main:packages/media/src/images.test.ts`.
 
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
@@ -128,19 +167,30 @@ describe("metadata, labels and references", () => {
         { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
-      const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (name) values ('Lunch') returning id`,
-      );
-      const inserted = await tx.execute<{
-        id: string;
-      }>(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image, active) values (${menu.rows[0]!.id}, 'Bread', 'each', 200, 'general', ${image.filename}, false) returning id`,
-      );
+      // Through the table definitions, not raw SQL: `id`, `created_at` and `updated_at` are
+      // JavaScript generators now (`$defaultFn`), never a column DEFAULT, so a raw insert that
+      // names neither is refused with `NOT NULL constraint failed`.
+      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+        id: catalogues.id,
+      });
+      // `unit_price` counts whole cents, so 200 is the 2.00 this fixture means.
+      const [inserted] = await tx
+        .insert(products)
+        .values({
+          catalogueId: menu!.id,
+          name: "Bread",
+          pricingUnit: "each",
+          unitPrice: 200,
+          vatClass: "general",
+          image: image.filename,
+          active: false,
+        })
+        .returning({ id: products.id });
       const uses = [
         {
           kind: "product",
-          id: inserted.rows[0]!.id,
-          catalogueId: menu.rows[0]!.id,
+          id: inserted!.id,
+          catalogueId: menu!.id,
           name: "Bread",
           active: false,
         },
@@ -161,25 +211,31 @@ describe("metadata, labels and references", () => {
         { bytes: photo, names: { en: "Large loaf" }, altText: { en: "Loaf" }, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
-      const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (name) values ('Lunch') returning id`,
-      );
+      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+        id: catalogues.id,
+      });
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
-      const product = await tx.execute<{ id: string }>(
-        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${menu.rows[0]!.id}, 'Bread', 'each', 200, 'general') returning id`,
-      );
-      const variant = await tx.execute<{ id: string }>(
-        sql`insert into product_variants (product_id, name, unit_price, image)
-          values (${product.rows[0]!.id}, 'Large', 300, ${image.filename}) returning id`,
-      );
+      const [product] = await tx
+        .insert(products)
+        .values({
+          catalogueId: menu!.id,
+          name: "Bread",
+          pricingUnit: "each",
+          unitPrice: 200,
+          vatClass: "general",
+        })
+        .returning({ id: products.id });
+      const [variant] = await tx
+        .insert(productVariants)
+        .values({ productId: product!.id, name: "Large", unitPrice: 300, image: image.filename })
+        .returning({ id: productVariants.id });
       const uses = [
         {
           kind: "variant",
-          id: variant.rows[0]!.id,
-          productId: product.rows[0]!.id,
-          catalogueId: menu.rows[0]!.id,
+          id: variant!.id,
+          productId: product!.id,
+          catalogueId: menu!.id,
           // The product and variant staff names, joined by `staffPresentationName`.
           name: "Bread \u00b7 Large",
           active: true,
@@ -223,7 +279,13 @@ describe("metadata, labels and references", () => {
 });
 
 describe("search and sorting", () => {
-  it("ranks name words above alt words, stems translations, searches labels and combines label filters", async () => {
+  // Two assertions deleted here with the stemmer (see the file header): `query: "bread"` expected
+  // `[name.id, alt.id]`, the alt-text row matching through "Breads"; and `query: "pera"` expected
+  // the Spanish name "Peras maduras". The name-above-alt RANKING those two rode on is still pinned,
+  // by "keeps a name match above repeated alt-text matches when sorting by relevance" below, which
+  // needs no stemmer. `alt` and `spanish` stay seeded as negative controls: they are the rows the
+  // label and phrase queries must leave out.
+  it("searches labels, matches a quoted phrase and combines a label filter", async () => {
     await withTransaction(suite.db, async (tx) => {
       const add = async (
         marker: number,
@@ -238,19 +300,13 @@ describe("search and sorting", () => {
             { fallbackLanguage: "en", maxUploadBytes: 100 },
           )
         ).image;
-      const alt = await add(1, { en: "Bakery" }, { en: "Breads on a plate" }, ["Food"]);
+      await add(1, { en: "Bakery" }, { en: "Breads on a plate" }, ["Food"]);
       const name = await add(2, { en: "Bread", es: "Pan recién horneado" }, { en: "A loaf" }, [
         "Food",
         "Summer menu",
       ]);
       const label = await add(3, { en: "Cake" }, { en: "A slice" }, ["Sweet", "Summer menu"]);
-      const spanish = await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, [
-        "Fruit",
-      ]);
-      expect((await listImages(tx, { query: "bread" })).images.map((row) => row.id)).toEqual([
-        name.id,
-        alt.id,
-      ]);
+      await add(4, { en: "Pears", es: "Peras maduras" }, { en: "Fruit" }, ["Fruit"]);
       expect(
         (await listImages(tx, { query: "bread", label: " SUMMER MENU " })).images.map(
           (row) => row.id,
@@ -261,9 +317,6 @@ describe("search and sorting", () => {
           (row) => row.id,
         ),
       ).toEqual([name.id, label.id]);
-      expect((await listImages(tx, { query: "pera" })).images.map((row) => row.id)).toEqual([
-        spanish.id,
-      ]);
       expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
       expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
@@ -291,10 +344,16 @@ describe("search and sorting", () => {
             )
           ).image,
         );
+      // Through the table, so the `ts` column's own mapping writes the ISO string. The raw
+      // statement this replaces bound a `Date`, which this driver cannot bind: measured
+      // 2026-09-22, inside the transaction it changed nothing and raised nothing, leaving two of
+      // the three images sharing an upload millisecond — so the date ordering below was decided by
+      // the uuid tiebreak rather than by the dates this test sets.
       for (let n = 0; n < 3; n++)
-        await tx.execute(
-          sql`update media_images set created_at = ${new Date(2026, 0, n + 1)} where id = ${added[n]!.id}`,
-        );
+        await tx
+          .update(mediaImages)
+          .set({ createdAt: new Date(2026, 0, n + 1) })
+          .where(eq(mediaImages.id, added[n]!.id));
       const ids = (result: Awaited<ReturnType<typeof listImages>>) =>
         result.images.map((image) => image.id);
       expect(ids(await listImages(tx))).toEqual([added[2]!.id, added[1]!.id, added[0]!.id]);
@@ -413,6 +472,47 @@ it("keeps a name match above repeated alt-text matches when sorting by relevance
   });
 });
 
+it("sorts accented names alphabetically in both directions across pages", async () => {
+  // Lifted from `name-sort.pg.test.ts`, which was the only place asserting that `Éclair` sorts
+  // between `Bread` and `Zest` rather than after `Zest`. That file needed a PostgreSQL container
+  // and was deleted with the harness on 2026-09-22; recover it with
+  // `git show origin/main:packages/media/src/name-sort.pg.test.ts`. The
+  // `collate pg_catalog."und-x-icu"` that produced it has no SQLite counterpart: the engine ships
+  // `BINARY`, `NOCASE` and `RTRIM`, and under a code-point comparison the lowercased `éclair`
+  // (U+00E9) sorts after `zest`. `Intl.Collator` is the ICU that `und` named, which is why the
+  // ordering moved into JavaScript rather than into the query.
+  await withTransaction(suite.db, async (tx) => {
+    for (const [index, name] of ["Zest", "Éclair", "Apple", "Bread"].entries()) {
+      await uploadImage(
+        tx,
+        {
+          bytes: new Uint8Array([...photo, 100 + index]),
+          names: { en: name },
+          altText: { en: name },
+          labels: ["Food"],
+        },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+    }
+    for (const direction of ["asc", "desc"] as const) {
+      const query = {
+        sort: "name" as const,
+        direction,
+        limit: 2,
+        label: "Food",
+        fallbackLanguage: "en",
+      };
+      const first = await listImages(tx, query);
+      const second = await listImages(tx, { ...query, offset: 2 });
+      expect(first.total).toBe(4);
+      const expected = ["Apple", "Bread", "Éclair", "Zest"];
+      expect([...first.images, ...second.images].map((image) => image.names.en)).toEqual(
+        direction === "asc" ? expected : expected.reverse(),
+      );
+    }
+  });
+});
+
 it("sorts by the default when the requested language was disabled while retaining its translations", async () => {
   await withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
@@ -442,52 +542,6 @@ it("sorts by the default when the requested language was disabled while retainin
   });
 });
 
-it.each([
-  { language: "ca", plural: "formatges", singular: "formatge" },
-  { language: "eu", plural: "etxeak", singular: "etxe" },
-])(
-  "matches $language word forms rather than requiring an exact token",
-  async ({ language, plural, singular }) => {
-    await withTransaction(suite.db, async (tx) => {
-      const { image } = await uploadImage(
-        tx,
-        {
-          bytes: photo,
-          names: { en: "Photograph", [language]: plural },
-          altText: { en: "A photograph" },
-          labels: [],
-        },
-        { maxUploadBytes: 100 },
-      );
-      const exactToken = await tx.execute<{ matched: boolean }>(
-        sql`select to_tsvector('pg_catalog.simple', ${plural}) @@ plainto_tsquery('pg_catalog.simple', ${singular}) as matched`,
-      );
-      expect(exactToken.rows).toEqual([{ matched: false }]);
-      expect((await listImages(tx, { query: singular })).images.map((row) => row.id)).toEqual([
-        image.id,
-      ]);
-    });
-  },
-);
-
-it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages on simple tokens", async () => {
-  const mapped = await suite.db.execute<{ name: string }>(sql`
-    select distinct cfgname::text as name from pg_ts_config
-    where oid in (select public.media_text_config(language) from unnest(array[
-      'ar','hy','eu','ca','da','nl','en','et','fi','fr','de','el','hi','hu','id','ga','it',
-      'lt','ne','no','pt','ro','ru','sr','es','sv','ta','tr','yi','ja'
-    ]) language) order by name
-  `);
-  const bundled = await suite.db.execute<{ name: string }>(
-    sql`select cfgname::text as name from pg_ts_config where cfgnamespace = 'pg_catalog'::regnamespace order by name`,
-  );
-  expect(mapped.rows).toEqual(bundled.rows);
-  const norwegian = await suite.db.execute<{ same: boolean }>(
-    sql`select public.media_text_config('no') = public.media_text_config('nb') and public.media_text_config('no') = public.media_text_config('nn') as same`,
-  );
-  expect(norwegian.rows).toEqual([{ same: true }]);
-});
-
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");
   await seedTenant(suite.db);
@@ -501,18 +555,25 @@ it("protects an image used only by a category and releases it after clearing the
       name: { en: "Food" },
       image: image.filename,
     });
-    const menu = await tx.execute<{ id: string }>(sql`
-      insert into catalogues (name) values ('Lunch') returning id
-    `);
-    const product = await tx.execute<{ id: string }>(sql`
-      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image) values (${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
-      returning id
-    `);
+    const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+      id: catalogues.id,
+    });
+    const [product] = await tx
+      .insert(products)
+      .values({
+        catalogueId: menu!.id,
+        name: "Bread",
+        pricingUnit: "each",
+        unitPrice: 2,
+        vatClass: "general",
+        image: image.filename,
+      })
+      .returning({ id: products.id });
     const uses = [
       {
         kind: "product" as const,
-        id: product.rows[0]!.id,
-        catalogueId: menu.rows[0]!.id,
+        id: product!.id,
+        catalogueId: menu!.id,
         name: "Bread",
         active: true,
       },
@@ -523,7 +584,7 @@ it("protects an image used only by a category and releases it after clearing the
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
     await updateCategory(tx, category.id, { image: null });
-    await tx.execute(sql`update products set image = null where id = ${product.rows[0]!.id}`);
+    await tx.update(products).set({ image: null }).where(eq(products.id, product!.id));
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
 });

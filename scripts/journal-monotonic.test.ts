@@ -5,19 +5,40 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Every migration set's journal must be strictly increasing in `when`. Drizzle decides what to apply
- * from `max(created_at)` alone, never from a journal index
- * (drizzle-orm@0.45.2/pg-core/dialect.js:56-62), so an entry whose `when` sits at or below one a
- * database has already recorded is a migration that will never run — silently, with no error.
+ * from `max(created_at)` alone, never from a journal index, so an entry whose `when` sits at or below
+ * one a database has already recorded is a migration that will never run — silently, with no error.
+ *
+ * Read on 2026-09-21 in the installed `drizzle-orm@0.45.2`. Paths below start at that package's
+ * root, because its `node_modules/.pnpm` directory name carries a peer-dependency hash; it is not
+ * written out as a glob here, since a `*` followed by a slash would close this comment.
+ * `sqlite-core/dialect.js` holds the dialect this tree's journals declare. `SQLiteSyncDialect.migrate`
+ * takes the watermark with `SELECT id, hash, created_at FROM <table> ORDER BY created_at DESC LIMIT 1`
+ * (lines 653-655) and applies a migration only when
+ * `!lastDbMigration || Number(lastDbMigration[2]) < migration.folderMillis` (line 660).
+ * `SQLiteAsyncDialect.migrate` carries the same two statements at lines 690-692 and 696.
+ * The SQLite dialect is the one that RUNS: `packages/db/src/migrate.ts` imports
+ * `drizzle-orm/better-sqlite3/migrator`, and the PostgreSQL migrators it used to dispatch to went
+ * with the storage switch. A `pg-core/dialect.js` citation stood here until 2026-09-22 and is gone
+ * with them.
+ *
+ * WHAT THIS GUARD CHECKS TODAY, AND WHAT IT DOES NOT. Nearly every set is a single regenerated
+ * SQLite baseline — `packages/db` and `packages/media` carry two entries each, `packages/fiscal-none`
+ * none at all, and every other set exactly one (counted 2026-09-22 over the journals on disk). A
+ * one-entry journal can never be out of order, so those sets' cases below hold BY CONSTRUCTION: they
+ * are not evidence that any `when` value in the tree is right, and a reader must not take them as
+ * such. What is really exercised today is `outOfOrder` itself, pinned by the synthetic negative
+ * control, the two sets that do carry a second entry, and the anti-vacuity anchor: every set's
+ * journal is on disk, and they yield more entries BETWEEN them than sets. The tree-scanning half
+ * becomes a real check for a given set the moment it gains a SECOND migration —
+ * and it is in place for that push rather than written after it.
  *
  * Root project, same reasoning as scripts/enum-add-value-safety.test.ts: it reads the whole tree, so
  * a package-resident copy would only run when its own package is in scope and most pushes never
  * reach packages/db.
  *
- * The out-of-order entries of an allowlisted set are pinned EXACTLY rather than counted, so a NEW
- * collision fails even in a set that already carries old ones. Receipt: with the earlier "at least
- * one" assertion, setting entry 14's `when` equal to entry 13's left this guard at 12 passed, while
- * a real PostgreSQL upgrade from point 14 then recorded 14 of 15 migrations and skipped 0014
- * (review, 2026-09-10).
+ * An allowlisted set's out-of-order entries are pinned EXACTLY rather than counted, so a NEW
+ * collision fails even in a set that already carries old ones (review, 2026-09-10). The allowlist is
+ * empty today — see `KNOWN_NON_MONOTONIC`.
  */
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -36,40 +57,22 @@ interface JournalEntry {
  * here. A Map with a per-entry reason rather than a bare array, as `module-seams.test.ts`'s
  * `DEFERRED_RUNTIME_PASS` does (CLAUDE.md §3).
  *
+ * EMPTY ON PURPOSE, and empty is the STRONG state rather than an unfinished one: no set in the tree
+ * is exempt from the check below. It is not an oversight either — a set whose journal really is out
+ * of order MUST be listed here, because the assertion pins a listed set's entries exactly and a
+ * missing entry fails.
+ *
+ * It held one entry until the SQLite regeneration: `core`, whose entries 2 to 6 carried `when` values
+ * below entry 1's, which left core release points 1 to 6 unable to reach HEAD at all (measured
+ * 2026-09-10; the receipt, including the two candidate repairs that failed, is the prose deleted by
+ * the commit that emptied this map). Those entries are gone because the regeneration replaced core's whole history
+ * with one baseline — not because the old journal was repaired in place.
+ *
  * SHRINK THIS LIST, NEVER GROW IT. An entry is not a licence: it records a defect that cannot be
  * repaired, only contained. Its `entries` are asserted equal, so both directions fail — a new
  * collision, and a repair that leaves the pin stale.
  */
-const KNOWN_NON_MONOTONIC = new Map<string, { entries: string[]; reason: string }>([
-  [
-    "core",
-    {
-      entries: [
-        "0002_device_profile_form_factor (when 1788769912531)",
-        "0003_drop_device_kind (when 1788771238830)",
-        "0004_device_binding_rule_sql (when 1788771251214)",
-        "0005_device_profile_form_factor_locked_sql (when 1788772418605)",
-        "0006_tills_name_unique_sql (when 1788775712562)",
-      ],
-      reason:
-        "Entries 2 to 6 carry `when` values below entry 1's, so drizzle's `max(created_at)` " +
-        "watermark SKIPS them for a database whose highest recorded value is entry 1's. Measured " +
-        "2026-09-10: a database at entry 1 upgrading to HEAD applies 10 of 15 migrations and " +
-        "raises nothing. NO assignment of `when` values repairs it, and that needs no experiment: " +
-        "a database at release point 2 and one at release point 3 both carry entry 1's `when` " +
-        "(1788785861913) as their watermark, because entry 2's RECORDED value sits below it. " +
-        "Point 2 therefore needs entry 2's `when` ABOVE that watermark or `0002` is skipped, while " +
-        "point 3 needs it AT OR BELOW or `0002` re-applies — contradictory for any single value. " +
-        "(Two candidate repairs were also run, on 2026-09-10, and each failed in one of those two " +
-        "directions.) The " +
-        "skip is no longer SILENT: `applyMigrations` counts applied migrations against shipped " +
-        "ones and throws `migrations.incomplete` (`packages/migrations/src/apply.ts`), so such a " +
-        "database refuses to boot rather than running on a schema it does not have. It is still " +
-        "not REPAIRED — those release points cannot upgrade at all — and repairing them means a " +
-        "squashed baseline, a separate decision.",
-    },
-  ],
-]);
+const KNOWN_NON_MONOTONIC = new Map<string, { entries: string[]; reason: string }>();
 
 function journalPathOf(from: string): string {
   return join(resolve(join(ROOT, "packages/migrations"), from), "meta", "_journal.json");
@@ -93,13 +96,10 @@ function outOfOrder(entries: JournalEntry[]): string[] {
   return offences;
 }
 
-const CORE = MANIFEST.find((set) => set.name === "core")!;
-
 describe("every migration set's journal is strictly increasing", () => {
   // Vacuous-pass anchor, in the siblings' style (classification-complete, errors-reachable): a set
   // whose folder moves reads as zero entries, and zero entries are never out of order — identical to
-  // a healthy set. Pin that the scan really found the journals, and that the one allowlisted set is
-  // the one the tree still carries.
+  // a healthy set. Pin that the scan really found the journals and really read entries out of them.
   it("discovers every set's journal (guards against a vacuous pass)", () => {
     for (const set of MANIFEST) {
       expect(existsSync(journalPathOf(set.from)), `${set.name}: no journal at ${set.from}`).toBe(
@@ -108,10 +108,18 @@ describe("every migration set's journal is strictly increasing", () => {
     }
     // Loose floors, every one of them strictly under today's number: a count is a receipt that goes
     // stale (CLAUDE.md §7), and a floor sitting exactly on the tree fails the day the tree shrinks
-    // by one for a good reason. The core one was 15 — exactly the tree's count — until a re-read.
+    // by one for a good reason.
+    //
+    // The entry floor is a TOTAL over every set rather than core's own count, because after the
+    // SQLite regeneration a per-set floor has nowhere honest to sit: every set carries exactly one
+    // entry, so 1 is the tree itself and 0 asserts nothing. Measured 2026-09-21: 12 entries across
+    // 13 sets, `packages/fiscal-none` declaring none.
     expect(MANIFEST.length).toBeGreaterThanOrEqual(10);
-    expect(journalEntries(CORE.from).length).toBeGreaterThanOrEqual(10);
-    expect([...KNOWN_NON_MONOTONIC.keys()]).toEqual(["core"]);
+    const entryTotal = MANIFEST.reduce((total, set) => total + journalEntries(set.from).length, 0);
+    expect(entryTotal).toBeGreaterThanOrEqual(8);
+    // Growing the allowlist fails here as well as in its own case, which is what "never grow it"
+    // costs a would-be grower: two deliberate edits rather than one.
+    expect([...KNOWN_NON_MONOTONIC.keys()]).toEqual([]);
   });
 
   for (const set of MANIFEST) {
@@ -127,18 +135,30 @@ describe("every migration set's journal is strictly increasing", () => {
     });
   }
 
-  it("reports a NEW collision inside an allowlisted set (negative control)", () => {
-    // The exact shape the earlier "at least one out-of-order entry" assertion swallowed: the last
-    // entry's `when` set equal to its predecessor's. A real upgrade from that point recorded 14 of
-    // 15 migrations and skipped the last one.
-    const entries = journalEntries(CORE.from);
-    const previous = entries.at(-2)!;
-    const collided = entries.map((entry, index) =>
-      index === entries.length - 1 ? { ...entry, when: previous.when } : entry,
+  it("reports a collision in a synthetic journal (negative control)", () => {
+    // Built by hand rather than taken from the tree. It used to collide the last real entry of the
+    // core journal with its predecessor, which stopped being possible when every set became a single
+    // baseline — and a control that cannot run is a check nobody has. The shapes below are the two
+    // that matter: a `when` EQUAL to an earlier one, which is what the earlier "at least one
+    // out-of-order entry" assertion swallowed, and a `when` BELOW an earlier one, which is the shape
+    // core's journal carried.
+    const healthy: JournalEntry[] = [
+      { when: 1_788_785_861_913, tag: "0000_baseline" },
+      { when: 1_788_785_861_914, tag: "0001_second" },
+      { when: 1_788_785_861_915, tag: "0002_third" },
+    ];
+    // The control in the other direction: without this, a broken `outOfOrder` that reported every
+    // entry would pass the two assertions below for the wrong reason (CLAUDE.md §1).
+    expect(outOfOrder(healthy)).toEqual([]);
+
+    const equalToPredecessor = healthy.map((entry, index) =>
+      index === 2 ? { ...entry, when: healthy[1]!.when } : entry,
     );
-    expect(outOfOrder(collided)).toEqual([
-      ...KNOWN_NON_MONOTONIC.get("core")!.entries,
-      `${entries.at(-1)!.tag} (when ${previous.when})`,
-    ]);
+    expect(outOfOrder(equalToPredecessor)).toEqual(["0002_third (when 1788785861914)"]);
+
+    const belowPredecessor = healthy.map((entry, index) =>
+      index === 1 ? { ...entry, when: 1 } : entry,
+    );
+    expect(outOfOrder(belowPredecessor)).toEqual(["0001_second (when 1)"]);
   });
 });

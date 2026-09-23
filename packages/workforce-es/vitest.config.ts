@@ -4,23 +4,14 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // globalSetup boots one shared Postgres container and makes the migrated
-    // `core_identity_workforce_es` template available. The retained suites use PGlite;
-    // globalSetup still precedes every worker, so a Docker-absent run fails the whole package.
-    // See src/testing/global-setup.ts.
-    globalSetup: ["./src/testing/global-setup.ts"],
-    // `testTimeout` covers work inside an individual test. `hookTimeout` bounds a hook that passes
-    // no timeout of its OWN; a hook given one overrides this config (the receipt is at
-    // `packages/db/src/testing/lifecycle.ts:178`). So it does NOT bound the PGlite boot and
-    // migrations, which run under the 60s default `useVenueDb` forwards to
-    // (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`); what it bounds here is the bare
-    // afterEach reset and afterAll close the helper registers per suite, plus any hook a test file
-    // writes for itself. The container boot/image pull runs in globalSetup, outside both.
+    // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times its
+    // own beforeAll (packages/db/src/testing/venue-db.ts:174, default 60s), so what this bounds is
+    // that helper's untimed afterEach/afterAll plus any hook a suite writes for itself.
+    // `testTimeout` covers a database opened inside an `it` body.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // A single worker avoids the v8 branch-coverage merge artifact across fork workers.
-    // The suites use PGlite, so they need no shared-cluster connection cap.
     maxWorkers: 1,
     coverage: {
       provider: "v8",
@@ -30,7 +21,6 @@ export default defineConfig({
         ...coverageConfigDefaults.exclude,
         "drizzle.config.ts",
         "drizzle/**",
-        "src/testing/**",
         // Re-export barrels: manifests with no imperative code, on which v8 reports phantom
         // uncovered branches. Their surface is asserted structurally by index.test.ts and
         // schema-ownership.test.ts.

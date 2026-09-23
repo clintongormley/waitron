@@ -1,7 +1,17 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  invoiceSeries,
+  locations,
+  nodes,
+  saleLines,
+  sales,
+  tenders,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -11,7 +21,13 @@ import {
   decimalToThousandths,
 } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import {
+  IDENTITY_MIGRATIONS,
+  hashPin,
+  personRole,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -24,8 +40,9 @@ import "./errors.js";
 // `report-api.overview.test.ts` proves the overview route. Unlike the overview (which anchors on
 // TODAY), these routes take an explicit day/range, so the fixtures seed sales on FIXED historical
 // business days and query them by date — no dependence on the wall clock. The `report.view` gate run
-// as the non-superuser app role is the real-Postgres suite's (report-api.pg.test.ts), which PGlite
-// cannot show because every PGlite connection is a superuser holding every grant (CLAUDE.md §4).
+// is asserted by `report-api.test.ts`'s own staff-session case. It used to be asserted a second time
+// under a non-superuser role, in `report-api.pg.test.ts`; that file went with the storage switch,
+// there being no roles on this engine, and the gate is application code either way.
 const noopLog: Logger = () => {};
 
 let tillId: string;
@@ -100,26 +117,45 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
   const cents = (value: string): number => decimalToCents(decimal(value));
   const thousandths = (value: string): number => decimalToThousandths(decimal(value));
   const basisPoints = (value: string): number => decimalToBasisPoints(decimal(value));
-  const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-      total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${tillId}, ${nodeId}, ${seriesId}, ${invoiceNumber}, ${d.issuedAt}, 0,
-      ${cents(d.total)}, ${JSON.stringify([{ rate: d.rate, base: d.base, tax: d.tax }])}::jsonb,
-      'es-ES', array['es-ES'], 'fake', 'recorded'
-    ) returning id`);
-  const saleId = sale.rows[0]!.id;
-  await db.execute(sql`
-    insert into tenders (sale_id, method, amount, tip_amount, settled_at)
-    values (${saleId}, 'cash', ${cents(d.tenderAmount)}, ${cents(d.tipAmount)}, ${d.issuedAt})`);
-  await db.execute(sql`
-    insert into sale_lines
-      (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${saleId}, 1, ${d.line.name},
-            ${JSON.stringify(d.line.descriptions)}::jsonb,
-            ${thousandths(d.line.quantity)}, ${cents("3.50")}, ${basisPoints(d.rate)},
-            ${cents(d.line.total)})`);
+  // Through the table definitions: every id is a `$defaultFn` generator here, and `vat_breakdown`,
+  // `descriptions` and `invoice_locales` are encoded by their own write mappings — the `::jsonb`
+  // casts and the `array[...]` constructor they replace are both refused by this engine. Every
+  // scaled-integer value is still converted by the same function it was.
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      tillId,
+      nodeId,
+      seriesId,
+      invoiceNumber,
+      issuedAt: d.issuedAt,
+      issuedOffsetMinutes: 0,
+      total: cents(d.total),
+      vatBreakdown: [{ rate: d.rate, base: d.base, tax: d.tax }],
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  const saleId = sale!.id;
+  await db.insert(tenders).values({
+    saleId,
+    method: "cash",
+    amount: cents(d.tenderAmount),
+    tipAmount: cents(d.tipAmount),
+    settledAt: d.issuedAt,
+  });
+  await db.insert(saleLines).values({
+    saleId,
+    lineNo: 1,
+    name: d.line.name,
+    descriptions: d.line.descriptions,
+    quantity: thousandths(d.line.quantity),
+    unitPrice: cents("3.50"),
+    vatRate: basisPoints(d.rate),
+    lineTotal: cents(d.line.total),
+  });
 }
 
 const suite = useVenueDb({
@@ -128,22 +164,30 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-    locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
-    tillId = till.rows[0]!.id;
-    const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (location_id, name)
-      values (${locationId}, 'Nodo 1') returning id`);
-    nodeId = node.rows[0]!.id;
-    const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (node_id, code)
-      values (${nodeId}, 'A') returning id`);
-    seriesId = series.rows[0]!.id;
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Sala principal",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
+    tillId = till!.id;
+    const [node] = await db
+      .insert(nodes)
+      .values({ locationId, name: "Nodo 1" })
+      .returning({ id: nodes.id });
+    nodeId = node!.id;
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "A" })
+      .returning({ id: invoiceSeries.id });
+    seriesId = series!.id;
 
     await seedDay(db, 1, SEED.day1);
     await seedDay(db, 2, SEED.day2);
@@ -154,11 +198,15 @@ const suite = useVenueDb({
     // proves they gate on report.view, not report.export (which the supervisor lacks).
     const sids = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mkPerson = async (name: string, role: string): Promise<string> => {
-        const p = await tx.execute<{ id: string }>(sql`
-          insert into persons (display_name, pin_hash, role)
-          values (${name}, ${hashPin("1234")}, ${role}) returning id`);
-        const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
+      const mkPerson = async (
+        name: string,
+        role: (typeof personRole.enumValues)[number],
+      ): Promise<string> => {
+        const [p] = await tx
+          .insert(persons)
+          .values({ displayName: name, pinHash: hashPin("1234"), role })
+          .returning({ id: persons.id });
+        const session = await startManagementSession(tx, { personId: p!.id });
         return session.id;
       };
       return {

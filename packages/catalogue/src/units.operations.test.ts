@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal, decimalToThousandths } from "@waitron/shared";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import {
+  catalogues,
+  CORE_MIGRATIONS,
+  products,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -19,14 +25,27 @@ import { assertQuantityPrecision } from "./units.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
+/**
+ * Both rows go through their drizzle tables: `catalogues.id` and `products.id` come from each
+ * table's own `$defaultFn` rather than from a SQL default, so a raw insert naming the other columns
+ * is refused `NOT NULL constraint failed: catalogues.id`.
+ */
 async function product(tx: Transaction, name: string) {
-  const menu = await tx.execute<{ id: string }>(sql`
-    insert into catalogues (name) values ('Menu') returning id`);
-  return (
-    await tx.execute<{ id: string }>(sql`
-      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
-      returning id`)
-  ).rows[0]!.id;
+  const [menu] = await tx
+    .insert(catalogues)
+    .values({ name: "Menu" })
+    .returning({ id: catalogues.id });
+  const [row] = await tx
+    .insert(products)
+    .values({
+      catalogueId: menu!.id,
+      name,
+      pricingUnit: "each",
+      unitPrice: 1,
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  return row!.id;
 }
 
 describe("unit operations", () => {
@@ -191,15 +210,11 @@ describe("unit operations", () => {
   });
 
   it("rejects excess precision before anything downstream can round it", async () => {
-    // The rounding this guards against used to belong to the column, a `numeric(12, 3)`. The column
-    // counts whole thousandths now, so the rounding moved to `decimalToThousandths` — and the two
-    // agree, which is why the storage change did not move this boundary. The SQL cast stays as the
-    // control for the half it used to be: both readings round 1.2345 to three places the same way,
-    // half away from zero.
-    const rounded = await suite.db.execute<{ value: string }>(
-      sql`select 1.2345::numeric(12,3)::text as value`,
-    );
-    expect(rounded.rows).toEqual([{ value: "1.235" }]);
+    // The database never rounds a quantity: the column holds a whole count of thousandths and
+    // `decimalToThousandths` owns the third place, so storage has no rounding of its own for this
+    // case to be checked against. A SQL-side control cannot exist here either — the engine has no
+    // exact decimal type, so `round(1.2345, 3)` is 1.234 and `cast(1.2345 as numeric(12,3))` keeps
+    // all four places (node:sqlite, Node v26.7.0; receipt in docs/developers/conventions-data.md).
     expect(decimalToThousandths(decimal("1.2345"))).toBe(1235);
     expect(() => assertQuantityPrecision("1.2345", 3, { positive: true })).toThrowError(
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),

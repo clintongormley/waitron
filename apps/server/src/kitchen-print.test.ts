@@ -2,7 +2,16 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  asAppUser,
+  diningTables,
+  locations,
+  printJobs,
+  ticketItems,
+  tills,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -68,13 +77,25 @@ interface Venue {
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${locationId}, 'Caja 1') returning id`);
+  // Inserted through the table definitions, not as raw SQL: `locations.id`, `tills.id` and
+  // `tills.created_at` are JavaScript generators on this engine (`$defaultFn`), which a raw insert
+  // never reaches — `id text PRIMARY KEY NOT NULL` and `created_at text NOT NULL` in
+  // `packages/db/drizzle/0000_baseline.sql:1` and `:39`. The locale list goes over as an array
+  // because the column's own write mapping encodes it; the `array[...]` constructor it replaces is
+  // a syntax error here (`near "[?]": syntax error`).
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -83,7 +104,7 @@ async function setupVenue(): Promise<Venue> {
     return cat.id;
   });
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -395,10 +416,13 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         stationId: cocina.id,
       });
       // A tab bound to a dining table → the order carries the table label the ticket header prints.
-      const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label)
-        values (${cfg.locationId}, 'Mesa 5') returning id`);
-      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+      // Through the table definition: `dining_tables.id` is a `$defaultFn` generator on this engine
+      // and a raw insert reaches none of them (`NOT NULL constraint failed: dining_tables.id`).
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: cfg.locationId, label: "Mesa 5" })
+        .returning({ id: diningTables.id });
+      const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
       // Fire the round with the FOREIGN-locale config so name resolution takes the fallback path.
       await addTabRound(tx, foreignCfg, tabId, [line(drink)]);
       return { printerId, jobs: await printJobsFor(tx) };
@@ -449,11 +473,12 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [line(drink)], null);
       // A counter-delivery table the order delivers to — the order points AT it (no tab back-pointer).
-      const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label)
-        values (${cfg.locationId}, 'Barra 3') returning id`);
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: cfg.locationId, label: "Barra 3" })
+        .returning({ id: diningTables.id });
       await tx.execute(sql`
-        update working_orders set delivery_table_id = ${table.rows[0]!.id} where id = ${orderId}`);
+        update working_orders set delivery_table_id = ${table!.id} where id = ${orderId}`);
       const [lineRow] = await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
@@ -475,7 +500,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     // The no-kitchen-printer venue's common case: a station fires but nothing is mapped to it. The mapping
     // read runs FIRST and comes back empty, so enqueueKitchenTickets RETURNS before the three
     // line/station/order detail SELECTs — proven by counting the `tx.select` calls it issues (one mapping
-    // read, not four). It enqueues nothing and takes no printer-row lock. This distinguishes the reordered
+    // read, not four). It enqueues nothing. This distinguishes the reordered
     // code (1 select) from the old order (4 selects); the zero-jobs assertion holds for both, so it is the
     // select count that pins the early return (CLAUDE.md §4: a test must fail with the guard removed).
     const { cfg, catalogueId } = await setupVenue();

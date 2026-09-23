@@ -1,9 +1,8 @@
 import { uploadImage } from "@waitron/media";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-// Real PostgreSQL checks startup through app_user connections and contending backends.
 import { randomUUID, X509Certificate } from "node:crypto";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -15,20 +14,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { Agent } from "undici";
 import {
   captureError,
-  createPostgresDb,
+  deviceProfiles,
+  locations,
+  nodes,
+  openVenueDatabase,
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
+  tenants,
+  tills,
   withTransaction,
+  type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import {
-  cloneTemplate,
-  nextCloneName,
-  pickTemplate,
-  resolveSharedHandle,
-  useTemplateDb,
-} from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
@@ -38,6 +37,7 @@ import { emptyDrainResult } from "@waitron/fiscal";
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import {
+  applyMigrations,
   appliedSchemaVersion,
   expectedSchemaVersion,
   manifestSets,
@@ -55,7 +55,6 @@ import { listBoxIpv4 } from "./box-reach.js";
 import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
-import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadTillConfig } from "./till-config.js";
@@ -118,8 +117,8 @@ beforeEach(() => {
 
 /**
  * `startServer`'s only test subject. Everything else in this package tests one composed piece
- * (`pass.pg.test.ts` builds its own, separate wiring to prove the composed PASS runs as the
- * deployment role); nothing before this file called `startServer` itself, so the field mapping in
+ * (`pass.db.test.ts` builds its own, separate wiring around the composed PASS); nothing before
+ * this file called `startServer` itself, so the field mapping in
  * `boot.ts` — `config.scheduler.*` into `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into
  * `recordPass`, the `settlementLagMs` conditional spread, the migrations-root default, and the
  * whole `close()` sequence — had no test at all.
@@ -131,33 +130,89 @@ beforeEach(() => {
  * `loop.sleeping` line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone whenever
  * nothing is due — exactly this suite's own case, with no due work seeded for either duty.
  *
- * `DATABASE_URL` is the deployment role, not the container's superuser default (`pg.connect()`'s
- * role): spec §10 states plainly that `DATABASE_URL` "must be the non-superuser deployment role".
- * Whether that role ALSO needs migration-grade grants depends on
- * `WAITRON_MIGRATIONS_DATABASE_URL` (config.ts): unset, it defaults to `DATABASE_URL`, so
- * migrations run under the same role the pool uses, and that role needs `CREATE` on top of
- * `app_user`'s grants — not `app_user`'s grants alone. `PROBE_ROLE` below is exactly that:
- * `app_user` membership for the app-role duty work, plus the `CREATE`/`SELECT` Drizzle's migrator
- * needs to re-run idempotently against an already-migrated database — confirmed empirically that
- * Postgres checks each privilege before Drizzle's own `IF NOT EXISTS` existence check ever runs,
- * so a role with only `app_user`'s `USAGE` grant fails on the very first `CREATE SCHEMA IF NOT
- * EXISTS "public"`, no-op or not. The first two tests below use `PROBE_ROLE` this way — as
- * `DATABASE_URL` alone, `WAITRON_MIGRATIONS_DATABASE_URL` unset — which is also that variable's
- * DEFAULT case and therefore the one every existing deployment keeps until it opts into the
- * split.
+ * ## What the move off PostgreSQL took out of this file
  *
- * `RUNTIME_ROLE`, below, is the OTHER case: the genuinely least-privileged role spec §10 actually
- * names, carrying only `app_user` membership and NONE of `PROBE_ROLE`'s extra `CREATE`/`SELECT`
- * grants. It cannot run a migration against an already-migrated database — the same permission-
- * denied-before-IF-NOT-EXISTS finding above applies to it too — which is what makes it able to prove
- * the split: a test that boots with `DATABASE_URL` set to `RUNTIME_ROLE` and
- * `WAITRON_MIGRATIONS_DATABASE_URL` set to `PROBE_ROLE` succeeds only because `applyMigrations` runs
- * over the SECOND connection string, never the pool's own.
+ * **The whole connection-string surface is gone, and with it the role split.** This suite used to
+ * point `DATABASE_URL` at a purpose-made non-superuser role (`server_boot_probe`) and
+ * `WAITRON_MIGRATIONS_DATABASE_URL` at a second, more-privileged one, because spec §10 required the
+ * pool to run under a least-privileged role. Neither variable exists any more —
+ * `grep -c "DATABASE_URL" apps/server/src/config.ts` returns 0, and `config.venueDir` is what boot
+ * opens. There are no roles on this engine either: every statement runs on the one connection
+ * `openVenueStore` hands out. Each boot below therefore names `WAITRON_VENUE_DIR` and nothing else.
+ * One case LOSES its subject outright and is deleted, with what it stopped proving written where it
+ * stood: the least-privileged-pool case. One case KEEPS a clause the role split used to carry — the
+ * "runs no migration" half of "refuses to start, and runs no migration" — on a different lever, and
+ * that test's own comment states the lever and the control run both ways.
+ *
+ * ## SIX CASES BELOW WERE RED ON TWO BROKEN PRODUCT FUNCTIONS, AND ALL SIX PASS NOW
+ *
+ * Two SQL functions the product called were created by no migration, and SQLite has no
+ * user-defined functions to find them in. Measured 2026-09-22 against a directory migrated by
+ * `applyMigrations(dir, migrationOptionsFor(manifestSets(), null))`, each statement run with its
+ * `::timestamptz` cast removed: `no such function: envios_work_due` and
+ * `no such function: credential_tenants`, `errcode` 1 each. The control in the other direction, in
+ * the same probe: `select count(*) as n from envios` answers `0`, so the migration set that would
+ * have carried the function DID run and it was the FUNCTION that was missing, not the schema.
+ *
+ * Both are ordinary queries now — `packages/credentials/src/store.ts`'s `credentialProvisioned` and
+ * `packages/fiscal-verifactu/src/drain.ts`'s `workIsDue` — and this file reports 37 passed, with no
+ * case edited. What each of the six used to cost is kept below, because it is the reading that
+ * showed the two functions apart:
+ *
+ * - `credential_tenants` is called from `boot.ts` on EVERY reconcile pass, with no gate in front of
+ *   it, so `payments.reconcile.stripe` failed on every trading boot in this file.
+ * - `envios_work_due` is reached through `workIsDue` only when the submission policy lets the REAL
+ *   drain run. `runFiscalDrain` (`apps/server/src/onboarding-policy.ts`) returns
+ *   `emptyDrainResult()` without calling it when `fiscalDrainEnabled` is false — which preproduction
+ *   is, unless fiscal test submissions are switched on.
+ *
+ * **That second bullet corrects a claim three sibling suites stated more widely.** They said every
+ * real `drain()` throws, which was true of `drain()`, and read as though every boot's drain duty
+ * did. It did not. Measured then, one case each, counting the `pass.complete` duty outcomes:
+ * a `WAITRON_ENV=preproduction` trading boot reported `fiscal.drain ok:true` 3 times out of 3 and
+ * `payments.reconcile.stripe ok:false` 3 out of 3; a `WAITRON_ENV=production` one reported BOTH
+ * `ok:false`, 201 out of 201. So `credential_tenants` alone was enough to hold `/health` at 503 on
+ * every trading boot, and it was the only thing doing so on a preproduction one.
+ *
+ * What that cost, case by case:
+ *
+ * 1. `boots, pins the tick-clamp mapping…` (production) — `sleeping.sleepMs` read 1000
+ *    (`minTickMs`) where the case pins 94327 (`maxTickMs`). Its premise is that with nothing due
+ *    both duties report `nextDueAt: null`; a FAILING duty asks to be retried at once instead, so
+ *    `sleepMsFor` clamped to the floor. The mapping the case exists to pin was unobservable until
+ *    both duties could succeed.
+ * 2-4. The three that call `fetchHealthOk` — `/health` stays 503 until EACH duty's first clean pass
+ *    sets `lastOkAt` (`health.ts`), and the reconcile duty never had one. One of the three
+ *    (`boots in trading mode over HTTPS…`) is preproduction, so its drain was fine and
+ *    `credential_tenants` was its whole cause.
+ * 5. `sleeps on WAITRON_SKIP_RETRY_MS…` (production) — no `drain.tenant_skipped` line, because
+ *    `drain` threw in `workIsDue` before it enumerated a tenant at all.
+ * 6. `closes the mTLS transport…` (production) — `Agent.prototype.close` was never called, for the
+ *    same reason: the throw was upstream of `resolveClient`.
+ *
+ * Three other suites recorded the drain half in their own header comments: `boot.mirror.test.ts`,
+ * `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`. Only `boot.promote.test.ts` still has a
+ * red case, and it is red on a THIRD PostgreSQL leftover — see that file.
+ *
+ * **The suite owns a venue DIRECTORY, not a database.** `useVenueDb` never exposes the directory it
+ * makes and boot needs one, so the shared fixture below is a `mkdtemp` + `applyMigrations` +
+ * `openVenueDatabase`, the shape `boot.singleton.test.ts` and `boot.reconcile.test.ts` already use.
+ * The suite's own handle stays open across the file. That is safe for READS beside a running server
+ * (write-ahead mode), and the two places that WRITE while a server is up — the passive-read probe's
+ * `last_seen_at` backdating and the image upload — both work, each measured directly: the image
+ * upload case passes, and the passive-read sequence was run against a booted server in a throwaway
+ * probe on 2026-09-22, answering 200/200/200 with `last_seen_at` unchanged on the passive read and
+ * bumped on the other two.
+ *
+ * One COST of the second handle, seen rather than assumed: a suite write beside a running server
+ * makes the server's own pending-card-payment sweep lose the write lock, and it logs
+ * `resolve_pending.failed` with `Error: database is locked` and carries on (`boot.ts:370`). One such
+ * line appears per full run of this file. The 5s `busy_timeout`
+ * (`packages/store/src/index.ts:66`) did not absorb it; WHY it did not is not established here — no
+ * probe was run for that — so treat the mechanism as open. Nothing here depends on that sweep, and
+ * production opens the directory once, from one process — so this is a property of the ARRANGEMENT
+ * this file chose, not a finding about the box.
  */
-const PROBE_ROLE = "server_boot_probe";
-const PROBE_PASSWORD = "probe";
-const RUNTIME_ROLE = "server_boot_runtime_probe";
-const RUNTIME_PASSWORD = "probe";
 // The till's fiscal identity. `loadConfig` resolves `config.till` OPTIONALLY via `tryLoadTillConfig`
 // (undefined when none of the four ids are set — setup mode, slice 1b); it is boot's TRADING branch
 // that REQUIRES a venue, so every provisioned-boot test in this suite must carry these. Distinct per
@@ -206,83 +261,77 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// A clone of the full-manifest template. `PROBE_ROLE` (server_boot_probe) and `RUNTIME_ROLE`
-// (server_boot_runtime_probe) are created cluster-wide by the package globalSetup, in place of the
-// per-file `probeRole` + `beforeAll` role creation this suite used before the shared container; the
-// per-DATABASE grants `PROBE_ROLE` needs to re-run migrations are applied to this clone in the
-// `beforeAll` below (they cannot be cluster-wide — they name this database).
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
-
+/**
+ * The shared, migrated venue directory every boot below points `WAITRON_VENUE_DIR` at, plus the
+ * suite's own open handle on it.
+ *
+ * It replaces a per-file clone of a shared PostgreSQL `manifest` template. The migration run is
+ * this suite's, not boot's, because the identity rows have to exist before boot reads them; boot's
+ * own `applyMigrations` over the same directory then finds nothing to do. Unlike
+ * `boot.singleton.test.ts`, the handle is NOT closed after seeding: several tests read the database
+ * back while their server is up, which write-ahead mode allows.
+ */
 let migrationsRoot: string;
-let databaseUrl: string;
-let runtimeDatabaseUrl: string;
+let sharedVenueDir: string;
+let sharedStore: VenueDatabase;
+let sharedDb: Database;
+
+/**
+ * A venue directory this process cannot open, for the three tests whose subject is a refusal that
+ * must fire BEFORE any storage is touched.
+ *
+ * It replaces `postgres://unused:unused@localhost/unused`. A merely absent path is NOT the
+ * equivalent: `openVenueStore` does `mkdir(config.directory, { recursive: true })`
+ * (`packages/store/src/index.ts:165`), so one would simply be created and the boot would carry on
+ * past the point these tests claim it never reaches. A path UNDER a non-directory is refused —
+ * `mkdir("/dev/null/venue", { recursive: true })` throws `ENOTDIR`, measured on this host with
+ * `node -e` on 2026-09-22 — so a boot that got that far would fail with `ENOTDIR` rather than with
+ * the classified refusal each of these three asserts.
+ */
+const UNOPENABLE_VENUE_DIR = "/dev/null/venue";
 
 beforeAll(async () => {
-  const dbName = new URL(suite.pg.uri).pathname.replace(/^\//, "");
-  // `CREATE` on the database and on `public`: Drizzle's migrator issues `CREATE SCHEMA IF NOT
-  // EXISTS "public"` (database-level `CREATE`) then `CREATE TABLE IF NOT EXISTS` per migration set
-  // (schema-level `CREATE`) before it ever checks whether either already exists.
-  await suite.admin.execute(sql.raw(`grant create on database ${dbName} to ${PROBE_ROLE}`));
-  await suite.admin.execute(sql.raw(`grant create on schema public to ${PROBE_ROLE}`));
-  // `SELECT` on every table in `public`, not just the five journal tables by name: the `manifest`
-  // template was migrated as the container's superuser (in the package globalSetup), so the
-  // deployment role does not OWN the journal tables it must read back from to decide nothing new
-  // needs applying.
-  await suite.admin.execute(
-    sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
-  );
-  // Make `PROBE_ROLE` the OWNER of every public table on this clone, so the boot-time owner DDL
-  // (the live change feed's triggers) succeeds as the migrator connection, exactly as production does:
-  // the real migrator OWNS its tables (Probe A), where this shared template was migrated by the
-  // container superuser. Ownership is set at
-  // fixture setup with `ALTER TABLE … OWNER TO` (not `REASSIGN OWNED`), and does not change what
-  // `app_user` (the pool's SET ROLE) may do, so the grant-enforcement assertions below are unaffected.
-  await suite.admin.execute(
-    sql.raw(`do $$
-      declare r record;
-      begin
-        for r in select tablename from pg_tables where schemaname = 'public' loop
-          execute format('alter table public.%I owner to ${PROBE_ROLE}', r.tablename);
-        end loop;
-      end $$;`),
-  );
+  // The venue directory: migrated through the manifest, then seeded. Held open for the rest of the
+  // file — the reads and the two writes it serves beside a running server are described in this
+  // file's header.
+  sharedVenueDir = await mkdtemp(join(tmpdir(), "waitron-boot-venue-"));
+  await applyMigrations(sharedVenueDir, migrationOptionsFor(manifestSets(), null));
+  sharedStore = await openVenueDatabase(sharedVenueDir);
+  sharedDb = sharedStore.venue;
 
-  databaseUrl = roleUrl(suite.pg.uri, PROBE_ROLE, PROBE_PASSWORD);
-
-  // `RUNTIME_ROLE` — `app_user` membership and nothing else, the role spec §10 actually means by
-  // "the non-superuser deployment role" — is created cluster-wide by the package globalSetup (with no
-  // `CREATE`/`SELECT` beyond `app_user`'s). It can do the duty work (drain/reconcile read and write
-  // through `app_user`'s own table grants, applied by the migrations themselves) but cannot run a
-  // migration against an already-migrated database, for the identical permission-denied-before-`IF NOT
-  // EXISTS` reason `PROBE_ROLE`'s own comment above explains. Only its clone-scoped connection URL is
-  // built here; no per-DATABASE grant is added, which is exactly what makes it least-privileged.
-  runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
-
-  // The till's own tenant, location and node, seeded once as the container superuser (exactly as
-  // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
-  // (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
-  // exist or every successful-boot test would fail at that read. `order_flow` defaults to
-  // `prepay`. A distinctive NIF (90M base) stays clear of every other seed generator sharing this
-  // database.
-  await suite.admin.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90000000K', 'Boot Till SL')`);
-  await suite.admin.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
-            array['es-ES'], 'Venta en establecimiento')`);
+  // The till's own tenant, location, node and till. `startServer` reads the location's `order_flow`
+  // at boot (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
+  // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`.
+  // A distinctive NIF (90M base) stays clear of every other seed generator.
+  //
+  // Each row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine;
+  // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
+  await sharedDb
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
+  await sharedDb.insert(locations).values({
+    id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
   // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
   // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
   // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
   // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
-  await suite.admin.execute(sql`
-    insert into nodes (id, location_id, name, filing_module)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till', 'verifactu')`);
-  await suite.admin.execute(sql`
-    insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Boot Till')`);
+  await sharedDb.insert(nodes).values({
+    id: TILL_ENV.WAITRON_TILL_NODE_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Boot Till",
+    filingModule: "verifactu",
+  });
+  await sharedDb.insert(tills).values({
+    id: TILL_ENV.WAITRON_TILL_TILL_ID,
+    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    name: "Boot Till",
+  });
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -299,16 +348,39 @@ beforeAll(async () => {
   }
 }, 180_000);
 
-// The temporary migrations root is this suite's own; the clone and `suite.admin` are
-// `useTemplateDb`'s. Guarded the same way: a `beforeAll` that threw before `mkdtemp` returned
-// must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
+// Every directory here is this suite's own now — no helper owns any of them. Guarded the same way
+// as before: a `beforeAll` that threw before a `mkdtemp` returned must not be followed by an
+// `rm(undefined)` reported as a second failure beside the real one. Guard:
+// `scripts/guarded-teardowns.test.ts`.
 afterAll(async () => {
+  if (sharedStore !== undefined) await sharedStore.close();
+  if (sharedVenueDir !== undefined) await rm(sharedVenueDir, { recursive: true, force: true });
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   // `TRADING_STATE_DIR` is created synchronously at module load (always defined), so
   // no undefined guard — `force: true` also absorbs the case where a boot's own nested subdir was
   // already removed.
   await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
+
+/**
+ * A fresh, migrated venue directory of its own, plus an open handle on it — the per-test isolation
+ * the three provision tests below need.
+ *
+ * It replaces a fresh clone of the shared PostgreSQL `manifest` template. `provisionVenue` stamps
+ * the `deployment` singleton AND mints a venue, either of which would fix or pollute the shared
+ * directory every other test in this file boots against (CLAUDE.md §4). The ownership half of the
+ * old comment is gone rather than reworded: there is no owner connection to arrange, because there
+ * are no roles — `applyVenue` runs on the one handle `openVenueStore` gives out.
+ *
+ * The handle is returned OPEN and stays open while the server runs, because each of the three reads
+ * the database back mid-test. Reads beside a running server are what write-ahead mode allows; these
+ * three make no writes of their own.
+ */
+async function freshVenue(): Promise<{ directory: string; store: VenueDatabase }> {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-boot-provision-venue-"));
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  return { directory, store: await openVenueDatabase(directory) };
+}
 
 /** An OS-assigned port, released before use. `WAITRON_HTTP_PORT` rejects `"0"` as not a positive
  * integer (config.test.ts pins that on purpose — see loadConfig's `positiveInt`), so this test
@@ -323,6 +395,46 @@ async function freePort(): Promise<number> {
       probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
+}
+
+/**
+ * Waits until `port` accepts a TCP connection — the listener is actually up.
+ *
+ * `startServer` resolves BEFORE its listener has bound. `startListening` calls `serve()`, which
+ * returns synchronously while the socket binds asynchronously (`boot.ts`'s own comment on the
+ * `listeningListener` argument says so), and nothing in `startServer` waits for Node's `listening`
+ * callback. A test that closes WITHOUT first dialling therefore reaches `server.close()` while the
+ * socket is still unbound, and Node rejects it with `ERR_SERVER_NOT_RUNNING` — "Server is not
+ * running." — which `close()` propagates.
+ *
+ * This was invisible on PostgreSQL, where the boot's remaining round trips gave the bind a turn of
+ * the event loop; it is the same class as the `promote-endpoint-e2e` spy the ledger records.
+ * Measured 2026-09-22 with three variants of one trading boot in this package, printing the error
+ * `close()` rejected with: closing immediately → `Server is not running.`; a 50ms delay first →
+ * none; a single `fetch` first → none. So the wait is what the three tests below were getting for
+ * free from PostgreSQL, not a workaround for a flaky assertion.
+ *
+ * Only the three tests that never dial their server call this. Every other boot below fetches
+ * something first, which is why they are unaffected. A TCP connect rather than a `fetch`, so this
+ * observes the BIND and nothing about what the app answers.
+ */
+async function awaitListening(port: number): Promise<void> {
+  for (let i = 0; i < POLL_TRIES; i += 1) {
+    const up = await new Promise<boolean>((resolve) => {
+      const socket = createConnection({ port, host: "127.0.0.1" });
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+    if (up) return;
+    await delay(POLL_INTERVAL_MS);
+  }
+  throw new Error(`the listener never bound 127.0.0.1:${port} within the poll budget`);
 }
 
 /**
@@ -554,24 +666,35 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
-  const person = await suite.admin.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role) values ('Passive read probe', ${hashPin("1234")}, 'manager') returning id`,
-  );
-  const personId = person.rows[0]!.id;
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn` values on
+  // this engine rather than SQL DEFAULTs, and a raw insert reaches neither.
+  const [person] = await sharedDb
+    .insert(persons)
+    .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
+    .returning({ id: persons.id });
+  const personId = person!.id;
   try {
-    const session = await withTransaction(suite.admin, (tx) =>
+    const session = await withTransaction(sharedDb, (tx) =>
       startManagementSession(tx, { personId }),
     );
-    const age = async (): Promise<string> =>
-      (
-        await suite.admin.execute<{ seen: string }>(
-          sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id} returning last_seen_at::text as seen`,
+    // Ten minutes back from the clock, subtracted on a `Date` and bound: this engine has neither
+    // `now()` nor an interval type. `toISOString()` is the spelling `@waitron/identity`'s own
+    // writers of this `tsString` column use, which is what makes the keepalive's staleness
+    // comparison on it a correct time ordering. The `::text` the two reads carried is gone rather
+    // than rewritten as a cast: the column IS text here, so it converted nothing.
+    const BACKDATE_MS = 10 * 60_000;
+    const age = async (): Promise<string> => {
+      const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
+      return (
+        await sharedDb.execute<{ seen: string }>(
+          sql`update management_sessions set last_seen_at = ${staleSeenAt} where id = ${session.id} returning last_seen_at as seen`,
         )
       ).rows[0]!.seen;
+    };
     const seen = async (): Promise<string> =>
       (
-        await suite.admin.execute<{ seen: string }>(
-          sql`select last_seen_at::text as seen from management_sessions where id = ${session.id}`,
+        await sharedDb.execute<{ seen: string }>(
+          sql`select last_seen_at as seen from management_sessions where id = ${session.id}`,
         )
       ).rows[0]!.seen;
     const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
@@ -600,12 +723,12 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     await mutation.text();
     expect(await seen()).not.toBe(beforeMutation);
   } finally {
-    await suite.admin.execute(sql`delete from management_sessions where person_id = ${personId}`);
-    await suite.admin.execute(sql`delete from persons where id = ${personId}`);
+    await sharedDb.execute(sql`delete from management_sessions where person_id = ${personId}`);
+    await sharedDb.execute(sql`delete from persons where id = ${personId}`);
   }
 }
 
-describe("startServer, against a real container as the deployment role", () => {
+describe("startServer, against a migrated venue directory", () => {
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
     // A throwaway log dir so this real boot's assembled rotating file sink writes somewhere isolated —
@@ -615,7 +738,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
         ...KEY_ENV,
-        DATABASE_URL: databaseUrl,
+        WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_LOG_DIR: logDir,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -728,8 +851,8 @@ describe("startServer, against a real container as the deployment role", () => {
       // version its shipped folder declares. This is the SAME seam SP-1a inverted to derive its set
       // list from `ALL_MODULES` — asserted here over `orderedMigrationSets(ALL_MODULES)` (the new
       // source) so a conversion that dropped or reordered a set surfaces as a mismatch. It is a
-      // consistency check, not the from-empty probe: this clone was pre-migrated by the shared
-      // container, so the distinguishing "boot is the sole migrator" proof lives in the setup-mode
+      // consistency check, not the from-empty probe: this directory was pre-migrated by the suite's
+      // own `beforeAll`, so the distinguishing "boot is the sole migrator" proof lives in the setup-mode
       // fresh-database test below; both modes reach the identical seam line, so proving it once from
       // empty and confirming trading mode leaves the same nine journals consistent covers both.
       for (const set of orderedMigrationSets(ALL_MODULES)) {
@@ -738,7 +861,7 @@ describe("startServer, against a real container as the deployment role", () => {
         // 0; every other set ships migrations, so `> 0` is the control that a real set was measured.
         if (set.name === "fiscal-none") expect(expected).toBe(0);
         else expect(expected).toBeGreaterThan(0);
-        expect(await appliedSchemaVersion(suite.admin, set)).toBe(expected);
+        expect(await appliedSchemaVersion(sharedDb, set)).toBe(expected);
       }
     } finally {
       await server.close();
@@ -760,8 +883,8 @@ describe("startServer, against a real container as the deployment role", () => {
     // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
     // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
     // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
-    // routes, no sync transport, no drain/reconcile workers. DATABASE_URL is PROBE_ROLE so the shared
-    // applyMigrations still runs idempotently against the template.
+    // routes, no sync transport, no drain/reconcile workers. The shared venue directory is already
+    // migrated, so boot's own applyMigrations runs idempotently over it.
     //
     // NEW in slice 2a: the box serves this surface over HTTPS from a self-signed cert it MINTS + then
     // reuses on later boots (`ensureBoxSecrets`), and generates its box secrets (key ring + node
@@ -773,7 +896,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-state-"));
     const server = await startServer({
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -875,7 +998,7 @@ describe("startServer, against a real container as the deployment role", () => {
       ...KEY_ENV,
       // Override the shared TRADING_STATE_DIR with this box's own dir — the one holding the leaf.
       WAITRON_STATE_DIR: stateDir,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
@@ -924,7 +1047,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // assertion below meaningful — the override must be what lands in the SAN, not a resolved interface.
     const override = "10.1.2.3";
     const server = await startServer({
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -968,19 +1091,18 @@ describe("startServer, against a real container as the deployment role", () => {
 
   it("setup mode migrates every module set from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
     // The from-empty probe SP-1a's inversion needs (spec §6, §4 pin 2): boot, and only boot, must
-    // migrate every module set the composition list carries. The other boot tests clone the
-    // pre-migrated `manifest` template, so their journals are populated whether or not boot's seam
-    // ran — a measurement where both answers look alike (CLAUDE.md §1). This test boots against a
-    // PRISTINE database (`template0`, no app objects), so each `__drizzle_migrations_<name>` table
-    // exists and is populated ONLY because boot's `applyMigrations` created it.
+    // migrate every module set the composition list carries. The other boot tests share a venue
+    // directory this suite migrated, so their journals are populated whether or not boot's seam ran
+    // — a measurement where both answers look alike (CLAUDE.md §1). This test boots against an EMPTY
+    // directory, so each `__drizzle_migrations_<name>` table exists and is populated ONLY because
+    // boot's `applyMigrations` created it.
     //
     // Setup mode (all four WAITRON_TILL_*_ID omitted) reaches the SAME single seam trading mode does
     // — `boot.ts`'s one `applyMigrations` runs in the shared prefix, before the mode branch — and it
     // needs no seeded venue (no `readOrderFlow`), so it is the mode that can boot a fresh database.
-    // The deployment probe that runs BEFORE migrations reads `null` on an unstamped/unmigrated DB
-    // (`assertDeploymentMatches`) and passes. Every migration that creates a cluster-global role
-    // guards it with `IF NOT EXISTS`, so a full-manifest migrate in this already-populated cluster is
-    // idempotent — the shared container migrates its own `manifest` template the same way.
+    // The deployment probe that runs BEFORE migrations reads `null` on an unmigrated database
+    // (`assertDeploymentMatches`) and passes — the probe asks `sqlite_master` whether the table
+    // exists rather than catching a refusal (`packages/migrations/src/schema-version.ts`).
     //
     // Regression visibility: were the converted seam to derive fewer sets (a broken import, an empty
     // list), the missing set's journal would be absent and `appliedSchemaVersion` would read 0
@@ -988,18 +1110,17 @@ describe("startServer, against a real container as the deployment role", () => {
     // boot (seam still on `manifestSets()`) it is GREEN, because the pin makes the two lists equal.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-state-"));
-    // A pristine database in the shared cluster. `template0` carries no app objects, so nothing
-    // but boot's migration run can populate the journals below; the superuser URL doubles as the
-    // app pool's and the migrator's (this test proves migrations run, not grants as the
-    // deployment role). `cloneTemplate` validates the identifiers it interpolates into the
-    // CREATE/DROP DATABASE utility statements (CLAUDE.md §3) and its `stop()` drops the clone
-    // WITH (FORCE) on a fresh admin connection.
-    const pg = await cloneTemplate(suite.pg.uri, "template0", nextCloneName());
+    // An EMPTY venue directory — the `template0` clone's counterpart. Nothing has migrated it, so
+    // the two files it will hold do not exist yet and nothing but boot's own migration run can
+    // create the journals read below. `openVenueStore` creates the directory itself
+    // (`packages/store/src/index.ts:165`), so handing boot a path that does not exist is enough;
+    // the `mkdtemp` is only so the teardown has one thing to remove.
+    const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-venue-"));
     let server: StartedServer | undefined;
-    let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
+    let probe: VenueDatabase | undefined;
     try {
       server = await startServer({
-        DATABASE_URL: pg.uri,
+        WAITRON_VENUE_DIR: venueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
@@ -1007,7 +1128,7 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
       });
 
-      probe = await pg.connect();
+      probe = await openVenueDatabase(venueDir);
       // Every one of the module sets `ALL_MODULES` derives — the new source boot.ts reads — is migrated
       // to its shipped-folder head. `expected > 0` is the control: a set with an empty journal would make
       // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
@@ -1018,25 +1139,21 @@ describe("startServer, against a real container as the deployment role", () => {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);
         else expect(expected).toBeGreaterThan(0);
-        expect(await appliedSchemaVersion(probe, set)).toBe(expected);
+        expect(await appliedSchemaVersion(probe.venue, set)).toBe(expected);
       }
     } finally {
       if (probe !== undefined) await probe.close();
       if (server !== undefined) await server.close();
       await rm(stateDir, { recursive: true, force: true });
-      // Drop the throwaway clone; `cloneTemplate`'s `stop()` runs `drop database … with (force)` on a
-      // fresh admin connection, closing any lingering backend (the app pool and probe are closed
-      // above, but the boot's own migrator connection is opened and closed inside `applyMigrations`,
-      // so this is belt-and-braces).
-      await pg.stop();
+      await rm(venueDir, { recursive: true, force: true });
     }
   }, 60_000);
 
   it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
     // SP-1b's trading-mode filter (architecture §1.3): on a trading boot the migration seam migrates only the
-    // sets the on-box `<stateDir>/modules.json` enables, not every module. A pristine `template0` clone
-    // is the ONLY harness that can PROVE a skip — the pre-migrated `manifest` template already carries
-    // every `__drizzle_migrations_<name>` journal, so a filtered run there could never make one ABSENT
+    // sets the on-box `<stateDir>/modules.json` enables, not every module. An EMPTY venue directory
+    // is the ONLY harness that can PROVE a skip — the shared directory already carries every
+    // `__drizzle_migrations_<name>` journal, so a filtered run there could never make one ABSENT
     // (a measurement where both answers look alike measures nothing, CLAUDE.md §1). Here `scheduler` is
     // disabled, so its journal exists after boot ONLY if the filter failed to skip it — which is exactly
     // the prove-by-deletion target (revert `setsToMigrate` to an unconditional `ALL_MODULES` and this
@@ -1056,17 +1173,17 @@ describe("startServer, against a real container as the deployment role", () => {
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { scheduler: false } }),
     );
-    // Pristine clone: `template0` carries no app objects, so a journal below exists only because boot's
-    // (now filtered) migration run created it. Superuser URL doubles as migrator + pool, as the
-    // setup-from-empty test above; the deployment probe reads `null` on the unstamped DB and passes.
-    const pg = await cloneTemplate(suite.pg.uri, "template0", nextCloneName());
+    // An EMPTY venue directory, the `template0` clone's counterpart: nothing has migrated it, so a
+    // journal below exists only because boot's (now filtered) migration run created it. As in the
+    // setup-from-empty test above, the deployment probe reads `null` on the unmigrated files.
+    const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
     let server: StartedServer | undefined;
-    let probe: Awaited<ReturnType<typeof createPostgresDb>> | undefined;
+    let probe: VenueDatabase | undefined;
     try {
       try {
         server = await startServer({
           ...KEY_ENV,
-          DATABASE_URL: pg.uri,
+          WAITRON_VENUE_DIR: venueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1074,16 +1191,20 @@ describe("startServer, against a real container as the deployment role", () => {
           WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
         });
       } catch {
-        // Expected: this pristine clone seeds no venue, so the trading branch's `readOrderFlow` (and a
+        // Expected: this empty directory seeds no venue, so the trading branch's `readOrderFlow` (and a
         // disabled statically-wired module's own wiring) throws AFTER the migration seam this test
         // asserts. The throw is swallowed deliberately — the seam's effect is already committed.
       }
-      probe = await pg.connect();
+      probe = await openVenueDatabase(venueDir);
       // The disabled module's journal is ABSENT — the filter skipped its set entirely (only its own
-      // migration run would create the table). `to_regclass` returns NULL for a missing relation,
-      // matching the style already used in the tree.
-      const schedulerReg = await probe.execute<{ reg: string | null }>(
-        sql.raw(`select to_regclass('public.__drizzle_migrations_scheduler') as reg`),
+      // migration run would create the table). `to_regclass` has no counterpart here, so the same
+      // question is put to `sqlite_master`; a SCALAR SUBQUERY keeps the shape `to_regclass` had —
+      // one row whose column is NULL when the relation is missing — rather than an empty result,
+      // which would let a query that selected nothing at all read as a pass.
+      const schedulerReg = await probe.venue.execute<{ reg: string | null }>(
+        sql.raw(
+          `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_scheduler') as reg`,
+        ),
       );
       expect(schedulerReg.rows[0]!.reg).toBeNull();
       // A DIFFERENT toggleable module's journal IS present and populated to its shipped head — the
@@ -1093,25 +1214,25 @@ describe("startServer, against a real container as the deployment role", () => {
       const payments = ALL_MODULES.find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
       expect(paymentsExpected).toBeGreaterThan(0);
-      expect(await appliedSchemaVersion(probe, payments.migrations)).toBe(paymentsExpected);
+      expect(await appliedSchemaVersion(probe.venue, payments.migrations)).toBe(paymentsExpected);
       // `core` (mandatory, never disableable — its table is `__drizzle_migrations_db`) migrated too:
       // `enabledModules` never drops it whatever modules.json says.
       const core = ALL_MODULES.find((m) => m.name === "core")!;
       const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
       expect(coreExpected).toBeGreaterThan(0);
-      expect(await appliedSchemaVersion(probe, core.migrations)).toBe(coreExpected);
+      expect(await appliedSchemaVersion(probe.venue, core.migrations)).toBe(coreExpected);
     } finally {
       if (probe !== undefined) await probe.close();
       if (server !== undefined) await server.close();
       await rm(stateDir, { recursive: true, force: true });
-      await pg.stop();
+      await rm(venueDir, { recursive: true, force: true });
     }
   }, 60_000);
 
   it("trading mode logs module.reconcile drift naming a soft-disabled module (SP-1b spec §3)", async () => {
     // The drift-log half of SP-1b (spec §3): a module the DATABASE has migrated but modules.json no
     // longer enables is `softDisabled` — its data is kept, it is simply not migrated — and boot logs
-    // the reconcile outcome at `info` so an operator sees it. The shared suite DB (`databaseUrl`) is
+    // the reconcile outcome at `info` so an operator sees it. The shared venue directory is
     // already migrated for every module AND carries the seeded venue, so a trading boot with
     // `scheduler` disabled BOOTS SUCCESSFULLY (no throw): the filtered migration is a no-op for the 8
     // enabled sets (already applied, idempotent) and never touches scheduler's still-present table
@@ -1130,7 +1251,7 @@ describe("startServer, against a real container as the deployment role", () => {
       const [started, reconcileLine] = await withCapturedStdout(async (lines) => {
         const s = await startServer({
           ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1146,6 +1267,8 @@ describe("startServer, against a real container as the deployment role", () => {
         return [s, found] as const;
       });
       server = started;
+      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      await awaitListening(port);
       // Names the soft-disabled module — the operator-visible signal that scheduler's schema is in the
       // DB but no longer enabled. `toMigrate` is empty: every ENABLED set was already migrated in the
       // shared DB, so nothing is pending.
@@ -1167,7 +1290,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // at boot.ts's migration seam (boot.ts:543, the arg to `applyMigrations`) — the stamp probe has
     // already closed and the long-lived pool is not yet open, so this rejection leaks nothing.
     //
-    // The shared suite DB (`databaseUrl`, already migrated + seeded) is enough: the refusal fires before
+    // The shared venue directory (already migrated + seeded) is enough: the refusal fires before
     // the migration run and before `readOrderFlow`, so no pristine clone is needed (the negative control
     // — that the default all-enabled set migrates all nine sets — is the trading migration-journal test
     // at the top of this describe, which stays green). `...KEY_ENV` (carrying `TILL_ENV`) keeps this in
@@ -1186,7 +1309,7 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(
         startServer({
           ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1226,7 +1349,7 @@ describe("startServer, against a real container as the deployment role", () => {
       await expect(
         startServer({
           ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1255,7 +1378,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-spa-state-"));
     const server = await startServer({
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -1297,8 +1420,9 @@ describe("startServer, against a real container as the deployment role", () => {
     // never-built wizard dir must therefore throw `server.config_invalid` naming WAITRON_SETUP_APP_DIR
     // before boot ever touches the database — the same LOUD posture the other two app dirs get
     // (spa-api.test.ts unit-tests `assertBuiltApp` itself; THIS proves boot wires it for the setup
-    // dir). No container needed: the throw precedes `createPostgresDb`, so the dummy DATABASE_URL below
-    // is never dialled and no pool leaks. Deletion-proof: remove the `assertBuiltApp(config.setupAppDir,
+    // dir). No storage needed: the throw precedes the stamp probe's `openVenueDatabase`, so the
+    // unopenable venue directory below is never opened and no handle leaks — and if the throw ever
+    // moved after it, the failure would be `ENOTDIR`, not the assertion below. Deletion-proof: remove the `assertBuiltApp(config.setupAppDir,
     // …)` line in boot.ts and this goes RED (the mis-built dir reaches `mountSpa`, 404ing every page
     // load instead of failing the boot).
     const emptyDir = mkdtempSync(join(tmpdir(), "waitron-boot-setup-noindex-"));
@@ -1306,7 +1430,7 @@ describe("startServer, against a real container as the deployment role", () => {
       let caught: unknown;
       try {
         await startServer({
-          DATABASE_URL: "postgres://unused:unused@localhost/unused",
+          WAITRON_VENUE_DIR: UNOPENABLE_VENUE_DIR,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_MIN_TICK_MS: "50",
           WAITRON_MAX_TICK_MS: "200",
@@ -1334,7 +1458,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-disc-"));
     const server = await startServer({
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -1398,7 +1522,7 @@ describe("startServer, against a real container as the deployment role", () => {
     await writeFile(keyFile, material.serverKeyPem);
 
     const server = await startServer({
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
@@ -1458,7 +1582,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await expect(
         startServer({
-          DATABASE_URL: databaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1486,26 +1610,21 @@ describe("startServer, against a real container as the deployment role", () => {
     // The slice-2b full-boot proof: boot unprovisioned over HTTPS (as the 2a test above does), then
     // drive the whole provisioning flow through the real endpoint — validate + hash, `provisionVenue`
     // (stamp + `applyVenue` as the OWNER connection boot now wires), persist `trading.env`, request the
-    // restart. A FRESH manifest clone (not the file-shared `suite`) keeps this isolated: `provisionVenue`
-    // stamps the GLOBAL `deployment` singleton AND mints a venue, either of which would fix or pollute
-    // every other test's shared DB (CLAUDE.md §4). The clone's superuser default connection OWNS the
-    // manifest tables — exactly the owner connection `applyVenue` documents it needs — so both
-    // `DATABASE_URL` and `WAITRON_MIGRATIONS_DATABASE_URL` point at it here (`config.migrationsDatabaseUrl`
-    // is what boot opens `ownerDb` from).
+    // restart. A FRESH venue directory (`freshVenue`, not the file-shared one) keeps this isolated:
+    // `provisionVenue` stamps the `deployment` singleton AND mints a venue, either of which would fix
+    // or pollute every other test's shared directory (CLAUDE.md §4).
     //
     // `requestRestart` defaults to `process.kill(process.pid, "SIGTERM")` (boot.ts) — which, with no
     // `bin.ts` SIGTERM handler installed under vitest, would kill this worker. `withMockedKill`
     // intercepts it the identical way `withMockedExit` intercepts the listen-failure `process.exit`.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-state-"));
-    const handle = resolveSharedHandle(undefined);
-    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-    const check = await pg.connect();
+    const venue = await freshVenue();
+    const check = venue.store.venue;
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
-          DATABASE_URL: pg.uri,
-          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1533,8 +1652,15 @@ describe("startServer, against a real container as the deployment role", () => {
           const json = (await response.json()) as { provisioned: boolean };
           expect(json.provisioned).toBe(true);
 
-          // `trading.env` was written with the four till ids + `WAITRON_ENV` + `DATABASE_URL`, so the
-          // next boot enters trading mode. Parsed (not substring-matched) so a missing key really fails.
+          // `trading.env` was written with the four till ids + `WAITRON_ENV`, so the next boot enters
+          // trading mode. Parsed (not substring-matched) so a missing key really fails.
+          //
+          // DROPPED with the storage switch: `expect(trading.DATABASE_URL).toBe(pg.uri)`. The field
+          // no longer exists — `TradingConfig` names no database at all, and `writeTradingEnv`
+          // (`apps/server/src/trading-config.ts:43`) writes only the six keys above, because boot
+          // derives the venue directory from the state root the supervisor hands both processes.
+          // The absence is pinned in the other direction by `trading-config.test.ts`'s
+          // whole-file exact-equality case, which is stronger than the assertion removed here.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
           for (const key of [
             "WAITRON_TILL_TILL_ID",
@@ -1545,18 +1671,17 @@ describe("startServer, against a real container as the deployment role", () => {
             expect(trading[key]).toBeTruthy();
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");
-          expect(trading.DATABASE_URL).toBe(pg.uri);
 
-          // The DB is now stamped preproduction and holds exactly one venue (one tenant, one
-          // node/SIF). `check` is the clone's superuser connection, used for the count
-          // assertions.
+          // The database is now stamped preproduction and holds exactly one venue (one tenant, one
+          // node/SIF). `check` is this test's own handle on the same directory the server has open;
+          // both reads below are reads.
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
           const tenants = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenants`,
+            sql`select cast(count(*) as int) as n from tenants`,
           );
           expect(tenants.rows[0]!.n).toBe(1);
           const nodes = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from nodes`,
+            sql`select cast(count(*) as int) as n from nodes`,
           );
           expect(nodes.rows[0]!.n).toBe(1);
 
@@ -1592,8 +1717,8 @@ describe("startServer, against a real container as the deployment role", () => {
         }
       });
     } finally {
-      await check.close();
-      await pg.stop();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
@@ -1610,15 +1735,13 @@ describe("startServer, against a real container as the deployment role", () => {
     // returned 200 — this test was INVERTED with the behaviour change.)
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-reject-state-"));
-    const handle = resolveSharedHandle(undefined);
-    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-    const check = await pg.connect();
+    const venue = await freshVenue();
+    const check = venue.store.venue;
     const material = mintMtlsMaterial();
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
-          DATABASE_URL: pg.uri,
-          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1651,14 +1774,14 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(json.error.params.field).toBe("aeatCert");
 
           // Nothing was minted and nothing was sealed — the request was refused before
-          // `provision`. `check` is the clone's superuser connection, used for both table
-          // observations.
+          // `provision`. `check` is this test's own handle on the same directory the server has
+          // open; both observations below are reads.
           const tenants = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenants`,
+            sql`select cast(count(*) as int) as n from tenants`,
           );
           expect(tenants.rows[0]!.n).toBe(0);
           const sealed = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(0);
 
@@ -1671,8 +1794,8 @@ describe("startServer, against a real container as the deployment role", () => {
         }
       });
     } finally {
-      await check.close();
-      await pg.stop();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
@@ -1697,9 +1820,8 @@ describe("startServer, against a real container as the deployment role", () => {
     // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-live-seal-state-"));
-    const handle = resolveSharedHandle(undefined);
-    const pg = await cloneTemplate(handle.uri, pickTemplate(handle, "manifest"), nextCloneName());
-    const check = await pg.connect();
+    const venue = await freshVenue();
+    const check = venue.store.venue;
     const material = mintMtlsMaterial();
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
     const drain = vi
@@ -1708,8 +1830,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await withMockedKill(async (kills) => {
         const server = await startServer({
-          DATABASE_URL: pg.uri,
-          WAITRON_MIGRATIONS_DATABASE_URL: pg.uri,
+          WAITRON_VENUE_DIR: venue.directory,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
@@ -1747,18 +1868,18 @@ describe("startServer, against a real container as the deployment role", () => {
           expect(json.provisioned).toBe(true);
 
           // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot
-          // env). `check` is the clone's superuser connection, used for both observations.
+          // env). `check` is this test's own handle on the same directory; both are reads.
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
           // Exactly one `fiscal.aeat` credential was sealed, in the database holding the tenant just
           // provisioned — the real provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`)
           // ran end-to-end.
           const sealed = await check.execute<{ n: number }>(
-            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
+            sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
           const provisioned = await check.execute<{ id: string }>(
-            sql`select id::text as id from tenants`,
+            sql`select cast(id as text) as id from tenants`,
           );
           expect(provisioned.rows).toEqual([{ id: "1" }]);
 
@@ -1772,8 +1893,8 @@ describe("startServer, against a real container as the deployment role", () => {
       });
     } finally {
       drain.mockRestore();
-      await check.close();
-      await pg.stop();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
@@ -1790,7 +1911,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
@@ -1835,7 +1956,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
@@ -1881,7 +2002,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
@@ -1941,7 +2062,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
@@ -1982,12 +2103,14 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
     });
     try {
+      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      await awaitListening(port);
       expect(runTunnelClient).not.toHaveBeenCalled();
     } finally {
       await server.close();
@@ -2006,7 +2129,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const [server, disabled] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
         ...KEY_ENV,
-        DATABASE_URL: databaseUrl,
+        WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ENV: "production",
@@ -2015,77 +2138,31 @@ describe("startServer, against a real container as the deployment role", () => {
       return [started, event] as const;
     });
     try {
+      // The listener may not have bound yet and this test never dials it — see `awaitListening`.
+      await awaitListening(port);
       expect(disabled.event).toBe("backup.disabled");
     } finally {
       await server.close();
     }
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
   }, 60_000);
-
-  it("boots and TRADES when the backup DB is unreachable — the read-privilege probe failure disables backup, never aborts boot (§5)", async () => {
-    // The strict CLAUDE.md §5 case, driven through startServer rather than reasoned about: WAITRON_BACKUP_DIR
-    // is set (so loadBackupConfig returns a config and the probe runs) but WAITRON_BACKUP_DATABASE_URL points
-    // at a REFUSED port (127.0.0.1:1 — connection refused, resolves fast and deterministically, not a hang).
-    // The probe's createPostgresDb therefore throws; boot's fail-safe catch swallows it, logs
-    // backup.disabled_probe_failed, and leaves backup OFF. What must hold: startServer RESOLVES (a bad backup
-    // role must not brick the till), /health serves (the box trades), and box-status reports
-    // backup.configured:false (backup left off). Uses a real container for the MAIN db as every trading boot
-    // here does; only the backup URL is the dead one.
-    const port = await freePort();
-    const backupDir = mkdtempSync(join(tmpdir(), "waitron-boot-backup-"));
-    const [server, disabled] = await withCapturedStdout(async (lines) => {
-      const started = await startServer(
-        {
-          ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "production",
-        },
-        // The backup vars go through the RAW `base` arg, not the merged `env`: the supervisor re-reads
-        // its config off `loadBoxEnv(base, stateDir)` on every reload, so a value only in `env` would
-        // never reach it. `WAITRON_STATE_DIR` (TRADING_STATE_DIR) holds no `backup.env`, so `base` is
-        // the sole source here.
-        {
-          WAITRON_BACKUP_DIR: backupDir,
-          // Port 1 → ECONNREFUSED, fast and deterministic (a refused port, never a hanging one).
-          WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
-          // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig
-          // throws backup.recovery_key_missing before the probe this test exercises ever runs.
-          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-        },
-      );
-      // The probe's createPostgresDb/assert failure was caught and backup left OFF — proven by the log line,
-      // whose arrival also means startServer got past the probe rather than throwing out of it.
-      const event = await waitForEvent(lines, "backup.disabled_probe_failed");
-      // Then wait for the first pass to complete (loop.sleeping is logged strictly after onPass ->
-      // recordPass, same as the main boot test) so /health has flipped past its pre-first-pass 503 startup
-      // grace — the box genuinely trades, and with no due fiscal work seeded both duties report ok.
-      await waitForEvent(lines, "loop.sleeping");
-      return [started, event] as const;
-    });
-    try {
-      // startServer RESOLVED (we hold a StartedServer) and the till TRADES: /health answers 200.
-      expect(disabled.event).toBe("backup.disabled_probe_failed");
-      await fetchHealthOk(`http://127.0.0.1:${port}/health`);
-      // The captured backup.disabled_probe_failed line means the supervisor left backup off (no
-      // destinations backing its config), so box-status's `readBackup` — now the supervisor's async
-      // `status().backupStatus` — reports `backup: { configured: false }`. That configured:false
-      // report is asserted directly (over the management gate) in box-status.route.test.ts, so it is
-      // not re-proven behind a manager login here (boot.test.ts seeds no manager identity — that would
-      // be the heavy scaffolding the slice brief says to avoid).
-    } finally {
-      await server.close();
-      rmSync(backupDir, { recursive: true, force: true });
-    }
-    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow(); // listener gone
-  }, 60_000);
+  // DELETED, not converted: "boots and TRADES when the backup DB is unreachable — the read-privilege
+  // probe failure disables backup, never aborts boot (§5)". It drove `startServer` with a good main
+  // database and a deliberately refused backup connection (`WAITRON_BACKUP_DATABASE_URL` at port 1),
+  // and asserted the box still traded with backup off.
+  //
+  // The lever is gone rather than moved: the backup duty no longer has a connection of its own to
+  // point somewhere bad — it opens the box's OWN venue directory — so there is no way to break the
+  // backup duty in a boot that is otherwise healthy. What survives is narrower and not through
+  // `startServer`: `backup-supervisor.test.ts`'s "a venue directory that will not open leaves backup
+  // off and never throws at the caller". So the §5 claim is still asserted, at the supervisor rather
+  // than at boot; nothing now proves boot ITSELF survives a backup duty that cannot start.
 
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIN_TICK_MS: "50",
@@ -2109,7 +2186,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIN_TICK_MS: "50",
@@ -2119,7 +2196,7 @@ describe("startServer, against a real container as the deployment role", () => {
 
     try {
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      const imageName = await withTransaction(suite.admin, async (tx) => {
+      const imageName = await withTransaction(sharedDb, async (tx) => {
         const result = await uploadImage(
           tx,
           {
@@ -2163,38 +2240,20 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  // C1: the host cannot start under the role spec §10 actually names unless migrations run under a
-  // DIFFERENT connection than the pool. This is that claim, proven rather than asserted in prose: if
-  // `boot.ts` reverted to applying migrations over `config.databaseUrl` (or the pool opened from
-  // it), `RUNTIME_ROLE` — which has no `CREATE` grant at all — would fail on Drizzle's own
-  // `CREATE SCHEMA IF NOT EXISTS "public"` before this test's `waitForPass` ever saw a first pass.
-  it("boots with a least-privileged DATABASE_URL when migrations run under a separate WAITRON_MIGRATIONS_DATABASE_URL", async () => {
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      DATABASE_URL: runtimeDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: databaseUrl,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_MIN_TICK_MS: "50",
-      WAITRON_MAX_TICK_MS: "200",
-      // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and would
-      // now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
-      WAITRON_SKIP_RETRY_MS: "100",
-    });
-    try {
-      await waitForPass(server.health);
-      // The pool itself is on `RUNTIME_ROLE`: a pass that reached `ok` proves the duty work (reading
-      // `credential_tenants`/`envios_work_due` through their SECURITY DEFINER seams, and
-      // `runDue`'s own `scheduled_runs` reads) also succeeds under `app_user` membership alone, with
-      // none of `PROBE_ROLE`'s extra migration-only grants.
-      expect(
-        Object.values(server.health.duties).every((duty) => duty.consecutiveFailures === 0),
-      ).toBe(true);
-    } finally {
-      await server.close();
-    }
-  }, 60_000);
+  // DELETED, not converted: "boots with a least-privileged DATABASE_URL when migrations run under a
+  // separate WAITRON_MIGRATIONS_DATABASE_URL". It booted with the pool on a role carrying `app_user`
+  // membership and nothing else, migrations on a second role carrying `CREATE`, and asserted a clean
+  // first pass — C1's claim that the host can run under the least-privileged role spec §10 names.
+  //
+  // Its subject is gone twice over. Neither variable exists (`grep -c "DATABASE_URL"
+  // apps/server/src/config.ts` → 0), and neither does the role: SQLite has no `GRANT`, no
+  // `SET ROLE`, and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`). There is
+  // one connection and it can do everything.
+  //
+  // LOST and covered by nothing: that the duty work a pass performs stays inside the privileges an
+  // application role holds. Nothing in this tree can express that question today; what replaces it
+  // is a decision recorded elsewhere — one database file per node, reached by one process — not
+  // another test.
 
   // I5 / I7: a bind failure must log a structured code and exit non-zero (spec §8's "everything
   // escapes" applied to the one boot failure that cannot literally throw — see boot.ts's own
@@ -2215,7 +2274,7 @@ describe("startServer, against a real container as the deployment role", () => {
           const [server, failure] = await withCapturedStdout(async (lines) => {
             const s = await startServer({
               ...KEY_ENV,
-              DATABASE_URL: databaseUrl,
+              WAITRON_VENUE_DIR: sharedVenueDir,
               WAITRON_HTTP_PORT: String(port),
               WAITRON_MIGRATIONS_DIR: migrationsRoot,
               WAITRON_MIN_TICK_MS: "1000",
@@ -2257,7 +2316,7 @@ describe("startServer, against a real container as the deployment role", () => {
           const [server, failure] = await withCapturedStdout(async (lines) => {
             const s = await startServer({
               ...KEY_ENV,
-              DATABASE_URL: databaseUrl,
+              WAITRON_VENUE_DIR: sharedVenueDir,
               WAITRON_HTTP_PORT: String(port),
               // Every other test in this file binds the DEFAULT host (127.0.0.1) successfully —
               // an unresolvable one failing to bind HERE is what proves `config.httpHost` reaches
@@ -2288,7 +2347,7 @@ describe("startServer, against a real container as the deployment role", () => {
     const error = await startServer({
       ...KEY_ENV,
       WAITRON_TILL_LOCATION_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(await freePort()),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
@@ -2311,10 +2370,10 @@ describe("startServer, against a real container as the deployment role", () => {
   // `minTickMs`/`maxTickMs`.
   //
   // The seeded tenant is never provisioned a `fiscal.aeat` credential, so — left in place — its
-  // `envios` row would stay due FOREVER against the one real container this whole describe block
+  // `envios` row would stay due FOREVER against the one venue directory this whole describe block
   // shares (`beforeAll` above): `drain.tenant_skipped` fires on `resolveClient` itself, before any
   // per-row retry state is ever touched, so nothing about this row's own due-ness ever advances.
-  // The tests at ~249/~348 above assert `consecutiveFailures === 0` in this SAME container and
+  // The tests above assert `consecutiveFailures === 0` against this SAME directory and
   // used to pass only because they were declared, and therefore ran, earlier — order-dependent on
   // this test staying last, which `--sequence.shuffle` (or a later `it` added after this one)
   // breaks. The `finally` below deletes the seeded `envios` row regardless of how this test
@@ -2325,9 +2384,8 @@ describe("startServer, against a real container as the deployment role", () => {
     // `seedPendingEnvios`'s own fixed `proximo_intento_en` ('2026-07-21T00:00:00Z') is always in
     // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
     // deliberately not injectable — see its own doc comment), so this tenant is due the instant
-    // the first pass runs. Seeded against `suite.admin` (the container's own superuser default),
-    // matching `pass.pg.test.ts`'s identical convention for owner-side setup.
-    const seeded = await seedPendingEnvios(suite.admin, {
+    // the first pass runs. Seeded on the suite's own handle, with no server up.
+    const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -2340,7 +2398,7 @@ describe("startServer, against a real container as the deployment role", () => {
       const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
         const started = await startServer({
           ...KEY_ENV,
-          DATABASE_URL: databaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_MIN_TICK_MS: "1000",
@@ -2389,9 +2447,9 @@ describe("startServer, against a real container as the deployment role", () => {
       // The ONLY row that keeps this database perpetually due: `envios_work_due` (drain.ts) reads
       // `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/`registro_sif`, so deleting
       // just this is what stops the drain from finding work again. Runs regardless of how the block
-      // above finishes, so a failed assertion still leaves the container clean for whatever test
+      // above finishes, so a failed assertion still leaves the directory clean for whatever test
       // runs next.
-      await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
 
@@ -2409,7 +2467,7 @@ describe("startServer, against a real container as the deployment role", () => {
   // process has no business dialling the real one) while `Agent` itself stays real.
   it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
     const port = await freePort();
-    const seeded = await seedPendingEnvios(suite.admin, {
+    const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -2421,7 +2479,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
     // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
     // ONE tenant carrying both due work and a usable credential, not two separate tenants.
-    await withTransaction(suite.admin, (tx) =>
+    await withTransaction(sharedDb, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
         purpose: "fiscal.aeat",
         value: {
@@ -2439,7 +2497,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       const server = await startServer({
         ...KEY_ENV,
-        DATABASE_URL: databaseUrl,
+        WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MIN_TICK_MS: "1000",
@@ -2474,9 +2532,9 @@ describe("startServer, against a real container as the deployment role", () => {
       // comment) still makes the real submission attempt fail, and `drain`'s `client.submit` catch
       // backs the batch off rather than raising an incident — but this cleanup is kept anyway,
       // rather than assumed absent, so a future change to that failure path does not silently
-      // leave a row behind for a LATER test in this shared-container suite to trip over.
-      await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
-      await suite.admin.execute(sql`delete from incidents `);
+      // leave a row behind for a LATER test sharing this directory to trip over.
+      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await sharedDb.execute(sql`delete from incidents `);
     }
   }, 60_000);
 
@@ -2484,60 +2542,58 @@ describe("startServer, against a real container as the deployment role", () => {
   // different value is refused, not overwritten — see its own doc comment), so the row this test
   // writes is deleted in `finally`, the same pattern the seeded `envios` rows above use — this test
   // is order-independent, not reliant on running last: a stamp left behind would make every LATER
-  // real-container test booting with `WAITRON_ENV: "production"` (the very first test in this
+  // test booting with `WAITRON_ENV: "production"` (the very first test in this
   // block) fail this same guard for real, which is exactly the order-dependence the "sleeps on
   // WAITRON_SKIP_RETRY_MS" test above was fixed to no longer have — not a precedent for keeping it
   // here.
   //
-  // DATABASE_URL is `runtimeDatabaseUrl` (RUNTIME_ROLE), not `databaseUrl` (PROBE_ROLE) like every
-  // other real-container test in this block: RUNTIME_ROLE carries no CREATE grant at all, so — per
-  // this file's own confirmed finding above (`RUNTIME_ROLE`'s own comment) — ANY attempt to run
-  // `applyMigrations` against it fails immediately with a raw Postgres permission error, even though
-  // this container's schema is already fully migrated (Postgres checks the CREATE privilege before
-  // Drizzle's own `IF NOT EXISTS` ever runs). That is what makes the observed
-  // `deployment.environment_mismatch` code proof of this test's SECOND clause, not just its first:
-  // with an already-migrated schema and PROBE_ROLE's CREATE grant, `applyMigrations` running here
-  // would be an invisible no-op — a guard that fired too LATE (after migrations, rather than before)
-  // would produce this exact same error and pass this exact same assertion. Under RUNTIME_ROLE it
-  // cannot: a late or bypassed guard would surface a permission-denied failure instead, a distinct
-  // and distinguishable error from `deployment.environment_mismatch`. RUNTIME_ROLE still reads the
-  // stamp `assertDeploymentMatches` needs to see: `0001_db_baseline_sql.sql` grants `deployment`'s
-  // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
-  // `beforeAll`).
+  // The SECOND clause — "runs no migration" — needs a lever that makes a migration run VISIBLE, or a
+  // guard firing too LATE would produce this same error and pass this same assertion (CLAUDE.md §1,
+  // both answers look alike). The lever the role split used is gone with the roles. Its replacement
+  // was already here and unremarked: this boot, alone in the file, sets NO `WAITRON_MIGRATIONS_DIR`,
+  // so the migration seam would resolve `boot.ts`'s from-source default
+  // `apps/server/src/drizzle` — a directory that does not exist — and throw `migrations.set_missing`
+  // out of `resolveExistingMigrationsFolder`. Reaching `deployment.environment_mismatch` therefore
+  // means the stamp guard ran BEFORE the seam.
+  //
+  // The control was run in the other direction rather than reasoned about. Two boots, 2026-09-22,
+  // against one migrated directory stamped `preproduction`, printing the classified code each
+  // rejected with: `WAITRON_ENV=production` → `deployment.environment_mismatch`;
+  // `WAITRON_ENV=preproduction`, everything else identical → `migrations.set_missing`. So the lever
+  // is live and the assertion below discriminates — a guard that ran after the seam would print the
+  // second code here, not the first.
   it("refuses to start, and runs no migration, against another environment's database", async () => {
-    await stampDeployment(suite.admin, "preproduction");
+    await stampDeployment(sharedDb, "preproduction");
 
     try {
       const error = await captureError(() =>
         startServer({
           ...KEY_ENV,
-          DATABASE_URL: runtimeDatabaseUrl,
+          WAITRON_VENUE_DIR: sharedVenueDir,
           WAITRON_ENV: "production",
         }),
       );
       expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
     } finally {
-      await suite.admin.execute(sql`delete from deployment where id = 1`);
+      await sharedDb.execute(sql`delete from deployment where id = 1`);
     }
   });
 });
 
-// The REJECT test below needs no real container: an at-or-above-budget `WAITRON_MAX_TICK_MS` is
-// rejected by this guard at the very top of `startServer`, before it ever reaches the stamp probe or
-// `applyMigrations` — a deliberately unreachable `DATABASE_URL` proves that (a real one would make the
-// rejection ambiguous between this guard and an actual connection failure that happened to also
-// throw). The ACCEPT test DOES need the container `beforeAll` starts for the suite above: since slice
-// 1b `loadKeyRing` lives at the top of boot's trading branch — AFTER the stamp probe and migrations —
-// so the below-budget value's proof (reaching `credentials.key_missing` at `loadKeyRing`) only lands
-// once those have run against a reachable database.
+// The REJECT test below needs no storage: an at-or-above-budget `WAITRON_MAX_TICK_MS` is rejected by
+// this guard at the very top of `startServer`, before it ever reaches the stamp probe or
+// `applyMigrations` — an UNOPENABLE venue directory proves that (an openable one would make the
+// rejection ambiguous between this guard and a storage failure that happened to also throw). The
+// ACCEPT test DOES need the migrated directory `beforeAll` builds for the suite above: since slice 1b
+// `loadKeyRing` lives at the top of boot's trading branch — AFTER the stamp probe and migrations — so
+// the below-budget value's proof (reaching `credentials.key_missing` at `loadKeyRing`) only lands once
+// those have run against a real database.
 describe("startServer's maxTickMs-vs-drain-budget guard", () => {
-  const UNREACHABLE_DATABASE_URL = "postgres://unused@unused.invalid/db";
-
   it("rejects WAITRON_MAX_TICK_MS at or above drain's staleness budget, before touching any infrastructure", async () => {
     const error = await captureError(() =>
       startServer({
         ...TILL_ENV,
-        DATABASE_URL: UNREACHABLE_DATABASE_URL,
+        WAITRON_VENUE_DIR: UNOPENABLE_VENUE_DIR,
         WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY]),
       }),
     );
@@ -2554,13 +2610,13 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
     // below-budget value passes the guard means reaching that later throw against a REACHABLE database.
     // `...TILL_ENV` makes `config.till` present (trading mode) while every WAITRON_CREDENTIALS_KEY*
     // variable is omitted, so a boot that gets past the guard, the stamp probe and migrations (against
-    // the real, unstamped container) throws `credentials.key_missing` at `loadKeyRing`. Reaching THAT
+    // the real, unstamped directory) throws `credentials.key_missing` at `loadKeyRing`. Reaching THAT
     // error, not `server.config_invalid`/`at_or_above_drain_budget`, is what proves the guard let this
     // value through rather than rejecting it for the wrong reason.
     const error = await captureError(() =>
       startServer({
         ...TILL_ENV,
-        DATABASE_URL: databaseUrl,
+        WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY] - 1),
       }),
@@ -2598,15 +2654,16 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
-    // Two `tills` rows in this till's own location, inserted as the container superuser
-    // (exactly as the location seed above). The (till_id) FK on
-    // `devices` requires a real row per bound device.
+    // Two `tills` rows in this till's own location. The (till_id) FK on `devices` requires a real
+    // row per bound device. Through the table definition, like the seeds in `beforeAll`: `tills.id`
+    // and `tills.created_at` are `$defaultFn` generators on NOT NULL columns
+    // (`packages/db/src/schema/tenants.ts:232,:245`), which a raw insert reaches neither of.
     const insertTill = async (name: string): Promise<string> => {
-      const res = await suite.admin.execute<{ id: string }>(sql`
-        insert into tills (location_id, name)
-        values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${name})
-        returning id`);
-      return res.rows[0]!.id;
+      const [row] = await sharedDb
+        .insert(tills)
+        .values({ locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID, name })
+        .returning({ id: tills.id });
+      return row!.id;
     };
     const till1 = await insertTill("SP-C dev override till 1");
     till2 = await insertTill("SP-C dev override till 2");
@@ -2617,12 +2674,15 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       // Since Task 7 a `till` device auto-creates its OWN register; binding a SPECIFIC existing register
       // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the
       // device resolves to its own bound till, which a handheld carries.
-      const { rows } = await suite.admin.execute<{ id: string }>(sql`
-          insert into device_profiles (name, form_factor)
-          values (${`Override device ${boundTillId}`}, 'phone-portrait') returning id`);
-      const dev = await enrolDeviceForTest(suite.admin, cfg, {
+      // Through the table definition for the same reason as `insertTill` above: `id`, `created_at`
+      // and `updated_at` are `$defaultFn` generators (`packages/db/src/schema/device-profiles.ts`).
+      const [profile] = await sharedDb
+        .insert(deviceProfiles)
+        .values({ name: `Override device ${boundTillId}`, formFactor: "phone-portrait" })
+        .returning({ id: deviceProfiles.id });
+      const dev = await enrolDeviceForTest(sharedDb, cfg, {
         name: "SP-C dev override device",
-        profileId: rows[0]!.id,
+        profileId: profile!.id,
         registerId: boundTillId,
       });
       return dev.deviceId;
@@ -2636,7 +2696,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       const port = await freePort();
       const server = await startServer({
         ...KEY_ENV,
-        DATABASE_URL: databaseUrl,
+        WAITRON_VENUE_DIR: sharedVenueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_HTTP_HOST: "0.0.0.0",
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -2667,7 +2727,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: databaseUrl,
+      WAITRON_VENUE_DIR: sharedVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",

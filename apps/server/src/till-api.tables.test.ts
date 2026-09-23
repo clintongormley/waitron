@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -31,8 +30,9 @@ import "./errors.js";
 
 // PGlite, not real Postgres: these routes are wiring — session guard + isUuid screen + STATUS mapping
 // over the commercial table/tab verbs, which are LOGIC (no privilege or concurrency behaviour to
-// prove here). The table/tab verbs' own real-PG proofs (the FOR UPDATE tab lock, the FKs)
-// live in `tabs.pg.test.ts`, `move-merge.pg.test.ts` and packages/db's schema suites; they are not
+// prove here). The table/tab verbs' own real-PG proofs (the FKs, and the concurrency properties
+// that predate the venue file's write queue)
+// live in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites; they are not
 // re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
 // into core, so the shared ordered set is the fixture.
 let cfg: TillConfig;
@@ -57,24 +57,33 @@ const suite = useVenueDb({
     // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly — the same constraint the park route's harness documents.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
     // as the PGlite superuser here, as the surrounding venue rows are.
-    await seedKitchenStation(db, { locationId: brandLocationId(loc.rows[0]!.id) });
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     // A node the tab's working-order write needs: `openTab`/`addTabRound` create an `open`
     // working_orders row whose FK `(node_id) → nodes(id)` requires a
     // real row; `cfg.nodeId` names THIS one.
-    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
     // Ana logs in with PIN "5555"; the session cookie the routes require names her shift.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
     // catalogue helpers — the same `withTransaction` + `asAppUser` path the tab verbs price it through, so
     // the active/assignment filters are real, not bypassed by a superuser insert.
@@ -90,15 +99,16 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+      await assignCatalogueToLocation(tx, loc!.id, cat.id);
       return p;
     });
     productId = product.id;
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${loc.rows[0]!.id}, 'Terraza') returning id`);
-    seededZoneId = zone.rows[0]!.id;
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId: loc!.id, name: "Terraza" })
+      .returning({ id: floorZones.id });
+    seededZoneId = zone!.id;
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
   },
 });
 
@@ -485,8 +495,9 @@ describe("table + tab routes", () => {
   });
 
   it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
-    // Open a REAL tab so `voidTabLine`'s `lockOpenTab` passes and the delete query is actually reached
-    // — a random uuid would be shielded by `lockOpenTab` (tab.not_open, 409) before the query. With a
+    // Open a REAL tab so `voidTabLine`'s `assertAnchoredTabOpen` passes and the delete query is
+    // actually reached — a random uuid would be shielded by `assertAnchoredTabOpen` (tab.not_open,
+    // 409) before the query. With a
     // real open tab: `9999999999` IS a `Number.isInteger`, so the bare integer check let it through; it
     // would then bind as `$n` into `where line_no = $n` on the int4 `line_no` column and PostgreSQL
     // would raise `22003 (out of range for integer)`, a non-AppError the boundary turns into an opaque

@@ -6,6 +6,24 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
 
 /**
+ * Whole minutes from a stored ISO stamp to `nowMs`, floored — what
+ * `floor(extract(epoch from (now() - stamp)) / 60)::int` computed in SQL.
+ *
+ * It moved out of SQL because this engine has neither `now()` nor `extract`, and because a
+ * timestamp column here is TEXT rather than a point in time. The reason the SQL version existed —
+ * that the DATABASE's clock and the app server's could skew — is gone with the swap: the engine
+ * runs inside this process (`node:sqlite`), so there is one clock.
+ *
+ * The same two lines, for the same reason, as `apps/server/src/working-order.ts`'s `minutesSince`,
+ * which this query's age model was copied from in the first place. They are not shared because that
+ * one is private to its module and `@waitron/reporting` does not depend on `apps/server`; if a
+ * third copy appears, the pair belongs in `@waitron/shared` beside `classifyBand`.
+ */
+function minutesSince(stamp: string, nowMs: number): number {
+  return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
+}
+
+/**
  * The manager overview's "orders taking too long" query (design §7.4) — THIS node's currently-open
  * kitchen orders whose worst UNSERVED line has crossed into `overdue` or `forgotten`, worst-first.
  * Reuses Task 4's age model and join shape verbatim (`apps/server/src/working-order.ts`'s
@@ -16,9 +34,9 @@ import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
  * `settled` Mode-P walk-up awaiting counter handover still ages).
  *
  * Classification happens in JS with the SHARED `classifyBand`/`worstBand` (never a hand-rolled SQL
- * CASE, CLAUDE.md §3/§4): `ageMinutes` is computed on the DATABASE clock (`now() - queued_at`), so
- * server and client agree regardless of any app-process/DB clock skew — the same
- * reconstruct-as-an-offset-from-Date.now() idiom `listStationQueue`/`listExpoQueue` use.
+ * CASE, CLAUDE.md §3/§4), and so does the AGE now — see {@link minutesSince}. The band is still
+ * reconstructed as an offset from one `Date.now()` reading rather than from `Date.parse(queuedAt)`
+ * at each use, the same idiom `listStationQueue`/`listExpoQueue` use.
  *
  * The per-order reduction picks, among the lines tied at the order's WORST band, the one with the
  * GREATEST age — the most urgent line to name (design says only "table/order, station, age, band";
@@ -41,8 +59,8 @@ export async function computeOverdueOrders(
   tx: Transaction,
   input: OverdueOrdersInput,
 ): Promise<OverdueOrder[]> {
-  // Captured once so every row in this run is classified against the SAME instant — cheaper than
-  // calling Date.now() per row, and immune to the classification drifting mid-run on a slow tick.
+  // Read ONCE, so every row in this run is aged and classified against the SAME instant — which is
+  // what `now()`, being transaction time, gave the SQL this replaced. See {@link minutesSince}.
   const nowMs = Date.now();
   const rows = await tx
     .select({
@@ -50,10 +68,8 @@ export async function computeOverdueOrders(
       orderNumber: workingOrders.orderNumber,
       stationName: kitchenStations.name,
       servedAt: workingOrderLines.servedAt,
-      // Minutes since this line reached its station, on the DATABASE clock — the same
-      // `now() - queued_at` idiom `listStationQueue`/`listExpoQueue` use, so classification is immune
-      // to any app-server/DB clock skew.
-      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
+      // The raw stamp; the age is computed in JS below (see {@link minutesSince}).
+      queuedAt: ticketItems.queuedAt,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -61,6 +77,8 @@ export async function computeOverdueOrders(
       // tab (`dt.tab_id` back-points here) or a counter delivery (`working_orders.delivery_table_id`
       // points at `dt`). `${workingOrders...}` interpolations are qualified (workingOrders is JOINed,
       // never this query's `.from()` base), so this is immune to CLAUDE.md §3's bare-column trap.
+      // `nulls last` is not PostgreSQL-only — SQLite has taken it since 3.30 and this build is
+      // 3.53.4; measured on node 26.7.0, `order by <expr> desc nulls last` both parses and orders.
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
@@ -110,9 +128,7 @@ export async function computeOverdueOrders(
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Reconstructed from the DB-computed age (never `Date.parse(queued_at)`), the same clock-skew-
-    // immune idiom listStationQueue/listExpoQueue use.
-    const ageMinutes = Number(row.ageMinutes);
+    const ageMinutes = minutesSince(row.queuedAt, nowMs);
     const band = classifyBand(nowMs - ageMinutes * 60_000, nowMs, thresholds);
     let order = byOrder.get(row.orderId);
     if (order === undefined) {

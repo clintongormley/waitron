@@ -15,7 +15,7 @@ import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 // KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs
-// on the caller's transaction as app_user; the `till.configure` gate is
+// on the caller's transaction; the `till.configure` gate is
 // applied at the ROUTE layer (Task 7, the layout-routes model), exactly as the FP-1 zone/table
 // verbs in tables.ts rely on the route's authorizeManager rather than gating inside the verb.
 // Deliberately imports nothing from working-order.ts — the `order_prep` rework (Tasks 3/4/6)
@@ -72,7 +72,8 @@ export async function requireLiveStation(
  * `cfg.locationId`, if any). Shared by {@link setDefaultStation} and {@link createStation}: the partial
  * unique `kitchen_stations_default_key` (one default per location) tolerates no two defaults even
  * momentarily, so a new default is always CLEAR-then-SET, and clearing first is what keeps the two from
- * ever coexisting within the statement pair (setting first would trip 23505 at the statement boundary).
+ * ever coexisting within the statement pair (setting first would be refused at the statement
+ * boundary).
  */
 async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
   await tx
@@ -86,11 +87,11 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
 /**
  * Create a kitchen station in the till's venue (its `cfg.locationId`), returning the minted id. A
  * duplicate `(location, name)` collides on `kitchen_stations_name_key` and is surfaced as
- * `station.name_taken` rather than the raw 23505 — the same shape tables.ts's `createZone` maps
+ * `station.name_taken` rather than the raw refusal — the same shape tables.ts's `createZone` maps
  * `zone.name_taken` with. Marking the station default ADOPTS it as THE default: it clears any prior
  * default first (in this same tx), exactly as {@link setDefaultStation} does — so WITHIN one tx the
- * partial-default unique (`kitchen_stations_default_key`) is not reachable and the expected 23505 is the
- * name key. The one exception is two CONCURRENT `createStation({isDefault:true})` in the same venue:
+ * partial-default unique (`kitchen_stations_default_key`) is not reachable and the expected
+ * duplicate-key refusal is the name key. The one exception is two CONCURRENT `createStation({isDefault:true})` in the same venue:
  * each clears then inserts `is_default=true`, and the second to commit trips the default partial-unique,
  * which this catch would ALSO surface as `station.name_taken` (a mislabel). Cosmetic — a gated admin
  * verb, a remote race, still a 4xx — so the catch is left undiscriminated rather than splitting on
@@ -154,7 +155,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
  * `station.not_found`; a name collision throws `station.name_taken`. The three `*AfterMinutes`
  * fields (KDS order-timing alerts, design §8) are validated by the ROUTE before this is called —
  * positive integers with `warm < overdue < forgotten` — so the raw
- * `kitchen_stations_thresholds_ordered` CHECK (23514) is never reachable from here; this verb
+ * `kitchen_stations_thresholds_ordered` CHECK is never reachable from here; this verb
  * only forwards whatever the caller already validated, the same division of labour
  * `name`/`displayOrder` already have with their route-side screens.
  */
@@ -210,7 +211,7 @@ export async function updateStation(
 }
 
 /** Deactivate a station (`active = false`) — never a hard delete (a `ticket_items.station_id` snapshot
- *  may reference it; app_user holds no DELETE on `kitchen_stations`). An absent id throws
+ *  may reference it, and the verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note)). An absent id throws
  *  `station.not_found`. `is_default` is left as-is: the row keeps the default slot until another station
  *  is made default (which clears it). No live routing lands on a deactivated default — `fireLines`'
  *  fallback query requires `is_default AND active`, and {@link setDefaultStation} refuses a deactivated
@@ -239,7 +240,7 @@ export async function deactivateStation(
  * station cannot be the fallback, and the check runs BEFORE any write so a bad id never clears the
  * existing default. Then CLEAR the prior default and SET the new one — two statements in the caller's
  * one tx. The partial unique `kitchen_stations_default_key` is checked at each statement boundary, so
- * clearing first means the two defaults never coexist (setting first would trip 23505). Idempotent when
+ * clearing first means the two defaults never coexist (setting first would be refused). Idempotent when
  * `id` is already the default: the clear unsets it, the set restores it.
  */
 export async function setDefaultStation(
@@ -296,7 +297,7 @@ export async function setProductStation(
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
  *  ALSO offers a whole-ticket "bump all". The per-line ticket-item state is always the source of truth;
- *  this flag governs only the display convenience. Mirrors `locations.bump_mode`'s pgEnum
+ *  this flag governs only the display convenience. Mirrors `locations.bump_mode`'s vocabulary
  *  (`packages/db/src/schema/tenants.ts`), spelled as a literal union here because `@waitron/db`'s
  *  enumerated exports do NOT publish the `bumpMode` enum object (CLAUDE.md §3). */
 export type BumpMode = "line" | "ticket";
@@ -309,8 +310,10 @@ export type BumpMode = "line" | "ticket";
  * `locations` table object (CLAUDE.md §3) — the same raw-`sql` shape the `order_flow` flip uses
  * in the till suites. `mode` is a typed `BumpMode`, so the value reaching the enum column is
  * always one of its two members (the route validates the request field before calling); `${mode}`
- * binds as a parameter (never string-concatenated) and PostgreSQL coerces it to the `bump_mode`
- * enum in the assignment context. `till.configure`-gated at the ROUTE (Task 7), as the other
+ * binds as a parameter, never string-concatenated. There is no enum TYPE below it any more:
+ * `locations.bump_mode` is a `text` column carrying `locations_bump_mode_ck`,
+ * `check(bump_mode in ('line', 'ticket'))` — so a foreign value is refused by that check rather
+ * than by a type. `till.configure`-gated at the ROUTE (Task 7), as the other
  * config verbs are.
  */
 export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMode): Promise<void> {
@@ -320,7 +323,7 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
 /** The KDS-2/3 fire-control venue setting (§2c). `waiter` (default) = the tab-ordering screen surfaces the
  *  per-course fire action; `kitchen` = the station display surfaces it; `expo` (KDS-3) = the expo/pass
  *  display surfaces it. Governs only which UI shows the button — `fireCourse` is the same either way, and
- *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` pgEnum (which backs
+ *  every surface is session-gated. DERIVED from `@waitron/db`'s `fireControlMode` vocabulary (which backs
  *  `locations.fire_control`, `packages/db/src/schema/tenants.ts`) so the two can never drift — add a mode
  *  to the enum and this widens with it, exactly as the sibling {@link OrderFlow}/`TicketState` server types
  *  derive from `orderFlow`/`ticketState`. The RUNTIME `fire-control` route validator derives its valid set
@@ -355,10 +358,10 @@ export async function getFireControl(tx: Transaction, cfg: TillConfig): Promise<
  * setBumpMode}: a parameterised `sql` update — the house style for these single-column
  * `locations` config writes (a Drizzle `.update(locations)` is available too; `@waitron/db`'s
  * barrel re-exports `locations`, so raw `sql` is a choice, not a necessity). `mode` is a typed
- * {@link FireControl}, so the value reaching the enum column is always one of its members (the
- * route validates the request field before calling); `${mode}` binds as a parameter (never
- * string-concatenated) and PostgreSQL coerces it to the `fire_control_mode` enum in the
- * assignment context. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs
+ * {@link FireControl}, so the value written is always one of its members (the route validates the
+ * request field before calling); `${mode}` binds as a parameter, never string-concatenated. As with
+ * `bump_mode` above, the column is `text` with its own `check` listing the members — there is no
+ * enum type below it. `till.configure`-gated at the ROUTE (Task 5), as the other config verbs
  * are.
  */
 export async function setFireControl(
@@ -373,7 +376,7 @@ export async function setFireControl(
 // Config verbs mirroring the station-config verbs above, minus the default concept: `kitchen_courses`
 // has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set
 // dance and no partial unique to protect. Same shape otherwise — plain inserts / by-id UPDATEs on the
-// caller's transaction as app_user, `course.name_taken` on a duplicate
+// caller's transaction, `course.name_taken` on a duplicate
 // `(location, name)` and `course.not_found` for an id this venue may not reach; the
 // `till.configure` gate is applied at the ROUTE layer (Task 5), exactly as the station verbs rely on.
 
@@ -446,7 +449,7 @@ export async function requireCourse(
 /**
  * Create a kitchen course in the till's venue (its `cfg.locationId`), returning the minted id. A
  * duplicate `(location, name)` collides on `kitchen_courses_name_key` and is surfaced as
- * `course.name_taken` rather than the raw 23505 — the same shape {@link createStation} maps
+ * `course.name_taken` rather than the raw refusal — the same shape {@link createStation} maps
  * `station.name_taken` with. Simpler than `createStation`: no default to adopt, so no clear-then-set.
  */
 export async function createCourse(
@@ -530,7 +533,7 @@ export async function updateCourse(
 }
 
 /** Deactivate a course (`active = false`) — never a hard delete (a `ticket_items.course_id` snapshot may
- *  reference it; app_user holds no DELETE on `kitchen_courses`). An absent id throws `course.not_found`.
+ *  reference it, and the verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note)). An absent id throws `course.not_found`.
  *  Mirrors {@link deactivateStation}. */
 export async function deactivateCourse(
   tx: Transaction,

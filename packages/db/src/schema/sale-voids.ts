@@ -1,5 +1,5 @@
-import { foreignKey, unique } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "./columns.js";
+import { foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { id, label, newId, table, tsString } from "./columns.js";
 import { sales } from "./sales.js";
 
 /**
@@ -17,7 +17,7 @@ import { sales } from "./sales.js";
 export const saleVoids = table(
   "sale_voids",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // No inline `.references()` here — see the hand-written
     // `sale_voids_sale_fk` below, mirroring `./sales.ts`'s own
     // `sale_lines_sale_fk`/`tenders_sale_fk`: a child row must not point at a

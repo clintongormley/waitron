@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, locations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
@@ -13,11 +13,19 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    const result = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description, time_zone)
-      values ('Island venue', array['es-ES'], 'Retail', 'Atlantic/Canary') returning id
-    `);
-    locationId = result.rows[0]!.id;
+    // Inserted through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+    // `locations.id` is a `$defaultFn(newId)` generator that a raw insert never reaches, and
+    // `invoice_locales` is a JSON array in a text column rather than a PostgreSQL `text[]`.
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Island venue",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Retail",
+        timeZone: "Atlantic/Canary",
+      })
+      .returning({ id: locations.id });
+    locationId = location!.id;
   },
 });
 
@@ -30,11 +38,16 @@ it("uses UTC when the location is missing", async () => {
 });
 
 it.each(["", "Not/AZone"])("uses UTC for an invalid stored zone %j", async (timeZone) => {
-  const result = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description, time_zone)
-    values ('Invalid zone venue', array['es-ES'], 'Retail', ${timeZone}) returning id
-  `);
-  const invalidLocationId = result.rows[0]!.id;
+  const [location] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Invalid zone venue",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+      timeZone,
+    })
+    .returning({ id: locations.id });
+  const invalidLocationId = location!.id;
   try {
     expect(await readVenueTimeZone(suite.db, { locationId: invalidLocationId })).toBe("UTC");
   } finally {

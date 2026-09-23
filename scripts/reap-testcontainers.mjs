@@ -2,22 +2,20 @@ import { execFileSync } from "node:child_process";
 
 // Reap STALE waitron Testcontainers resources.
 //
-// Why this exists: this repo runs its real-Postgres suites with `TESTCONTAINERS_RYUK_DISABLED=true`
-// (mandatory locally — Ryuk hangs on this machine, CLAUDE.md §4), which disables Testcontainers' own
-// reaper. A CLEAN vitest exit still self-reaps — `startSharedContainer`'s `globalTeardown` calls
-// `container.stop()`, removing the container and its anonymous volume. But an INTERRUPTED run (Ctrl-C,
-// a timeout SIGTERM, a crash) skips `globalTeardown` and leaves a running container + its volume behind,
-// un-reaped. Over many interrupted runs these accumulate and bloat the Docker daemon, which slows
-// container ops and adds host-side overhead — enough ambient load to tip the parallel `pnpm -r
-// test:coverage` over its PGlite `beforeAll` timeout and the `freePort`→bind race (EADDRINUSE). This
-// script is the compensating reaper (the manual `pnpm reap` before local database tests).
+// Why this exists: containers here are started with `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory
+// locally — Ryuk hangs on this machine, CLAUDE.md §4), which disables Testcontainers' own reaper. A
+// caller that finishes normally stops its own container; an INTERRUPTED run (Ctrl-C, a timeout
+// SIGTERM, a crash) leaves a running container and its anonymous volume behind, un-reaped. Over many
+// interrupted runs these accumulate and bloat the Docker daemon, which slows container ops and adds
+// host-side overhead. This script is the compensating reaper (the manual `pnpm reap`).
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
-//  1. LABEL. It removes only containers carrying `com.waitron.reapable` (stamped by every helper in
-//     this repo that starts a container — `startPostgresContainer` in packages/db, and `startStore`
-//     in bench/sqlite-failover), never the generic `org.testcontainers` label that every
-//     testcontainers container in every project shares. So another repo's containers — and this repo's
-//     compose dev DB, which is not a testcontainer at all — are out of scope.
+//  1. LABEL. It removes only containers carrying `com.waitron.reapable`, never the generic
+//     `org.testcontainers` label that every testcontainers container in every project shares. One
+//     helper stamps it today, `startStore` in `bench/sqlite-failover/src/store.ts` — that is the
+//     whole answer to `grep -rn com.waitron.reapable` outside this script and its own suite, taken
+//     2026-09-22. So another repo's containers — and this repo's compose dev DB, which is not a
+//     testcontainer at all — are out of scope.
 //  2. AGE. Of those, it removes only ones older than STALE_CONTAINER_MS. A container younger than that
 //     may belong to a watch-mode vitest running RIGHT NOW in another terminal (its container lives for
 //     the whole process, which is necessarily younger than the threshold when freshly started), so it

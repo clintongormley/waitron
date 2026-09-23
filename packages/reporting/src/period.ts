@@ -67,6 +67,34 @@ export function validatePeriod(year: number, period: LiquidationPeriod): void {
   }
 }
 
+/** The first day of `year`-`month` as `"YYYY-MM-DD"`; `Date.UTC` normalises a month past December. */
+function firstOfMonth(year: number, month: number): string {
+  return new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * The half-open civil-date window `[first day of (year, firstMonth), that day + months)` as a
+ * predicate on a date-valued SQL expression.
+ *
+ * Both bounds are computed here and bound as `"YYYY-MM-DD"` strings rather than built in SQL. The
+ * expression this replaced was `make_date(...)` and `+ interval '1 month'`, neither of which exists
+ * on this engine; the calendar arithmetic moved onto `Date.UTC`, which carries a month past
+ * December into the next year the way the interval did. Both sides of every comparison are a civil
+ * date in the one fixed `"YYYY-MM-DD"` spelling — `received_on` is stored that way and the output
+ * side's `filedDateExpr` is `date(...)`, whose output is that shape — so a string comparison IS a
+ * date comparison here.
+ *
+ * Measured against PGlite 0.5.8 (PostgreSQL 18.3) on 2026-09-22: the 68 (year, period) pairs of
+ * four years × twelve months, four quarters and the year produced identical `lo`/`hi` pairs, 0
+ * disagreements — 1999, 2024 (a leap year) and 2100 (not one) included. Computing the upper bound
+ * as thirty days per month instead disagrees on 49 of the 68, which is the control.
+ */
+function civilDateWindow(dateExpr: SQL, year: number, firstMonth: number, months: number): SQL {
+  const lower = firstOfMonth(year, firstMonth);
+  const upper = firstOfMonth(year, firstMonth + months);
+  return sql`${dateExpr} >= ${lower} and ${dateExpr} < ${upper}`;
+}
+
 /**
  * The half-open civil-date bound `[firstDay, upper)` on a date-valued SQL expression for a
  * `LiquidationPeriod` — pure calendar dates, no DST subtlety. The output side passes the filed
@@ -77,19 +105,13 @@ export function validatePeriod(year: number, period: LiquidationPeriod): void {
  */
 export function periodDateFilter(dateExpr: SQL, year: number, period: LiquidationPeriod): SQL {
   switch (period.kind) {
-    case "month": {
-      const firstDay = sql`make_date(${year}, ${period.month}, 1)`;
-      return sql`${dateExpr} >= ${firstDay} and ${dateExpr} < (${firstDay} + interval '1 month')`;
-    }
-    case "quarter": {
-      const firstMonth = 3 * (period.quarter - 1) + 1; // Q1→1, Q2→4, Q3→7, Q4→10
-      const firstDay = sql`make_date(${year}, ${firstMonth}, 1)`;
-      return sql`${dateExpr} >= ${firstDay} and ${dateExpr} < (${firstDay} + interval '3 months')`;
-    }
-    case "year": {
-      const firstDay = sql`make_date(${year}, 1, 1)`;
-      return sql`${dateExpr} >= ${firstDay} and ${dateExpr} < (${firstDay} + interval '1 year')`;
-    }
+    case "month":
+      return civilDateWindow(dateExpr, year, period.month, 1);
+    case "quarter":
+      // Q1→1, Q2→4, Q3→7, Q4→10
+      return civilDateWindow(dateExpr, year, 3 * (period.quarter - 1) + 1, 3);
+    case "year":
+      return civilDateWindow(dateExpr, year, 1, 12);
     /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than returning
        an undefined SQL bound that would silently widen or empty the fiscal aggregate (mirrors
        validatePeriod's guard above). */

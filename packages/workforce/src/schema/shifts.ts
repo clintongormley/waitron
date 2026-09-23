@@ -1,22 +1,23 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, id, label, locations, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, id, label, locations, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
 /**
  * A planned shift — what a person is INTENDED to work, at a location, over an interval. PLANNING
- * data, the inverse of `time_entries` (what ACTUALLY happened): ordinary mutable rows, so the app
- * role holds SELECT, INSERT, UPDATE and DELETE (drizzle/0001_workforce_baseline_sql.sql) — a shift is moved,
- * re-roled, or discarded freely, with no append-only trigger and no hash chain. The planned↔actual
+ * data, the inverse of `time_entries` (what ACTUALLY happened): ordinary mutable rows — a shift is
+ * moved, re-roled, or discarded freely, with no append-only trigger and no hash chain, and nothing in
+ * the database refusing any of it; the grant that used to name the permitted writes went with
+ * PostgreSQL. The planned↔actual
  * link is a READ MODEL by person + local date (design 2026-07-22 §4 "the planned-vs-actual seam",
  * plan §2.1), not an FK: a
  * worked session may have no planned shift and a planned shift may be a no-show.
  *
  * `starts_at`/`ends_at` are the absolute instants; `starts_offset_minutes`/`ends_offset_minutes` are
  * the wall offsets that ride alongside — the same `time_entries.event_at`/`event_offset_minutes`
- * pattern, so the LOCAL wall date is recovered as `(starts_at at time zone 'UTC' + offset)` (what
- * `publishRoster` matches against a roster version's period).
+ * pattern, so the LOCAL wall date is recovered by `shiftLocalDate` (../shift-local-date.ts), which
+ * is what `publishRoster` matches against a roster version's period.
  *
  * `roster_version_id` is null while the shift is an unpublished draft and is set on publish
  * (`publishRoster` attaches every in-period draft shift at the version's location). Deleting the
@@ -25,7 +26,7 @@ import { rosterVersions } from "./roster-versions.js";
 export const shifts = table(
   "shifts",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** The workplace the shift is scheduled at. */
     locationId: id("location_id").notNull(),
@@ -38,7 +39,7 @@ export const shifts = table(
     role: label("role"),
     /** The published roster version this shift belongs to; null while an unpublished draft. */
     rosterVersionId: id("roster_version_id"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason
@@ -66,6 +67,9 @@ export const shifts = table(
     check("shifts_starts_offset_ck", sql`${t.startsOffsetMinutes} between -840 and 840`),
     check("shifts_ends_offset_ck", sql`${t.endsOffsetMinutes} between -840 and 840`),
     // A shift ends after it starts — a zero- or negative-length planned interval is malformed.
+    // WEAKER THAN IT READS on this engine: both columns are TEXT, so this compares SPELLINGS, and
+    // a pair whose two endpoints are spelled differently is judged wrongly in BOTH directions. The
+    // measurement and the fix are recorded once, on `assertShiftInterval` in ../clocking.ts.
     check("shifts_interval_ck", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );

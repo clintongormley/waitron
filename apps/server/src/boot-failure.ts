@@ -1,66 +1,52 @@
-import { firstCodeInCauseChain, isAppError, sqlStateOf } from "@waitron/shared";
+import { isAppError, sqliteFailureOf } from "@waitron/shared";
 import "./errors.js";
 
 /**
- * Node socket-level failures. A refused connection is NOT a SQLSTATE — `sqlStateOf` returns null for
- * every one of these, because they are not five `[0-9A-Z]` characters — so this branch tests the
- * Node `code` itself. `waitForPostgres` already retries a refused connection for up to sixty
- * seconds, so reaching here means the failure outlasted that wait.
+ * The engine cannot open the venue file at all: the state volume is not mounted, the directory is
+ * not there, or the process cannot read it. SQLITE_CANTOPEN (14) is what every one of those arrives
+ * as — measured 2026-09-22 on Node v26.7.0, a missing file opened read-only and a path under a
+ * directory that does not exist both give `unable to open database file`, errcode 14.
+ *
+ * A LIST, like the tables this replaces, so that adding a code is a decision with a name rather
+ * than widening a pattern.
+ *
+ * **What is deliberately NOT here: SQLITE_NOTADB (26), `file is not a database`.** Neither shipped
+ * code fits it — the file is reachable, and its schema is not what is wrong with it — and naming a
+ * third code is a product decision, not a classification one: it needs a registry entry and English
+ * and Spanish operator wording (CLAUDE.md §3). So a corrupted venue file reaches the page as
+ * `unknown`, with the driver's own message on the installer's channel.
  */
-export const UNREACHABLE_SOCKET_CODES: readonly string[] = [
-  "ECONNREFUSED",
-  "ENOTFOUND",
-  "ETIMEDOUT",
-  "EHOSTUNREACH",
-];
-
-/** Driver-level refusals to connect: bad password, no such database, cluster not accepting yet. */
-export const UNREACHABLE_SQL_STATES: readonly string[] = ["28P01", "3D000", "57P03"];
+export const UNREACHABLE_RESULT_CODES: readonly number[] = [14];
 
 /**
- * The database does not carry the schema this image expects. Written from the run-it experiment, not
- * before it (spec §6): `55P04` is the one the first real box actually produced — drizzle applies a
- * set's pending migrations in one transaction and PostgreSQL refuses to use an enum value added
- * inside it, so an upgrade aborts there.
+ * The database does not carry the schema this image expects.
  *
- * Each entry has to be UNAMBIGUOUSLY schema-shaped, because this code's operator action is "restore
- * from a backup, or reinstall". `22P02` was listed here (spec §4.1 still names it) and was removed
- * for failing that test: run on PostgreSQL 18, `select 'not-a-uuid'::uuid` and `select 'b'::t` for
- * an enum without a `b` return the SAME SQLSTATE, and the first is a malformed VALUE, not a missing
- * schema. Sending an operator to restore a healthy database over a bad boot-time value is worse than
- * saying `unknown` — and `unknown` now costs little, because the installer's channel carries the
- * driver's own message. Deviation recorded in the spec's §9 addendum.
- */
-export const SCHEMA_MISMATCH_SQL_STATES: readonly string[] = [
-  "42P01", // undefined_table
-  "42703", // undefined_column
-  "42704", // undefined_object
-  "55P04", // object_not_in_prerequisite_state — unsafe use of a new enum value
-];
-
-const SOCKET = new Set(UNREACHABLE_SOCKET_CODES);
-const UNREACHABLE = new Set(UNREACHABLE_SQL_STATES);
-const MISMATCH = new Set(SCHEMA_MISMATCH_SQL_STATES);
-
-/**
- * The first `code` in the cause chain that names a socket failure we classify, or null.
+ * **Matched on the MESSAGE, and it has to be.** This engine reports a missing table and a missing
+ * column as errcode 1, `SQL logic error` — and so is an ordinary mistake in a query (measured
+ * 2026-09-22, Node v26.7.0: `select * from tenants` against a virgin file, `select legal_name from
+ * tenants` against a table without it, and `select from where`, all errcode 1). This code's
+ * operator action is "restore from a backup, or reinstall", so classifying on the number alone
+ * would send a box's operator to restore a healthy database over a typo. The control for that is a
+ * case in `boot-failure.test.ts`.
  *
- * Same walk as `sqlStateOf`, different predicate — `firstCodeInCauseChain` (`@waitron/shared`) is
- * the one copy, and it carries the depth-bound and self-reference arguments.
+ * The cost of matching text: a release that reworded either message leaves this reading `unknown`,
+ * silently. Nothing warns.
  */
-function socketCodeOf(error: unknown): string | null {
-  return firstCodeInCauseChain(error, (code) => SOCKET.has(code));
-}
+const SCHEMA_MISSING = /^no such (table|column): /;
+
+const UNREACHABLE = new Set(UNREACHABLE_RESULT_CODES);
 
 /**
  * The best code the entrypoint can name for a boot failure, sitting between `runEntry`'s catch and
  * the recovery state — so the unauthenticated page shows a classification rather than the single
  * word `unknown` that told the first real box's operator nothing.
  *
- * Both tables are EXHAUSTIVE BY CONSTRUCTION — membership in a pinned list, never a pattern — which
- * is what keeps `EPIPE` out: it is five upper-case characters and therefore passes `sqlStateOf`'s
- * shape filter, but it is in neither list, so it stays `unknown`. `boot-failure.test.ts` walks each
- * list and pins that control.
+ * **A socket failure is no longer a database failure, and this no longer says it is.** The list of
+ * Node socket codes that used to answer `provisioning.database_unreachable` is gone with the
+ * networked cluster: the database is a file this process opens, so nothing it does can be refused
+ * by a socket. A socket failure reaching here now comes from something else on the boot path, and
+ * telling a box's operator to check the database settings for it would be worse than `unknown`.
+ * The loss, stated plainly: nothing classifies a socket failure at boot any more.
  *
  * `unknown` is the rare fallback now. `runEntry` writes the scrubbed error to the container's stdout
  * for every failure OF THE BOOT SEQUENCE ITSELF — not for every failure: `readRecoveryState` and the
@@ -72,11 +58,10 @@ function socketCodeOf(error: unknown): string | null {
  */
 export function classifyBootFailure(error: unknown): string {
   if (isAppError(error)) return error.code;
-  if (socketCodeOf(error) !== null) return "provisioning.database_unreachable";
-  const sqlState = sqlStateOf(error);
-  if (sqlState !== null) {
-    if (UNREACHABLE.has(sqlState)) return "provisioning.database_unreachable";
-    if (MISMATCH.has(sqlState)) return "provisioning.schema_mismatch";
+  const failure = sqliteFailureOf(error);
+  if (failure !== null) {
+    if (UNREACHABLE.has(failure.errcode)) return "provisioning.database_unreachable";
+    if (SCHEMA_MISSING.test(failure.message)) return "provisioning.schema_mismatch";
   }
   return "unknown";
 }

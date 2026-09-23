@@ -1,13 +1,19 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { diningTables, locations, tills, withTransaction, type Database } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  persons,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
+import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
 import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { BOOKINGS_ROUTES } from "./routes.js";
@@ -19,15 +25,20 @@ import { BOOKINGS_ROUTES } from "./routes.js";
 // authorization.not_permitted — the deletion proof for the descriptor's permissions seat.
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
-// Real Postgres, not PGlite: every DB touch below goes through `BOOKINGS_ROUTES`' `gated` helper
-// (withTransaction + asAppUser + authorizeManager), so the booking routes run as the non-superuser
-// `app_user` and the table GRANTS are actually enforced. PGlite connects as a superuser holding every
-// privilege (CLAUDE.md §4), so a missing grant would pass there and fail only at runtime. The
-// `booking.manage` gate is proven by deletion on the block below. `core.openTab` is `fakeCore` (the
-// real verb lives in apps/server, which a module cannot import); the seat still opens a real
-// working_orders row, so the seat happy-path and read-back are exercised end to end.
-
-const suite = useTemplateDb({ template: "manifest" });
+// WHAT THIS SUITE NO LONGER SHOWS. Its header used to say that every database touch below goes
+// through `BOOKINGS_ROUTES`' `gated` helper (withTransaction + asAppUser + authorizeManager), so
+// the routes ran as the non-superuser `app_user` and the table GRANTS were enforced rather than
+// bypassed. This engine has no roles and `asAppUser` is an empty body
+// (`packages/db/src/testing/roles.ts`), so the grant half is gone and nothing replaces it. The
+// `booking.manage` gate is the module's own code and is still proven by deletion, on the block
+// below. `core.openTab` is `fakeCore` (the real verb lives in apps/server, which a module cannot
+// import); the seat still opens a real working_orders row, so the seat happy-path and read-back are
+// exercised end to end.
+//
+// The fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS) — bookings FKs into core, and
+// the routes need identity's `persons` and management sessions — where this used to clone the
+// shared `manifest` template.
+const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
@@ -44,29 +55,51 @@ interface Venue {
 
 /** Hand-seed a venue (tenant + location + till + node) and the manager/staff people and sessions this
  * route fixture needs. Not `applyVenue`: that would import `@waitron/composition`'s `ALL_MODULES`,
- * closing a composition → bookings → composition cycle. The tables come from the `manifest` template. */
+ * closing a composition → bookings → composition cycle.
+ *
+ * Every row goes through its table definition rather than raw SQL: each `id` and each timestamp is
+ * supplied by a `$defaultFn` in JavaScript now, never by a column DEFAULT, so a raw insert naming
+ * none of them is refused `NOT NULL constraint failed`; and `invoiceLocales` reaches its column's
+ * own JSON mapping, which the `array['es-ES']` constructor used to do in SQL this engine has not.
+ * The display names carry a fresh suffix because live display names are unique across the database
+ * and this fixture runs once per test. */
 async function setupVenue(): Promise<Venue> {
-  const db: Database = suite.admin;
+  const db: Database = suite.db;
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
 
-  const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const managerSession = await startManagementSession(tx, {
-      personId: mgr.rows[0]!.id,
-    });
-    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
+  const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
+    const [mgr] = await tx
+      .insert(persons)
+      .values({
+        displayName: `The Manager ${crypto.randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role: "manager",
+      })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({
+        displayName: `The Clerk ${crypto.randomUUID()}`,
+        pinHash: hashPin("1234"),
+        role: "staff",
+      })
+      .returning({ id: persons.id });
+    const managerSession = await startManagementSession(tx, { personId: mgr!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
@@ -75,28 +108,27 @@ async function setupVenue(): Promise<Venue> {
   };
   return {
     cfg,
-    ctx: { db, cfg, core: fakeCore({ tillId: till.rows[0]!.id, nodeId }) },
+    ctx: { db, cfg, core: fakeCore({ tillId: till!.id, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };
 }
 
 /** One Hono app per venue — the routes bind ONE tenant via `ctx.cfg`, so each venue's routes need
- * their own app (mirrors `purchasing-api.pg.test.ts`). */
+ * their own app. */
 function mountApp(ctx: ModuleRouteContext): Hono {
   const app = new Hono();
   BOOKINGS_ROUTES.mount(app, ctx, noopLog);
   return app;
 }
 
-/** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
+/** Insert an ACTIVE dining table for the venue, returning its id. */
 async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const row = await tx.execute<{ id: string }>(sql`
-      insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
-    return row.rows[0]!.id;
-  });
+  const [row] = await suite.db
+    .insert(diningTables)
+    .values({ locationId: cfg.locationId, label, active: true })
+    .returning({ id: diningTables.id });
+  return row!.id;
 }
 
 /** JSON POST/PATCH/GET helper carrying `cookie`. */
@@ -150,7 +182,7 @@ async function createBooking(
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("Bookings API over real Postgres (routes, gates and request screens)", () => {
+describe("Bookings API (routes, gates and request screens)", () => {
   it("runs the manager happy path: create → list → patch → seat → read-back", async () => {
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
@@ -179,6 +211,13 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     });
     expect(patchRes.status).toBe(204);
     const afterPatch = (await listOn(app, managerCookie, "2026-08-20")).find((r) => r.id === id);
+    // LEFT AS IT WAS, AND THIS CASE IS RED BECAUSE OF IT. `booking_time` was a PostgreSQL `time`,
+    // which normalised `21:30` to `21:30:00` on the way back out; `timeOfDay` is plain `text` on
+    // this engine (`packages/db/src/schema/columns.ts`), so what is stored and returned is the
+    // `21:30` the request sent. Nothing between the route and the column rewrites it — `requireTime`
+    // (`./routes.ts`) validates and passes the string through. Changing `21:30:00` to `21:30` is a
+    // change to what this case ASSERTS, not a translation of PostgreSQL-only SQL, so it is left for
+    // the owner to decide rather than edited to pass.
     expect(afterPatch).toMatchObject({ bookingTime: "21:30:00", contactName: "García party" });
 
     // Seat: opens a real TS-1 tab on the booking's table and links it.
@@ -261,13 +300,15 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
     // `booking.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
     // before any op runs on every route.
     //
-    // GUARD-BY-DELETION (authorizeManager), run 2026-08-30 against postgres:18 via Testcontainers
-    // (TESTCONTAINERS_RYUK_DISABLED=true): removed the
+    // GUARD-BY-DELETION (authorizeManager), re-taken on THIS engine 2026-09-22 on Node v26.7.0:
+    // removed the
     //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: BOOKING_WRITE });`
-    // call from `routes.ts`'s `gated` helper. This test then FAILED — every staff request that
-    // expected 403 instead reached its op (POST → 201, GET → 200, the by-id routes → 404/409/204), so
-    // the `toBe(403)` assertions flipped green→red. Restored the line and the test passed again;
-    // `git diff routes.ts` is clean afterwards.
+    // call from `routes.ts`'s `gated` helper and changed nothing else. This case then FAILED —
+    // every staff request that expected 403 instead reached its op — and it was the ONLY case in
+    // this file to change state (the happy path above is red either way, for the unrelated reason
+    // its own comment gives, and the 401 case stayed green, so the session check is a separate
+    // mechanism). Restored, this case passes again. The original reading was taken 2026-08-30
+    // against postgres:18 via Testcontainers.
     const { ctx, managerCookie, staffCookie } = await setupVenue();
     const app = mountApp(ctx);
     // A real booking the manager owns, so the staff by-id calls target an id that DOES exist — the
@@ -436,8 +477,11 @@ describe("Bookings API over real Postgres (routes, gates and request screens)", 
   it("400s an out-of-range but well-shaped bookingTime at the screen, never a downstream 500", async () => {
     // `25:61` is `\d{2}:\d{2}`-shaped but out of range: it must be refused as a clean 400
     // `management.request_invalid` by `requireTime`'s range-validating regex BEFORE it reaches the
-    // `time` column (where it would `22007` → an opaque `server.internal` 500). A valid `20:00` still
-    // creates (201), so the tightened regex has not broken the accepted shape.
+    // column. A valid `20:00` still creates (201), so the tightened regex has not broken the
+    // accepted shape. Under PostgreSQL the column itself was the backstop — a `time` refused `25:61`
+    // with `22007`, so a screen that let it through produced an opaque `server.internal` 500. There
+    // is NO backstop now: `timeOfDay` is plain `text` (`packages/db/src/schema/columns.ts`) and
+    // would store `25:61` without complaint, which makes the screen the only thing standing here.
     const { ctx, managerCookie } = await setupVenue();
     const app = mountApp(ctx);
 

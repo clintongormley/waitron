@@ -1,5 +1,5 @@
-import { unique } from "drizzle-orm/pg-core";
-import { count, flag, id, label, table, tsString } from "./columns.js";
+import { unique } from "drizzle-orm/sqlite-core";
+import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 
 /**
  * A venue-configured MANUAL service status a table may carry (design §2a) — "Bill requested",
@@ -11,7 +11,7 @@ import { count, flag, id, label, table, tsString } from "./columns.js";
 export const tableServiceStatuses = table(
   "table_service_statuses",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The human label the floor plan shows ("Bill requested", "Needs cleaning"). Unique within a venue.
     label: label("label").notNull(),
     // A floor-plan swatch — a hex ("#ef4444") or a short token ("amber"), app-validated on write
@@ -20,7 +20,7 @@ export const tableServiceStatuses = table(
     // Author-controlled ordering in the editor + the floor-plan picker.
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // No two statuses share a label within a venue (design §2a) — the unique `createStatus`/`updateStatus`

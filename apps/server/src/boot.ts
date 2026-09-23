@@ -7,7 +7,6 @@ import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
-  createPostgresDb,
   installChangeFeed,
   subscribeToChanges,
   persistNodeMembershipIfNewer,
@@ -16,6 +15,7 @@ import {
   readNodeMembership,
   setSingletonRoleTx,
   readMirrorConfig,
+  openVenueDatabase,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -64,7 +64,6 @@ import type {
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
-import { closeAll } from "./close-all.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -204,22 +203,19 @@ export interface StartedServer {
    */
   promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /**
-   * Resolves once background work has stopped, the listeners are closed and the mode's long-lived
-   * pools are closed; rejects if any of those pools fails to close.
+   * Resolves once background work has stopped, the listeners are closed and the venue store is
+   * closed; rejects if any of that fails.
    */
   close(): Promise<void>;
 }
 
 /**
  * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
- * work and which connection pools to drain. `closePools` closes, through `closeAll`, the long-lived
- * pools the mode holds: setup — the app pool and the provisioning owner pool; adoption-pending and
- * trading — the app pool and the owner pool. Trading's backup read pool is the exception:
- * `backupSupervisor.stop()` in `stopWork` closes it, swallowing a failure to close it. Short-lived
- * pools (a demote's or promote's owner pool) close in their own
- * `finally`. Every close in `closePools` is attempted and the first failure is rethrown, so
- * `close()` rejects; a signal-initiated shutdown then logs `server.shutdown_failed`, unless the
- * shutdown deadline has already exited the process. Setup's `stopWork` is a no-op;
+ * work and what to close. In every mode `closePools` closes the venue store, which is both of the
+ * directory's files. Trading's backup read connection is the exception: `backupSupervisor.stop()` in
+ * `stopWork` closes it, swallowing a failure to close it. A failure to close rejects `close()`; a
+ * signal-initiated shutdown then logs `server.shutdown_failed`, unless the shutdown deadline has
+ * already exited the process. Setup's `stopWork` is a no-op;
  * adoption-pending's AWAITS the adoption worker — `runFinishAdoption` takes no abort signal, so there
  * is nothing to cancel; trading's stops the main loop, the outbound tunnel and the backup sweep, and
  * closes the live event bus after dropping its change-feed subscription. That unsubscribe is itself
@@ -270,7 +266,6 @@ export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url
 const BACKUP_ENV_KEYS = [
   "WAITRON_BACKUP_DIR",
   "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_DATABASE_URL",
   "WAITRON_BACKUP_RECOVERY_KEY",
   "WAITRON_BACKUP_SCHEDULE_DAYS",
   "WAITRON_BACKUP_AT",
@@ -641,10 +636,9 @@ export function startLandingListener(
  * The `StartedServer` every mode returns, with the shared `close()` sequence written once. `close()`
  * is idempotent. The mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops
  * any background work and awaits it; then, after the listeners close and in a `finally` so a
- * listener failure still reaches it, `closePools` closes the mode's long-lived pools (setup: app +
- * provisioning owner; adoption-pending and trading: app + owner; trading's backup read pool
- * is closed by `stopWork` instead). A pool that fails to close rejects `close()` only after every
- * pool in `closePools` has been attempted, and `server.stopped` is then not logged. `mdns` is the
+ * listener failure still reaches it, `closePools` closes the venue store (trading's backup read
+ * connection is closed by `stopWork` instead). A failure to close rejects `close()`, and
+ * `server.stopped` is then not logged. `mdns` is the
  * mDNS responder (inactive for development and loopback listeners); `close()` stops it FIRST — the box is
  * going down, so it must stop advertising `waitron.local` before anything else.
  */
@@ -662,9 +656,11 @@ function makeStartedServer(
     | { kind: "mirror"; run: (a: FenceAttestation) => Promise<MirrorPromotionResult> }
     | { kind: "local-secondary"; run: (a: FenceAttestation) => Promise<PromotionResult> },
 ): StartedServer {
-  // Guards a second, LOSING concurrent `close()`: without it, both calls would reach the pool
-  // teardown (pg-pool's `.end()`), and `.end()` a second time throws "Called end on pool more than
-  // once". `bin.ts`'s own signal latch prevents two calls from a signal handler today, but `close()`
+  // Guards a second, LOSING concurrent `close()`: without it both calls would run the whole
+  // sequence — stopping the mdns responder, the background work and the listeners a second time.
+  // (The store's own `close` is separately idempotent, `packages/store/src/index.ts`, so it is this
+  // guard that owns everything ABOVE it.) `bin.ts`'s own signal latch prevents two calls from a
+  // signal handler today, but `close()`
   // is exported on `StartedServer` precisely so a caller outside `bin.ts` can invoke it directly — a
   // test hook above all — with no latch of its own. Checked and set synchronously, before the first
   // `await`: JS's run-to-completion means the loser's check always sees the winner's write, however
@@ -682,21 +678,21 @@ function makeStartedServer(
       if (closed) return;
       closed = true;
       // Stop advertising FIRST — the box is going down, so `waitron.local` must stop resolving to it
-      // before the listener and pools come apart. `stop()` is idempotent and destroys the UDP socket
+      // before the listener and the store come apart. `stop()` is idempotent and destroys the UDP socket
       // once, so a second concurrent close() (guarded above) never double-destroys it either.
       // `.catch(() => {})`: `stop()` never rejects today (mdns.ts's own `Promise<void>` executor has
-      // no reject path), but a reject here must never skip the pool teardown below, so this is
+      // no reject path), but a reject here must never skip the store teardown below, so this is
       // defensive rather than a response to an observed failure.
       await mdns.stop().catch(() => {});
-      // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
+      // Stop this boot's background work and await it BEFORE the listener/store teardown below, so
       // close() does not leave a worker running. This await sits outside the try/finally below,
-      // so a rejecting `stopWork` skips `closePools` and leaves the pools open: a mode's `stopWork`
+      // so a rejecting `stopWork` skips `closePools` and leaves the store open: a mode's `stopWork`
       // must not reject.
       await teardown.stopWork();
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
-      // already gone — see bin.ts's own double-signal guard) must still close the pools. `close()`
+      // already gone — see bin.ts's own double-signal guard) must still close the store. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
-      // above all — would otherwise be left holding open pools on exactly the path that failed.
+      // above all — would otherwise be left holding the store open on exactly the path that failed.
       try {
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection, which
@@ -705,7 +701,7 @@ function makeStartedServer(
       } finally {
         // Close the plain-HTTP landing listener too (when one was started), in the `finally` so a
         // rejecting `server.close()` above never leaks it. `.catch(() => {})` for the same reason the
-        // mdns stop above swallows: a reject here must not skip the pool teardown below.
+        // mdns stop above swallows: a reject here must not skip the store teardown below.
         if (landing !== undefined) await landing.close().catch(() => {});
         await teardown.closePools();
       }
@@ -717,17 +713,20 @@ function makeStartedServer(
 /**
  * The one place the real implementations meet. Everything above is injected, so this function is
  * thin by construction. `tsc` pins every field mapping below against each callee's own signature;
- * `boot.test.ts` is this function's own test subject — calling it against a real container, as the
- * deployment role, and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
+ * `boot.test.ts` is this function's own test subject — calling it against a real migrated venue
+ * directory (`openVenueDatabase`; `grep -c 'useRealPostgres\|Testcontainers' apps/server/src/boot.test.ts`
+ * prints 0, run 2026-09-23) and asserting `onPass`'s effect on `/health`, the `minTickMs`/`maxTickMs`
  * mapping (via the logged `loop.sleeping` line, since a duty-neutral pass alone cannot distinguish a
  * swapped mapping from a correct one), both sides of the `settlementLagMs` conditional spread, and
- * `close()`'s own sequencing including its idempotency guard. `pass.pg.test.ts` does NOT import
- * this file — it builds its own, separate composition of the same pieces to prove the composed pass
- * runs as the non-superuser role; that predates `boot.test.ts` and remains evidence for the same
- * SHAPE of wiring, not a substitute for testing this function directly. The manual end-to-end boot
- * recorded in the Task 11 report (`node dist/server.js` against a fresh container, through to a
- * clean `/health` and a graceful `SIGTERM`) remains the only evidence that the BUNDLE, not just the
- * source, boots — `boot.test.ts` runs from source, matching every other suite in this package.
+ * `close()`'s own sequencing including its idempotency guard. `pass.db.test.ts` does NOT import this
+ * file — it builds its own, separate composition of the same pieces and runs the REAL duties against
+ * a migrated database; it predates `boot.test.ts` and remains evidence for the same SHAPE of wiring,
+ * not a substitute for testing this function directly. What it USED to add — running that
+ * composition as a non-superuser role, so a missing grant failed it — is gone with the roles, and is
+ * replaced by nothing; its own header states that. The manual end-to-end boot recorded in the Task
+ * 11 report (`node dist/server.js` through to a clean `/health` and a graceful `SIGTERM`) remains
+ * the only evidence that the BUNDLE, not just the source, boots — `boot.test.ts` runs from source,
+ * matching every other suite in this package.
  *
  * Boot failures ESCAPE, deliberately: invalid config, an unloadable key ring, a failed migration or
  * an unreachable database exit non-zero and let the supervisor decide. A host that boots
@@ -792,8 +791,10 @@ export async function startServer(
   // that file's tail to anyone on the venue's LAN with no login. The STDOUT half is left whole: it is
   // the installer's channel (spec §4.4), reachable only with a shell on the box, and masking it would
   // erase the difference between a wrong password and no password at all — both render `***` — which
-  // is exactly what an installer chasing `provisioning.database_unreachable` (SQLSTATE `28P01`) has
-  // to tell apart. Pinned by `recovery-surface.test.ts` → "the caught error's own words on the page",
+  // is exactly what an installer chasing a refused outbound connection has to tell apart. The
+  // credentialed URLs that reach the log are the box's OUTBOUND ones now (SMTP, the mirror relay, a
+  // payment provider); the box's own database is a file on its disk and carries no password, so the
+  // database example this reasoning used to carry is gone with the cluster. Pinned by `recovery-surface.test.ts` → "the caught error's own words on the page",
   // which asserts both directions on one logged line.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
@@ -813,10 +814,10 @@ export async function startServer(
     });
   }
   // Each configured built-SPA directory must actually hold an `index.html`. Checked HERE, in the
-  // same fail-fast-before-resources group as the `maxTickMs` guard above and BEFORE any pool is
-  // opened or migrations run: `assertBuiltApp` is a pure `existsSync` with no database dependency, so
-  // a wrong or never-built dir should fail the boot LOUDLY (`server.config_invalid`, naming the env
-  // var — §8's "everything escapes") before it costs a migration run or an open app-role pool, not
+  // same fail-fast-before-resources group as the `maxTickMs` guard above and BEFORE the venue store
+  // is opened or migrations run: `assertBuiltApp` is a pure `existsSync` with no database dependency,
+  // so a wrong or never-built dir should fail the boot LOUDLY (`server.config_invalid`, naming the env
+  // var — §8's "everything escapes") before it costs a migration run or an open store, not
   // after. Gated exactly as the mounts are — dev leaves them unset. The trading SPA mounts stay LAST,
   // after every API route (`mountSpa`'s "call me after every API route" contract); the setup wizard is
   // mounted inside `mountSetup` (the setup branch below), but its dir is checked here, in BOTH modes,
@@ -832,26 +833,25 @@ export async function startServer(
   }
 
   // Before ANY write, including migrations: a host pointed at another environment's database must
-  // stop here. Its own connection, closed immediately — the long-lived pool below is not opened
-  // until migrations have run, and borrowing the migrator's string keeps this on the same database
-  // the migrations are about to touch.
-  const stampProbe = await createPostgresDb(config.migrationsDatabaseUrl);
+  // stop here. Its own short-lived open of the same venue directory, closed in the `finally` — the
+  // long-lived store below is not opened until migrations have run, so at no point does this
+  // function hold two opens of one directory at once, and `applyMigrations` takes its own file lock
+  // over a directory nothing else here has open.
+  const stampProbe = await openVenueDatabase(config.venueDir);
   try {
-    await assertDeploymentMatches(stampProbe, config.environment);
+    await assertDeploymentMatches(stampProbe.venue, config.environment);
   } finally {
     await stampProbe.close();
   }
 
-  // Migrations first, over `config.migrationsDatabaseUrl` — which defaults to `config.databaseUrl`
-  // but may name a differently-privileged role (config.ts's own doc comment). Running this BEFORE
-  // opening the long-lived pool below means a migration failure never leaves an app-role pool open
-  // for nothing, and it means the pool is never asked to double as the migrator's connection: the
-  // two connection strings can differ, and `applyMigrations` now opens its own connection from
-  // whichever string it is given rather than migrating over a pool built from a different one.
+  // Migrations first, over `config.venueDir`. `applyMigrations` takes the directory's migration lock
+  // and opens and closes its own store (`packages/migrations/src/apply.ts` states why both), so
+  // running it BEFORE the long-lived open below keeps this boot to one open of the directory at a
+  // time and leaves nothing open behind a failed migration.
   // SP-1b: the on-box `modules.json` desired set, read BEFORE the migration run — exactly when the
   // decision is needed (architecture §1.3). Read UNCONDITIONALLY (both modes need it: trading for the
   // migration filter + drift log, setup for the provisioning gate below), so a malformed file fails
-  // fast, once, before the migration run (only the short-lived stamp probe above has opened yet).
+  // fast, once, before the migration run (the stamp probe above has already closed).
   // Setup mode still migrates the FULL schema (the wizard needs it — SP-1a §4 "setup-migrates-all");
   // trading mode migrates only the enabled set (default: all). `enabledModules` never drops `core` —
   // it is `mandatory`, and `parseModuleConfig` refuses disabling a mandatory module.
@@ -862,11 +862,15 @@ export async function startServer(
   // `dev-migration-hint.ts` states why that line is worth a seam here.
   await withDevMigrationHint(log, config.devMode, () =>
     applyMigrations(
-      config.migrationsDatabaseUrl,
+      config.venueDir,
       migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
     ),
   );
-  const db = await createPostgresDb(config.databaseUrl);
+  // The long-lived open, and the only one for the rest of this boot. `store` owns BOTH files, so
+  // every teardown below closes IT; `db` is the venue handle, which is what every read and write in
+  // this function names.
+  const store = await openVenueDatabase(config.venueDir);
+  const db = store.venue;
 
   // SP-1b drift visibility (spec §3): compare the enabled set against what the DB has ACTUALLY
   // migrated (derived from appliedSchemaVersion — there is no deployment column). softDisabled = a
@@ -874,42 +878,32 @@ export async function startServer(
   // migrated. Logged at info so an operator sees the reconcile outcome; nothing acts on it here beyond
   // the filter above.
   //
-  // The reads run over their OWN short-lived MIGRATOR connection (`config.migrationsDatabaseUrl`, the
-  // same string `applyMigrations` and the stamp probe above use), NOT the app `db` pool. The migrator
-  // created and owns the drizzle journal tables (`__drizzle_migrations_*`), so it is the connection
-  // that reliably reads them; keep this probe on it rather than coupling the read to the app pool's
-  // role — the same reason the stamp probe above runs on the migrator connection, not the pool. They
-  // also run auto-commit — a plain per-statement
-  // `execute`, never inside a transaction — because `appliedSchemaVersion`'s 42P01 catch for a
-  // never-migrated table poisons an enclosing transaction (spec §3); a fresh connection used
-  // auto-commit satisfies that just as the pool would.
+  // The reads run on `db`, the store already open above — there is one file here and nothing to
+  // choose between. They are also outside any transaction, and nothing needs them to be inside one:
+  // `appliedSchemaVersion` asks `sqlite_master` whether the journal table exists rather than issuing
+  // a statement it expects to be refused (`packages/migrations/src/schema-version.ts` carries the
+  // measurement that decided that), so no refusal reaches this code at all.
   // SP-1b drift visibility only (the outbox schema-version park gate that once read this is gone with
   // the sync block). Computed in the trading-mode block, used solely to log `module.reconcile` drift.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.till !== undefined) {
-    const driftProbe = await createPostgresDb(config.migrationsDatabaseUrl);
-    try {
-      // One sweep of every module's applied schema version, keyed by name (`schemaVersionsByModule`,
-      // which the backup manifest shares — the driftProbe is an auto-commit pool, so its `Promise.all`
-      // reads are each isolated); the migrated Set is derived from it (version > 0).
-      const myModuleVersions = await schemaVersionsByModule(driftProbe, ALL_MODULES);
-      appliedModuleVersions = myModuleVersions;
-      const migrated = new Set(
-        Object.entries(myModuleVersions)
-          .filter(([, v]) => v > 0)
-          .map(([n]) => n),
-      );
-      // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
-      // (the branch above), so reuse it rather than recompute the same filter.
-      const r = reconcile(
-        setsToMigrate.map((m) => m.name),
-        migrated,
-      );
-      if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
-        log("info", "module.reconcile", { softDisabled: r.softDisabled, toMigrate: r.toMigrate });
-      }
-    } finally {
-      await driftProbe.close();
+    // One sweep of every module's applied schema version, keyed by name (`schemaVersionsByModule`,
+    // which the backup manifest shares); the migrated Set is derived from it (version > 0).
+    const myModuleVersions = await schemaVersionsByModule(db, ALL_MODULES);
+    appliedModuleVersions = myModuleVersions;
+    const migrated = new Set(
+      Object.entries(myModuleVersions)
+        .filter(([, v]) => v > 0)
+        .map(([n]) => n),
+    );
+    // `setsToMigrate` already holds `enabledModules(ALL_MODULES, moduleConfig)` in trading mode
+    // (the branch above), so reuse it rather than recompute the same filter.
+    const r = reconcile(
+      setsToMigrate.map((m) => m.name),
+      migrated,
+    );
+    if (r.softDisabled.length > 0 || r.toMigrate.length > 0) {
+      log("info", "module.reconcile", { softDisabled: r.softDisabled, toMigrate: r.toMigrate });
     }
   }
 
@@ -985,10 +979,10 @@ export async function startServer(
     //
     // Guarded so a throw anywhere in this branch (`ensureBoxSecrets` on EACCES/EROFS under the state
     // dir, a missing/unreadable `secrets.env`, or `startListening` -> `buildServeOptions` ->
-    // `readFileSync` on a missing/unreadable operator TLS file) closes `db` before it propagates —
-    // mirroring the trading branch's own `loadKeyRing` guard below. `createPostgresDb` above already
-    // opened a LIVE pool, and on a throw path `startServer` never returns a `StartedServer`, so
-    // nothing else would ever call `db.close()` — the pool would leak. The happy path is unchanged.
+    // `readFileSync` on a missing/unreadable operator TLS file) closes the store before it propagates
+    // — mirroring the trading branch's own `loadKeyRing` guard below. The store is open by now, and on
+    // a throw path `startServer` never returns a `StartedServer`, so nothing else would ever call
+    // `store.close()` and both files would stay open. The happy path is unchanged.
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
@@ -1007,280 +1001,244 @@ export async function startServer(
         parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
       );
       const accountKey = resolveAccountKey({}, ring);
-      // The OWNER connection every setup-mode owner write opens over — `applyVenue`'s INSERT into
-      // `tenants` (which `app_user` deliberately cannot — CLAUDE.md §3), `stampDeployment`'s
-      // `deployment` singleton, and the break-glass secret mint the adopt path rides through this same
-      // pool. All need the role that OWNS the tables, NOT the app pool's `config.databaseUrl`.
-      // `config.adminDatabaseUrl` IS that table-owner connection (the role that ran
-      // `waitron-provision instance` — CREATE DATABASE + the migrations over the admin string,
-      // `packages/provisioning/src/instance-apply.ts`); on a role-split appliance it is distinct from
-      // `migrationsDatabaseUrl` (an `app_user` member with no INSERT on `tenants`), and unset it falls
-      // back to `migrationsDatabaseUrl`→`databaseUrl` so dev/CI is unchanged and a misconfigured
-      // appliance fails CLOSED (`42501`) rather than writing under a stray pool. Closed in the setup
-      // teardown (`closePools`) beside `db`, and on any throw below (the inner catch) so a later
-      // failure — from `mountSetup` or `startListening` — never leaks it.
-      const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
-      try {
-        // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
-        // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
-        // and `adopt` (C2b) persist `trading.env` through the SAME writer.
-        const persistTrading = async (cfg: TradingConfig): Promise<void> => {
-          await writeTradingEnv(config.stateDir, {
-            ...cfg,
-            accountKey: cfg.accountKey ?? accountKey.toString("base64"),
-          });
-        };
-        // The NAME of the database `ownerDb` writes — echoed by `provisioning.foreign_tenant` if a
-        // fresh venue or a mirror adopt is pointed at a database already holding a different tenant.
-        // Parsed from the owner URL, but never the URL itself (it can carry a password, and that code param is
-        // operator-typed configuration, never a secret): an unparseable string (a bare Unix-socket
-        // path throws in `new URL` — cli.ts's socket note) falls back to a neutral label.
-        let ownerDatabaseName = "the target database";
-        try {
-          const parsed = new URL(config.adminDatabaseUrl).pathname.replace(/^\//, "");
-          if (parsed !== "") ownerDatabaseName = parsed;
-        } catch {
-          // Keep the neutral label — a malformed/socket URL must not leak into the error param.
-        }
-        // The setup surface, now with the slice-2b provisioning deps bound. `provision` captures
-        // `ownerDb`; `db`/`ring` are handed to the fiscal contribution's provisioning-secret seal seat
-        // (so boot imports no regime); `persistTrading` writes `<stateDir>/trading.env`; `requestRestart`
-        // SIGTERMs this process so the supervisor restarts it into trading mode (`bin.ts`'s latch does
-        // the graceful shutdown). `databaseUrl`/`migrationsDatabaseUrl` become `trading.env`'s own
-        // connection strings for the next boot. `adopt` is the MIRROR-side sibling (C2b): it fetches the
-        // primary's bundle over real HTTP (`fetchMirrorBundle`) and adopts the venue into this box's own
-        // database, reusing the SAME `ownerDb`/`ring`/`persistTrading` the provision path wires. The `*`
-        // catch-all inside `mountSetup` stays terminal and last, so the POST routes (registered before
-        // it) are not shadowed.
-        mountSetup(
-          app,
-          {
-            environment: config.environment,
-            devMode: config.devMode,
-            operations: createSetupOperationStore(config.stateDir),
-            stageRestore: (request) =>
-              stageRestoreRequest(config.stateDir, request, async (candidate) => {
-                await validateArtifact({
-                  artifact: candidate.artifact,
-                  recoveryKey: candidate.recoveryKey,
-                  databaseUrl: config.migrationsDatabaseUrl,
+      // `writeTradingEnv` returns the path it wrote; both setup verbs only need `Promise<void>`, so
+      // discard it explicitly rather than widen the dep's type. Extracted to a const so `provision`
+      // and `adopt` (C2b) persist `trading.env` through the SAME writer.
+      const persistTrading = async (cfg: TradingConfig): Promise<void> => {
+        await writeTradingEnv(config.stateDir, {
+          ...cfg,
+          accountKey: cfg.accountKey ?? accountKey.toString("base64"),
+        });
+      };
+      // What `provisioning.foreign_tenant` names when a fresh venue or a mirror adopt is pointed at
+      // a database that already holds a different tenant. The venue DIRECTORY is the database now, so
+      // that is the value: `WAITRON_VENUE_DIR` or its default under the state root (`config.ts`), both
+      // operator-typed configuration rather than a secret, which is why it may be echoed. The name
+      // the receiving side gives this — `database` — is unchanged.
+      const ownerDatabaseName = config.venueDir;
+      // The setup surface, now with the slice-2b provisioning deps bound. `db`/`ring` are handed to
+      // the fiscal contribution's provisioning-secret seal seat (so boot imports no regime);
+      // `persistTrading` writes `<stateDir>/trading.env`; `requestRestart` SIGTERMs this process so the
+      // supervisor restarts it into trading mode (`bin.ts`'s latch does the graceful shutdown).
+      // `adopt` is the MIRROR-side sibling (C2b): it fetches the primary's bundle over real HTTP
+      // (`fetchMirrorBundle`) and adopts the venue into this box's own database, reusing the SAME
+      // `db`/`ring`/`persistTrading` the provision path wires. The `*` catch-all inside `mountSetup`
+      // stays terminal and last, so the POST routes (registered before it) are not shadowed.
+      mountSetup(
+        app,
+        {
+          environment: config.environment,
+          devMode: config.devMode,
+          operations: createSetupOperationStore(config.stateDir),
+          stageRestore: (request) =>
+            stageRestoreRequest(config.stateDir, request, async (candidate) => {
+              await validateArtifact({
+                artifact: candidate.artifact,
+                recoveryKey: candidate.recoveryKey,
+                stateDir: config.stateDir,
+                stagingDir: join(config.stateDir, "restore-staging"),
+                migrationsRoot: config.migrationsRoot,
+                modules: ALL_MODULES,
+                environment: candidate.environment,
+              });
+            }),
+          stageConfiguration: (artifact, passphrase) =>
+            stageConfigurationImport(
+              config.stateDir,
+              ring,
+              artifact,
+              passphrase,
+              async (bundle) => {
+                const resolvedConfig = venueModuleConfig(
+                  moduleConfig,
+                  bundle.venue.location.fiscalTerritory,
+                );
+                const modules = enabledModules(ALL_MODULES, resolvedConfig);
+                validateConfigurationBundle(
+                  bundle,
+                  modules,
+                  await schemaVersionsByModule(db, modules),
+                );
+              },
+            ),
+          clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
+          runFiscalTest: async ({ request, contribution, secret }) => {
+            const resolvedConfig = venueModuleConfig(
+              moduleConfig,
+              request.venue.location.fiscalTerritory,
+            );
+            const modules = enabledModules(ALL_MODULES, resolvedConfig);
+            const moduleVersions = await schemaVersionsByModule(db, modules);
+            const input = fiscalReadinessInput({
+              venue: request.venue,
+              contribution,
+              secret,
+              moduleVersions,
+              applicationVersion:
+                process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
+            });
+            return createFiscalReadinessStore(
+              config.stateDir,
+              () =>
+                submitFiscalReadiness({
                   stateDir: config.stateDir,
-                  stagingDir: join(config.stateDir, "restore-staging"),
                   migrationsRoot: config.migrationsRoot,
-                  modules: ALL_MODULES,
-                  environment: candidate.environment,
-                  log,
-                });
-              }),
-            stageConfiguration: (artifact, passphrase) =>
-              stageConfigurationImport(
-                config.stateDir,
-                ring,
-                artifact,
-                passphrase,
-                async (bundle) => {
-                  const resolvedConfig = venueModuleConfig(
-                    moduleConfig,
-                    bundle.venue.location.fiscalTerritory,
-                  );
-                  const modules = enabledModules(ALL_MODULES, resolvedConfig);
-                  validateConfigurationBundle(
-                    bundle,
-                    modules,
-                    await schemaVersionsByModule(ownerDb, modules),
-                  );
-                },
-              ),
-            clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
-            runFiscalTest: async ({ request, contribution, secret }) => {
-              const resolvedConfig = venueModuleConfig(
-                moduleConfig,
-                request.venue.location.fiscalTerritory,
-              );
-              const modules = enabledModules(ALL_MODULES, resolvedConfig);
-              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
-              const input = fiscalReadinessInput({
+                  modules,
+                  venue: request.venue,
+                  contribution,
+                  secret,
+                  ring,
+                  readinessInput: input,
+                }),
+              ring.current.key,
+            ).run(input);
+          },
+          assertFiscalReady: async ({ request, contribution, secret }) => {
+            const resolvedConfig = venueModuleConfig(
+              moduleConfig,
+              request.venue.location.fiscalTerritory,
+            );
+            const modules = enabledModules(ALL_MODULES, resolvedConfig);
+            const moduleVersions = await schemaVersionsByModule(db, modules);
+            await createFiscalReadinessStore(
+              config.stateDir,
+              async () => "uncertain",
+              ring.current.key,
+            ).assertReady(
+              fiscalReadinessInput({
                 venue: request.venue,
                 contribution,
                 secret,
                 moduleVersions,
                 applicationVersion:
                   process.env.WAITRON_BUILD_ID ?? process.env.npm_package_version ?? "development",
-              });
-              return createFiscalReadinessStore(
-                config.stateDir,
-                () =>
-                  submitFiscalReadiness({
-                    stateDir: config.stateDir,
-                    migrationsRoot: config.migrationsRoot,
-                    modules,
-                    venue: request.venue,
-                    contribution,
-                    secret,
-                    ring,
-                    readinessInput: input,
-                  }),
-                ring.current.key,
-              ).run(input);
-            },
-            assertFiscalReady: async ({ request, contribution, secret }) => {
-              const resolvedConfig = venueModuleConfig(
-                moduleConfig,
-                request.venue.location.fiscalTerritory,
-              );
-              const modules = enabledModules(ALL_MODULES, resolvedConfig);
-              const moduleVersions = await schemaVersionsByModule(ownerDb, modules);
-              await createFiscalReadinessStore(
-                config.stateDir,
-                async () => "uncertain",
-                ring.current.key,
-              ).assertReady(
-                fiscalReadinessInput({
-                  venue: request.venue,
-                  contribution,
-                  secret,
-                  moduleVersions,
-                  applicationVersion:
-                    process.env.WAITRON_BUILD_ID ??
-                    process.env.npm_package_version ??
-                    "development",
-                }),
-              );
-            },
-            // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
-            // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
-            // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
-            // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
-            provision: async (req) => {
-              const resolvedConfig = venueModuleConfig(
-                moduleConfig,
-                req.venue.location.fiscalTerritory,
-              );
-              const modules = enabledModules(ALL_MODULES, resolvedConfig);
-              const staged = req.configurationImport
-                ? await readStagedConfigurationImport(config.stateDir, ring)
-                : null;
-              if (req.configurationImport && staged === null) {
-                throw new AppError("setup.request_invalid", { field: "configurationImport" });
-              }
-              if (
-                staged !== null &&
-                (staged.bundle.venue.country !== req.venue.country ||
-                  staged.bundle.venue.taxId !== req.venue.taxId)
-              ) {
-                throw new AppError("setup.request_invalid", { field: "configurationImport" });
-              }
-              const versions =
-                staged === null ? undefined : await schemaVersionsByModule(ownerDb, modules);
-              const result = await provisionVenue(
-                {
-                  ownerDb,
-                  moduleConfig: resolvedConfig,
-                  database: ownerDatabaseName,
-                  stateDir: config.stateDir,
-                  ...(staged === null
-                    ? {}
-                    : {
-                        beforeCommit: async (tx, result) => {
-                          await importConfigurationTables(
-                            tx,
-                            staged.bundle,
-                            { locationId: result.locationId },
-                            modules,
-                            versions!,
-                          );
-                        },
-                      }),
-                },
-                req,
-              );
-              return result;
-            },
-            recoverProvision: async (req) => {
-              const result = await recoverProvisionedVenue(ownerDb, req);
-              return result;
-            },
-            seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-            adopt: (req) =>
-              adoptFromPrimary(
-                {
-                  ownerDb,
-                  fetchBundle: fetchMirrorBundle,
-                  advertisedOrigin: config.advertisedOrigin,
-                  environment: config.environment,
-                  persistTrading,
-                  // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
-                  // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
-                  persistModuleConfig: async (c) => {
-                    await writeModuleConfig(config.stateDir, c);
-                  },
-                  stateDir: config.stateDir,
-                  databaseUrl: config.databaseUrl,
-                  migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-                  database: ownerDatabaseName,
-                },
-                req,
-              ),
-            establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb, ring }, nodeId),
-            seedMembership: (nodeId) =>
-              seedTermZeroMembership({ db: ownerDb, ring }, nodeId, config.advertisedOrigin),
-            // The owner DB + vault ring the setup surface seals the regime's provisioning secret with,
-            // through the fiscal contribution's `provisioningSecret.seal` seat — so BOOT imports no
-            // regime package (module-seams). The seal fires only for a provision whose regime demands
-            // a secret (Veri*Factu: a production provision's AEAT cert).
-            db: ownerDb,
-            ring,
-            persistTrading,
-            databaseUrl: config.databaseUrl,
-            migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-            requestRestart: () => process.kill(process.pid, "SIGTERM"),
-            // The built setup wizard (slice 2c) served as the setup surface's root catch-all when
-            // configured; `undefined` (dev/Vite, or an image without the bundle) keeps the inline
-            // placeholder shell. Its dir was already `assertBuiltApp`-checked in the fail-fast group
-            // above, so `mountSetup`'s `mountSpa` never becomes a 404-for-every-page catch-all.
-            setupAppDir: config.setupAppDir,
+              }),
+            );
           },
-          log,
-        );
-        const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
-        const server = startListening({ ...config, tls }, app, now, log);
-        // Start discovery after the throwing setup steps so a failed boot cannot leak its socket.
-        // The responder skips development and loopback listeners; close() owns its teardown.
-        const mdns = startMdnsResponder({
-          hostname: BOX_HOSTNAME,
-          devMode: config.devMode,
-          httpHost: config.httpHost,
-          getAddresses: boxAddresses,
-          log,
-        });
-        return makeStartedServer(
-          server,
-          health,
-          log,
-          {
-            // A setup box runs no background work, so there is nothing to abort or await.
-            stopWork: () => Promise.resolve(),
-            // Just the app pool AND the provisioning owner pool — a setup box opens no others.
-            // Both are closed even if one fails; the first failure is then rethrown for the log.
-            closePools: () => closeAll([() => db.close(), () => ownerDb.close()]),
+          // Resolve the fiscal slot from the REQUEST's territory (authoritative, §4): the box's
+          // `moduleConfig` base is default-on, which with two fiscal-slot members would be ambiguous;
+          // `venueModuleConfig` forces exactly the territory's fiscal module on before provisionVenue's
+          // gate/slot check runs and before it persists the set to `<stateDir>/modules.json`.
+          provision: async (req) => {
+            const resolvedConfig = venueModuleConfig(
+              moduleConfig,
+              req.venue.location.fiscalTerritory,
+            );
+            const modules = enabledModules(ALL_MODULES, resolvedConfig);
+            const staged = req.configurationImport
+              ? await readStagedConfigurationImport(config.stateDir, ring)
+              : null;
+            if (req.configurationImport && staged === null) {
+              throw new AppError("setup.request_invalid", { field: "configurationImport" });
+            }
+            if (
+              staged !== null &&
+              (staged.bundle.venue.country !== req.venue.country ||
+                staged.bundle.venue.taxId !== req.venue.taxId)
+            ) {
+              throw new AppError("setup.request_invalid", { field: "configurationImport" });
+            }
+            const versions =
+              staged === null ? undefined : await schemaVersionsByModule(db, modules);
+            const result = await provisionVenue(
+              {
+                ownerDb: db,
+                moduleConfig: resolvedConfig,
+                database: ownerDatabaseName,
+                stateDir: config.stateDir,
+                ...(staged === null
+                  ? {}
+                  : {
+                      beforeCommit: async (tx, result) => {
+                        await importConfigurationTables(
+                          tx,
+                          staged.bundle,
+                          { locationId: result.locationId },
+                          modules,
+                          versions!,
+                        );
+                      },
+                    }),
+              },
+              req,
+            );
+            return result;
           },
-          mdns,
-          // The plain-HTTP trust/landing listener (Task 3): a setup box serves its own minted leaf,
-          // so a phone can trust the CA from this page before hitting the HTTPS interstitial. Started
-          // AFTER the HTTPS bind above, on a different port; `undefined` when disabled or leaf-less.
-          startLandingListener(config, log),
-        );
-      } catch (error) {
-        // A throw AFTER `ownerDb` opened (`mountSetup` / `startListening` / `buildServeOptions`) must
-        // close it before propagating to the outer catch that closes `db` — neither pool may leak.
-        await ownerDb.close();
-        throw error;
-      }
+          recoverProvision: async (req) => {
+            const result = await recoverProvisionedVenue(db, req);
+            return result;
+          },
+          seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
+          adopt: (req) =>
+            adoptFromPrimary(
+              {
+                ownerDb: db,
+                fetchBundle: fetchMirrorBundle,
+                advertisedOrigin: config.advertisedOrigin,
+                environment: config.environment,
+                persistTrading,
+                // `writeModuleConfig` returns the path it wrote; the dep only needs `Promise<void>`,
+                // so discard it the same way `persistTrading` above wraps `writeTradingEnv`.
+                persistModuleConfig: async (c) => {
+                  await writeModuleConfig(config.stateDir, c);
+                },
+                stateDir: config.stateDir,
+                database: ownerDatabaseName,
+              },
+              req,
+            ),
+          establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+          seedMembership: (nodeId) =>
+            seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+          // The venue file + vault ring the setup surface seals the regime's provisioning secret
+          // with, through the fiscal contribution's `provisioningSecret.seal` seat — so BOOT imports no
+          // regime package (module-seams). The seal fires only for a provision whose regime demands
+          // a secret (Veri*Factu: a production provision's AEAT cert).
+          db,
+          ring,
+          persistTrading,
+          requestRestart: () => process.kill(process.pid, "SIGTERM"),
+          // The built setup wizard (slice 2c) served as the setup surface's root catch-all when
+          // configured; `undefined` (dev/Vite, or an image without the bundle) keeps the inline
+          // placeholder shell. Its dir was already `assertBuiltApp`-checked in the fail-fast group
+          // above, so `mountSetup`'s `mountSpa` never becomes a 404-for-every-page catch-all.
+          setupAppDir: config.setupAppDir,
+        },
+        log,
+      );
+      const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
+      const server = startListening({ ...config, tls }, app, now, log);
+      // Start discovery after the throwing setup steps so a failed boot cannot leak its socket.
+      // The responder skips development and loopback listeners; close() owns its teardown.
+      const mdns = startMdnsResponder({
+        hostname: BOX_HOSTNAME,
+        devMode: config.devMode,
+        httpHost: config.httpHost,
+        getAddresses: boxAddresses,
+        log,
+      });
+      return makeStartedServer(
+        server,
+        health,
+        log,
+        {
+          // A setup box runs no background work, so there is nothing to abort or await.
+          stopWork: () => Promise.resolve(),
+          // The venue directory's two files, which `store.close()` closes together — a setup box
+          // opens nothing else.
+          closePools: () => store.close(),
+        },
+        mdns,
+        // The plain-HTTP trust/landing listener (Task 3): a setup box serves its own minted leaf,
+        // so a phone can trust the CA from this page before hitting the HTTPS interstitial. Started
+        // AFTER the HTTPS bind above, on a different port; `undefined` when disabled or leaf-less.
+        startLandingListener(config, log),
+      );
     } catch (error) {
       // mDNS is not started until just before `makeStartedServer` below (after every throwing step in
-      // this branch), so a throw reaching here never opened the UDP socket — only the DB pool (the app
-      // pool AND, if it opened, the provisioning owner pool via the inner catch) needs closing.
-      await db.close();
+      // this branch), so a throw reaching here never opened the UDP socket — only the store needs
+      // closing.
+      await store.close();
       throw error;
     }
   }
@@ -1297,13 +1255,11 @@ export async function startServer(
   // provider, the drain loop), so an unprovisioned box needs no WAITRON_CREDENTIALS_KEY.
   //
   // Guarded so a `loadKeyRing` throw (`credentials.key_missing`, a malformed WAITRON_CREDENTIALS_KEY)
-  // closes `db` before it propagates. `createPostgresDb` above already opened a LIVE pool (it does
-  // `await pool.connect(); probe.release()`, `packages/db/src/client.ts`), and on the throw path
-  // `startServer` never returns a `StartedServer`, so nothing else would ever call `db.close()` — the
-  // pool would leak. This mirrors the `stampProbe` try/finally in the shared prefix above; the happy
-  // path is unchanged. (The pre-existing `readOrderFlow`/`buildCardProvider` throw sites below leak the
-  // same way and are out of scope here — this only restores the no-leak `loadKeyRing` had before it
-  // moved after the pool open.)
+  // closes the store before it propagates. The store is open by now, and on the throw path
+  // `startServer` never returns a `StartedServer`, so nothing else would ever call `store.close()` and
+  // both files would stay open. This mirrors the `stampProbe` try/finally in the shared prefix above;
+  // the happy path is unchanged. (The `readOrderFlow`/`buildCardProvider` throw sites below leave the
+  // store open the same way and are out of scope here.)
   let ring: ReturnType<typeof loadKeyRing>;
   try {
     ring = loadKeyRing(env);
@@ -1312,7 +1268,7 @@ export async function startServer(
     // `loadKeyRing` throw here never opened the UDP socket — only `db` needs closing. The pre-existing
     // `readOrderFlow`/`buildCardProvider` throw sites further down still leak `db` the same way and stay
     // out of scope here (they leaked `db` before slice 3 too — documented above).
-    await db.close();
+    await store.close();
     throw error;
   }
   const accountKey = resolveAccountKey(env, ring);
@@ -1330,24 +1286,11 @@ export async function startServer(
   // read below.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
-    // A dedicated small OWNER pool — the identity establish and the ambient viewer are owner writes.
-    // Opened on `config.migrationsDatabaseUrl`, NOT the `config.adminDatabaseUrl` the plain `ownerDb`
-    // pools in this file take (setup, the fenced demote, `withOwnerDb`): on a role-split appliance those
-    // are two different roles, so the name carries which URL it connects on — the same distinction
-    // `feedOwnerDb` below is named for.
-    // Wrapped so a throw closes both pools (only `db` + this one are open here) before rethrowing.
-    let adoptOwnerDb: Database;
-    try {
-      adoptOwnerDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
-    } catch (error) {
-      await db.close();
-      throw error;
-    }
     // The only status surface an adoption-pending box serves — unauthenticated (no ambient viewer
     // exists yet) and deliberately minimal, distinct from the full `mountBoxStatusApi` shape.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     const finishWorker = runFinishAdoption({
-      ownerDb: adoptOwnerDb,
+      ownerDb: db,
       ring,
       stateDir: config.stateDir,
       modules: setsToMigrate,
@@ -1378,7 +1321,7 @@ export async function startServer(
         stopWork: async () => {
           await finishWorker.catch(() => {});
         },
-        closePools: () => closeAll([() => adoptOwnerDb.close(), () => db.close()]),
+        closePools: () => store.close(),
       },
       mdns,
       // The plain-HTTP trust/landing listener (Task 3) — an adoption-pending box serves trading over
@@ -1390,7 +1333,7 @@ export async function startServer(
   try {
     assertSingleOperationalVenue(await readOperationalVenueIds(db), config.till.locationId);
   } catch (error) {
-    await db.close();
+    await store.close();
     throw error;
   }
 
@@ -1404,19 +1347,19 @@ export async function startServer(
   // a mirror; `mirror-bundle.ts`'s header says what the deleted replication used to supply and that no
   // replacement has landed. A primary is today's flow.
   // Read ONCE here into a refreshable holder that the promote action
-  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its owner-role write — so a mode flip
+  // (`promoteLocalSecondaryToPrimary`, this slice) refreshes after its write — so a mode flip
   // would take effect live, no restart (design §10; the refresh is in promote.ts). This slice does NOT
   // flip the mode: a local-secondary promote refreshes this holder without changing its value ('primary'
   // stays 'primary'). What FLIPS deployment.mode to 'primary' to open the read-only gate live is the
-  // mirror→primary path (spec §5b), a later slice. The pool is already open, so this DB read is free.
+  // mirror→primary path (spec §5b), a later slice. The store is already open, so this read is free.
   // The singleton-ownership axis (promotion runbook design §2), read into its own refreshable holder
   // beside the mode holder: a 'secondary' node (a mirror OR a sell-only local secondary) runs no fiscal
   // duties; only a 'primary' drains/reconciles. Read PER PASS below, and the promote action DOES flip this
   // holder: after writing singleton_role='primary' it refreshes both holders, so the fiscal pass starts on
   // the next tick with no restart (promotion runbook design §3b/§3c).
-  // Both axes from ONE read (a single MVCC snapshot), so the initial holder pair is never torn — the
-  // same single-snapshot guarantee `refreshDeploymentHolders` relies on: two separate reads under READ
-  // COMMITTED could straddle a concurrent promotion and yield an impossible `(mirror, primary)` pair.
+  // Both axes from ONE read of the one row, so the initial holder pair is never torn — the same thing
+  // `refreshDeploymentHolders` relies on: two separate reads could straddle a concurrent promotion and
+  // yield an impossible `(mirror, primary)` pair.
   // Membership rejoin R1 (design §6): a returned ex-primary that holds a superseding document marking
   // it sell-only/evicted must come up FENCED, not as the primary its saved axes still claim. The held
   // document is authority above the persisted axes (wire-protocol §8), and the reconciliation is
@@ -1443,7 +1386,7 @@ export async function startServer(
     try {
       peer = await readMirrorConfig(db);
     } catch (error) {
-      await db.close();
+      await store.close();
       throw error;
     }
     if (peer !== null) {
@@ -1462,10 +1405,9 @@ export async function startServer(
           peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
           fetchPeerMembership: fetchPeerMembershipDocument,
           // The two-part accept fence over the fetched document (`acceptMembershipDocument`: signature +
-          // trust chain, then strictly-newer against the held term), persisting via the app pool's
-          // term-guarded writer only when it accepts (`app_user` holds INSERT/UPDATE on
-          // `node_membership`). Persist-if-accepted, so a newer verified chart is held even when it does
-          // not fence this node.
+          // trust chain, then strictly-newer against the held term), persisting through the
+          // term-guarded writer only when it accepts. Persist-if-accepted, so a newer verified chart is
+          // held even when it does not fence this node.
           acceptDocument: async (incoming, currentTerm) => {
             const result = acceptMembershipDocument(incoming, currentTerm, trustSet);
             if (result.accepted) await persistNodeMembershipIfNewer(db, incoming);
@@ -1474,7 +1416,7 @@ export async function startServer(
           log,
         });
       } catch (error) {
-        await db.close();
+        await store.close();
         throw error;
       }
     }
@@ -1485,35 +1427,25 @@ export async function startServer(
   const fenced = isFenced(heldMembership, config.till.nodeId);
   let axes = initialAxes;
   if (fenced && axes.singletonRole === "primary") {
-    // Demote the singleton axis on the OWNER pool (app_user holds no UPDATE on deployment) — the same
-    // table-owner adminDatabaseUrl owner-write R3b promote uses (withOwnerDb), so it shares the
-    // fail-closed admin→migrations→app fallback. Idempotent: a
-    // second fenced boot already reads 'secondary' and skips. mode stays 'primary' — the (primary,
-    // secondary) pair is valid (deployment_role_valid_ck); the read-only gate below, not the mode,
-    // enforces the fence. This stops the submitter/reconciler/config-writer via their existing
-    // isSingletonPrimary gates with no worker-gating code change.
-    // Close the app `db` pool on ANY throw before rethrowing, matching the loadKeyRing / mirror-guard
+    // Demote the singleton axis. Idempotent: a second fenced boot already reads 'secondary' and
+    // skips. mode stays 'primary' — the (primary, secondary) pair is valid
+    // (deployment_role_valid_ck); the read-only gate below, not the mode, enforces the fence. This
+    // stops the submitter/reconciler/config-writer via their existing isSingletonPrimary gates with
+    // no worker-gating code change.
+    // Close the store on ANY throw before rethrowing, matching the loadKeyRing / mirror-guard
     // close-on-throw discipline in this region: startServer never returns on the throw path, so nothing
-    // else would call `db.close()`. The inner try/finally closes the short-lived owner pool regardless.
+    // else would call `store.close()`.
     try {
-      const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
-      try {
-        // Demote the singleton axis in an owner transaction — app_user holds no UPDATE on
-        // `deployment`. Idempotent: a second fenced boot re-writes the same value.
-        await ownerDb.transaction(async (tx) => {
-          await setSingletonRoleTx(tx, "secondary");
-        });
-      } finally {
-        await ownerDb.close();
-      }
+      await withTransaction(db, async (tx) => {
+        await setSingletonRoleTx(tx, "secondary");
+      });
     } catch (error) {
-      await db.close();
+      await store.close();
       throw error;
     }
     // Re-read rather than synthesize `{ ...axes, singletonRole: "secondary" }`: the demote wrote only
-    // singleton_role, but re-reading takes BOTH axes from one fresh MVCC snapshot of the current row, so
-    // `mode` cannot be stale if another owner action flipped `deployment.mode` in the window since the
-    // initial read (the torn-pair / concurrent-promotion risk readDeploymentAxes's own contract describes).
+    // singleton_role, and re-reading takes BOTH axes from one read of the current row, so `mode`
+    // cannot be stale if something flipped `deployment.mode` in the window since the initial read.
     // One extra query on the rare fenced path, bought for that freshness (Copilot #214 re-review).
     axes = await readDeploymentAxes(db);
   }
@@ -1552,11 +1484,11 @@ export async function startServer(
   // mirror mode unless the operator explicitly opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`); a primary is
   // unaffected. Placed here (not at the `startListening` bind further down) so the refuse path opens
   // no ambient viewer and no tunnel or backup workers — only `db` is live, closed the
-  // same way the `loadKeyRing` guard above does rather than leaking the pool.
+  // same way the `loadKeyRing` guard above does rather than leaving the store open.
   try {
     assertMirrorBindSafe(config, isMirror, env);
   } catch (error) {
-    await db.close();
+    await store.close();
     throw error;
   }
   // Resolve the trading transport once so the mirror's ambient session and every mounted login
@@ -1586,7 +1518,7 @@ export async function startServer(
     try {
       await ensureMirrorViewer(db);
     } catch (error) {
-      await db.close();
+      await store.close();
       throw error;
     }
     app.use(
@@ -1602,9 +1534,9 @@ export async function startServer(
   // says why; the origin is still what its reads must be scoped to.) Distinct from
   // `config.till.nodeId`, which stays the node's OWN identity for every WRITE path (membership
   // promotion R3a). The origin is read from
-  // `mirror_config` (written owner-role at adopt), NEVER from env. A mirror REQUIRES it: an absent
+  // `mirror_config` (written at adopt), NEVER from env. A mirror REQUIRES it: an absent
   // record is a loud `server.config_invalid` (fail-closed). Wrapped in the same db-cleanup guard the
-  // `loadKeyRing` load above uses, so a throw closes the pool rather than leaking it. Hoisted ABOVE the
+  // `loadKeyRing` load above uses, so a throw closes the store rather than leaving it open. Hoisted ABOVE the
   // mounts because `mountReportApi` needs `dataNodeId`.
   let dataNodeId: string = config.till.nodeId;
   if (isMirror) {
@@ -1621,31 +1553,19 @@ export async function startServer(
       }
       dataNodeId = loaded.originNodeId;
     } catch (error) {
-      await db.close();
+      await store.close();
       throw error;
     }
   }
 
-  // The live change feed's triggers are owner DDL, so they need a small dedicated OWNER pool. It is its
-  // own pool, and its own name, because it connects on `config.migrationsDatabaseUrl` while the plain
-  // `ownerDb` pools (setup, the fenced demote, `withOwnerDb`) connect on `config.adminDatabaseUrl` — two
-  // different roles on a role-split appliance. It runs only that occasional owner DDL, so it is
-  // capped. Opened AFTER the last db-cleanup throw site in this branch (the mirror-config read just
-  // above) so a throw here is the first that must also drain it; closed in `closePools` below.
-  let feedOwnerDb: Database;
-  try {
-    feedOwnerDb = await createPostgresDb(config.migrationsDatabaseUrl, { max: 2 });
-  } catch (error) {
-    await db.close();
-    throw error;
-  }
-
+  // The live change feed installs its triggers as DDL. That ran on its own connection while the
+  // engine had roles to choose between; there is one file and one handle now, so it runs on `db`.
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
   try {
-    await installChangeFeed(feedOwnerDb, changeSources);
+    await installChangeFeed(db, changeSources);
   } catch (error) {
-    await Promise.allSettled([feedOwnerDb.close(), db.close()]);
+    await store.close();
     throw error;
   }
   mountLiveApi(
@@ -1712,7 +1632,7 @@ export async function startServer(
   // unprovisioned tenant fails per-request (via `run`), never at boot.
   // The till's pay-timing mode is a per-LOCATION column, not an env var, so `config.till` (from
   // `tryLoadTillConfig`) carries every fiscal id but NOT `orderFlow`. Read it here, ONCE, now that the
-  // pool is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
+  // store is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
   //
@@ -1736,10 +1656,10 @@ export async function startServer(
     orderFlow,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
-  // The venue's DEFAULT UI locale, derived ONCE now the pool is open — the DISPLAY counterpart to the
+  // The venue's DEFAULT UI locale, derived ONCE now the store is open — the DISPLAY counterpart to the
   // fiscal `till.locale`/`invoiceLocales` (left untouched). `readVenueLocale` applies the shared
   // `override → province → country → English` chain, reading the tenant's country + the location's
-  // province under the app role. The override is the RAW `WAITRON_TILL_LOCALE` (`till.localeOverride`),
+  // province. The override is the RAW `WAITRON_TILL_LOCALE` (`till.localeOverride`),
   // NOT the defaulted `till.locale` (which is `es-ES` and would mask geography). Threaded as a STRING
   // into the till + me mounts below (both surface it via `GET .../locales`), never re-read per request.
   const venueLocale = await readVenueLocale(db, {
@@ -2091,12 +2011,14 @@ export async function startServer(
     log,
   );
   // The backup duty's lifecycle owner (BR-1 Task 4). It re-reads the box-env files from DISK on every
-  // `reload()` (so the wizard's `backup.env` takes effect without a restart), derives the read
-  // connection — the config's explicit `WAITRON_BACKUP_DATABASE_URL` or, when unset, the box's own
-  // OWNER connection (`config.adminDatabaseUrl`) — probes it, and starts the sweep ONLY on a singleton
-  // primary whose probe passes. A probe failure or a non-primary role leaves backup off and is logged,
-  // never stopping sales (§5). Provenance and the disk re-read both read the RAW `base` env, not the
-  // merged `env`, so a file-sourced value is distinguishable from an env-sourced one (spec §3.2).
+  // `reload()` (so the wizard's `backup.env` takes effect without a restart), opens the venue
+  // directory on its OWN connection — not this one — and starts the sweep ONLY on a singleton
+  // primary. A venue it cannot open, or a non-primary role, leaves backup off and is logged, never
+  // stopping sales (§5). Why a second connection rather than this handle is measured and recorded in
+  // `backup-supervisor.ts`'s header: the archive is `VACUUM INTO`, which SQLite refuses on a
+  // connection with a transaction open. Provenance and the disk re-read both read the RAW `base`
+  // env, not the merged `env`, so a file-sourced value is distinguishable from an env-sourced one
+  // (spec §3.2).
   // The in-process record of each backup destination's last sweep outcome. The sweep the supervisor
   // starts fills it and the backups alert source (assembled just below, once the supervisor exists)
   // reads this same holder — so both refer to one map. It is process-lived and empty until the first
@@ -2106,7 +2028,7 @@ export async function startServer(
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
     isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
     readSingletonRole: () => holders.singletonRole.current,
-    adminDatabaseUrl: config.adminDatabaseUrl,
+    venueDir: config.venueDir,
     modules: ALL_MODULES,
     environment: config.environment,
     stateDir: config.stateDir,
@@ -2294,27 +2216,14 @@ export async function startServer(
     );
   }
 
-  // The short-lived owner pool both the in-process promotes and the promote ENDPOINT open from the
-  // table-OWNER admin connection (the same open/close pattern the boot-time `stampProbe` uses) rather
-  // than holding one open — a trading box keeps only the app pool — handing the promote the shared
-  // `PromoteDeps`. `config.adminDatabaseUrl` is `WAITRON_ADMIN_DATABASE_URL` when set, else the
-  // migrations URL, else the app URL: so a role-split appliance that misconfigures it opens the
-  // LEAST-privileged connection and the owner write hits a role with no UPDATE on `deployment`, throwing
-  // 42501 — fails CLOSED, never a silent no-op. In dev/CI the URL is the superuser.
-  const withOwnerDb = async <T>(run: (deps: PromoteDeps) => Promise<T>): Promise<T> => {
-    const ownerDb = await createPostgresDb(config.adminDatabaseUrl);
-    try {
-      return await run({
-        appDb: db,
-        ownerDb,
-        holders,
-        log,
-        ring,
-        nodeId: till.nodeId,
-      });
-    } finally {
-      await ownerDb.close();
-    }
+  // The `PromoteDeps` both the in-process promotes and the promote ENDPOINT run against. Assembled
+  // once here rather than per call: every field is already bound for the life of this boot.
+  const promoteDeps: PromoteDeps = {
+    db,
+    holders,
+    log,
+    ring,
+    nodeId: till.nodeId,
   };
 
   // The mirror→primary promote, shared by the in-process `StartedServer.promoteMirrorToPrimary`
@@ -2323,40 +2232,39 @@ export async function startServer(
   // still-read-only mirror), runs the PONR owner transaction, and restarts into `mode=primary` on a real
   // promote — an already-primary re-run is an idempotent no-op that skips the restart. Only a mirror
   // changes its selling series + `deployment.mode` on promotion, so this path exists only in mirror mode.
-  const promoteMirrorRun = (attestation: FenceAttestation): Promise<MirrorPromotionResult> =>
-    withOwnerDb(async (deps) => {
-      const result = await promoteMirrorToPrimary(
-        {
-          ...deps,
-          // The promoted primary numbers under its OWN reserved standard series, not the primary's inert
-          // `till.seriesId` that adopt wrote; every other value is re-emitted unchanged from the running
-          // config. Called BEFORE the PONR (inert on a still-read-only mirror), so a PROCESS crash can
-          // never leave the box primary on the primary's series (power-loss residual documented on
-          // `MirrorPromoteDeps.persistTradingEnv`).
-          persistTradingEnv: async (seriesId) => {
-            const next: TradingConfig = {
-              tillId: till.tillId,
-              nodeId: till.nodeId,
-              seriesId,
-              locationId: till.locationId,
-              databaseUrl: config.databaseUrl,
-              migrationsDatabaseUrl: config.migrationsDatabaseUrl,
-              environment: config.environment,
-              accountKey: accountKey.toString("base64"),
-            };
-            await writeTradingEnv(config.stateDir, next);
-          },
+  const promoteMirrorRun = async (
+    attestation: FenceAttestation,
+  ): Promise<MirrorPromotionResult> => {
+    const result = await promoteMirrorToPrimary(
+      {
+        ...promoteDeps,
+        // The promoted primary numbers under its OWN reserved standard series, not the primary's inert
+        // `till.seriesId` that adopt wrote; every other value is re-emitted unchanged from the running
+        // config. Called BEFORE the PONR (inert on a still-read-only mirror), so a PROCESS crash can
+        // never leave the box primary on the primary's series (power-loss residual documented on
+        // `MirrorPromoteDeps.persistTradingEnv`).
+        persistTradingEnv: async (seriesId) => {
+          const next: TradingConfig = {
+            tillId: till.tillId,
+            nodeId: till.nodeId,
+            seriesId,
+            locationId: till.locationId,
+            environment: config.environment,
+            accountKey: accountKey.toString("base64"),
+          };
+          await writeTradingEnv(config.stateDir, next);
         },
-        attestation,
-      );
-      if (!result.alreadyPrimary) {
-        // Restart into `mode=primary` on the NEXT tick so the in-process caller's result is returned
-        // first (the supervisor loop that reboots the box is out of process; `requestRestart` is only
-        // wired in the setup branch, so the inline `process.kill` form is used here).
-        setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
-      }
-      return result;
-    });
+      },
+      attestation,
+    );
+    if (!result.alreadyPrimary) {
+      // Restart into `mode=primary` on the NEXT tick so the in-process caller's result is returned
+      // first (the supervisor loop that reboots the box is out of process; `requestRestart` is only
+      // wired in the setup branch, so the inline `process.kill` form is used here).
+      setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+    }
+    return result;
+  };
 
   // The promote ENDPOINT's delegate (both modes, spec §6). On a mirror → the real restart-into-primary
   // promote (`promoteMirrorRun`), reporting `restarting` from its `alreadyPrimary`. On a non-mirror
@@ -2509,10 +2417,10 @@ export async function startServer(
   });
 
   // The shared `StartedServer` + `close()` (see `makeStartedServer`), with the trading mode's own
-  // teardown supplied here: stop the main loop, the outbound tunnel and the backup sweep, then drain
-  // the app and change-feed owner pools. The ordering guarantees (abort the loop and workers together, await
-  // the loop, swallow a worker's settle-by-rejection so it can never skip the guaranteed pool
-  // teardown) are unchanged.
+  // teardown supplied here: stop the main loop, the outbound tunnel and the backup sweep, then close
+  // the venue store. The ordering guarantees (abort the loop and workers together, await the loop,
+  // swallow a worker's settle-by-rejection so it can never skip the guaranteed store teardown) are
+  // unchanged.
   //
   // Start discovery after the throwing setup steps; the responder skips development and loopback.
   const mdns = startMdnsResponder({
@@ -2538,7 +2446,7 @@ export async function startServer(
         await loop;
         // The outbound tunnel worker, torn down the identical way: tunnelController.abort() above
         // already signalled it, so this only awaits its settle, swallowing a settle-by-rejection so it
-        // can never skip the guaranteed pool teardown below. It never rejects in production (its slots
+        // can never skip the guaranteed store teardown below. It never rejects in production (its slots
         // back off every error), and holds no connection pool of its own — nothing to add to
         // closePools.
         if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
@@ -2549,8 +2457,8 @@ export async function startServer(
         // ordering guarantee the tunnel above keeps.
         await backupSupervisor.stop();
       },
-      // The app pool and the change-feed owner pool; both are closed even if one fails.
-      closePools: () => closeAll([() => db.close(), () => feedOwnerDb.close()]),
+      // The venue directory's two files, closed together.
+      closePools: () => store.close(),
     },
     mdns,
     // The plain-HTTP trust/landing listener (Task 3) — a trading box serves its own minted leaf, so a
@@ -2560,13 +2468,13 @@ export async function startServer(
     // in `isMirror`), so a mirror surfaces `promoteMirrorToPrimary` and a local secondary
     // `promoteLocalSecondaryToPrimary` — never both. The mirror path (`promoteMirrorRun`, defined above,
     // also the endpoint's mirror delegate) corrects `trading.env` and restarts; the local-secondary path
-    // does not. Both build `PromoteDeps` via the shared `withOwnerDb`.
+    // does not. Both run against the shared `promoteDeps`.
     isMirror
       ? { kind: "mirror" as const, run: promoteMirrorRun }
       : {
           kind: "local-secondary" as const,
           run: (attestation: FenceAttestation) =>
-            withOwnerDb((deps) => promoteLocalSecondaryToPrimary(deps, attestation)),
+            promoteLocalSecondaryToPrimary(promoteDeps, attestation),
         },
   );
 }

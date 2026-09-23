@@ -17,7 +17,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
@@ -40,10 +40,10 @@ let supervisorSessionId: string;
 let managerSessionId: string;
 let staffSessionId: string;
 
-// PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
-// the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
-// non-superuser one. `sale.not_found` and `sale.series_not_found` are asserted below for a
-// genuinely ABSENT row, which is what those codes mean with one tenant per database.
+// One venue file for everything here (`useVenueDb`): the guards are pure logic (an unknown id, a
+// series of the wrong purpose, an unsettled corrective), none of which turns on who is connected
+// or on two writers contending. `sale.not_found` and `sale.series_not_found` are asserted below
+// for a genuinely ABSENT row, which is what those codes mean with one tenant per database.
 const suite = useVenueDb({
   // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -57,7 +57,7 @@ beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
-  // Seeded on the fixture connection, like the record-void suite.
+  // Seeded on the suite's own handle, like the record-void suite.
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
   const staffId = await seedPerson("staff");
@@ -70,14 +70,18 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
- * display name distinct because this fixture creates several live people in one tenant. */
+/** A person of `role` whose PIN is "1234", inserted on the suite's own handle. The role makes the
+ * display name distinct because this fixture creates several live people in one tenant.
+ *
+ * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
+ * `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
+ * so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role)
-        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
-  );
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(persons)
+    .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
+    .returning({ id: persons.id });
+  return row!.id;
 }
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
@@ -192,8 +196,8 @@ function correctionInput(
   };
 }
 
-/** Records an ORIGINAL sale exactly as the application will: as `app_user`, in one transaction,
- * on a node already registered with the backend. */
+/** Records an ORIGINAL sale exactly as the application will: in one transaction, on a node
+ * already registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
@@ -202,7 +206,7 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-/** Runs `recordCorrection` as `app_user`, in one transaction — the real write path. */
+/** Runs `recordCorrection` in one transaction — the real write path. */
 async function correct(
   backend: FiscalBackend,
   correctsSaleId: SaleId,
@@ -214,11 +218,12 @@ async function correct(
   });
 }
 
-/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
- * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
+/** Counts every row in `table`. The suite helper empties every data table between tests
+ * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
+ * test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)}`,
+    sql`select count(*) as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -227,7 +232,7 @@ async function countRows(table: string): Promise<number> {
  * ORIGINAL sale (settled immediately by `sell`) carries tenders and a settlement of its own. */
 async function countForSale(table: string, saleId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where sale_id = ${saleId}`,
+    sql`select count(*) as n from ${sql.raw(table)} where sale_id = ${saleId}`,
   );
   return result.rows[0]!.n;
 }
@@ -236,7 +241,7 @@ async function countForSale(table: string, saleId: SaleId): Promise<number> {
  * written" that the authorization gate turns on. A rejected correction must leave this at zero. */
 async function countCorrectives(originalId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from sales where corrects_sale_id = ${originalId}`,
+    sql`select count(*) as n from sales where corrects_sale_id = ${originalId}`,
   );
   return result.rows[0]!.n;
 }

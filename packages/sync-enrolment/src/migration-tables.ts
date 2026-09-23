@@ -12,14 +12,20 @@
  * not sort, so both callers sort.
  */
 
-/** `CREATE TABLE ["public".]"<name>"` — quoted or bare, schema-qualified or not, IF NOT EXISTS or not.
+/** `CREATE TABLE ["public".]"<name>"` — the name backtick-quoted (what every `CREATE TABLE` under
+ * a package's `drizzle` directory is now), double-quoted (still the spelling of the fixture sets
+ * under `packages/db/test`) or bare; schema-qualified or not; IF NOT EXISTS or not. Each spelling has its
+ * own case in `migration-tables.test.ts`. SQLite accepts `[bracket]` quoting as well — sqlite3 3.51.0
+ * created a table from `CREATE TABLE [brack]` — and that is NOT handled here: a set emitting it would
+ * read as creating no tables at all, which is exactly what the backtick did before this tolerance.
  * The name capture is digit-tolerant (`[a-z0-9_]+`, `i` flag): real table names carry digits. */
 const CREATE_TABLE =
-  /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?"?(?:public"?\.)?"?([a-z0-9_]+)"?/gi;
+  /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?/gi;
 
 /** `DROP TABLE [IF EXISTS] ["public".]"<name>"`, the same tolerances. A trailing CASCADE/RESTRICT is
  * outside the capture and does not need matching. */
-const DROP_TABLE = /\bdrop\s+table\s+(?:if\s+exists\s+)?"?(?:public"?\.)?"?([a-z0-9_]+)"?/gi;
+const DROP_TABLE =
+  /\bdrop\s+table\s+(?:if\s+exists\s+)?["`]?(?:public["`]?\.)?["`]?([a-z0-9_]+)["`]?/gi;
 
 /** Blank block comments, `--` line comments, and `'…'` string literals to whitespace, preserving line
  * count (so a CREATE/DROP TABLE mentioned in prose or a literal is ignored). Naive by design — the

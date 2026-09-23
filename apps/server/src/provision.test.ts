@@ -78,12 +78,16 @@ interface FiscalCounts {
   registros: number;
 }
 
+// `cast(count(*) as int)` throughout, in place of the PostgreSQL cast operator: this engine has no
+// cast OPERATOR and refuses the colons at prepare with `unrecognized token: ":"` (the same rewrite
+// `working-order.ts` took). Every one of these is a row COUNT, not an amount — CLAUDE.md §3's rule
+// that a raw read of a money, quantity or rate column casts to text does not reach any of them.
 async function fiscalCounts(db: Database): Promise<FiscalCounts> {
   const [sif, series, nodes, registros] = await Promise.all([
-    db.execute<{ n: number }>(sql`select count(*)::int as n from registro_sif`),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from invoice_series`),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from nodes`),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from registros_facturacion`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from registro_sif`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from invoice_series`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from nodes`),
+    db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from registros_facturacion`),
   ]);
   return {
     sif: sif.rows[0]!.n,
@@ -135,8 +139,8 @@ describe("provisionVenue", () => {
     ]);
     const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
       select
-        (select count(*)::int from catalogues ) as menus,
-        (select count(*)::int from zone_menus zm
+        (select cast(count(*) as int) from catalogues ) as menus,
+        (select cast(count(*) as int) from zone_menus zm
           join zone_service_policies p on p.zone_id = zm.zone_id
           where p.location_id = ${result.locationId}) as zone_menus`);
     expect(defaults.rows[0]).toEqual({ menus: 1, zone_menus: 1 });
@@ -264,7 +268,7 @@ describe("provisionVenue", () => {
     );
     const afterFirst = await fiscalCounts(db);
     const firstTenants = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from tenants`,
+      sql`select cast(count(*) as int) as n from tenants`,
     );
     expect(firstTenants.rows[0]!.n).toBe(1);
 
@@ -277,7 +281,9 @@ describe("provisionVenue", () => {
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
 
     // Still exactly one tenant — and no second SIF/series/node/chain.
-    const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    const tenants = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from tenants`,
+    );
     expect(tenants.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
@@ -318,7 +324,9 @@ describe("provisionVenue", () => {
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
     // One taxpayer, one SIF/series set, one node — no duplicate chain.
-    const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    const tenants = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from tenants`,
+    );
     expect(tenants.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });

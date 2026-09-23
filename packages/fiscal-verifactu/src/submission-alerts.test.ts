@@ -1,14 +1,16 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { asAppUser, newId, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fiscalSubmissionSource } from "./submission-alerts.js";
 
-// Reads run as `app_user`, the role a real alert read holds — `asAppUser(tx)` before every read, so
-// the test proves the source works with the grants `app_user` actually has (SELECT on
-// `registros_facturacion` and `envios`) rather than the fixture owner's wider privileges.
+// `asAppUser(tx)` still stands before every read, and on this engine it does nothing at all:
+// SQLite has no roles and no grants, so the reads run with whatever the one open handle can do
+// (`packages/db/src/testing/roles.ts`, which keeps the call sites compiling until they are swept).
+// What these cases prove is therefore the source's own arithmetic over the two tables, not that it
+// works under a narrower set of privileges — there is no narrower set here.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -40,27 +42,36 @@ let seq = 0;
 async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<string> {
   seq += 1;
   const s = seq;
+  // Three spellings in the statements below changed with the engine, each measured by running
+  // this file. `id` on all three tables is stated rather than omitted, because it is a
+  // `$defaultFn` column only the insert BUILDER fills — the raw statement this replaces was
+  // refused `NOT NULL constraint failed: invoice_series.id`. `'[]'::jsonb` and `'{}'::jsonb` lose
+  // their casts: the columns are TEXT holding JSON, and a `::` reaches SQLite's parser as
+  // `unrecognized token: ":"`. And `array['es']` becomes the JSON array `'["es"]'`, which is what
+  // `invoice_locales` holds now (`packages/db/src/schema/sales.ts` checks it with
+  // `json_array_length`).
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${id.nodeId}, ${"W" + String(s)})
+    insert into invoice_series (id, node_id, code)
+    values (${newId()}, ${id.nodeId}, ${"W" + String(s)})
     returning id
   `);
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${id.tillId}, ${id.nodeId}, ${series.rows[0]!.id}, ${s},
-      '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
+    insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${newId()}, ${id.tillId}, ${id.nodeId}, ${series.rows[0]!.id}, ${s},
+      '2026-07-20T19:20:30+01:00', 60, 0, '[]',
+      'es', '["es"]', 'verifactu', 'recorded'
     ) returning id
   `);
   const huella = String(s).padStart(64, "0");
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
+      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
+    ) values (${newId()}, ${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
       ${id.nif}, ${"W" + String(s) + "/1"}, '2026-07-20', 'Waitron SL',
-      true, '{}'::jsonb,
-      ${genTime.toISOString()}, 60, '01', ${huella}
+      true, '{}',
+      ${genTime.toISOString()}, 60, '01', ${huella}, ${genTime.toISOString()}
     ) returning id
   `);
   return registro.rows[0]!.id;
@@ -75,9 +86,13 @@ async function seedWaiting(
   estado: string,
 ): Promise<void> {
   const registroId = await seedRegistro(db, id, genTime);
+  // `proximo_intento_en` joins the list of `$defaultFn` columns a raw statement must state —
+  // measured here as `NOT NULL constraint failed: envios.proximo_intento_en`. The value is the
+  // record's own generation time, and nothing under test reads it: `fiscalSubmissionSource` reads
+  // `envios.estado` and the registro's `fecha_hora_huso_gen_registro`, and nothing else.
   await db.execute(sql`
-    insert into envios (registro_id, estado)
-    values (${registroId}, ${estado})
+    insert into envios (registro_id, estado, proximo_intento_en)
+    values (${registroId}, ${estado}, ${genTime.toISOString()})
   `);
 }
 

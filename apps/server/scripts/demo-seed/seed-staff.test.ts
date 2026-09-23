@@ -1,9 +1,19 @@
-// Exercise the staff seed on PostgreSQL through app_user, including the permitted persons writes.
+/**
+ * The staff seed, end to end, on the engine the box now runs.
+ *
+ * **What went with PostgreSQL: this file's reason for running the seed through `app_user`.** It
+ * used to say it exercised "the permitted persons writes" — the seed's inserts arriving as the
+ * non-owner deployment role, so a missing `INSERT` grant on `persons` would have failed it. SQLite
+ * has no roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every
+ * call below runs on the one connection. Nothing now checks who may write `persons`. The `asAppUser`
+ * calls are left in place only because task T1 of the storage swap removes them tree-wide.
+ */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin, verifyPin, type PersonRoleValue } from "@waitron/identity";
@@ -12,11 +22,14 @@ import { DEMO_ADMIN_EMAIL, DEMO_PIN, DEMO_STAFF } from "./staff.js";
 
 const LOCALE = "en-GB";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same local-counter shape `seed-catalogue.test.ts`
-// / `seed-floor.test.ts` use, on a fresh base (60_000_000 is already taken by `seed-floor.test.ts`).
+// One NIF per provisioned venue. Each test starts on an empty database — `useVenueDb`'s per-test
+// reset empties every data table — so the counter no longer keeps two tests apart; it keeps the two
+// `provisionVenue` calls WITHIN a test apart, should a test ever make them.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -56,7 +69,7 @@ async function provisionVenue(): Promise<void> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 }
 
@@ -64,7 +77,7 @@ describe("seedStaff", () => {
   it("seeds staff across all roles, all on the demo PIN", async () => {
     await provisionVenue();
 
-    const persons = await withTransaction(suite.admin, async (tx) => {
+    const persons = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await seedStaff(tx);
 
@@ -101,7 +114,7 @@ describe("seedStaff", () => {
   it("gives every person an email while preserving which demo accounts have preset passwords", async () => {
     await provisionVenue();
 
-    const rows = await withTransaction(suite.admin, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await seedStaff(tx);
 

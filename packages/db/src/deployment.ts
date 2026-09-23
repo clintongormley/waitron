@@ -9,11 +9,43 @@ import "./errors.js";
  * `apps/server`'s identically-shaped `DeploymentEnvironment` type — this package must never import
  * from `apps/server` — but a union all the same, not a bare `string`: narrowing this at compile
  * time is what makes an unrepresentable value (e.g. `"staging"`, a stray `process.env.NODE_ENV`) a
- * `tsc` error instead of a runtime `deployment_environment_ck` violation (SQLSTATE 23514) discovered
- * only once `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
+ * `tsc` error instead of a runtime `deployment_environment_ck` violation discovered only once
+ * `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
  * `Entorno` (`registro-row.ts`) closes one layer down.
  */
 export type DeploymentEnvironment = "production" | "preproduction";
+
+/**
+ * Whether the `deployment` table exists in the file behind this handle.
+ *
+ * **`sqlite_master` rather than `pragma table_info`, because a table name BINDS here.** Measured on
+ * Node v26.7.0 against `node:sqlite`: `pragma table_info(?)` is refused at prepare time with
+ * `near "?": syntax error`, and the same pragma with the name written into the statement text
+ * returns its rows — so a pragma probe would have to build SQL by concatenation, which `CLAUDE.md`
+ * §3 allows only with an escape or a validate-and-throw. A catalogue read needs neither.
+ *
+ * **Probing at all, rather than running the read and catching the refusal**, is what lets these
+ * readers keep their contract of answering for a database whose migrations have not run: catching
+ * would mean matching the engine's refusal text, which is a string this repository does not own.
+ *
+ * The catalogue is per FILE — a venue handle sees the venue file's tables and nothing else, pinned
+ * by `packages/store/src/index.test.ts`.
+ *
+ * {@link readMirrorConfig} and {@link readNodeMembership} probe their own tables the same way and
+ * point here for the reason.
+ *
+ * Exported because one caller outside this file needs the two halves of {@link
+ * readDeploymentEnvironment}'s `null` told apart: `waitron-provision venue` STAMPS a migrated
+ * directory that carries no row, and must refuse one whose schema was never created at all, where
+ * the insert would be met by `no such table: deployment`. Every other caller must keep treating the
+ * two as one thing — see the `null` paragraph below.
+ */
+export async function deploymentTableExists(db: Database): Promise<boolean> {
+  const present = await db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name = ${"deployment"}`,
+  );
+  return present.rows.length > 0;
+}
 
 /**
  * The environment this database was stamped for, or `null` if it has none.
@@ -23,22 +55,18 @@ export type DeploymentEnvironment = "production" | "preproduction";
  * and on a database predating this feature the table exists but is empty. Both mean the same
  * thing — nothing recorded what this database is for — and both are handled identically.
  *
- * Uses `to_regclass` rather than catching an undefined-table error, because in PostgreSQL a failed
- * statement aborts the enclosing transaction: probing by failure would poison a transaction the
- * caller may still need.
+ * {@link deploymentTableExists} is what makes the first half of that true — see it for why the
+ * existence of the table is read off the catalogue rather than discovered by running the select.
  *
  * The return type is narrowed to `DeploymentEnvironment | null`, not a bare `string`, because
- * `0001_db_baseline_sql.sql`'s `deployment_environment_ck` is the thing that makes this honest: no
+ * the `deployment_environment_ck` check in `./schema/deployment.js` is what makes this honest: no
  * row can exist in this column outside `'production'`/`'preproduction'`, so a value read back here
  * is one of those two by construction, never a value merely assumed to be safe.
  */
 export async function readDeploymentEnvironment(
   db: Database,
 ): Promise<DeploymentEnvironment | null> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.deployment') is not null as exists`,
-  );
-  if (present.rows[0]?.exists !== true) return null;
+  if (!(await deploymentTableExists(db))) return null;
 
   const rows = await db.execute<{ environment: DeploymentEnvironment }>(
     sql`select environment from deployment where id = 1`,
@@ -77,13 +105,10 @@ export async function stampDeployment(
 export type DeploymentMode = "primary" | "mirror";
 
 /** The role this database plays, or `"primary"` when nothing has been stamped — an unstamped database
- * is a primary. Same `to_regclass` probe (not a caught undefined-table error) `readDeploymentEnvironment`
- * uses and for the same reason: a failed statement would poison the caller's transaction. */
+ * is a primary. Answers for a table that does not exist yet as well as for one holding no row, through
+ * the same {@link deploymentTableExists} probe `readDeploymentEnvironment` uses. */
 export async function readDeploymentMode(db: Database): Promise<DeploymentMode> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.deployment') is not null as exists`,
-  );
-  if (present.rows[0]?.exists !== true) return "primary";
+  if (!(await deploymentTableExists(db))) return "primary";
   const rows = await db.execute<{ mode: DeploymentMode }>(
     sql`select mode from deployment where id = 1`,
   );
@@ -94,12 +119,15 @@ export async function readDeploymentMode(db: Database): Promise<DeploymentMode> 
  * unlike `stampDeployment`'s immutable environment, there is no "already stamped" guard. The only
  * non-test caller today is the adopt path, which sets `mirror` at setup (`adoptFromPrimary` → here,
  * `apps/server/src/adopt.ts`); the promotion path (design §10) that will set `primary` back is not
- * built yet. An OWNER-role write: `app_user` holds no UPDATE on `deployment` (the grant read-back
- * asserts it), so this runs on the provisioning/owner connection, never the app pool. Requires the
+ * built yet. **Nothing in the database refuses this write.** It was an owner-role write on
+ * PostgreSQL, where `app_user` held no UPDATE on `deployment`; this engine has no roles and no
+ * grants (`./testing/roles.ts`), and `deployment` carries no trigger, so an `update deployment …`
+ * on an ordinary handle succeeds — measured 2026-09-23 on Node v26.7.0 against the core migration
+ * set. Which code may set the mode is now a convention the callers keep, nothing more. Requires the
  * singleton row (stamp the environment first) — a 0-row UPDATE is a silent no-op on an unstamped DB,
  * which never happens for a real mirror. */
 export async function setDeploymentMode(db: Database, mode: DeploymentMode): Promise<void> {
-  await db.transaction((tx) => setDeploymentModeTx(tx, mode));
+  await db.withWriteLock(async () => setDeploymentModeTx(db, mode));
 }
 
 /** Sets this database's role on a caller-provided transaction (see `setDeploymentMode` for the full
@@ -136,13 +164,10 @@ export async function setDeploymentModeTx(tx: Transaction, mode: DeploymentMode)
 export type SingletonRole = "primary" | "secondary";
 
 /** Whether this database holds the singleton duties, or `"primary"` when nothing has been stamped — an
- * unstamped database is a sole primary. Same `to_regclass` probe (not a caught undefined-table error)
- * `readDeploymentMode` uses, for the same transaction-poisoning reason. */
+ * unstamped database is a sole primary. Answers for a missing table as well as an empty one, through the
+ * same {@link deploymentTableExists} probe `readDeploymentMode` uses. */
 export async function readSingletonRole(db: Database): Promise<SingletonRole> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.deployment') is not null as exists`,
-  );
-  if (present.rows[0]?.exists !== true) return "primary";
+  if (!(await deploymentTableExists(db))) return "primary";
   const rows = await db.execute<{ singleton_role: SingletonRole }>(
     sql`select singleton_role from deployment where id = 1`,
   );
@@ -150,24 +175,20 @@ export async function readSingletonRole(db: Database): Promise<SingletonRole> {
 }
 
 /**
- * Reads both `deployment` axes — `mode` and `singleton_role` — in a SINGLE query, so the pair is
- * taken from one MVCC snapshot and is always internally consistent. The single-axis readers above
- * (`readDeploymentMode` + `readSingletonRole`) each run their own query, so under READ COMMITTED a
- * concurrent promotion committing between the two reads can hand a caller a torn pair — e.g.
- * `(mirror, primary)`, the exact combination `deployment_role_valid_ck` forbids (a read-only mirror
- * cannot hold singletons) and which therefore never exists in any single committed row. This reader
- * cannot observe that pair: one `select mode, singleton_role from deployment where id = 1` sees both
- * columns as of the same snapshot. Same `to_regclass` existence probe (not a caught undefined-table
- * error) the single-axis readers use and for the same transaction-poisoning reason; the same
- * per-field `?? "primary"` fallback for an unstamped database (a sole primary).
+ * Reads both `deployment` axes — `mode` and `singleton_role` — in a SINGLE query, so the pair always
+ * comes from one row and is internally consistent. The single-axis readers above
+ * (`readDeploymentMode` + `readSingletonRole`) each run their own query, so a promotion committing
+ * between the two reads can hand a caller a torn pair — e.g. `(mirror, primary)`, the exact
+ * combination `deployment_role_valid_ck` forbids (a read-only mirror cannot hold singletons) and
+ * which therefore never exists in any single committed row. This reader cannot observe that pair:
+ * one `select mode, singleton_role from deployment where id = 1` reads both columns out of the same
+ * row. Same {@link deploymentTableExists} probe the single-axis readers use, and the same per-field
+ * `?? "primary"` fallback for an unstamped database (a sole primary).
  */
 export async function readDeploymentAxes(
   db: Database,
 ): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole }> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.deployment') is not null as exists`,
-  );
-  if (present.rows[0]?.exists !== true) return { mode: "primary", singletonRole: "primary" };
+  if (!(await deploymentTableExists(db))) return { mode: "primary", singletonRole: "primary" };
   const rows = await db.execute<{ mode: DeploymentMode; singleton_role: SingletonRole }>(
     sql`select mode, singleton_role from deployment where id = 1`,
   );
@@ -177,18 +198,18 @@ export async function readDeploymentAxes(
   };
 }
 
-/** Sets this database's singleton-ownership role. An OWNER-role write (app_user holds no UPDATE on
- * deployment), like `setDeploymentMode`; fail-loud on a 0-row update (stamp the environment first).
+/** Sets this database's singleton-ownership role. Nothing in the database refuses this write, for
+ * the reason `setDeploymentMode` states; fail-loud on a 0-row update (stamp the environment first).
  * Setting `'primary'` on a `mode='mirror'` database is refused by `deployment_role_valid_ck` — a
  * read-only mirror cannot hold singletons; a promotion flips the mode first (the promote action's job). */
 export async function setSingletonRole(db: Database, role: SingletonRole): Promise<void> {
-  await db.transaction((tx) => setSingletonRoleTx(tx, role));
+  await db.withWriteLock(async () => setSingletonRoleTx(db, role));
 }
 
 /** Sets the singleton-ownership role on a caller-provided transaction (see `setSingletonRole` for the
- * full contract — owner-role write, fail-loud on a 0-row update, `deployment_role_valid_ck` refuses
- * `'primary'` on a mirror). Exists so a caller can commit this flip in the SAME transaction as a
- * related write (CLAUDE.md §3: a caller that must write atomically with another write shares one
+ * full contract — nothing in the database refuses it, fail-loud on a 0-row update,
+ * `deployment_role_valid_ck` refuses `'primary'` on a mirror). Exists so a caller can commit this
+ * flip in the SAME transaction as a related write (CLAUDE.md §3: a caller that must write atomically with another write shares one
  * transaction) — the promotion path (spec `2026-09-03-reserved-standby-identity-and-promotion-design.md`
  * §6 R1) commits it with the membership-document write (`writeNodeMembershipTx`), so both land or neither
  * does. `setSingletonRole` is this on its own transaction. */
@@ -203,18 +224,24 @@ export async function setSingletonRoleTx(tx: Transaction, role: SingletonRole): 
 
 /** The stored scrypt verifier of the offline break-glass secret, or `null` when unset — a node
  * minted before this column, an unstamped database, or the primary (never promoted) all read `null`.
- * A plain `select … limit 1` (not the `to_regclass` probe the axis readers use): the singleton row's
- * absence already reads `null` via `row?.v ?? null`, and every caller of this holds a stamped
- * database. Never returns the break-glass SECRET — only the verifier stored against it. */
+ * A plain `select … limit 1` (not the {@link deploymentTableExists} probe the axis readers use): the
+ * singleton row's absence already reads `null` via `row?.v ?? null`, and every caller of this holds a
+ * stamped database. Never returns the break-glass SECRET — only the verifier stored against it. */
 export async function readBreakGlassVerifier(db: Database | Transaction): Promise<string | null> {
   const [row] = await db.select({ v: deployment.breakGlassVerifier }).from(deployment).limit(1);
   return row?.v ?? null;
 }
 
 /** Writes the break-glass verifier onto the singleton `deployment` row, on a caller-provided
- * transaction so a promotion can commit it atomically with its other writes (CLAUDE.md §3). An
- * OWNER-role write: `app_user` holds no UPDATE on `deployment` (deployment.break-glass.test.ts's
- * real-PG receipt asserts the app-role write is refused 42501), so this runs on the owner connection.
+ * transaction so a promotion can commit it atomically with its other writes (CLAUDE.md §3).
+ *
+ * **Nothing refuses another writer this column.** The spec (§9.3) reserves it for the promotion
+ * path, and on PostgreSQL the database held that line: `app_user` was refused the UPDATE with
+ * `42501`. That case is gone with the roles — `deployment.break-glass.test.ts`'s own header records
+ * its deletion as a loss — and an `update deployment set break_glass_verifier = …` on an ordinary
+ * handle now succeeds, measured 2026-09-23 on Node v26.7.0 against the core migration set. The rule
+ * survives only as a convention the callers keep.
+ *
  * Requires the singleton row (stamp the environment first); on an unstamped database the UPDATE is a
  * silent 0-row no-op, which never happens for a node reaching promotion. */
 export async function setBreakGlassVerifierTx(tx: Transaction, verifier: string): Promise<void> {

@@ -1,4 +1,5 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { sessions } from "./schema/sessions.js";
 import { verifyPersonCredential } from "./credential.js";
@@ -47,7 +48,7 @@ export async function loginWithPin(
 export async function endSession(tx: Transaction, sessionId: string): Promise<boolean> {
   const updated = await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.id, sessionId), isNull(sessions.endedAt)))
     .returning({ id: sessions.id });
   return updated.length > 0;

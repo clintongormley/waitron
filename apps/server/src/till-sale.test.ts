@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  asAppUser,
+  diningTables,
+  saleLines,
+  sales,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -44,17 +52,26 @@ import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-or
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 
-// Exercise the sale path and chained fiscal write as app_user on PostgreSQL. Provision as owner.
+// Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
+// catalogue, sell, and read the filed record back.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. The `asAppUser(tx)` calls below are now inert
+// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep; nothing here establishes
+// what the deployment role, which no longer exists, may read or write.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `catalogue-demo.ts`/`record-one-sale.ts` document. `recordSale` reads
+ * identical stub shape `record-one-sale.ts` documents. `recordSale` reads
  * `now()` once and touches neither `anchor` nor `currentAnchor`.
  */
 function systemClock(): TrustedClock {
@@ -76,9 +93,8 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF. A local counter, the same shape
-// `provision-till.test.ts`'s `nextNif` uses for the same reason.
+// `tenants_country_tax_id_key` is unique, so two venues provisioned without a reset between them
+// need different NIFs. A local counter, the same shape `provision-till.test.ts`'s `nextNif` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -146,11 +162,11 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const catalogue = await withTransaction(suite.admin, async (tx) => {
+  const catalogue = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
@@ -227,9 +243,13 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
       where zone_id = ${zone.rows[0]!.id}`);
+    // `preparation_routes.id` names its own value here: the column's default moved client-side to
+    // `$defaultFn(newId)` (`packages/venue-service/src/schema/service.ts`), which a raw insert never
+    // reaches, and `newId` IS `randomUUID` (`packages/db/src/schema/columns.ts:270`). The insert
+    // stays raw because the station is chosen by a subquery.
     await tx.execute(sql`
-      insert into preparation_routes (location_id, category_id, station_id)
-      values (${cfg.locationId}, ${bebidas.id},
+      insert into preparation_routes (id, location_id, category_id, station_id)
+      values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);
     return {
@@ -247,7 +267,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -255,10 +275,42 @@ beforeAll(() => {
   });
 });
 
+/** The six frozen names a raw read of `working_order_lines` / `sale_lines` hands back — the two
+ *  `descriptions` columns as the TEXT the engine stores, because a raw `execute` bypasses the
+ *  column's own JSON read mapping (measured 2026-09-22 against `menu_sections.name` in
+ *  `catalogue-api.test.ts`, which came back as `{"en":"Drinks",…}` rather than an object). */
+type StoredNames = {
+  variant_id: string;
+  name: string;
+  variant_name: string | null;
+  kitchen_name: string | null;
+  variant_kitchen_name: string | null;
+  descriptions: string;
+  variant_descriptions: string | null;
+};
+
+/** Parse the two JSON columns at the row, leaving every assertion below exactly as it was. The
+ *  decode moved out of the driver, not out of the test. */
+function decodeNames<T extends StoredNames>(
+  row: T,
+): Omit<T, "descriptions" | "variant_descriptions"> & {
+  descriptions: Record<string, string>;
+  variant_descriptions: Record<string, string> | null;
+} {
+  return {
+    ...row,
+    descriptions: JSON.parse(row.descriptions) as Record<string, string>,
+    variant_descriptions:
+      row.variant_descriptions === null
+        ? null
+        : (JSON.parse(row.variant_descriptions) as Record<string, string>),
+  };
+}
+
 describe("recordTillSale", () => {
   it("requires a published variant and freezes its menu price and presentation facts", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale(deps, cfg, {
         zoneId,
@@ -282,26 +334,21 @@ describe("recordTillSale", () => {
     expect(result.total).toBe("8.20");
     // The filed sale line carries the SAME six names as the frozen order line — filing copies the
     // snapshot rather than resolving the catalogue a second time.
-    const snapshots = await suite.admin.execute<{
-      variant_id: string;
-      name: string;
-      variant_name: string | null;
-      kitchen_name: string | null;
-      variant_kitchen_name: string | null;
-      descriptions: Record<string, string>;
-      variant_descriptions: Record<string, string> | null;
-      unit_price_gross?: number | null;
-    }>(sql`
+    const snapshots = await suite.db.execute<StoredNames & { unit_price_gross?: number | null }>(
+      sql`
       -- unit_price_gross counts whole cents, and the assertion below is on that COUNT, not on an
-      -- amount: ::int only normalises it to a number, and raises 22003 rather than answering wrong.
+      -- amount. The integer cast that used to sit on this column only normalised node-postgres's
+      -- answer to a number; the column is an integer column on this engine and the driver already
+      -- hands back a number, so the cast is dropped rather than replaced. The count is unchanged.
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
-             variant_descriptions, unit_price_gross::int as unit_price_gross
+             variant_descriptions, unit_price_gross
       from working_order_lines
       union all
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, null
       from sale_lines
-      order by unit_price_gross nulls last`);
+      order by unit_price_gross nulls last`,
+    );
     const names = {
       variant_id: variantIds!.double,
       name: "Agua mineral",
@@ -311,14 +358,14 @@ describe("recordTillSale", () => {
       descriptions: { [LOCALE]: "Agua mineral" },
       variant_descriptions: { [LOCALE]: "Doble ración" },
     };
-    expect(snapshots.rows).toEqual([
+    expect(snapshots.rows.map(decodeNames)).toEqual([
       { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
   });
   it("prints the variant on the receipt line that identifies the goods (art. 7.1.e)", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
       tender: { method: "cash", amount: "4.10" },
@@ -350,7 +397,7 @@ describe("recordTillSale", () => {
       variants: true,
     });
     const workingOrderId = randomUUID();
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, unitPrice: "4.10", available: true },
@@ -403,26 +450,18 @@ describe("recordTillSale", () => {
       ]);
     });
 
-    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: workingOrderId,
       lines: [],
       tender: { method: "cash", amount: "8.90" },
     });
     expect(result.total).toBe("8.90");
-    const stored = await suite.admin.execute<{
-      variant_id: string;
-      name: string;
-      variant_name: string | null;
-      kitchen_name: string | null;
-      variant_kitchen_name: string | null;
-      descriptions: Record<string, string>;
-      variant_descriptions: Record<string, string> | null;
-    }>(sql`
+    const stored = await suite.db.execute<StoredNames>(sql`
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions
       from sale_lines
       order by line_no`);
-    expect(stored.rows).toEqual([
+    expect(stored.rows.map(decodeNames)).toEqual([
       {
         variant_id: variantIds!.double,
         name: "Agua mineral",
@@ -446,14 +485,14 @@ describe("recordTillSale", () => {
   it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
       lines: [{ menuItemId: waterOfferId, quantity: "2" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
     expect(result.total).toBe("4.50");
-    const snapshots = await suite.admin.execute<{
+    const snapshots = await suite.db.execute<{
       zone_id: string;
       menu_item_id: string;
       menu_name: string;
@@ -472,8 +511,8 @@ describe("recordTillSale", () => {
         department_name: "Venue",
       },
     ]);
-    const prep = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from ticket_items
+    const prep = await suite.db.execute<{ count: number }>(sql`
+      select cast(count(*) as integer) as count from ticket_items
       `);
     expect(prep.rows).toEqual([{ count: 1 }]);
   });
@@ -482,7 +521,7 @@ describe("recordTillSale", () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       lines: [{ productId: each.id, quantity: "2" }],
       tender: { method: "cash", amount: "5.00" },
     });
@@ -493,13 +532,13 @@ describe("recordTillSale", () => {
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
-    const prep = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from ticket_items
+    const prep = await suite.db.execute<{ count: number }>(sql`
+      select cast(count(*) as integer) as count from ticket_items
       `);
     expect(prep.rows).toEqual([{ count: 1 }]);
 
     // A genuine chained fiscal record exists — one for this tenant's single sale.
-    const rows = await withTransaction(suite.admin, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
@@ -512,7 +551,7 @@ describe("recordTillSale", () => {
 
     // TillSaleRequest.lines has no price field; sending an extra `unitPrice` cast `as any` must not
     // change the filed total — the server re-reads the catalogue and prices authoritatively.
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       lines: [
         { productId: each.id, quantity: "1", unitPrice: "0.01" } as unknown as {
           productId: string;
@@ -530,7 +569,7 @@ describe("recordTillSale", () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     await expect(
       recordTillSale(deps, cfg, { lines: [], tender: { method: "cash", amount: "0" } }),
@@ -576,14 +615,14 @@ describe("recordTillSale", () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
 
-    await FakeFiscalBackend.install(suite.admin);
-    const fake = new FakeFiscalBackend(suite.admin);
-    await withTransaction(suite.admin, async (tx) => {
+    await FakeFiscalBackend.install(suite.db);
+    const fake = new FakeFiscalBackend(suite.db);
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId);
     });
 
-    const result = await recordTillSale({ db: suite.admin, backend: fake, clock }, cfg, {
+    const result = await recordTillSale({ db: suite.db, backend: fake, clock }, cfg, {
       lines: [{ productId: each.id, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
@@ -642,10 +681,10 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
         },
         ALL_MODULES,
       ),
-      { db: suite.admin, modules: ALL_MODULES },
+      { db: suite.db, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
-    const productId = await withTransaction(suite.admin, async (tx) => {
+    const productId = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -673,14 +712,14 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const driftedCfg: TillConfig = { ...cfg, invoiceLocales: ["ca-ES"], locale: "ca-ES" };
     const workingOrderId = randomUUID();
 
-    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, driftedCfg, {
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, driftedCfg, {
       id: workingOrderId,
       lines: [{ productId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
 
-    const { woLines, slLines } = await withTransaction(suite.admin, async (tx) => {
+    const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const woLines = await tx
         .select({ descriptions: workingOrderLines.descriptions })
@@ -709,13 +748,13 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const { cfg, productId } = await setupBareVenue(["es-ES", "ca-ES"], { es: "Café", ca: "Cafè" });
     const workingOrderId = randomUUID();
 
-    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: workingOrderId,
       lines: [{ productId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 
-    const lines = await withTransaction(suite.admin, async (tx) => {
+    const lines = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ descriptions: workingOrderLines.descriptions })
@@ -808,10 +847,10 @@ describe("ordering extras and options — parent + child lines", () => {
         },
         ALL_MODULES,
       ),
-      { db: suite.admin, modules: ALL_MODULES },
+      { db: suite.db, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
-    const seeded = await withTransaction(suite.admin, async (tx) => {
+    const seeded = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -965,7 +1004,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
       lines: [
         {
           productId: v.burgerId,
@@ -992,7 +1031,7 @@ describe("ordering extras and options — parent + child lines", () => {
       "Queso customer",
     ]);
 
-    const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
+    const { wol, sl } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const wol = await tx
         .select({
@@ -1041,7 +1080,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
       // Two burgers, each carrying Bacon ×3 → the Bacon child is priced dish(2) × pick(3) = 6.
       lines: [
         {
@@ -1058,7 +1097,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.total).toBe("21.00");
     expect(result.lines).toHaveLength(2); // parent + one child (the repeat is a single summed line)
 
-    const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
+    const { wol, sl } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const wol = await tx
         .select({
@@ -1114,7 +1153,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
   /** The filed lines of the one sale this working order produced, in `line_no` order. */
   async function filedLinesOf(workingOrderId: string) {
-    return withTransaction(suite.admin, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1141,7 +1180,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+    await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
       lines: [
         {
           productId: v.menuProductId,
@@ -1166,7 +1205,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await createOpenOrder(
         tx,
@@ -1185,7 +1224,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // The till sends no basket, so this files from `readLockedLines` — the answers reach the sale
     // only if that reader selects `working_order_lines.option_snapshots` and carries it.
-    await payWorkingOrder({ db: suite.admin, backend, clock }, v.cfg, {
+    await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: workingOrderId,
       lines: [],
       tender: { method: "cash", amount: "20.00" },
@@ -1201,7 +1240,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+    await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
       lines: [
         {
           productId: v.burgerId,
@@ -1235,10 +1274,15 @@ describe("ordering extras and options — parent + child lines", () => {
     // values, never catalogue references" header): there is no column for the picked product at all,
     // so no future write can put one there without this failing first. Same instrument as
     // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note guard.
-    const columns = await withTransaction(suite.admin, async (tx) => {
+    const columns = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
+      // This engine has no `information_schema`; a table's columns come from the PRAGMA function,
+      // the same replacement `configuration-transfer.ts:403` takes. The structural claim is
+      // unchanged: an unknown table would yield no rows, and `toContain("option_snapshots")` below
+      // would fail first, so an empty answer cannot pass the two `not.toContain` assertions by
+      // vacuum.
       const { rows } = await tx.execute<{ column_name: string }>(
-        sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
+        sql`select name as column_name from pragma_table_info('sale_lines')`,
       );
       return rows.map((row) => row.column_name);
     });
@@ -1254,7 +1298,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // PARK: persist an OPEN order with parent + child lines, and capture the PREVIEW price its lines
     // were built from (the same authoritative `priceBasketWithOptions` result).
-    const preview = await withTransaction(suite.admin, async (tx) => {
+    const preview = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { priced } = await createOpenOrder(
         tx,
@@ -1278,7 +1322,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // RETRIEVE + PAY: the till sends the parked order's id and NO basket, so payWorkingOrder files from
     // the STORED locked lines (readLockedLines → priceStoredOrder), re-pricing the children from their
     // add-time `unit_price_gross`/`vat_rate` — never a re-read of the catalogue.
-    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: workingOrderId,
       lines: [],
       tender: { method: "cash", amount: "20.00" },
@@ -1299,7 +1343,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // PARENT's id, not `null`. `readLockedLines` reconstructs each child's `parentLineNo` from its
     // stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
     // exactly as a live walk-up does — a child sale_line is never orphaned by the re-price.
-    const filed = await withTransaction(suite.admin, async (tx) => {
+    const filed = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1337,16 +1381,15 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(
-        sql`insert into dining_tables (id, location_id, label, active)
-            values (${tableId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
-      );
+      await tx
+        .insert(diningTables)
+        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
     });
 
     // Open a tab and send a round of the burger with two extras.
-    const tabId = await withTransaction(suite.admin, async (tx) => {
+    const tabId = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1363,7 +1406,7 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     // Settle the tab (files from the STORED locked lines via priceStoredOrder).
-    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "20.00" },
@@ -1371,7 +1414,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.total).toBe("10.25");
     expect(result.lines).toHaveLength(3);
 
-    const filed = await withTransaction(suite.admin, async (tx) => {
+    const filed = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1399,18 +1442,17 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
-    const tabId = await withTransaction(suite.admin, async (tx) => {
+    const tabId = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(
-        sql`insert into dining_tables (id, location_id, label, active)
-            values (${tableId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
-      );
+      await tx
+        .insert(diningTables)
+        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ productId: v.burgerId, quantity: "1" }]);
       return tabId;
     });
 
-    const result = await recordTillSale({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
       lines: [],
       tender: { method: "cash", amount: "20.00" },
       workingOrderId: tabId,
@@ -1429,17 +1471,16 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(
-        sql`insert into dining_tables (id, location_id, label, active)
-            values (${tableId}, ${v.cfg.locationId}, 'Mesa NC', true)`,
-      );
+      await tx
+        .insert(diningTables)
+        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa NC", active: true });
     });
 
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
     // Then VOID the bacon child (line_no 2), leaving {1,3,4} — non-contiguous.
-    const tabId = await withTransaction(suite.admin, async (tx) => {
+    const tabId = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1458,7 +1499,7 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    const result = await payWorkingOrder({ db: suite.admin, backend, clock }, v.cfg, {
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "30.00" },
@@ -1467,7 +1508,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.total).toBe("18.75");
     expect(result.lines).toHaveLength(3);
 
-    const filed = await withTransaction(suite.admin, async (tx) => {
+    const filed = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1495,7 +1536,7 @@ describe("ordering extras and options — parent + child lines", () => {
   it("rejects unoffered answers, an unanswered options list, an over-cap pick and extras on a fractional product", async () => {
     const v = await setupModifierVenue();
     const bogus = "00000000-0000-0000-0000-000000000000";
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     // (a) a list the dish does not attach → extras.invalid naming the offending field.
     await expect(
@@ -1591,7 +1632,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
   it("refuses a dish answered with a WITHDRAWN option label, and one left unanswered", async () => {
     const v = await setupModifierVenue();
-    const deps = { db: suite.admin, backend, clock };
+    const deps = { db: suite.db, backend, clock };
 
     // An active list must be answered, and a withdrawn label is not an answer — so a till holding a
     // stale menu is refused rather than selling the dish with nothing chosen.

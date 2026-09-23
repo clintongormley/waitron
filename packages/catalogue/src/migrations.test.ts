@@ -1,13 +1,35 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { captureError, CORE_MIGRATIONS, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import {
+  captureError,
+  catalogues,
+  CHECK_VIOLATION,
+  CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
+  isPgError,
+  categories as coreCategories,
+  products,
+  pgErrorMessage,
+  UNIQUE_VIOLATION,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
+import { categoryDetails, productCategories } from "./schema/categories.js";
+import {
+  extraListItems,
+  extraLists,
+  menuItemExtraItems,
+  menuItemExtraLists,
+} from "./schema/extras.js";
+import { optionLabels } from "./schema/options.js";
+import { productUnits, unitSeedStates, units } from "./schema/units.js";
+import { menuItemVariants, productVariants } from "./schema/variants.js";
 
-// PGlite applies the same migration files PostgreSQL does; these cases read the catalog and the
-// foreign-key refusals, with no role or concurrency dimension.
+// One SQLite file with the core set and this package's set applied, which is what the product
+// opens. There is no second target and no role dimension any more: one process holds one file.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   timeoutMs: 60_000,
@@ -38,168 +60,245 @@ const TABLES = [
   "product_modifiers",
 ];
 
-const tableList = () =>
-  sql.join(
-    TABLES.map((table) => sql`${table}`),
-    sql`, `,
-  );
+/**
+ * One table's columns, as the engine's own catalogue reports them.
+ *
+ * `pragma table_info` replaces `information_schema.columns`, which SQLite does not have. `pk` is 0
+ * for an ordinary column and the column's 1-based position in the primary key otherwise, which is
+ * what makes a composite key readable in declaration order.
+ */
+async function columnsOf(table: string) {
+  return (
+    await db.execute<{ name: string; pk: number }>(sql`pragma table_info(${sql.raw(`'${table}'`)})`)
+  ).rows;
+}
 
 describe("the catalogue migration set carries no tenant column", () => {
   it("has no tenant_id column on any table in the set", async () => {
-    const rows = await db.execute<{ table_name: string }>(sql`
-      select table_name from information_schema.columns
-      where table_schema = 'public' and column_name = 'tenant_id' and table_name in (${tableList()})`);
-    expect(rows.rows).toEqual([]);
+    const found: string[] = [];
+    for (const table of TABLES)
+      for (const column of await columnsOf(table))
+        if (column.name === "tenant_id") found.push(`${table}.${column.name}`);
+    expect(found).toEqual([]);
   });
 
+  /**
+   * The keys and links, read through the three catalogues SQLite has in place of `pg_constraint`.
+   *
+   * **A foreign key and a primary key have no NAME here**, which is a fact about the generated
+   * schema and not only about this test: drizzle-kit emits a SQLite foreign key as a bare
+   * `FOREIGN KEY (…) REFERENCES …` clause with no `CONSTRAINT <name>` before it, and a primary key
+   * as `PRIMARY KEY(…)`. So the map that used to be keyed by `menu_items_section_fk` is keyed by
+   * the table and columns the key is declared ON, and every fact the PostgreSQL definition string
+   * carried — which table and columns, which parent table and columns, and the delete action — is
+   * still here. Every entry below was checked one at a time against the `pg_get_constraintdef`
+   * strings this replaced; the three that changed WORDING rather than meaning are the two
+   * `content_languages` checks (`schema/menu.ts` carries the measurement for each) and nothing
+   * else, and one of those two lost half its subject — see the third case's note.
+   *
+   * CHECK constraints keep their names, because drizzle writes those as `CONSTRAINT "<name>"
+   * CHECK(…)`; they are read out of the stored `CREATE TABLE` text, which is the only place SQLite
+   * keeps a check's expression.
+   */
   it("keys and links every table on its own columns and each parent's primary key", async () => {
-    const rows = await db.execute<{ name: string; def: string }>(sql`
-      select conname as name, pg_get_constraintdef(oid) as def from pg_constraint
-      where contype in ('p', 'u', 'f', 'c') and conrelid::regclass::text in (${tableList()})
-      order by conname`);
-    expect(Object.fromEntries(rows.rows.map((row) => [row.name, row.def]))).toEqual({
-      category_details_category_fk:
-        "FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE",
-      category_details_category_id_pk: "PRIMARY KEY (category_id)",
-      category_details_parent_fk:
-        "FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE RESTRICT",
-      content_languages_default_ck: "CHECK ((default_language = ANY (languages)))",
-      content_languages_list_ck:
-        "CHECK ((((cardinality(languages) >= 1) AND (cardinality(languages) <= 200)) AND (array_position(languages, NULL::text) IS NULL)))",
-      content_languages_pkey: "PRIMARY KEY (id)",
-      content_languages_singleton_ck: "CHECK ((id = 1))",
-      extra_list_items_list_fk:
-        "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
-      extra_list_items_pkey: "PRIMARY KEY (id)",
-      extra_list_items_price_ck: "CHECK ((price >= 0))",
-      extra_list_items_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
-      extra_list_items_qty_ck: "CHECK ((max_quantity >= 1))",
-      extra_lists_picks_ck:
-        "CHECK (((min_picks >= 0) AND ((max_picks IS NULL) OR (max_picks >= min_picks))))",
-      extra_lists_pkey: "PRIMARY KEY (id)",
-      menu_item_extra_items_list_fk:
-        "FOREIGN KEY (menu_item_id, list_id) REFERENCES menu_item_extra_lists(menu_item_id, list_id) ON DELETE CASCADE",
-      menu_item_extra_items_pk: "PRIMARY KEY (menu_item_id, list_id, product_id)",
-      menu_item_extra_items_price_ck: "CHECK ((price >= 0))",
-      menu_item_extra_items_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
-      menu_item_extra_lists_item_fk:
-        "FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE",
-      menu_item_extra_lists_list_fk:
-        "FOREIGN KEY (list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
-      menu_item_extra_lists_pk: "PRIMARY KEY (menu_item_id, list_id)",
-      menu_item_variants_offer_fk:
-        "FOREIGN KEY (menu_item_id, product_id) REFERENCES menu_items(id, product_id) ON DELETE CASCADE",
-      menu_item_variants_pk: "PRIMARY KEY (menu_item_id, variant_id)",
-      menu_item_variants_price_ck: "CHECK ((unit_price >= 0))",
-      menu_item_variants_variant_fk:
-        "FOREIGN KEY (product_id, variant_id) REFERENCES product_variants(product_id, id) ON DELETE RESTRICT",
-      menu_items_gross_price_ck: "CHECK ((gross_price >= 0))",
-      menu_items_id_product_key: "UNIQUE (id, product_id)",
-      menu_items_menu_fk: "FOREIGN KEY (menu_id) REFERENCES catalogues(id) ON DELETE CASCADE",
-      menu_items_menu_product_key: "UNIQUE (menu_id, product_id)",
-      menu_items_pkey: "PRIMARY KEY (id)",
-      menu_items_product_fk: "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
-      menu_items_section_fk:
-        "FOREIGN KEY (menu_id, section_id) REFERENCES menu_sections(menu_id, id) ON DELETE RESTRICT",
-      menu_sections_menu_fk: "FOREIGN KEY (menu_id) REFERENCES catalogues(id) ON DELETE CASCADE",
-      menu_sections_menu_id_key: "UNIQUE (menu_id, id)",
-      menu_sections_pkey: "PRIMARY KEY (id)",
-      option_labels_list_fk: "FOREIGN KEY (list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
-      option_labels_pkey: "PRIMARY KEY (id)",
-      option_lists_pkey: "PRIMARY KEY (id)",
-      product_categories_category_fk:
-        "FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT",
-      product_categories_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
-      product_categories_product_id_category_id_pk: "PRIMARY KEY (product_id, category_id)",
-      product_modifiers_extra_list_fk:
-        "FOREIGN KEY (extra_list_id) REFERENCES extra_lists(id) ON DELETE CASCADE",
-      product_modifiers_one_reference_ck:
-        "CHECK (((extra_list_id IS NULL) <> (option_list_id IS NULL)))",
-      product_modifiers_option_list_fk:
-        "FOREIGN KEY (option_list_id) REFERENCES option_lists(id) ON DELETE CASCADE",
-      product_modifiers_pkey: "PRIMARY KEY (id)",
-      product_modifiers_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
-      product_units_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE",
-      product_units_product_id_pk: "PRIMARY KEY (product_id)",
-      product_units_unit_fk: "FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE RESTRICT",
-      product_variants_pkey: "PRIMARY KEY (id)",
-      product_variants_price_ck: "CHECK ((unit_price >= 0))",
-      product_variants_product_fk:
-        "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
-      product_variants_product_id_key: "UNIQUE (product_id, id)",
-      unit_seed_states_pkey: "PRIMARY KEY (id)",
-      unit_seed_states_singleton_ck: "CHECK ((id = 1))",
-      units_hardware_unit_ck:
-        "CHECK ((hardware_unit = ANY (ARRAY['kg'::text, 'g'::text, 'mg'::text])))",
-      units_pkey: "PRIMARY KEY (id)",
-      units_precision_ck: 'CHECK ((("precision" >= 0) AND ("precision" <= 3)))',
-      units_seed_key_key: "UNIQUE (seed_key)",
+    const foreignKeys: Record<string, string> = {};
+    const primaryKeys: Record<string, string> = {};
+    const checks: Record<string, string> = {};
+    for (const table of TABLES) {
+      const key = await columnsOf(table);
+      const pk = key
+        .filter((column) => column.pk > 0)
+        .sort((left, right) => left.pk - right.pk)
+        .map((column) => column.name);
+      if (pk.length > 0) primaryKeys[table] = pk.join(", ");
+      // One row per COLUMN of a key, grouped by `id`, which is the key's own number on the table —
+      // a composite key arrives as several rows sharing one id, in declaration order (`seq`).
+      const rows = (
+        await db.execute<{
+          id: number;
+          seq: number;
+          table: string;
+          from: string;
+          to: string;
+          on_delete: string;
+        }>(sql`pragma foreign_key_list(${sql.raw(`'${table}'`)})`)
+      ).rows;
+      const grouped = new Map<
+        number,
+        { parent: string; from: string[]; to: string[]; onDelete: string }
+      >();
+      for (const row of [...rows].sort((left, right) => left.seq - right.seq)) {
+        const entry = grouped.get(row.id) ?? {
+          parent: row.table,
+          from: [],
+          to: [],
+          onDelete: row.on_delete.toLowerCase(),
+        };
+        entry.from.push(row.from);
+        entry.to.push(row.to);
+        grouped.set(row.id, entry);
+      }
+      for (const entry of grouped.values())
+        foreignKeys[`${table}(${entry.from.join(", ")})`] =
+          `${entry.parent}(${entry.to.join(", ")}) on delete ${entry.onDelete}`;
+      const ddl = (
+        await db.execute<{ sql: string }>(
+          sql`select sql from sqlite_master where type = 'table' and name = ${table}`,
+        )
+      ).rows[0]!.sql;
+      // Each check ends at the comma before the next clause, or at the closing paren of the table.
+      for (const match of ddl.matchAll(/CONSTRAINT "([^"]+)" CHECK\((.*?)\)(?=,\n|\n\))/gs))
+        checks[match[1]!] = match[2]!;
+    }
+
+    expect(primaryKeys).toEqual({
+      content_languages: "id",
+      menu_sections: "id",
+      menu_items: "id",
+      category_details: "category_id",
+      product_categories: "product_id, category_id",
+      units: "id",
+      unit_seed_states: "id",
+      product_units: "product_id",
+      product_variants: "id",
+      menu_item_variants: "menu_item_id, variant_id",
+      option_lists: "id",
+      option_labels: "id",
+      extra_lists: "id",
+      extra_list_items: "id",
+      menu_item_extra_lists: "menu_item_id, list_id",
+      menu_item_extra_items: "menu_item_id, list_id, product_id",
+      product_modifiers: "id",
+    });
+
+    expect(foreignKeys).toEqual({
+      "category_details(category_id)": "categories(id) on delete cascade",
+      "category_details(parent_id)": "categories(id) on delete restrict",
+      "extra_list_items(list_id)": "extra_lists(id) on delete cascade",
+      "extra_list_items(product_id)": "products(id) on delete restrict",
+      "menu_item_extra_items(menu_item_id, list_id)":
+        "menu_item_extra_lists(menu_item_id, list_id) on delete cascade",
+      "menu_item_extra_items(product_id)": "products(id) on delete restrict",
+      "menu_item_extra_lists(list_id)": "extra_lists(id) on delete cascade",
+      "menu_item_extra_lists(menu_item_id)": "menu_items(id) on delete cascade",
+      "menu_item_variants(menu_item_id, product_id)":
+        "menu_items(id, product_id) on delete cascade",
+      "menu_item_variants(product_id, variant_id)":
+        "product_variants(product_id, id) on delete restrict",
+      "menu_items(menu_id)": "catalogues(id) on delete cascade",
+      "menu_items(menu_id, section_id)": "menu_sections(menu_id, id) on delete restrict",
+      "menu_items(product_id)": "products(id) on delete restrict",
+      "menu_sections(menu_id)": "catalogues(id) on delete cascade",
+      "option_labels(list_id)": "option_lists(id) on delete cascade",
+      "product_categories(category_id)": "categories(id) on delete restrict",
+      "product_categories(product_id)": "products(id) on delete cascade",
+      "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
+      "product_modifiers(option_list_id)": "option_lists(id) on delete cascade",
+      "product_modifiers(product_id)": "products(id) on delete cascade",
+      "product_units(product_id)": "products(id) on delete cascade",
+      "product_units(unit_id)": "units(id) on delete restrict",
+      "product_variants(product_id)": "products(id) on delete restrict",
+    });
+
+    expect(checks).toEqual({
+      content_languages_singleton_ck: `"content_languages"."id" = 1`,
+      // `default_language = ANY (languages)` on PostgreSQL. The list is JSON text here, and the
+      // membership test matches the QUOTED token so one code cannot match a prefix of a longer
+      // one; `schema/menu.ts` carries the measurement.
+      content_languages_default_ck: `instr("content_languages"."languages", '"' || "content_languages"."default_language" || '"') > 0`,
+      // The PostgreSQL check also refused a NULL ENTRY in the list. That half does not carry, and
+      // no check can express it here — `schema/menu.ts` states why. What is left is the count.
+      content_languages_list_ck: `json_array_length("content_languages"."languages") between 1 and 200`,
+      menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
+      units_precision_ck: `"units"."precision" between 0 and 3`,
+      units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
+      unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
+      product_variants_price_ck: `"product_variants"."unit_price" >= 0`,
+      menu_item_variants_price_ck: `"menu_item_variants"."unit_price" >= 0`,
+      extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
+      extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
+      extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
+      menu_item_extra_items_price_ck: `"menu_item_extra_items"."price" >= 0`,
+      product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
     });
   });
 
+  /**
+   * Every index the set declares, whether it backs a UNIQUE constraint or only a lookup.
+   *
+   * The PostgreSQL version of this case excluded the constraint-backed indexes, because there they
+   * were reachable through `pg_constraint` and the case above read them. SQLite declares a
+   * multi-column UNIQUE as a `CREATE UNIQUE INDEX` and nothing else, so they belong here; the
+   * `unique` flag is what keeps the two kinds apart, and the five unique entries below are the
+   * five `UNIQUE (...)` rows the case above used to carry.
+   *
+   * `sql is null` is the filter, not a name pattern: SQLite stores no statement for an index it
+   * created itself for a `PRIMARY KEY` or a single-column `UNIQUE` declaration.
+   */
   it("rebuilds every lookup index without the tenant", async () => {
-    const rows = await db.execute<{ name: string; def: string }>(sql`
-      select indexname as name, indexdef as def from pg_indexes
-      where schemaname = 'public' and tablename in (${tableList()})
-        and indexname not in (select conname from pg_constraint)
-      order by indexname`);
-    const columns = Object.fromEntries(
-      rows.rows.map((row) => [row.name, /USING btree \(([^)]*)\)/.exec(row.def)?.[1]]),
-    );
-    expect(columns).toEqual({
-      category_details_parent_idx: "parent_id",
-      extra_list_items_list_product_uq: "list_id, product_id",
-      extra_list_items_list_sort_idx: "list_id, sort",
-      menu_item_extra_items_list_product_idx: "list_id, product_id",
-      menu_item_extra_lists_list_idx: "list_id",
-      menu_items_menu_order_idx: "menu_id, display_order",
-      menu_sections_menu_order_idx: "menu_id, display_order",
-      option_labels_list_sort_idx: "list_id, sort",
-      product_categories_category_idx: "category_id",
-      product_modifiers_product_extra_uq: "product_id, extra_list_id",
-      product_modifiers_product_option_uq: "product_id, option_list_id",
-      product_modifiers_product_sort_idx: "product_id, sort",
-      product_units_unit_idx: "unit_id",
+    const indexes: Record<string, { unique: boolean; columns: string }> = {};
+    for (const table of TABLES) {
+      const rows = (
+        await db.execute<{ name: string; sql: string | null }>(
+          sql`select name, sql from sqlite_master where type = 'index' and tbl_name = ${table}`,
+        )
+      ).rows;
+      for (const row of rows) {
+        if (row.sql === null) continue;
+        const columns = (
+          await db.execute<{ name: string }>(sql`pragma index_info(${sql.raw(`'${row.name}'`)})`)
+        ).rows;
+        indexes[row.name] = {
+          unique: row.sql.startsWith("CREATE UNIQUE"),
+          columns: columns.map((column) => column.name).join(", "),
+        };
+      }
+    }
+    expect(indexes).toEqual({
+      category_details_parent_idx: { unique: false, columns: "parent_id" },
+      extra_list_items_list_product_uq: { unique: true, columns: "list_id, product_id" },
+      extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
+      menu_item_extra_items_list_product_idx: { unique: false, columns: "list_id, product_id" },
+      menu_item_extra_lists_list_idx: { unique: false, columns: "list_id" },
+      menu_items_id_product_key: { unique: true, columns: "id, product_id" },
+      menu_items_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
+      menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
+      menu_sections_menu_id_key: { unique: true, columns: "menu_id, id" },
+      menu_sections_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
+      option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
+      product_categories_category_idx: { unique: false, columns: "category_id" },
+      product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
+      product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
+      product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
+      product_units_unit_idx: { unique: false, columns: "unit_id" },
+      product_variants_product_id_key: { unique: true, columns: "product_id, id" },
+      units_seed_key_key: { unique: true, columns: "seed_key" },
     });
   });
 });
 
 describe("the one-row catalogue tables hold at most one row", () => {
   it("refuses a second content-language policy", async () => {
-    await db.execute(
-      sql`insert into content_languages (default_language, languages) values ('en', array['en'])`,
-    );
+    await db.insert(contentLanguages).values({ defaultLanguage: "en", languages: ["en"] });
     const second = await captureError(() =>
-      db.execute(
-        sql`insert into content_languages (id, default_language, languages) values (2, 'es', array['es'])`,
-      ),
+      db.insert(contentLanguages).values({ id: 2, defaultLanguage: "es", languages: ["es"] }),
     );
-    expect(pgErrorCode(second)).toBe("23514");
+    expect(isPgError(second, CHECK_VIOLATION)).toBe(true);
+    // A CHECK is the one refusal class SQLite still names, so this half survives unchanged.
     expect(pgErrorMessage(second)).toContain("content_languages_singleton_ck");
     const duplicate = await captureError(() =>
-      db.execute(
-        sql`insert into content_languages (default_language, languages) values ('es', array['es'])`,
-      ),
+      db.insert(contentLanguages).values({ defaultLanguage: "es", languages: ["es"] }),
     );
-    expect(pgErrorCode(duplicate)).toBe("23505");
+    expect(isPgError(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("refuses a second unit-seed marker", async () => {
-    await db.execute(sql`insert into unit_seed_states default values`);
-    const second = await captureError(() =>
-      db.execute(sql`insert into unit_seed_states (id) values (2)`),
-    );
-    expect(pgErrorCode(second)).toBe("23514");
+    await db.insert(unitSeedStates).values({ id: 1 });
+    const second = await captureError(() => db.insert(unitSeedStates).values({ id: 2 }));
+    expect(isPgError(second, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(second)).toContain("unit_seed_states_singleton_ck");
-    const duplicate = await captureError(() =>
-      db.execute(sql`insert into unit_seed_states default values`),
-    );
-    expect(pgErrorCode(duplicate)).toBe("23505");
+    const duplicate = await captureError(() => db.insert(unitSeedStates).values({ id: 1 }));
+    expect(isPgError(duplicate, UNIQUE_VIOLATION)).toBe(true);
   });
 });
 
@@ -209,33 +308,68 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   /** Rows seeded per test: the per-test reset empties every table after each case. */
   async function catalogue() {
     await seedTenant(db);
-    const one = async (statement: ReturnType<typeof sql>) =>
-      (await db.execute<{ id: string }>(statement)).rows[0]!.id;
-    const menuId = await one(sql`insert into catalogues (name) values ('Lunch') returning id`);
-    const otherMenuId = await one(
-      sql`insert into catalogues (name) values ('Dinner') returning id`,
-    );
-    const product = (name: string) =>
-      one(sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menuId}, ${name}, 'each', 1, 'general')
-        returning id`);
+    const menuId = (
+      await db.insert(catalogues).values({ name: "Lunch" }).returning({ id: catalogues.id })
+    )[0]!.id;
+    const otherMenuId = (
+      await db.insert(catalogues).values({ name: "Dinner" }).returning({ id: catalogues.id })
+    )[0]!.id;
+    const product = async (name: string) =>
+      (
+        await db
+          .insert(products)
+          .values({
+            catalogueId: menuId,
+            name,
+            pricingUnit: "each",
+            unitPrice: 1,
+            vatClass: "general",
+          })
+          .returning({ id: products.id })
+      )[0]!.id;
     const productId = await product("Soup");
     const otherProductId = await product("Bread");
-    const categoryId = await one(
-      sql`insert into categories (name) values ('{"en":"Food"}') returning id`,
-    );
-    const unitId = await one(sql`insert into units (seed_key, name, abbreviation, precision)
-      values ('each', '{"en":"each"}', '{"en":"ea"}', 0) returning id`);
-    const sectionId = await one(sql`insert into menu_sections (menu_id, name)
-      values (${menuId}, '{"en":"Starters"}') returning id`);
-    const otherSectionId = await one(sql`insert into menu_sections (menu_id, name)
-      values (${otherMenuId}, '{"en":"Mains"}') returning id`);
-    const menuItemId =
-      await one(sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
-      values (${menuId}, ${productId}, ${sectionId}, 3) returning id`);
-    const variantId = await one(sql`insert into product_variants (product_id, name, unit_price)
-      values (${productId}, '{"en":"Bowl"}', 4) returning id`);
-    const otherVariantId = await one(sql`insert into product_variants (product_id, name, unit_price)
-      values (${otherProductId}, '{"en":"Loaf"}', 2) returning id`);
+    const categoryId = (
+      await db
+        .insert(coreCategories)
+        .values({ name: { en: "Food" } })
+        .returning({ id: coreCategories.id })
+    )[0]!.id;
+    const unitId = (
+      await db
+        .insert(units)
+        .values({
+          seedKey: "each",
+          name: { en: "each" },
+          abbreviation: { en: "ea" },
+          precision: 0,
+        })
+        .returning({ id: units.id })
+    )[0]!.id;
+    const section = async (menu: string, name: string) =>
+      (
+        await db
+          .insert(menuSections)
+          .values({ menuId: menu, name: { en: name } })
+          .returning({ id: menuSections.id })
+      )[0]!.id;
+    const sectionId = await section(menuId, "Starters");
+    const otherSectionId = await section(otherMenuId, "Mains");
+    const menuItemId = (
+      await db
+        .insert(menuItems)
+        .values({ menuId, productId, sectionId, grossPrice: 3 })
+        .returning({ id: menuItems.id })
+    )[0]!.id;
+    const variant = async (owner: string, name: string, price: number) =>
+      (
+        await db
+          .insert(productVariants)
+          .values({ productId: owner, name, unitPrice: price })
+          .returning({ id: productVariants.id })
+      )[0]!.id;
+    const variantId = await variant(productId, "Bowl", 4);
+    const otherVariantId = await variant(otherProductId, "Loaf", 2);
     return {
       menuId,
       otherMenuId,
@@ -253,37 +387,60 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
 
   /** One extras list, for the cases that need a list without needing what it offers. */
   async function extraList(name: string): Promise<string> {
-    const rows = await db.execute<{ id: string }>(
-      sql`insert into extra_lists (name) values (${name}) returning id`,
-    );
-    return rows.rows[0]!.id;
+    const rows = await db.insert(extraLists).values({ name }).returning({ id: extraLists.id });
+    return rows[0]!.id;
   }
 
-  async function refusal(statement: ReturnType<typeof sql>, constraint: string) {
-    const error = await captureError(() => db.transaction((tx) => tx.execute(statement)));
-    expect(pgErrorCode(error), constraint).toBe("23503");
-    expect(pgErrorMessage(error), constraint).toContain(constraint);
+  /**
+   * The statement is refused, as a foreign-key violation.
+   *
+   * **`key` is the assertion's LABEL, and nothing checks it against the engine.** SQLite reports a
+   * foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names neither the
+   * constraint nor the column — measured, and written up on `constraintTarget`
+   * (`packages/db/src/constraint-target.ts`). So the `toContain(<constraint name>)` half of this
+   * helper is gone, with no replacement available from the engine; what still discriminates is
+   * that each call below sends a statement with exactly ONE wrong value, so the class plus the
+   * statement say which key fired.
+   */
+  async function refusal(write: () => Promise<unknown>, key: string) {
+    const error = await captureError(write);
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
   }
 
   it("refuses a menu section or offer whose menu, product or section does not exist", async () => {
     const c = await catalogue();
     await refusal(
-      sql`insert into menu_sections (menu_id, name) values (${missing}, '{"en":"X"}')`,
+      () => db.insert(menuSections).values({ menuId: missing, name: { en: "X" } }),
       "menu_sections_menu_fk",
     );
     await refusal(
-      sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
-        values (${missing}, ${c.otherProductId}, ${c.sectionId}, 1)`,
+      () =>
+        db.insert(menuItems).values({
+          menuId: missing,
+          productId: c.otherProductId,
+          sectionId: c.sectionId,
+          grossPrice: 1,
+        }),
       "menu_items_menu_fk",
     );
     await refusal(
-      sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
-        values (${c.menuId}, ${missing}, ${c.sectionId}, 1)`,
+      () =>
+        db.insert(menuItems).values({
+          menuId: c.menuId,
+          productId: missing,
+          sectionId: c.sectionId,
+          grossPrice: 1,
+        }),
       "menu_items_product_fk",
     );
     await refusal(
-      sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
-        values (${c.menuId}, ${c.otherProductId}, ${missing}, 1)`,
+      () =>
+        db.insert(menuItems).values({
+          menuId: c.menuId,
+          productId: c.otherProductId,
+          sectionId: missing,
+          grossPrice: 1,
+        }),
       "menu_items_section_fk",
     );
   });
@@ -291,8 +448,13 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   it("refuses an offer placed in another menu's section", async () => {
     const c = await catalogue();
     await refusal(
-      sql`insert into menu_items (menu_id, product_id, section_id, gross_price)
-        values (${c.menuId}, ${c.otherProductId}, ${c.otherSectionId}, 1)`,
+      () =>
+        db.insert(menuItems).values({
+          menuId: c.menuId,
+          productId: c.otherProductId,
+          sectionId: c.otherSectionId,
+          grossPrice: 1,
+        }),
       "menu_items_section_fk",
     );
   });
@@ -300,19 +462,19 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   it("refuses category details and memberships whose category or product does not exist", async () => {
     const c = await catalogue();
     await refusal(
-      sql`insert into category_details (category_id) values (${missing})`,
+      () => db.insert(categoryDetails).values({ categoryId: missing }),
       "category_details_category_fk",
     );
     await refusal(
-      sql`insert into category_details (category_id, parent_id) values (${c.categoryId}, ${missing})`,
+      () => db.insert(categoryDetails).values({ categoryId: c.categoryId, parentId: missing }),
       "category_details_parent_fk",
     );
     await refusal(
-      sql`insert into product_categories (product_id, category_id) values (${missing}, ${c.categoryId})`,
+      () => db.insert(productCategories).values({ productId: missing, categoryId: c.categoryId }),
       "product_categories_product_fk",
     );
     await refusal(
-      sql`insert into product_categories (product_id, category_id) values (${c.productId}, ${missing})`,
+      () => db.insert(productCategories).values({ productId: c.productId, categoryId: missing }),
       "product_categories_category_fk",
     );
   });
@@ -320,11 +482,11 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   it("refuses a unit assignment whose product or unit does not exist", async () => {
     const c = await catalogue();
     await refusal(
-      sql`insert into product_units (product_id, unit_id) values (${missing}, ${c.unitId})`,
+      () => db.insert(productUnits).values({ productId: missing, unitId: c.unitId }),
       "product_units_product_fk",
     );
     await refusal(
-      sql`insert into product_units (product_id, unit_id) values (${c.productId}, ${missing})`,
+      () => db.insert(productUnits).values({ productId: c.productId, unitId: missing }),
       "product_units_unit_fk",
     );
   });
@@ -332,34 +494,54 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   it("refuses variants whose product, offer or product variant does not exist or does not match", async () => {
     const c = await catalogue();
     await refusal(
-      sql`insert into product_variants (product_id, name, unit_price) values (${missing}, '{"en":"X"}', 1)`,
+      () => db.insert(productVariants).values({ productId: missing, name: "X", unitPrice: 1 }),
       "product_variants_product_fk",
     );
     await refusal(
-      sql`insert into menu_item_variants (menu_item_id, product_id, variant_id, unit_price)
-        values (${missing}, ${c.productId}, ${c.variantId}, 1)`,
+      () =>
+        db.insert(menuItemVariants).values({
+          menuItemId: missing,
+          productId: c.productId,
+          variantId: c.variantId,
+          unitPrice: 1,
+        }),
       "menu_item_variants_offer_fk",
     );
     await refusal(
-      sql`insert into menu_item_variants (menu_item_id, product_id, variant_id, unit_price)
-        values (${c.menuItemId}, ${c.otherProductId}, ${c.otherVariantId}, 1)`,
+      () =>
+        db.insert(menuItemVariants).values({
+          menuItemId: c.menuItemId,
+          productId: c.otherProductId,
+          variantId: c.otherVariantId,
+          unitPrice: 1,
+        }),
       "menu_item_variants_offer_fk",
     );
     await refusal(
-      sql`insert into menu_item_variants (menu_item_id, product_id, variant_id, unit_price)
-        values (${c.menuItemId}, ${c.productId}, ${missing}, 1)`,
+      () =>
+        db.insert(menuItemVariants).values({
+          menuItemId: c.menuItemId,
+          productId: c.productId,
+          variantId: missing,
+          unitPrice: 1,
+        }),
       "menu_item_variants_variant_fk",
     );
     await refusal(
-      sql`insert into menu_item_variants (menu_item_id, product_id, variant_id, unit_price)
-        values (${c.menuItemId}, ${c.productId}, ${c.otherVariantId}, 1)`,
+      () =>
+        db.insert(menuItemVariants).values({
+          menuItemId: c.menuItemId,
+          productId: c.productId,
+          variantId: c.otherVariantId,
+          unitPrice: 1,
+        }),
       "menu_item_variants_variant_fk",
     );
   });
 
   it("refuses a label whose options list does not exist", async () => {
     await refusal(
-      sql`insert into option_labels (list_id, name) values (${missing}, 'Rare')`,
+      () => db.insert(optionLabels).values({ listId: missing, name: "Rare" }),
       "option_labels_list_fk",
     );
   });
@@ -368,11 +550,11 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const c = await catalogue();
     const listId = await extraList("Breads");
     await refusal(
-      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${missing}, ${listId})`,
+      () => db.insert(menuItemExtraLists).values({ menuItemId: missing, listId }),
       "menu_item_extra_lists_item_fk",
     );
     await refusal(
-      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${missing})`,
+      () => db.insert(menuItemExtraLists).values({ menuItemId: c.menuItemId, listId: missing }),
       "menu_item_extra_lists_list_fk",
     );
   });
@@ -381,24 +563,30 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const c = await catalogue();
     const listId = await extraList("Breads");
     const otherListId = await extraList("Sauces");
-    await db.execute(
-      sql`insert into menu_item_extra_lists (menu_item_id, list_id) values (${c.menuItemId}, ${listId})`,
-    );
+    await db.insert(menuItemExtraLists).values({ menuItemId: c.menuItemId, listId });
     await refusal(
-      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
-        values (${missing}, ${listId}, ${c.productId})`,
+      () =>
+        db
+          .insert(menuItemExtraItems)
+          .values({ menuItemId: missing, listId, productId: c.productId }),
       "menu_item_extra_items_list_fk",
     );
     // The offer and the list both exist; what is wrong is that this offer does not publish THAT
     // list, so an override under it would be read by nothing.
     await refusal(
-      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
-        values (${c.menuItemId}, ${otherListId}, ${c.productId})`,
+      () =>
+        db.insert(menuItemExtraItems).values({
+          menuItemId: c.menuItemId,
+          listId: otherListId,
+          productId: c.productId,
+        }),
       "menu_item_extra_items_list_fk",
     );
     await refusal(
-      sql`insert into menu_item_extra_items (menu_item_id, list_id, product_id)
-        values (${c.menuItemId}, ${listId}, ${missing})`,
+      () =>
+        db
+          .insert(menuItemExtraItems)
+          .values({ menuItemId: c.menuItemId, listId, productId: missing }),
       "menu_item_extra_items_product_fk",
     );
   });
@@ -407,11 +595,11 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const c = await catalogue();
     const listId = await extraList("Breads");
     await refusal(
-      sql`insert into extra_list_items (list_id, product_id) values (${missing}, ${c.productId})`,
+      () => db.insert(extraListItems).values({ listId: missing, productId: c.productId }),
       "extra_list_items_list_fk",
     );
     await refusal(
-      sql`insert into extra_list_items (list_id, product_id) values (${listId}, ${missing})`,
+      () => db.insert(extraListItems).values({ listId, productId: missing }),
       "extra_list_items_product_fk",
     );
   });

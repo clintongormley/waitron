@@ -1,35 +1,47 @@
-import { sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { TRIGGER_ABORT } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { dailyCloses, type DailyCloseSnapshot } from "./daily-closes.js";
 import { locations, tenants } from "./tenants.js";
 
-// Real Postgres, not PGlite, and not describeEachTarget: the headline assertions are the two
-// append-only TRIGGERS (`daily_closes_immutable` and the BEFORE TRUNCATE statement trigger, both
-// WT001), each proven against a role that HAS been granted the privilege inside a rolled-back
-// transaction. PGlite connects as a superuser that can DISABLE TRIGGER unconditionally, so a PGlite
-// pass would be a false pass (CLAUDE.md §4). The column-presence and FK assertions would pass on
-// either target; they ride along on the one container this suite already needs. `app_user`'s own
-// withheld UPDATE/DELETE — the first layer, which fires before the trigger — is pinned by the
-// privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
+// The headline assertion is that `daily_closes` refuses a rewrite: the append-only triggers
+// `@waitron/store` installs for every table a module declared `appendOnly()`
+// (`packages/store/src/append-only.ts`), which `useVenueDb` installs from `CORE_MIGRATIONS`'
+// own `appendOnlyTables` list.
+//
+// THREE LOSSES, from the storage swap:
+//  - the PostgreSQL version proved each refusal against a role that HAD been granted the privilege,
+//    inside a rolled-back transaction — a layered proof, because `app_user` is refused UPDATE by
+//    the grant first and a trigger nobody has seen fire is a comment, not a backstop. SQLite has no
+//    roles and no grants (`packages/db/src/testing/roles.ts`), so there is only one layer left and
+//    the refusal below is simply the trigger's.
+//  - the TRUNCATE case is deleted. SQLite has no `TRUNCATE` statement and no trigger event for
+//    `DROP TABLE`, so the statement-level trigger that blocked a table-wide wipe has no counterpart
+//    at all (`packages/store/src/append-only.ts` says so in its own words). What a caller that can
+//    issue DDL may still do to this table is refused by nothing. The DELETE case below is what this
+//    engine offers in its place, and it is a narrower claim.
+//  - the snapshot column was `jsonb` and is now `text` in JSON mode, so the read-back below goes
+//    through Drizzle's decoding rather than a `->>` path expression the database evaluates.
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-// The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK (D3 in the
-// design owns the person schema; a raw uuid keeps this table independent of it).
+// The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK.
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-// Captured at seed time — the node id the raw inserts below need as the foreign-key target.
+// Captured at seed time — the node id the inserts below need as the foreign-key target.
 let nodeA = "";
 
 // A minimal-but-real snapshot document: `close` is the VAT-exact computeDailyClose output (owned by
-// @waitron/reporting, opaque `unknown` here) and `cashReconciliation` is the per-till/per-node variance
-// block. Stored verbatim; the readback below proves the jsonb column round-trips a nested value.
-function snapshotLiteral(nodeVariance: string): string {
-  return JSON.stringify({
+// @waitron/reporting, opaque `unknown` here) and `cashReconciliation` is the per-till/per-node
+// variance block. Stored verbatim; the readback below proves the column round-trips a nested value.
+function snapshot(nodeVariance: string): DailyCloseSnapshot {
+  return {
     close: { vat: { taxTotal: "12.35" }, cash: {}, counts: { sales: 3, corrections: 0, voids: 0 } },
     cashReconciliation: {
       byTill: [
@@ -44,35 +56,18 @@ function snapshotLiteral(nodeVariance: string): string {
       ],
       nodeVariance,
     },
-  });
+  };
 }
-
-// Raw SQL, not the drizzle `dailyCloses` object: the RED phase then fails at runtime on
-// `relation "daily_closes" does not exist` — the real cause — rather than at compile time on a
-// missing import, and the assertion exercises the actual column list a migration produces.
-function insertCloseSql(opts: {
-  nodeId: string;
-  businessDay: string;
-  sequenceNo: number;
-  snapshot?: string;
-}): ReturnType<typeof sql> {
-  return sql`
-    insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_by, snapshot) values (${opts.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
-      '', ${"A".repeat(64)}, ${CLOSED_BY}, ${opts.snapshot ?? snapshotLiteral("0.00")}::jsonb
-    ) returning id`;
-}
-
-class RollbackSignal extends Error {}
 
 describe("frozen daily close schema (append-only triggers, columns, FK)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
-    const admin = suite.admin;
-    await admin
+    const db = suite.db;
+    await db
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
-    await admin.insert(locations).values([
+    await db.insert(locations).values([
       {
         id: LOCATION_A,
         name: "Fixture Location A",
@@ -80,84 +75,67 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
         operationDescription: "Hosteleria",
       },
     ]);
-    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   });
 
-  it("writes and reads back a daily_closes row (the column list, and the snapshot jsonb)", async () => {
+  // The Drizzle builder rather than raw SQL: `id` and `closed_at` are `$defaultFn` columns Drizzle
+  // applies CLIENT-side, so a raw `insert` reaches neither and the row is refused NOT NULL. The
+  // column LIST the PostgreSQL version pinned by writing raw SQL is still pinned, by the builder
+  // refusing to compile a field the table does not declare.
+  function insertClose(opts: { businessDay: string; sequenceNo: number; variance?: string }) {
+    return withTransaction(suite.db, (tx) =>
+      tx.insert(dailyCloses).values({
+        nodeId: nodeA,
+        businessDay: opts.businessDay,
+        sequenceNo: opts.sequenceNo,
+        prevEntryHash: "",
+        entryHash: "A".repeat(64),
+        closedBy: CLOSED_BY,
+        snapshot: snapshot(opts.variance ?? "0.00"),
+      }),
+    );
+  }
+
+  it("writes and reads back a daily_closes row (the column list, and the snapshot document)", async () => {
     // The positive control for the trigger rejections below: without a write that SUCCEEDS, a
-    // rejection could equally mean the role has no access to the table at all. It also pins the column
-    // list a close is written with and that the nested snapshot jsonb round-trips.
-    const row = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await tx.execute(
-        insertCloseSql({
-          nodeId: nodeA,
-          businessDay: "2026-08-01",
-          sequenceNo: 1,
-          snapshot: snapshotLiteral("1.23"),
-        }),
-      );
-      const result = await tx.execute<{
-        business_day: string;
-        sequence_no: number;
-        prev_entry_hash: string;
-        entry_hash: string;
-        closed_by: string;
-        node_variance: string;
-      }>(sql`
-        select business_day, sequence_no, prev_entry_hash, entry_hash, closed_by,
-               snapshot->'cashReconciliation'->>'nodeVariance' as node_variance
-          from daily_closes
-         where node_id = ${nodeA} and business_day = '2026-08-01'`);
-      return result.rows[0];
-    });
-    expect(row?.sequence_no).toBe(1);
-    expect(row?.prev_entry_hash).toBe("");
-    expect(row?.entry_hash).toBe("A".repeat(64));
-    expect(row?.closed_by).toBe(CLOSED_BY);
-    expect(row?.node_variance).toBe("1.23");
+    // rejection could equally mean the table is unreachable. It also pins that the nested snapshot
+    // round-trips.
+    await insertClose({ businessDay: "2026-08-01", sequenceNo: 1, variance: "1.23" });
+    const [row] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select()
+        .from(dailyCloses)
+        .where(and(eq(dailyCloses.nodeId, nodeA), eq(dailyCloses.businessDay, "2026-08-01"))),
+    );
+    expect(row?.sequenceNo).toBe(1);
+    expect(row?.prevEntryHash).toBe("");
+    expect(row?.entryHash).toBe("A".repeat(64));
+    expect(row?.closedBy).toBe(CLOSED_BY);
+    expect(row?.snapshot.cashReconciliation.nodeVariance).toBe("1.23");
   });
 
-  it("rejects UPDATE of daily_closes by the append-only trigger even when the privilege is granted", async () => {
-    // The layered proof. app_user's withheld UPDATE — the first layer, pinned by the privilege
-    // matrix in packages/fiscal-verifactu — refuses the statement at privilege-check time, so nothing
-    // that matrix covers ever reaches the trigger, and a trigger nobody has seen fire is a comment,
-    // not a backstop. Grant UPDATE inside a transaction that rolls back, and watch the second layer
-    // (daily_closes_immutable → reject_mutation() → WT001) catch it. Remove that trigger from the
-    // migration and THIS test goes red while the matrix stays green.
-    await withTransaction(suite.admin, async (tx) => {
-      await tx.execute(sql`grant update on daily_closes to app_user`);
-      await tx.execute(sql`set local role app_user`);
-      await tx.execute(
-        insertCloseSql({
-          nodeId: nodeA,
-          businessDay: "2026-08-04",
-          sequenceNo: 4,
-        }),
-      );
-      const error = await captureError(() =>
-        tx.execute(sql`update daily_closes set entry_hash = ${"C".repeat(64)}`),
-      );
-      expect(pgErrorCode(error)).toBe("WT001");
-      throw new RollbackSignal();
-    }).catch((e: unknown) => {
-      if (!(e instanceof RollbackSignal)) throw e;
-    });
+  it("rejects an UPDATE of daily_closes, via the append-only trigger", async () => {
+    await insertClose({ businessDay: "2026-08-04", sequenceNo: 4 });
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx
+          .update(dailyCloses)
+          .set({ entryHash: "C".repeat(64) })
+          .where(eq(dailyCloses.businessDay, "2026-08-04")),
+      ),
+    );
+    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
+    expect(pgErrorMessage(error)).toBe("daily_closes is append-only");
   });
 
-  it("rejects TRUNCATE of daily_closes by the statement trigger", async () => {
-    // A row trigger does NOT fire on TRUNCATE. Without the separate BEFORE TRUNCATE … FOR EACH
-    // STATEMENT trigger, TRUNCATE walks straight through every row-level protection above. No
-    // CASCADE: nothing references daily_closes.id (the whole close is one frozen jsonb document — no
-    // child table — design D1).
-    await withTransaction(suite.admin, async (tx) => {
-      await tx.execute(sql`grant truncate on daily_closes to app_user`);
-      await tx.execute(sql`set local role app_user`);
-      const error = await captureError(() => tx.execute(sql`truncate daily_closes`));
-      expect(pgErrorCode(error)).toBe("WT001");
-      throw new RollbackSignal();
-    }).catch((e: unknown) => {
-      if (!(e instanceof RollbackSignal)) throw e;
-    });
+  it("rejects a DELETE of daily_closes, via the append-only trigger", async () => {
+    await insertClose({ businessDay: "2026-08-05", sequenceNo: 5 });
+    const error = await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        tx.delete(dailyCloses).where(eq(dailyCloses.businessDay, "2026-08-05")),
+      ),
+    );
+    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
+    expect(pgErrorMessage(error)).toBe("daily_closes is append-only");
   });
 });

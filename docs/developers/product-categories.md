@@ -163,17 +163,40 @@ category writes in product operations call the shared membership replacement ope
 Both new tables belong to catalogue, have foreign keys onto the core product and category rows, and
 state classification.
 
-Hierarchy edits, membership replacements and category deletion take the same transaction lock.
-Deletion also locks the core category row against a concurrent preparation-route insert.
-The media set adds the image foreign key (`category_details_media_image_fk`, created in media's
-`0001_media_baseline_sql`); attaching an image locks its row against deletion.
+Hierarchy edits, membership replacements and category deletion take no lock. On PostgreSQL the
+three shared one advisory lock taken as each one's first statement, and deletion additionally locked
+the core category row so a concurrent preparation-route insert could not slip between its steps.
+Neither survives the storage switch, and neither is needed: `withTransaction`
+(`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits one
+write transaction on the file at a time (`packages/store/src/write-queue.ts`), so two of these paths
+cannot overlap however they are started. `packages/catalogue/src/categories.ts` states this above
+`listCategories` and again inside `deleteCategory`. The receipt is `racePair` in
+`packages/catalogue/test/fixtures.ts`, which carries the measurement and a control, used by the
+three `serializes …` cases in `packages/catalogue/src/categories.db.test.ts`.
+
+The media set still protects `category_details.image`, under the same name
+(`category_details_media_image_fk`) but by a different mechanism: it is now four triggers rather
+than a foreign key, created in `packages/media/drizzle/0001_image_references.sql`, whose header
+explains why a real key could not be regenerated. The refusal arrives as errcode 1811, not 787, and
+`pragma foreign_key_list('category_details')` does not list the rule. Attaching an image does not
+lock the image's row — `validateImage` reads it and relies on there being no concurrent writer, and
+says so at the read.
+
 Configuration transfer places media rows before category image references and preserves membership
 and primary choice. Category parent references target existing core identities, so metadata rows can
 be restored in any order after those identities.
 
-The migrations are core `0020_category_names` (whose `categories_tenant_id_key` unique went with
-the tenant column, 2026-09-14), and the catalogue and media baselines
-(`0000_catalogue_baseline`, `0001_catalogue_baseline_sql`, `0001_media_baseline_sql`). The core migration drops and recreates
-the name column; it does not translate or backfill existing text. Follow the existing preproduction
-reset workflow for a populated database. Do not apply it to a populated shared development database
-as an incidental part of running tests. No shared development database was reset for this build.
+There is no per-change migration history to point at any more. The storage switch regenerated every
+module's PostgreSQL chain into one SQLite baseline per set, so all three files this paragraph used
+to name are gone and so is core's `0020_category_names` — `grep -rn 0020_category_names` over
+`packages/` and `apps/` matched nothing on 2026-09-23. What exists now is the end state: the
+catalogue set is `packages/catalogue/drizzle/0000_baseline.sql`, the media set is
+`packages/media/drizzle/0000_baseline.sql` plus the image-reference triggers in
+`0001_image_references.sql`, and the core set is `packages/db/drizzle/0000_baseline.sql` plus
+`0001_behavioural_triggers.sql`.
+
+The operational advice that hung off the old migration still holds, and it is a house rule rather
+than a property of any one file: schema changes drop and recreate, with no translation and no
+backfill (`CLAUDE.md` §3). Follow the existing preproduction reset workflow for a populated
+database. Do not apply it to a populated shared development database as an incidental part of
+running tests. No shared development database was reset for this build.

@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { Database, Transaction } from "./client.js";
+import { now } from "./schema/columns.js";
 import { nodeMembership } from "./schema/node-membership.js";
 
 /**
@@ -12,9 +13,10 @@ import { nodeMembership } from "./schema/node-membership.js";
  * Returns the document WHOLE and unverified — the caller re-runs `verifyMembershipDocument` /
  * `acceptMembershipDocument` (@waitron/membership) against it; this layer is storage, not the fence.
  *
- * Uses `to_regclass` rather than catching an undefined-table error, exactly as `readMirrorConfig`/
- * `readDeploymentMode` do: a failed statement aborts the enclosing transaction in PostgreSQL, so
- * probing by failure would poison a transaction the caller may still need.
+ * The table's existence is read off `sqlite_master` rather than discovered by running the select and
+ * catching the refusal, exactly as `readMirrorConfig`/`readDeploymentMode` do — the reason for that
+ * shape, and for the catalogue rather than a pragma, is on `deploymentTableExists` in
+ * `./deployment.js`.
  *
  * Accepts a `Database` OR a `Transaction` (the explicit union `client.ts` blesses for a reader that
  * must work on whatever handle it is given): R3b's promote reads the held term through its OWN owner
@@ -23,23 +25,24 @@ import { nodeMembership } from "./schema/node-membership.js";
 export async function readNodeMembership(
   db: Database | Transaction,
 ): Promise<SignedMembershipDocument | null> {
-  const present = await db.execute<{ exists: boolean }>(
-    sql`select to_regclass('public.node_membership') is not null as exists`,
+  const present = await db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name = ${"node_membership"}`,
   );
-  if (present.rows[0]?.exists !== true) return null;
+  if (present.rows.length === 0) return null;
 
-  const rows = await db.execute<{ document: SignedMembershipDocument }>(
-    sql`select document from node_membership where id = 1`,
-  );
-  const row = rows.rows[0];
-  if (row === undefined) return null;
-  // `document` is a jsonb column, so the driver hands it back already parsed. Structural validity is
-  // the caller's verify step, not ours.
-  return row.document;
+  // Through the table object, not raw SQL: `document` is stored as JSON TEXT, and it is the column's
+  // own read mapping (`json` in ./schema/columns.js) that parses it. A raw select returns the text
+  // unchanged, so the caller would be handed a string where the signature says a document.
+  // Structural validity is still the caller's verify step, not ours.
+  const [row] = await db
+    .select({ document: nodeMembership.document })
+    .from(nodeMembership)
+    .where(eq(nodeMembership.id, 1));
+  return row?.document ?? null;
 }
 
 /**
- * Owner-role UPSERT of the singleton (`id = 1`). A PLAIN setter — it does NOT run the accept test
+ * UPSERT of the singleton (`id = 1`). A PLAIN setter — it does NOT run the accept test
  * (owner decision, 2026-09-03): the authentic-and-strictly-newer fence is `acceptMembershipDocument`
  * in @waitron/membership, called by the Slice-3 adoption path before it persists here.
  *
@@ -47,18 +50,21 @@ export async function readNodeMembership(
  * `number` term with this bigint column). Deriving it here keeps the column and the in-blob term in
  * step for writes through this accessor; the DB does not enforce it, so a raw SQL write could set
  * them apart.
- * `app_user` holds INSERT/UPDATE on `node_membership` (Slice 3's runtime-adoption grant), but every
- * APP-POOL write goes through the term-guarded `persistNodeMembershipIfNewer` below — gossip adoption
- * (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt handshake's org-chart append
- * (`mirror-bundle-api.ts`), none of which can assume it is the only writer. This accessor is the
- * OWNER-connection setter, used where no concurrent writer exists: seeding (`membership-seed.ts`) and
- * the promote transaction (`promote.ts`, via `writeNodeMembershipTx`) — owner decision, Slice 2.
+ * **Which caller may use this one is a convention, and nothing in the database holds it.** The two
+ * setters were told apart by the connection they ran on — PostgreSQL granted `app_user` INSERT and
+ * UPDATE here, and this plain one ran on the owner connection instead. There are no roles and no
+ * grants on this engine (`./testing/roles.ts`). The split stands on its own terms: a caller that
+ * cannot assume it is the only writer goes through the term-guarded `persistNodeMembershipIfNewer`
+ * below — gossip adoption (`membership-adopt.ts`), retirement (`retire.ts`) and the adopt
+ * handshake's org-chart append (`mirror-bundle-api.ts`) — and this one is for where no concurrent
+ * writer exists: seeding (`membership-seed.ts`) and the promote transaction (`promote.ts`, via
+ * `writeNodeMembershipTx`) — owner decision, Slice 2.
  */
 export async function writeNodeMembership(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  await db.transaction((tx) => writeNodeMembershipTx(tx, document));
+  await db.withWriteLock(async () => writeNodeMembershipTx(db, document));
 }
 
 /**
@@ -80,7 +86,7 @@ export async function writeNodeMembershipTx(
     .values({ id: 1, term, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: sql`now()` },
+      set: { term, document, updatedAt: now() },
     });
 }
 
@@ -104,7 +110,7 @@ export async function persistNodeMembershipIfNewer(
   db: Database,
   document: SignedMembershipDocument,
 ): Promise<boolean> {
-  return db.transaction((tx) => persistNodeMembershipIfNewerTx(tx, document));
+  return db.withWriteLock(async () => persistNodeMembershipIfNewerTx(db, document));
 }
 
 /** The term-guarded singleton upsert on a caller-provided transaction — the atomic monotonic backstop
@@ -123,7 +129,7 @@ export async function persistNodeMembershipIfNewerTx(
     .values({ id: 1, term, document })
     .onConflictDoUpdate({
       target: nodeMembership.id,
-      set: { term, document, updatedAt: sql`now()` },
+      set: { term, document, updatedAt: now() },
       setWhere: sql`${nodeMembership.term} < ${term}`,
     })
     .returning({ id: nodeMembership.id });

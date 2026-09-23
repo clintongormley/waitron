@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   nodeId as brandNodeId,
@@ -63,19 +64,33 @@ function freshNif(): string {
  * get a second NIF.
  */
 async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
-  await tx.execute(sql`
-    insert into tenants (id, country, tax_id, legal_name)
-    select 1, 'ES', ${nif}, ${"Waitron SL"} where not exists (select 1 from tenants)
-  `);
+  // Through the table definition, like every other write here: `created_at` is a `$defaultFn`
+  // generator that only the insert BUILDER runs, so the raw insert this replaces was refused
+  // `NOT NULL constraint failed: tenants.created_at` and took all sixteen cases of chain.test.ts
+  // with it.
+  //
+  // `on conflict do nothing` rather than the `where not exists (select 1 from tenants)` this used
+  // to carry. The two cannot disagree: the id is pinned to 1 AND checked
+  // (`tenants_singleton_ck`, `packages/db/src/schema/tenants.ts`), so "the table already has a
+  // row" and "the row with id 1 already exists" are the same question.
+  await tx
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
+    .onConflictDoNothing();
 }
 
 /** Inserts one location and returns its id — the FK a node and a till both need. */
 async function insertLocation(tx: Transaction, label: string): Promise<string> {
-  const location = await tx.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values (${"Sala " + label}, array['es'], ${"Venta en establecimiento"})
-    returning id
-  `);
-  const locationRow = location.rows[0];
+  // `invoice_locales` is a JSON-encoded list on this engine, not a `text[]`, so the builder
+  // encodes the array and the `array['es']` literal this used to carry is a syntax error.
+  const [locationRow] = await tx
+    .insert(locations)
+    .values({
+      name: "Sala " + label,
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
   if (locationRow === undefined) throw new Error("seedTill: location insert returned no row");
   return locationRow.id;
 }
@@ -83,22 +98,20 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
 /** Inserts one node under an existing location and returns its id — the SIF/chain/series owner
  * (node-id rekey, 2026-08-03). */
 async function insertNode(tx: Transaction, location: string, label: string): Promise<NodeId> {
-  const node = await tx.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${location}, ${"Node " + label})
-    returning id
-  `);
-  const nodeRow = node.rows[0];
+  const [nodeRow] = await tx
+    .insert(nodes)
+    .values({ locationId: location, name: "Node " + label })
+    .returning({ id: nodes.id });
   if (nodeRow === undefined) throw new Error("seedTill: node insert returned no row");
   return brandNodeId(nodeRow.id);
 }
 
 /** Inserts one till under an existing location and returns its id — where a sale rings. */
 async function insertTill(tx: Transaction, location: string, label: string): Promise<TillId> {
-  const till = await tx.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location}, ${"Till " + label})
-    returning id
-  `);
-  const tillRow = till.rows[0];
+  const [tillRow] = await tx
+    .insert(tills)
+    .values({ locationId: location, name: "Till " + label })
+    .returning({ id: tills.id });
   if (tillRow === undefined) throw new Error("seedTill: till insert returned no row");
   return brandTillId(tillRow.id);
 }
@@ -111,11 +124,10 @@ async function addTill(tx: Transaction, nif: string, label: string): Promise<See
   const node = await insertNode(tx, location, label);
   const tillId = await insertTill(tx, location, label);
 
-  const series = await tx.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code, purpose, next_number) values (${node}, ${"G" + label}, ${"standard"}, 1)
-    returning id
-  `);
-  const seriesRow = series.rows[0];
+  const [seriesRow] = await tx
+    .insert(invoiceSeries)
+    .values({ nodeId: node, code: "G" + label, purpose: "standard", nextNumber: 1 })
+    .returning({ id: invoiceSeries.id });
   if (seriesRow === undefined) throw new Error("seedTill: series insert returned no row");
 
   const sif = await registerSif(tx, {
@@ -158,18 +170,16 @@ export async function addTillToNode(
 ): Promise<SeededTill> {
   return db.transaction(async (tx) => {
     // Reuse the node's own location so the till sits under the same venue.
-    const [locationRow] = (
-      await tx.execute<{ location_id: string }>(sql`
-        select location_id from nodes where id = ${seed.nodeId}
-      `)
-    ).rows;
+    const [locationRow] = await tx
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, seed.nodeId));
     if (locationRow === undefined) throw new Error("addTillToNode: node not found");
-    const tillId = await insertTill(tx, locationRow.location_id, label);
-    const series = await tx.execute<{ id: string }>(sql`
-      insert into invoice_series (node_id, code, purpose, next_number) values (${seed.nodeId}, ${"G" + label}, ${"standard"}, 1)
-      returning id
-    `);
-    const seriesRow = series.rows[0];
+    const tillId = await insertTill(tx, locationRow.locationId, label);
+    const [seriesRow] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: seed.nodeId, code: "G" + label, purpose: "standard", nextNumber: 1 })
+      .returning({ id: invoiceSeries.id });
     if (seriesRow === undefined) throw new Error("addTillToNode: series insert returned no row");
     return {
       tillId,
@@ -248,14 +258,26 @@ export async function seedSale(
   till: SeededTill,
   invoiceNumber: number,
 ): Promise<SaleId> {
-  const { rows } = await db.execute<{ id: string }>(sql`
-    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${till.seriesId}, ${invoiceNumber},
-            '2026-07-20T19:20:30+02:00', 120,
-            0, '[]'::jsonb,
-            'es', array['es'], 'verifactu', 'recorded')
-    returning id
-  `);
-  const row = rows[0];
+  // `vat_breakdown` and `invoice_locales` are JSON columns here, so the builder encodes them; the
+  // `'[]'::jsonb` and `array['es']` literals this used to carry are both syntax errors. `total` is
+  // a count of whole cents, so the zero is the same zero.
+  const [row] = await db
+    .insert(sales)
+    .values({
+      tillId: till.tillId,
+      nodeId: till.nodeId,
+      seriesId: till.seriesId,
+      invoiceNumber,
+      issuedAt: "2026-07-20T19:20:30+02:00",
+      issuedOffsetMinutes: 120,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
   if (row === undefined) throw new Error("seedSale inserted nothing");
   return brandSaleId(row.id);
 }

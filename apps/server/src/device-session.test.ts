@@ -1,11 +1,45 @@
+/**
+ * The device cookie and the three guards that read it, on the engine the box now runs.
+ *
+ * ## What went with PostgreSQL, and is replaced by nothing
+ *
+ * The old header argued that real PostgreSQL was needed here rather than PGlite, because
+ * `requireDevice`'s read and its `last_seen_at` write run as `app_user` and a superuser session
+ * would hide a missing grant. SQLite has no roles and no grants: one process opens one file and
+ * `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). The grant half of
+ * every database-backed case below is now checked by nothing, here or elsewhere. What each case
+ * still proves is the guard's own logic — the cookie parse, the token verify, the `active` filter,
+ * the profile capability set — which lives in `device-session.ts`, not in the database.
+ *
+ * Every fixture below writes through its TABLE DEFINITION rather than as raw SQL, the change
+ * `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
+ * this engine: each table's `id` (and `tills.created_at`, `canvases.created_at`,
+ * `device_profiles.created_at`/`updated_at`, `devices.enrolled_at`) is a `$defaultFn` generator a
+ * raw insert never reaches while the column is NOT NULL, and a JavaScript boolean cannot bind on
+ * this driver. It is also what encodes the JSON and list columns, whose `::jsonb`, `::uuid` and
+ * `array[...]` spellings are syntax this parser refuses (`unrecognized token: ":"`).
+ *
+ * The "(real Postgres)" in the five describes below is stale and is left for the branch's single
+ * rename sweep, the choice `apps/server/src/device.test.ts:24` records.
+ */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { asAppUser, withTransaction } from "@waitron/db";
+import {
+  asAppUser,
+  canvases,
+  deviceProfiles,
+  devices,
+  kitchenStations,
+  locations,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
 import {
@@ -33,11 +67,11 @@ import {
 import type { DeviceBinding } from "./device-session.js";
 import "./errors.js";
 
-// Real PostgreSQL checks requireDevice reads and last_seen_at writes under app_user privileges;
-// a check left on PGlite's default superuser would pass without those grants.
-// Cookie-only checks share the same file fixture.
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
@@ -47,21 +81,27 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 }
 
 /**
- * Each database-backed test seeds its own venue, keeping device state order-independent
- * across the shared clone; stations are created through the app role.
+ * Each database-backed test seeds its own venue, so the device state each case reads is its own.
  */
 async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
-  const admin = suite.admin;
+  const admin = suite.db;
   await seedTenant(admin);
-  const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const [loc] = await admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await admin
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -90,7 +130,7 @@ async function enrolDeviceFixture(): Promise<{
   // A device is DEFINED by its profile now (Task 7): a `kds` profile with NO capabilities — the
   // station-bound kitchen screen the old station-only mint produced, its capability set empty.
   const deviceProfileId = await seedDeviceProfile("Pantalla profile", "kds", []);
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Pantalla",
     profileId: deviceProfileId,
     stationId,
@@ -119,11 +159,11 @@ async function seedDeviceProfile(
   capabilities: CapabilityFlag[],
   canvasId: string | null = null,
 ): Promise<string> {
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor, canvas_id, capabilities)
-    values (${name}, ${formFactor}, ${canvasId}::uuid, ${JSON.stringify(capabilities)}::jsonb)
-    returning id`);
-  return prof.rows[0]!.id;
+  const [prof] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name, formFactor, canvasId, capabilities })
+    .returning({ id: deviceProfiles.id });
+  return prof!.id;
 }
 
 /**
@@ -138,11 +178,11 @@ async function enrolTillDeviceFixture(): Promise<{
   tillId: string;
 }> {
   const { cfg } = await setupStation();
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (name, definition)
-    values ('Front counter', ${JSON.stringify(DEFAULT_CANVASES.till)}::jsonb)
-    returning id`);
-  const canvasId = prof.rows[0]!.id;
+  const [canvas] = await suite.db
+    .insert(canvases)
+    .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
+    .returning({ id: canvases.id });
+  const canvasId = canvas!.id;
   // This fixture explicitly grants reader and drawer access. Its canvas reference is the front-counter canvas —
   // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
   // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
@@ -152,14 +192,14 @@ async function enrolTillDeviceFixture(): Promise<{
     ["integrated-card-payment", "open-cash-drawer"],
     canvasId,
   );
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Counter till",
     profileId: deviceProfileId,
   });
   // The cash-drawer flag is bound LATER via the dashboard — accept leaves the column at its default —
   // so set it here as the dashboard would, so the binding read below surfaces it. Read back the
   // auto-created register the till device rings against.
-  const { rows } = await suite.admin.execute<{ till_id: string }>(sql`
+  const { rows } = await suite.db.execute<{ till_id: string }>(sql`
     update devices
        set has_cash_drawer = true
      where id = ${dev.deviceId}
@@ -177,14 +217,14 @@ async function enrolTillDeviceFixture(): Promise<{
  * Deactivate the device on the admin connection for the revocation test.
  */
 async function revoke(deviceId: string): Promise<void> {
-  await suite.admin.execute(sql`update devices set active = false where id = ${deviceId}`);
+  await suite.db.execute(sql`update devices set active = false where id = ${deviceId}`);
 }
 
 /**
  * Read last_seen_at to compare the value before and after device validation.
  */
 async function lastSeenAt(deviceId: string): Promise<string | null> {
-  const { rows } = await suite.admin.execute<{ last_seen_at: string | null }>(
+  const { rows } = await suite.db.execute<{ last_seen_at: string | null }>(
     sql`select last_seen_at from devices where id = ${deviceId}`,
   );
   return rows[0]!.last_seen_at;
@@ -204,7 +244,7 @@ async function runProbe(
   handler: (deps: { db: Database }, c: Context) => Promise<Response>,
 ): Promise<{ res: Response; thrown: unknown }> {
   const app = new Hono();
-  const deps = { db: suite.admin };
+  const deps = { db: suite.db };
   let thrown: unknown;
   app.get("/probe", (c) => handler(deps, c));
   app.onError((err, c) => {
@@ -242,7 +282,7 @@ async function enrolHandheldFixture(): Promise<{
   // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
   // binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
   const deviceProfileId = await seedDeviceProfile("Waiter phone profile", "phone-portrait", []);
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
     registerId: cfg.tillId,
@@ -284,15 +324,15 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
   token: string;
 }> {
   const { cfg } = await setupStation();
-  const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into canvases (name, definition)
-    values ('Waiter phone', ${JSON.stringify(DEFAULT_CANVASES["phone-portrait"])}::jsonb)
-    returning id`);
-  const canvasId = prof.rows[0]!.id;
+  const [canvas] = await suite.db
+    .insert(canvases)
+    .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
+    .returning({ id: canvases.id });
+  const canvasId = canvas!.id;
   // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
   // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
     registerId: cfg.tillId,
@@ -667,13 +707,13 @@ async function enrolDevDevices(): Promise<{
   // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
   // current identity.
   const tillProfileId = await seedDeviceProfile("Till A profile", "till", []);
-  const devA = await enrolDeviceForTest(suite.admin, cfg, {
+  const devA = await enrolDeviceForTest(suite.db, cfg, {
     name: "Till A",
     profileId: tillProfileId,
   });
   // Device B — a `kds` device bound to a station, the override target.
   const kdsProfileId = await seedDeviceProfile("KDS B profile", "kds", []);
-  const devB = await enrolDeviceForTest(suite.admin, cfg, {
+  const devB = await enrolDeviceForTest(suite.db, cfg, {
     name: "KDS B",
     profileId: kdsProfileId,
     stationId,
@@ -690,7 +730,7 @@ describe("dev-override header (real Postgres)", () => {
   it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
     const { deviceAId, deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, devMode: false },
+      { db: suite.db, devMode: false },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceAId); // NOT deviceBId
@@ -699,7 +739,7 @@ describe("dev-override header (real Postgres)", () => {
   it("is honoured when devMode is true — header wins over cookie, no token needed", async () => {
     const { deviceACookie, deviceBId } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, devMode: true },
+      { db: suite.db, devMode: true },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceBId);
@@ -712,7 +752,7 @@ describe("dev-override header (real Postgres)", () => {
     const { deviceACookie } = await enrolDevDevices();
     for (const bad of ["not-a-uuid", randomUUID()]) {
       const binding = await readWithHeaders(
-        { db: suite.admin, devMode: true },
+        { db: suite.db, devMode: true },
         { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: bad },
       );
       expect(binding).toBeNull();
@@ -722,7 +762,7 @@ describe("dev-override header (real Postgres)", () => {
   it("with no override header, devMode reads the cookie unchanged", async () => {
     const { deviceAId, deviceACookie } = await enrolDevDevices();
     const binding = await readWithHeaders(
-      { db: suite.admin, devMode: true },
+      { db: suite.db, devMode: true },
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}` },
     );
     expect(binding?.deviceId).toBe(deviceAId);
@@ -733,30 +773,44 @@ describe("tryReadDevice dev override resolves a seeded device (real Postgres)", 
   // Seeded DIRECTLY (not through the enrol path), so the case is self-contained. The dev-override
   // path carries no token and reads the device by id alone.
   async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
-    const admin = suite.admin;
+    const admin = suite.db;
     await seedTenant(admin);
-    const loc = await admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const st = await admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name, is_default)
-      values (${locationId}, 'Cocina', true) returning id`);
+    const [loc] = await admin
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [st] = await admin
+      .insert(kitchenStations)
+      .values({ locationId, name: "Cocina", isDefault: true })
+      .returning({ id: kitchenStations.id });
     // A kds profile → the binding rule requires a station and no register.
-    const prof = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor)
-      values ('Pantalla', 'kds') returning id`);
-    const dev = await admin.execute<{ id: string }>(sql`
-      insert into devices (location_id, device_profile_id, station_id, label, token_hash, active)
-      values (${locationId}, ${prof.rows[0]!.id}, ${st.rows[0]!.id}, 'Pantalla Cocina',
-              'scrypt$00$00', true) returning id`);
-    return { deviceId: dev.rows[0]!.id };
+    const [prof] = await admin
+      .insert(deviceProfiles)
+      .values({ name: "Pantalla", formFactor: "kds" })
+      .returning({ id: deviceProfiles.id });
+    const [dev] = await admin
+      .insert(devices)
+      .values({
+        locationId,
+        deviceProfileId: prof!.id,
+        stationId: st!.id,
+        label: "Pantalla Cocina",
+        tokenHash: "scrypt$00$00",
+        active: true,
+      })
+      .returning({ id: devices.id });
+    return { deviceId: dev!.id };
   }
 
   it("DOES resolve a device scoped to its OWN tenant", async () => {
     const { deviceId } = await seedKdsDeviceUnderNewTenant();
     const binding = await readWithHeaders(
-      { db: suite.admin, devMode: true },
+      { db: suite.db, devMode: true },
       { [DEV_DEVICE_HEADER]: deviceId },
     );
     expect(binding?.deviceId).toBe(deviceId);

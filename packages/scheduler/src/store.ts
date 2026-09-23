@@ -1,5 +1,5 @@
-import { and, asc, eq, gte, inArray, lt, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
-import { isUniqueViolation, type Transaction } from "@waitron/db";
+import { and, asc, eq, gte, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { isUniqueViolation, nowIso, type Transaction } from "@waitron/db";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
 import { scheduledRuns, type RunState } from "./schema/scheduled-runs.js";
@@ -16,32 +16,28 @@ export interface ClaimedRun {
 }
 
 /**
- * Renders a `timestamp with time zone` column as ISO-8601 text, e.g. `2026-07-24T01:00:00+01:00`,
- * instead of Postgres's native `2026-07-24 01:00:00+01` (space-separated, no `T`). Plain column
- * selection hands back that native rendering — `LedgerRow`'s and `ClaimedRun`'s own doc comments
- * promise ISO strings, and `to_json(col) #>> '{}'` is what makes that literally true rather than a
- * claim callers have to trust. `new Date(...)` parses either rendering correctly, so nothing
- * downstream depended on the native form; this only fixes what the TYPE says the value looks like.
+ * The columns a claim hands back.
+ *
+ * Every timestamp here is read by selecting the column and nothing else. The columns are
+ * `tsString` — `text`, handed back as the string the driver returned — and every writer in this
+ * file binds `toISOString()` or `nowIso()`, so what is stored IS the ISO-8601 string
+ * `ClaimedRun` and `LedgerRow` promise. Measured 2026-09-22, through `useVenueDb` on the real
+ * engine: after an insert carrying `claimGap`'s own values, `select period_from,
+ * typeof(period_from) from scheduled_runs` gave `2026-07-24T00:00:00.000Z` and `text`, and a
+ * plain drizzle selection of the same column gave that same string. No rendering step is needed
+ * to make the type true.
  */
-function isoText(column: AnyColumn) {
-  return sql<string>`to_json(${column}) #>> '{}'`;
-}
-
-/** As `isoText`, for a column (or aggregate expression) that can genuinely be SQL NULL —
- * `to_json(NULL) #>> '{}'` renders NULL, not the string `"null"`, so the nullability is real. */
-function isoTextOrNull(column: AnyColumn) {
-  return sql<string | null>`to_json(${column}) #>> '{}'`;
-}
-
 const CLAIMED = {
   id: scheduledRuns.id,
-  periodFrom: isoText(scheduledRuns.periodFrom),
-  periodTo: isoText(scheduledRuns.periodTo),
+  periodFrom: scheduledRuns.periodFrom,
+  periodTo: scheduledRuns.periodTo,
   generation: scheduledRuns.generation,
   attempts: scheduledRuns.attempts,
   // Never null here: every statement that selects via CLAIMED sets started_at in the same
-  // statement (claimGap on insert, claimRow/reclaimStale on update).
-  startedAt: isoText(scheduledRuns.startedAt),
+  // statement (claimGap on insert, claimRow/reclaimStale on update). The COLUMN is nullable, so
+  // selecting it plainly would infer `string | null` and refuse to satisfy `ClaimedRun.startedAt`;
+  // this template emits the same column reference and is where that invariant is asserted.
+  startedAt: sql<string>`${scheduledRuns.startedAt}`,
 } as const;
 
 /**
@@ -63,13 +59,13 @@ export async function readSnapshot(
   const rows = await tx
     .select({
       id: scheduledRuns.id,
-      periodFrom: isoText(scheduledRuns.periodFrom),
-      periodTo: isoText(scheduledRuns.periodTo),
+      periodFrom: scheduledRuns.periodFrom,
+      periodTo: scheduledRuns.periodTo,
       generation: scheduledRuns.generation,
       state: scheduledRuns.state,
       attempts: scheduledRuns.attempts,
-      nextAttemptAt: isoTextOrNull(scheduledRuns.nextAttemptAt),
-      startedAt: isoTextOrNull(scheduledRuns.startedAt),
+      nextAttemptAt: scheduledRuns.nextAttemptAt,
+      startedAt: scheduledRuns.startedAt,
     })
     .from(scheduledRuns)
     .where(
@@ -86,10 +82,12 @@ export async function readSnapshot(
 
   const [bounds] = await tx
     .select({
-      // `min()` over zero rows is SQL NULL — the "duty has never run" case — and `to_json` renders
-      // that as NULL too (not the string "null"), so `?? null` below is a real fallback, not dead
-      // code papering over a lie.
-      earliest: sql<string | null>`to_json(min(${scheduledRuns.periodFrom})) #>> '{}'`,
+      // `min()` over zero rows is SQL NULL — the "duty has never run" case — so `?? null` below is
+      // a real fallback, not dead code papering over a lie. Measured 2026-09-22 on the real engine:
+      // `select min(period_from), count(*) from scheduled_runs where duty = 'no.such.duty'`
+      // returned one row reading `{"earliest":null,"n":0}`, so the driver hands back JS `null`, not
+      // a string and not a missing row.
+      earliest: sql<string | null>`min(${scheduledRuns.periodFrom})`,
       below: sql<number>`count(distinct ${scheduledRuns.periodFrom}) filter (where ${scheduledRuns.periodFrom} < ${horizon})`,
     })
     .from(scheduledRuns)
@@ -156,7 +154,12 @@ export async function claimRow(
       // `reclaimStale` only ever touches rows that are already `running`, so this is the one write
       // that could leave a stale value.
       nextAttemptAt: null,
-      updatedAt: sql`now()`,
+      // Every `updated_at` stamp in this file reads this process's clock, which is also what the
+      // column's own `$defaultFn(nowIso)` writes on the insert, and what `started_at`/`finished_at`
+      // already took from the caller's `params.now`. The PostgreSQL `now()` this replaced read the
+      // DATABASE's clock, once per transaction; this engine has no such function and the statement
+      // failed outright with `no such function: now`.
+      updatedAt: nowIso(),
     })
     .where(
       and(
@@ -188,7 +191,7 @@ export async function reclaimStale(
     .set({
       attempts: sql`${scheduledRuns.attempts} + 1`,
       startedAt: now,
-      updatedAt: sql`now()`,
+      updatedAt: nowIso(),
     })
     .where(
       and(
@@ -236,7 +239,7 @@ export async function completeRun(
       errorCode: params.errorCode,
       nextAttemptAt: params.nextAttemptAt?.toISOString() ?? null,
       finishedAt: params.now.toISOString(),
-      updatedAt: sql`now()`,
+      updatedAt: nowIso(),
     })
     .where(
       and(
@@ -286,13 +289,18 @@ export async function enqueueSuccessor(
   if (state === undefined || Number(state.unfinished) > 0) return false;
 
   try {
-    // A SAVEPOINT around the insert, not a bare insert: a statement PostgreSQL rejects aborts the
-    // whole transaction, so catching the violation without one leaves every LATER statement failing
-    // with 25P02. `completeRun` is not one of those — the caller completes first and enqueues second
-    // (`run.ts`) — so what a lost race cost it was not a refusal but its own already-executed write,
-    // discarded when the aborted transaction ended as a ROLLBACK, leaving the run to be reclaimed
-    // as stale. Drizzle emits a nested `tx.transaction` as SAVEPOINT / ROLLBACK TO, which clears
-    // the abort and leaves the enclosing transaction usable. Same shape as `appendToChain` in
+    // A SAVEPOINT around the insert, not a bare insert. The adapter emits a nested
+    // `tx.transaction` as SAVEPOINT / ROLLBACK TO whenever a transaction is already open
+    // (`packages/store/src/node-sqlite-adapter.ts`), which inside `withTransaction` it always is.
+    //
+    // The danger this was written against was PostgreSQL's: a rejected statement aborted the whole
+    // transaction, so catching the violation without a savepoint left every LATER statement failing
+    // with 25P02 — and cost `completeRun` (the caller completes first and enqueues second,
+    // `run.ts`) its own already-executed write when the aborted transaction ended as a ROLLBACK,
+    // leaving the run to be reclaimed as stale. SQLite does not abort the transaction; it backs out
+    // the refused statement alone (receipt, with a control: `bench/sqlite-failover/README.md` →
+    // "What S5 measures, and the savepoint it does not need"). The savepoint stays because it still
+    // confines a losing attempt's own writes to that attempt. Same shape as `appendToChain` in
     // `packages/fiscal-verifactu/src/chain.ts` and `insertClose` in
     // `packages/reporting/src/record-daily-close.ts`.
     await tx.transaction(async (attempt) => {

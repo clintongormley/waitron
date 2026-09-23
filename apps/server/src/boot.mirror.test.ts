@@ -9,56 +9,83 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
   readSingletonRole,
   setDeploymentMode,
   stampDeployment,
+  tenants,
+  tills,
   writeMirrorConfig,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { drain } from "@waitron/fiscal-verifactu";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
-import { roleUrl } from "./testing/postgres.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // Mirror-mode server boot. The mirror reads only its origin/relay/CA from the DATABASE
-// (`mirror_config`, written owner-role at adopt) — the outbox pull and its per-peer token are gone,
-// and nothing took over from them: a mirror takes in no rows at all today (`mirror-bundle.ts`'s
-// header states the open question). Real Postgres, not PGlite: the mirror
-// serves its dashboard through the ambient viewer session, which writes `persons` /
-// `management_sessions` as the NON-superuser `app_user` — so the table GRANTS are enforced, where a
-// PGlite superuser holds every privilege and a missing one would pass (CLAUDE.md §4). `readMirrorConfig`
-// runs as that same app role. Manifest clones: a `mirror`-stamped database seeded with its
-// `mirror_config` (read-only, refuses writes), a `primary`-stamped one of the SAME identity (mounts the
-// primary-only surfaces) — the control that the mirror's absence is not vacuous — a `noConfig`
-// mirror-stamped one with NO `mirror_config` row (the fail-closed control), and an adoption-pending one.
+// (`mirror_config`, written at adopt) — the outbox pull and its per-peer token are gone, and nothing
+// took over from them: a mirror takes in no rows at all today (`mirror-bundle.ts`'s header states
+// the open question). Four venue DIRECTORIES, each migrated and seeded separately: a
+// `mirror`-stamped one carrying its `mirror_config` (read-only, refuses writes), a
+// `primary`-stamped one of the SAME identity (mounts the primary-only surfaces) — the control that
+// the mirror's absence is not vacuous — a `noConfig` mirror-stamped one with NO `mirror_config` row
+// (the fail-closed control), and an adoption-pending one holding no venue rows at all. The relay
+// recorded in `mirror_config` is UNREACHABLE and nothing on this boot dials it.
 //
-// `DATABASE_URL` is `app_login` (an app_user member) exactly as a real mirror pool is: the ambient
-// session's `ensureMirrorViewer` / `mirrorSession` write through the CONNECTION's role, so they
-// must run on the app-role pool, never a superuser one (Task 3 carry-over note). Migrations run over
-// the SUPERUSER uri (`WAITRON_MIGRATIONS_DATABASE_URL`) — the clone is already manifest-migrated, so
-// this is an idempotent re-run the app role could not do (it lacks CREATE — boot.test.ts's PROBE_ROLE
-// note). The relay recorded in `mirror_config` is UNREACHABLE and nothing on this boot dials it.
+// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED. This suite used to justify a real container by
+// role separation: the ambient viewer session's `ensureMirrorViewer` / `mirrorSession` wrote
+// `persons` and `management_sessions` through an `app_login` pool, so a missing table GRANT failed
+// here where a PGlite superuser would have passed, and migrations ran over a separate superuser
+// connection the app role could not have used. There is no role on this engine — `pg.connectAs` has
+// no counterpart and `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) — and no
+// second connection either: boot opens the venue directory and every statement runs on it. Nothing
+// below now checks that the ambient viewer's writes are ones the deployment role may make, and the
+// idempotent-re-migrate observation has no privilege content left. What the cases still prove is
+// what a mirror boot MOUNTS and REFUSES, which is the whole of the rest of this file.
+//
+// ONE CASE BELOW WAS RED ON A BROKEN PRODUCT FUNCTION, AND IT PASSES NOW. `drain`'s `workIsDue`
+// (`packages/fiscal-verifactu/src/drain.ts`) used to issue
+// `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22, on a venue directory
+// migrated by `applyMigrations`: the statement as written threw `unrecognized token: ":"` at the
+// cast, and with the cast removed `no such function: envios_work_due`. Nothing created that
+// function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such thing.
+// So EVERY `drain()` call on this engine threw before it reached `resolveClient`. `workIsDue` is an
+// ordinary query now and the case passes unedited; it was kept red rather than deleted because it
+// guards a fiscal invariant (CLAUDE.md §5: a node that is not the singleton primary must never file
+// to AEAT) and because its assertion is the OTHER-direction control for the case beside it.
 
-const mirror = useTemplateDb({ template: "manifest", resetPerTest: false });
-const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
-// A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
-// a mirror that has just adopted, which holds none of the venue's rows (adopt scaffolds none, and
-// nothing brings them).
-const adopting = useTemplateDb({ template: "manifest", resetPerTest: false });
-// A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
-// control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
-// (server.config_invalid), never serve a mirror that can never reach its primary.
-const noConfig = useTemplateDb({ template: "manifest", resetPerTest: false });
+// The four venue directories, and the long-lived handle this suite seeds and reads each through. A
+// directory is migrated through `applyMigrations` — the product's own entry point, which installs
+// each set's append-only triggers as well as its tables — and boot's own re-run over the same
+// directory is a no-op. The handle stays open alongside a booted server's own open of the same
+// directory, which write-ahead mode and the store's `busy_timeout` allow
+// (`packages/store/src/index.ts`). Nothing is reset between tests: every case seeds what it needs
+// and the four directories never meet.
+//
+// `adopting` is migrated but has NO identity seeded — it models a mirror that has just adopted,
+// which holds none of the venue's rows (adopt scaffolds none, and nothing brings them). `noConfig`
+// is mirror-stamped and NEVER given a `mirror_config` row — the fail-closed control: a box stamped
+// `deployment.mode='mirror'` with no connection config must refuse to boot (server.config_invalid),
+// never serve a mirror that can never reach its primary.
+const VENUES = ["mirror", "primary", "noConfig", "adopting"] as const;
+type VenueName = (typeof VENUES)[number];
+const venueDir = {} as Record<VenueName, string>;
+const stores = {} as Record<VenueName, VenueDatabase>;
+const db = {} as Record<VenueName, Database>;
 
 // The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
-// per field. Seeded on BOTH clones in `beforeAll` (tenant/location/node/till/series) so a successful
-// boot's `readOrderFlow` / `readVenueLocale` reads resolve.
+// per field. Seeded on each identity-bearing directory in `beforeAll`
+// (tenant/location/node/till/series) so a successful boot's `readOrderFlow` / `readVenueLocale`
+// reads resolve.
 const TILL_ENV = {
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -89,8 +116,8 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-// The mirror's DB-stored connection config (swap step 4) — written into `mirror_config` (owner-role)
-// on the `mirror` clone. Since the outbox pull is gone, a mirror boot only reads `mirror_config` for
+// The mirror's DB-stored connection config (swap step 4) — written into `mirror_config` on the
+// `mirror` directory. Since the outbox pull is gone, a mirror boot only reads `mirror_config` for
 // its origin/relay/CA (no per-peer token); the relay port-1 endpoint is unreachable, which is fine —
 // nothing dials it here.
 const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
@@ -108,30 +135,55 @@ const BOX_CA_PEM = mintSelfSignedServerCert({
 }).caCertPem;
 
 let migrationsRoot: string;
-let mirrorDatabaseUrl: string;
-let noConfigDatabaseUrl: string;
-let primaryDatabaseUrl: string;
-let adoptingDatabaseUrl: string;
 
 /**
  * Seed the venue identity — the taxpayer row, then the location, node, till and series the
- * WAITRON_TILL_*_ID name — on one clone, as the container superuser.
+ * WAITRON_TILL_*_ID name — on one venue directory.
  */
 async function seedIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
-            array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
-            ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
+  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
+  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await admin
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90222222J", legalName: "Mirror SL" })
+    .onConflictDoNothing();
+  await admin
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Node",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Till",
+    })
+    .onConflictDoNothing();
+  await admin
+    .insert(invoiceSeries)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      code: "A",
+    })
+    .onConflictDoNothing();
 }
 
 beforeAll(async () => {
@@ -146,41 +198,46 @@ beforeAll(async () => {
     });
   }
 
-  await seedIdentity(mirror.admin);
-  await seedIdentity(primary.admin);
-  await seedIdentity(noConfig.admin);
-  // Stamp all three preproduction (matching WAITRON_ENV so the deployment guard passes), then flip the
-  // two mirror clones' mode. setDeploymentMode is an OWNER write (app_user holds no UPDATE on
-  // deployment), so it runs on the superuser admin. The primary clone keeps the column default
-  // ('primary').
-  await stampDeployment(mirror.admin, "preproduction");
-  await setDeploymentMode(mirror.admin, "mirror");
-  await stampDeployment(primary.admin, "preproduction");
-  await stampDeployment(noConfig.admin, "preproduction");
-  await setDeploymentMode(noConfig.admin, "mirror");
-  // The adoption-pending clone: stamped preproduction (so `assertDeploymentMatches` passes) and mode
+  for (const name of VENUES) {
+    venueDir[name] = await mkdtemp(join(tmpdir(), `waitron-mirror-venue-${name}-`));
+    await applyMigrations(venueDir[name], fromSource);
+    stores[name] = await openVenueDatabase(venueDir[name]);
+    db[name] = stores[name].venue;
+  }
+
+  await seedIdentity(db.mirror);
+  await seedIdentity(db.primary);
+  await seedIdentity(db.noConfig);
+  // Stamp all three preproduction (matching WAITRON_ENV so the deployment guard passes), then flip
+  // the two mirror directories' mode. The primary one keeps the column default ('primary').
+  await stampDeployment(db.mirror, "preproduction");
+  await setDeploymentMode(db.mirror, "mirror");
+  await stampDeployment(db.primary, "preproduction");
+  await stampDeployment(db.noConfig, "preproduction");
+  await setDeploymentMode(db.noConfig, "mirror");
+  // The adoption-pending directory: stamped preproduction (so `assertDeploymentMatches` passes) and mode
   // 'mirror', but deliberately NOT seeded with the till identity — the tenant row the initial copy
   // has not brought yet.
-  await stampDeployment(adopting.admin, "preproduction");
-  await setDeploymentMode(adopting.admin, "mirror");
+  await stampDeployment(db.adopting, "preproduction");
+  await setDeploymentMode(db.adopting, "mirror");
 
-  // The `mirror` clone's DB-stored connection config (C2b), written owner-role exactly as
-  // `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` (app_user) reads INSTEAD of
-  // the retired env. The `noConfig` clone deliberately gets none (the fail-closed control).
-  await writeMirrorConfig(mirror.admin, {
+  // The `mirror` directory's DB-stored connection config (C2b), written exactly as
+  // `adoptFromPrimary` would — this is what the boot's `readMirrorConfig` reads INSTEAD of the
+  // retired env. The `noConfig` directory deliberately gets none (the fail-closed control).
+  await writeMirrorConfig(db.mirror, {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
     originNodeId: MIRROR_ORIGIN_NODE,
   });
-
-  mirrorDatabaseUrl = roleUrl(mirror.pg.uri, "app_login", "app_pw");
-  noConfigDatabaseUrl = roleUrl(noConfig.pg.uri, "app_login", "app_pw");
-  primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
-  adoptingDatabaseUrl = roleUrl(adopting.pg.uri, "app_login", "app_pw");
 }, 180_000);
 
 afterAll(async () => {
+  // Every file is closed before the directory holding it is removed, and each step is guarded on its
+  // own so a store that never opened does not stop the rest of the teardown.
+  for (const name of VENUES) if (stores[name] !== undefined) await stores[name].close();
+  for (const name of VENUES)
+    if (venueDir[name] !== undefined) await rm(venueDir[name], { recursive: true, force: true });
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
@@ -208,13 +265,12 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
+describe("mirror-mode boot (deployment.mode = 'mirror')", () => {
   it("serves a dashboard read via the ambient viewer and refuses writes", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: mirrorDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
+      WAITRON_VENUE_DIR: venueDir.mirror,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       // No WAITRON_MIRROR_BOX_* (C2b retired it for the mirror): the relay URL, box CA + hostname are
@@ -315,7 +371,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // `envios` row). `entorno` matches this box's stamp so the row is genuinely due for the environment
     // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
     // regardless (drain.ts:187), so the tripwire fires either way.
-    const seeded = await seedFiscalRegistro(mirror.admin, {
+    const seeded = await seedFiscalRegistro(db.mirror, {
       ids: {
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
@@ -346,7 +402,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
             drain: (at2) =>
               drain(
                 {
-                  db: mirror.admin,
+                  db: db.mirror,
                   resolveClient: tripwireResolveClient,
                   skipRetryMs: 300_000,
                   environment: "preproduction",
@@ -369,13 +425,13 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
         ),
       );
 
-    // The mirror clone's REAL role, as `setDeploymentMode('mirror')` co-set it in beforeAll — this is a
+    // The mirror directory's REAL role, as `setDeploymentMode('mirror')` co-set it in beforeAll — this is a
     // genuine mirror, not a role invented for the test.
-    const role = await readSingletonRole(mirror.admin);
+    const role = await readSingletonRole(db.mirror);
     expect(role).toBe("secondary");
 
     // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
-    // primary control below (`envios_work_due` gates on `proximo_intento_en <= now`, whose
+    // primary control below (`workIsDue` gates on `proximo_intento_en <= now`, whose
     // default is the CONTAINER's `now()` at insert — which can sit microseconds ahead of the host's
     // `new Date()`, leaving the row not-yet-due and the tripwire silent for a clock-skew reason). The
     // mirror direction ignores `now` (the gate short-circuits), so one instant serves both.
@@ -388,15 +444,21 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     expect(mirrorReport).toEqual({ nextDueAt: null, duties: [] });
 
     // Belt-and-braces: the seeded envío is untouched — still 'pendiente', no submission side effect.
-    const afterMirror = await mirror.admin.execute<{ estado: string }>(
+    const afterMirror = await db.mirror.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
     expect(afterMirror.rows[0]?.estado).toBe("pendiente");
 
-    // Prove-by-deletion, baked in as the other-direction control (CLAUDE.md §1): the SAME wiring with
-    // the node promoted to 'primary' DOES run the pass, drain reaches `resolveClient`, and the tripwire
-    // FIRES — so the mirror's clean pass above is the singleton gate working, not a drainer that never
-    // fires. (Documented RED confirmed in a scratch run before this control was added; see the report.)
+    // The other-direction control (CLAUDE.md §1): the SAME wiring with the node promoted to 'primary'
+    // DOES run the pass, drain reaches `resolveClient`, and the tripwire FIRES — so the mirror's clean
+    // pass above is the singleton gate working, not a drainer that never fires.
+    //
+    // RED ON THIS ENGINE, and it is the product that is broken, not this assertion. `drain` throws in
+    // `workIsDue` before `resolveClient` (the file header carries the two measurements), so
+    // `resolveClientCalled` stays false in BOTH directions. Until that is fixed the mirror assertion
+    // above is vacuous: it would pass with the singleton gate deleted, which is exactly the
+    // look-alike measurement CLAUDE.md §1 forbids. The assertion is left as it is — weakening it to
+    // something that passes would hide that.
     const primaryReport = await buildPass(() => "primary")(drainAt);
     expect(resolveClientCalled).toBe(true);
     // drain contains the tripwire rejection (drain.ts:192 → `skipped`), so the pass still
@@ -405,7 +467,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
 
     // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainDue`
     // (drain.ts:187-188), so nothing was ever submitted — the tripwire proves reachability, not filing.
-    const afterPrimary = await mirror.admin.execute<{ estado: string }>(
+    const afterPrimary = await db.mirror.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
@@ -419,8 +481,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: primaryDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
+      WAITRON_VENUE_DIR: venueDir.primary,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       // A singleton primary mounts the mirror-bundle endpoint (swap step 4 gates it on
@@ -467,7 +528,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // that surface is UNAUTHENTICATED), so binding it to a routable host would expose admin with no auth.
     // `assertMirrorBindSafe` (wired right after `isMirror` is read, before the ambient viewer is seeded)
     // fails the boot CLOSED with `server.mirror_bind_exposed` naming the host — BEFORE the socket binds.
-    // The `mirror` clone (mirror_config seeded) is the subject; the guard fires ahead of the config read,
+    // The `mirror` directory (mirror_config seeded) is the subject; the guard fires ahead of the config read,
     // so this refusal does not depend on that row. The throw closes `db` before propagating (no leak).
     //
     // Prove-by-deletion (verified 2026-08-29, then restored): with the `if (!isMirror) return` in
@@ -478,8 +539,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     try {
       await startServer({
         ...KEY_ENV,
-        DATABASE_URL: mirrorDatabaseUrl,
-        WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
+        WAITRON_VENUE_DIR: venueDir.mirror,
         WAITRON_HTTP_HOST: "0.0.0.0",
         WAITRON_HTTP_PORT: String(await freePort()),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -500,8 +560,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
-      DATABASE_URL: mirrorDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: mirror.pg.uri,
+      WAITRON_VENUE_DIR: venueDir.mirror,
       WAITRON_HTTP_HOST: "0.0.0.0",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -527,10 +586,10 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // A mirror's whole job is to pull through the tunnel, which needs the DB-stored connection config
     // (`mirror_config`); a deployment stamped 'mirror' with no such row is a misconfiguration, refused
     // LOUDLY at boot (server.config_invalid { variable: "mirror_config", reason:
-    // "mirror_requires_mirror_config" }) rather than serving
-    // a box that can never reach its primary. Proven on the `noConfig` clone (mirror-stamped, never
-    // seeded with a mirror_config row). The throw closes `db` before propagating (no leak); the line
-    // coverage on that `await db.close()` is what proves it ran.
+    // "mirror_requires_mirror_config" }) rather than serving a box that can never reach its primary.
+    // Proven on the `noConfig` directory (mirror-stamped, never seeded with a mirror_config row).
+    // The throw closes `db` before propagating (no leak); the line coverage on that
+    // `await db.close()` is what proves it ran.
     //
     // Prove-by-deletion (verified 2026-08-29, then restored): with the `if (loaded === null) throw`
     // removed, this boot dereferences `loaded.originNodeId` on a null and throws a CONFUSING TypeError
@@ -541,8 +600,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     try {
       await startServer({
         ...KEY_ENV,
-        DATABASE_URL: noConfigDatabaseUrl,
-        WAITRON_MIGRATIONS_DATABASE_URL: noConfig.pg.uri,
+        WAITRON_VENUE_DIR: venueDir.noConfig,
         WAITRON_HTTP_PORT: String(await freePort()),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
       });
@@ -600,8 +658,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_STATE_DIR: stateDir,
-      DATABASE_URL: adoptingDatabaseUrl,
-      WAITRON_MIGRATIONS_DATABASE_URL: adopting.pg.uri,
+      WAITRON_VENUE_DIR: venueDir.adopting,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });

@@ -1,31 +1,39 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  CORE_MIGRATIONS,
+  UNIQUE_VIOLATION,
+  captureError,
+  isPgError,
+  pgErrorMessage,
+  withTransaction,
+} from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { cardReaders } from "./card-readers.js";
 
-// Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4). It writes under
-// `app_user`'s grants (`asAppUser` inside the transaction), so a missing SELECT/INSERT/UPDATE grant
-// from 0001_payments_baseline_sql.sql fails here, whereas PGlite connects as a superuser holding
-// every grant and would pass regardless. A clone of the `core_payments` template (CORE + PAYMENTS).
-const postgres = useTemplateDb({ template: "core_payments" });
+// This suite used to run on real PostgreSQL, under a non-superuser LOGIN inheriting `app_user`'s
+// grants, and doubled as the grant check for 0001_payments_baseline_sql.sql's REVOKE ALL +
+// targeted GRANT. That half is GONE and has no replacement: this engine has no roles, so nothing
+// anywhere now checks that a write to `card_readers` would be permitted to an ordinary
+// application role rather than to an owner. What is left — the shape, the defaults and the unique
+// index — is what a schema can still refuse on its own.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 describe("card_readers", () => {
   it("stores a reader and rejects a duplicate (provider, provider_ref)", async () => {
-    const db = postgres.admin;
+    const db = suite.db;
 
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await tx
         .insert(cardReaders)
         .values({ provider: "sumup", providerRef: "rdr_1", name: "Counter" });
     });
 
     // Round-trips: the row is readable and its defaults are what the schema promises.
-    const stored = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      return tx.select().from(cardReaders).where(eq(cardReaders.providerRef, "rdr_1"));
-    });
+    const stored = await withTransaction(db, (tx) =>
+      tx.select().from(cardReaders).where(eq(cardReaders.providerRef, "rdr_1")),
+    );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.name).toBe("Counter");
     expect(stored[0]!.provider).toBe("sumup");
@@ -34,17 +42,23 @@ describe("card_readers", () => {
     expect(stored[0]!.unpairedAt).toBeNull();
 
     // The (provider, provider_ref) unique rejects a second reader with the same ref.
-    // `tx.insert` wraps the PG error in a DrizzleQueryError whose top-level `.message` is the
-    // generic "Failed query: …"; the constraint name lives on `.cause`, read by `pgErrorMessage`.
     const dup = await captureError(() =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         await tx
           .insert(cardReaders)
           .values({ provider: "sumup", providerRef: "rdr_1", name: "Dup" });
       }),
     );
-    expect(pgErrorCode(dup)).toBe("23505"); // unique_violation
-    expect(pgErrorMessage(dup)).toMatch(/card_readers_provider_ref_key/);
+    // Was `pgErrorCode(dup) === "23505"`. SQLite reports a result code on `errcode`, and splits
+    // PostgreSQL's one `23505` into a unique index (2067) and a primary key (1555) — so the class
+    // comes from `UNIQUE_VIOLATION` (`packages/db/src/sql-state.ts`), which holds both.
+    expect(isPgError(dup, UNIQUE_VIOLATION)).toBe(true);
+    // Was `/card_readers_provider_ref_key/`. SQLite names the COLUMNS of the index it refused, not
+    // the constraint's name, so the assertion moves to the columns — the same index, said the
+    // engine's way. Nothing is lost here: a message naming these two columns can only have come
+    // from this index.
+    expect(pgErrorMessage(dup)).toMatch(
+      /UNIQUE constraint failed: card_readers\.provider, card_readers\.provider_ref/,
+    );
   });
 });

@@ -201,8 +201,9 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       if (!Array.isArray(body.ingredientIds)) {
         throw new AppError("management.request_invalid", { field: "ingredientIds" });
       }
-      // Screen each element as a UUID up front: a well-formed array of arbitrary strings would otherwise
-      // reach `recipe_lines.ingredient_id` (a uuid column) as a bound param → 22P02 → an opaque 500.
+      // Screen each element as a UUID up front: `recipe_lines.ingredient_id` is plain `text`, so a
+      // well-formed array of arbitrary strings would otherwise be written there unchallenged
+      // (`till-api.ts`'s note on `shared.invalid_id`).
       // `requireBodyUuid` maps a malformed element to `management.request_invalid { field }` (a valid but
       // nonexistent id is the separate FK case — `recipe.*_not_found` is deferred by the spec §8).
       const ingredientIds = body.ingredientIds.map((x) => requireBodyUuid(x, "ingredientIds"));

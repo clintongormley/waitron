@@ -1,14 +1,22 @@
 /**
- * app_user's table privileges. Letters: S=SELECT I=INSERT U=UPDATE D=DELETE T=TRUNCATE. The
- * matrix carries the base grants; the four `sync_*` outbox tables are gone (swap S5). The design is
- * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1. A
- * deliberate grant change edits this file in the same commit, with the reason in the message.
- * Runnable receipts: scripts/schema-equivalence.md describes the dump/ACL comparison, and
- * privileges.test.ts reads every table's privileges back from the live catalog.
+ * What `app_user` was granted on each table, BEFORE the storage switch. Letters: S=SELECT I=INSERT
+ * U=UPDATE D=DELETE T=TRUNCATE. The design it was taken from is
+ * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1.
  *
- * has_table_privilege measures table grants only: UPDATE(next_number) on invoice_series does not
- * produce a U here. The suite beside this file guards the column privileges that need a standing
- * check; scripts/schema-equivalence.sh also compares column ACLs during the squash proof.
+ * THIS IS A FROZEN RECORD, NOT A MEASUREMENT, and it is unverified data: the engine it describes is
+ * gone, so there are no roles and no grants to read it back from. The suite that used to do that,
+ * `privileges.test.ts`, went with them, and `scripts/schema-equivalence.sh` cannot run over SQLite
+ * migration sets. Nothing checks these letters against anything. Do not read a letter here as a
+ * statement about what the running system refuses today — it refuses nothing.
+ *
+ * Its one live consumer is `scripts/write-path-tables.test.ts`, which takes the four tables marked
+ * `S` — read and never written — and cross-checks them against its own frozen
+ * `write-path-tables.json` while both files exist. That guard, not this matrix, is the whole of the
+ * enforcement now, and its header states what it gives up.
+ *
+ * Its own blind spot, which outlived it: `has_table_privilege` measured TABLE grants only, so a
+ * column-scoped grant — `UPDATE(next_number)` on `invoice_series` was the one that mattered — never
+ * produced a letter here.
  */
 export const PRIVILEGES: Record<string, string> = {
   absences: "SIUD",

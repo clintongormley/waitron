@@ -29,7 +29,7 @@ export async function enqueuePrintJob(
   // A friendly `printer.not_found` for an absent printer, via a DB-only pre-check SELECT (indexed
   // PK lookup — no socket, no wait). Chosen over catching the FK violation because a raised 23503
   // would ABORT the caller's enclosing transaction (a fire/sale may enqueue mid-transaction),
-  // whereas this pre-check leaves the tx clean on the not_found path. All values bind as `$n`,
+  // whereas this pre-check leaves the tx clean on the not_found path. All values bind as parameters,
   // never concatenated. `printerId` is not shape-screened here. Management routes validate their
   // path parameter with `requireUuidParam`; this pre-check resolves a well-formed unknown id to
   // `printer.not_found` without aborting the caller's transaction.

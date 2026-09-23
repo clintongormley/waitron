@@ -1,9 +1,9 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 
-// Two projects share one coverage report: the server suites run in Node (real Postgres / PGlite), and
-// the dashboard panel's Lit widgets run in real headless Chromium (mirrors packages/bookings). Run Node
-// first so Chromium does not compete with this package's PostgreSQL work.
+// Two projects share one coverage report: the server suites run in Node, and the dashboard panel's
+// Lit widgets run in real headless Chromium (mirrors packages/bookings). The `groupOrder`s below run
+// the Node project first.
 export default defineConfig({
   test: {
     projects: [
@@ -20,40 +20,27 @@ export default defineConfig({
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,
-          // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template
-          // every real-PG suite clones (~26ms) instead of each file booting and migrating its own
-          // (~1.5s). See src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent
-          // run now fails the whole project (that file's header explains the broadening).
-          globalSetup: ["./src/testing/global-setup.ts"],
           include: ["src/**/*.test.ts"],
           exclude: [
             ...configDefaults.exclude,
             "**/.stryker-tmp/**",
             "src/**/*.sandbox.test.ts",
-            // The dashboard panel is browser-mode; it runs in the project below, never boots Docker.
+            // The dashboard panel is browser-mode; it runs in the project below.
             "src/dashboard/**",
           ],
-          // testTimeout bounds a test body, and neither database start-up is one: the PGlite boot with
-          // its migrations and the real-PG suite's clone of the migrated template both run in a
-          // beforeAll. hookTimeout bounds a hook that passes no timeout of its own, which is why it
-          // does not reach the PGlite boot either — useVenueDb hands that beforeAll a timeout itself,
-          // the 60_000 this project's four PGlite suites pass, and a 60-second default when a suite
-          // passes none. What hookTimeout does bound is sumup.test.ts's untimed useTemplateDb hooks
-          // (the template clone, the per-test reset, the teardown), the bare afterEach reset and
-          // afterAll close every PGlite suite here gets, and any hook a test file writes for itself —
-          // today no file here writes one. The container boot and image pull run in globalSetup,
-          // outside both.
+          // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s
+          // unless a suite passes `timeoutMs`), so `hookTimeout` bounds only the hooks left
+          // untimed: that helper's per-test reset and close, and any hook a test file writes for
+          // itself. `testTimeout` bounds a test body.
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // Keep one worker (#22): only ONE test file runs at a time, so the shared cluster's single
-          // 100-connection budget is a non-issue and needs no `maxWorkers` cap.
+          // Keep one worker (#22): the Node project runs one test file at a time.
           maxWorkers: 1,
         },
       },
       {
-        // The browser / Lit project — mirrors packages/ui and packages/bookings: real headless Chromium
-        // via Playwright, NO globalSetup (a browser test must never boot Docker). Scoped to the
-        // `./dashboard` sub-path.
+        // The browser / Lit project — mirrors packages/ui and packages/bookings: real headless
+        // Chromium via Playwright, scoped to the `./dashboard` sub-path.
         test: {
           name: "browser",
           sequence: { groupOrder: 2 },

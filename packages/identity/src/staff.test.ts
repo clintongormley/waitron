@@ -39,12 +39,18 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 
-function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
+// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+function run<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, fn);
 }
 
+// No cast on the count. The `::int` this carried was refused before the statement ran —
+// `unrecognized token: ":"`, because a colon opens a bind parameter to SQLite's parser. It was
+// there to turn the PostgreSQL driver's BigInt into a number; measured on node v26.7.0, this driver
+// hands `select count(*)` back as a JavaScript number already (`3`, `typeof "number"`).
 async function personCount(): Promise<number> {
-  const rows = await suite.db.execute<{ n: number }>(sql`select count(*)::int as n from persons`);
+  const rows = await suite.db.execute<{ n: number }>(sql`select count(*) as n from persons`);
   return rows.rows[0]!.n;
 }
 
@@ -238,13 +244,23 @@ describe("setEmail", () => {
 });
 
 // The duplicate-email → person.email_taken translation, proven end to end against the DB unique
-// index in staff.email.test.ts (real Postgres) and against the reported table and columns in
-// persons.constraint-target.pg.test.ts. Here we pin the translator's two branches directly with
-// crafted errors — no DB — so the re-throw branch is covered deterministically. asEmailTaken is
-// exported from staff.ts for exactly this, not from the package barrel.
+// index in staff.email.test.ts, and against one real refusal per `persons` index — the three
+// expression indexes and the plain-column control — in person-constraints.db.test.ts. Here we pin
+// the translator's branches directly with crafted errors — no DB — so each re-throw branch is
+// covered deterministically, including shapes a real collision cannot easily produce.
+//
+// The crafted errors carry THIS engine's words: `errcode` (a number) and a message SQLite writes,
+// where they used to carry PostgreSQL's `code: "23505"` with the table and key in a `detail`
+// string. That rewrite is not cosmetic — every case below except the first would have gone on
+// PASSING unread after the engine changed, because a matcher that can never match re-throws
+// everything, and four of these five cases assert a re-throw. Each message below is a shape driven
+// against the migrated database in person-constraints.db.test.ts.
+// asEmailTaken is exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
-  it("re-throws a wrapped unique violation that names no key", () => {
-    const original = { cause: { code: "23505" } };
+  // A layer carrying the result code and no message at all: the engine always writes one, but a
+  // wrapper in the chain need not re-expose it, and `indexViolated` must not read that as a match.
+  it("re-throws a wrapped unique violation that names no index", () => {
+    const original = { cause: { errcode: 2067 } };
     let thrown: unknown;
     try {
       asEmailTaken(original, "owner@x.com");
@@ -254,15 +270,14 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  it("translates a 23505 on persons (lower(email))", () => {
+  it("translates a collision on the login-email index", () => {
     let thrown: unknown;
     try {
       asEmailTaken(
         {
           cause: {
-            code: "23505",
-            table: "persons",
-            detail: "Key (lower(email))=(o@x.com) already exists.",
+            errcode: 2067,
+            message: "UNIQUE constraint failed: index 'persons_tenant_email_uq'",
           },
         },
         "o@x.com",
@@ -273,15 +288,17 @@ describe("asEmailTaken", () => {
     expect(isAppError(thrown) && thrown.code).toBe("person.email_taken");
   });
 
-  // A 23505 on a DIFFERENT persons key (the id PK, or any index added later) must NOT be mislabelled
-  // person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the target gate in
-  // asEmailTaken and this fails (the error becomes person.email_taken). (Copilot, PR #172.)
-  it("re-throws a 23505 on a persons key that is not the email index", () => {
+  // A unique violation on a DIFFERENT persons key (the id PK here, or any index added later) must
+  // NOT be mislabelled person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the
+  // index gate in asEmailTaken and this fails (the error becomes person.email_taken). (Copilot,
+  // PR #172.) The primary key arrives under its own result code, 1555 rather than 2067, and names
+  // the table and column rather than an index — both shapes are driven in
+  // person-constraints.db.test.ts.
+  it("re-throws a unique violation on a persons key that is not the email index", () => {
     const original = {
       cause: {
-        code: "23505",
-        table: "persons",
-        detail: "Key (id)=(1a1e2e3c-0000-4000-8000-000000000000) already exists.",
+        errcode: 1555,
+        message: "UNIQUE constraint failed: persons.id",
       },
     };
     let thrown: unknown;
@@ -293,14 +310,17 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // The same columns on a DIFFERENT table. `sameTarget` compares both halves, so a `lower(email)`
-  // collision somewhere other than `persons` is not this refusal.
-  it("re-throws a 23505 on lower(email) of another table", () => {
+  // A collision on another table's email index is not this refusal. The
+  // discriminator moved with the engine: it was the TABLE reported beside the key, and it is now
+  // the index's NAME, which carries the table because SQLite keeps every index in one namespace
+  // per database — a second `CREATE UNIQUE INDEX persons_tenant_email_uq` on another table is
+  // refused `index persons_tenant_email_uq already exists` (driven on node:sqlite, Node v26.7.0,
+  // /tmp/f1-index-namespace-probe.mjs).
+  it("re-throws a collision on another table's email index", () => {
     const original = {
       cause: {
-        code: "23505",
-        table: "invitees",
-        detail: "Key (lower(email))=(owner@x.com) already exists.",
+        errcode: 2067,
+        message: "UNIQUE constraint failed: index 'invitees_email_uq'",
       },
     };
     let thrown: unknown;
@@ -312,8 +332,12 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
+  // Not a unique violation at all: a NOT NULL refusal (1299) on the same table. `indexViolated`
+  // asks the CLASS as well as the name, so this can never be read as an index collision.
   it("re-throws a non-unique error unchanged", () => {
-    const original = { code: "42501" };
+    const original = {
+      cause: { errcode: 1299, message: "NOT NULL constraint failed: persons.display_name" },
+    };
     let thrown: unknown;
     try {
       asEmailTaken(original, "owner@x.com");
@@ -510,6 +534,21 @@ describe("suspendPerson / reactivatePerson", () => {
       ),
     ).toBe("person.self_deactivation");
     expect((await personRow(personId)).status).toBe("active");
+  });
+
+  // The other half of the case above, and the half that used to be SILENT. The self-check folded
+  // the id's case and the UPDATE did not, so an upper-case id naming somebody else matched no row:
+  // nobody was suspended, and nothing was thrown. `persons.id` is plain text now and compares byte
+  // for byte (`settleId`, staff.ts, carries the measurement). Proof-by-deletion: drop `settleId`
+  // from `suspendPerson`'s `where` and this case fails on the status while the case above, which
+  // only exercises the comparison, still passes.
+  it("suspends another person whose id arrived in upper case", async () => {
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const targetId = await seedPerson(suite.db, "staff");
+    await run((tx) =>
+      suspendPerson(tx, { managementSessionId: sessionId, personId: targetId.toUpperCase() }),
+    );
+    expect((await personRow(targetId)).status).toBe("suspended");
   });
 
   it("suspend blocks login; reactivate restores it", async () => {

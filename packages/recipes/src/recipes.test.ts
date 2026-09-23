@@ -90,9 +90,8 @@ describe("recipe composition and allergen derivation", () => {
     expect(await publishedAllergens(productId)).toBeNull();
   });
 
-  // The diet roll-up mirrors the allergen roll-up: PGlite is enough here — the fold only reads
-  // `ingredients.dietary_origin` rows and writes `products.diet_derivation`/`diet`, no privilege or
-  // concurrency behaviour.
+  // The diet roll-up mirrors the allergen roll-up: the fold only reads
+  // `ingredients.dietary_origin` rows and writes `products.diet_derivation`/`diet`.
   it("recomputeProductDerivations (diet): an uncategorised ingredient makes the product diet-pending", async () => {
     const row = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);

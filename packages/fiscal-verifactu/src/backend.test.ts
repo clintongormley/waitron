@@ -662,7 +662,7 @@ describe("pendingCount", () => {
 /**
  * Idempotent replay returns the filed desglose and derives its QR from the stored record.
  * PGlite exercises this read-back without concurrent writers. The server
- * working-order.pg.test.ts and till-api.pg.test.ts suites exercise replay through the backend.
+ * working-order.pay-and-dispatch.test.ts and till-api.fiscal-sale-paths.test.ts suites exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
   it("returns the filed issuer after the taxpayer's own identity changes", async () => {

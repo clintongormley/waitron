@@ -19,8 +19,9 @@ import type {
  * scope (tenders are always positive).
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
-  // Both sums are counts of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment.
+  // Both sums are counts of whole cents read raw, handed over as TEXT and converted by
+  // `rawCentsToDecimal` — see its doc comment. `cast(… as text)` is what `::text` was; `till_id`
+  // needs no cast at all now, because an id column is `text` on this engine (`columns.ts`).
   const { rows } = await tx.execute<{
     till_id: string;
     method: TenderMethod;
@@ -28,18 +29,20 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
     tip: string;
   }>(sql`
     select
-      s.till_id::text as till_id,
+      s.till_id as till_id,
       t.method as method,
-      sum(t.amount)::text as amount,
-      sum(t.tip_amount)::text as tip
+      cast(sum(t.amount) as text) as amount,
+      cast(sum(t.tip_amount) as text) as tip
     from tenders t
     join sales s on s.id = t.sale_id
     where ${businessDayClause(sql`t.settled_at`, input)}
       ${nodeScopeClause(input.nodeId)}
     group by s.till_id, t.method
-    -- ::text so byMethod is alphabetical (card, cash, other, ...). Ordering the tender_method ENUM
-    -- directly sorts by its DECLARED order (cash, card, voucher, ...), which is arbitrary here.
-    order by s.till_id, t.method::text
+    -- byMethod stays alphabetical (card, cash, other, ...). It needed a ::text cast to get that
+    -- when method was a PostgreSQL ENUM, whose bare ordering is its DECLARED order (cash, card,
+    -- voucher, ...); the column is a checked TEXT column on this engine, so plain t.method IS
+    -- the alphabetical ordering and a cast would say nothing.
+    order by s.till_id, t.method
   `);
 
   const tills = new Map<string, TenderMethodLine[]>();

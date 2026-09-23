@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -44,34 +43,49 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     // Ana logs in with PIN "5555"; the session cookie the route requires names her shift.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, locationId, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, locationId, nodeId);
     // Seed a table and active/inactive statuses through the application transaction.
     const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
-      const active = await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
-      );
-      const inactive = await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (label, color, active) values ('Retired', '#000', false) returning id`,
-      );
+      const [active] = await tx
+        .insert(tableServiceStatuses)
+        .values({ label: "Bill requested", color: "#ef4444" })
+        .returning({ id: tableServiceStatuses.id });
+      const [inactive] = await tx
+        .insert(tableServiceStatuses)
+        .values({ label: "Retired", color: "#000", active: false })
+        .returning({ id: tableServiceStatuses.id });
       return {
         tableId,
-        activeStatusId: active.rows[0]!.id,
-        inactiveStatusId: inactive.rows[0]!.id,
+        activeStatusId: active!.id,
+        inactiveStatusId: inactive!.id,
       };
     });
     TABLE_ID = seeded.tableId;

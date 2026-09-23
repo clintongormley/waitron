@@ -31,15 +31,9 @@ import { fileURLToPath } from "node:url";
  * 34808295788. It is excluded from this package's coverage report for the same reason, stated in
  * `packages/db/vitest.config.ts`.
  *
- * `src/testing/global-setup.ts`: vitest runs a `globalSetup` in the MAIN process, before the workers
- * exist, and Stryker records which test covers a mutant from a setup file injected into each WORKER.
- * Nothing the main process executes is recorded against any test, so these mutants are never run at
- * all: all nine read `NoCoverage` in run 35498146363 (shard 4). Excluded from this package's
- * coverage report already, for the same structural reason.
- *
  * @type {string[]}
  */
-export const NOT_MUTATED = ["src/english-only.ts", "src/testing/global-setup.ts"];
+export const NOT_MUTATED = ["src/english-only.ts"];
 
 /**
  * Splits `path` into `parts` contiguous Stryker mutation ranges (`path:startLine-endLine`) covering

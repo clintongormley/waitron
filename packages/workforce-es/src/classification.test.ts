@@ -9,7 +9,10 @@ function tablesInDrizzle(): string[] {
   const names: string[] = [];
   for (const file of readdirSync(DRIZZLE).filter((f) => f.endsWith(".sql"))) {
     const sql = readFileSync(join(DRIZZLE, file), "utf8");
-    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([a-z0-9_]+)"?/gi)) {
+    // Either quoting: drizzle-kit writes a SQLite identifier in backticks where it wrote a
+    // PostgreSQL one in double quotes, and a name may arrive unquoted. Both are accepted so the
+    // guard reads the generated SQL rather than one dialect's punctuation.
+    for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?[`"]?([a-z0-9_]+)[`"]?/gi)) {
       names.push(m[1]!);
     }
   }
@@ -30,6 +33,11 @@ describe("WORKFORCE_ES_CLASSIFICATION", () => {
   it("classifies exactly the tables this module's migrations create", () => {
     const classified = new Set(WORKFORCE_ES_CLASSIFICATION.map((c) => c.table));
     const created = new Set(tablesInDrizzle());
+    // The control, and the reason this line exists: the assertion below it — the one that catches a
+    // NEW table nobody classified — passes against an empty `created`, so it says nothing at all
+    // unless the scan actually found the migrations. It found none when the DDL switched to
+    // backtick quoting and this scanner still matched only double quotes.
+    expect(created.size).toBeGreaterThan(0);
     expect([...created].filter((t) => !classified.has(t)).sort()).toEqual([]);
     expect([...classified].filter((t) => !created.has(t)).sort()).toEqual([]);
   });

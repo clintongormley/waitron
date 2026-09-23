@@ -4,7 +4,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { CHECK_VIOLATION, UNIQUE_VIOLATION, isPgError, printers } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { CharacterSet } from "./charset.js";
@@ -20,19 +20,20 @@ import type { PaperWidth, Resolution } from "./layout.js";
  * violation carries the stable `transport_fields` reason (the specific missing field is unknowable
  * from the SQLSTATE alone — `createPrinter`'s pre-check names it precisely on the common path).
  *
- * `isPgError` asks which CLASS of refusal this is and never WHICH key, which is wider than the two
- * constraints named above. It matters on the CHECK side: `printers` also carries
- * `printers_character_table_ck` (migration `0037`, in `packages/db/drizzle/`): measured 2026-09-21
- * on PGlite, a `characterTable` of 300 through `createPrinter` comes back as
- * `printer.invalid_config` wearing the `transport_fields` reason, while 16 is accepted. On the
- * unique side the only other key is the `id` primary key, which neither write here supplies. Telling two keys of one class apart means asking for the SQLSTATE and the key together,
- * which is `refusalOn` (`@waitron/db`).
+ * The CHECK branch names its constraint, because `printers` carries SEVEN and only this one means
+ * "this transport is short of a field it needs". `isPgError(error, CHECK_VIOLATION)` asks which
+ * CLASS a refusal is and never WHICH constraint, so it accepted all seven alike: a `characterTable`
+ * of 300 trips `printers_character_table_ck` and came back as `printer.invalid_config` wearing the
+ * `transport_fields` reason, telling an operator to fix a field that was not the problem. SQLite
+ * puts the constraint's NAME in a CHECK refusal's message, which `checkFailed` (`@waitron/db`)
+ * reads. On the unique side the only other key is the `id` primary key, which neither write here
+ * supplies.
  */
 function translatePrinterWriteError(error: unknown, localKey: string | undefined): never {
   if (localKey !== undefined && isPgError(error, UNIQUE_VIOLATION)) {
     throw new AppError("printer.already_registered", { localKey });
   }
-  if (isPgError(error, CHECK_VIOLATION)) {
+  if (checkFailed(error, "printers_transport_fields_ck")) {
     throw new AppError("printer.invalid_config", { reason: "transport_fields" });
   }
   throw error;
@@ -48,7 +49,7 @@ export interface PrintConfig {
   locationId: string;
 }
 
-/** How a printer is reached — the `print_transport` pgEnum; the union lives in `@waitron/print-agent`. */
+/** How a printer is reached — the `print_transport` column; the union lives in `@waitron/print-agent`. */
 export type { PrintTransport } from "@waitron/print-agent";
 
 /**
@@ -189,7 +190,7 @@ export interface PrinterRow {
  * screen decides what changes. `0` rows updated (an unknown id) → `printer.not_found`. The
  * transport-fields CHECK / local_key UNIQUE are the DB backstop, translated to
  * `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning, for the
- * update path). One tenant per database, so the id alone selects the row; all values bind as `$n`.
+ * update path). One tenant per database, so the id alone selects the row; all values bind as parameters.
  */
 export async function updatePrinter(
   tx: Transaction,
@@ -232,10 +233,11 @@ export async function updatePrinter(
 }
 
 /**
- * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
- * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
- * (unknown id) → `printer.not_found`. One tenant per database, so the id alone selects the row;
- * values bind as `$n`.
+ * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: the
+ * `print_jobs` history references it (`print_jobs.printer_id`, no `on delete` clause, so the
+ * parent row cannot be removed while a job names it). `0` rows (unknown id) →
+ * `printer.not_found`. One tenant per database, so the id alone selects the row; values bind as
+ * parameters.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops

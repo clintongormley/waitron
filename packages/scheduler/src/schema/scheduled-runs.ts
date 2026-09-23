@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, id, json, label, table, tsString } from "@waitron/db";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { count, id, json, label, newId, nowIso, table, tsString } from "@waitron/db";
 
 /**
  * The lifecycle of one scheduled run. `pending` is work enqueued but not yet attempted (a
@@ -23,7 +23,7 @@ export type RunState = (typeof runState)[number];
 export const scheduledRuns = table(
   "scheduled_runs",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** `PeriodDuty.name`. Changing a duty's name orphans its history — it is an identifier. */
     duty: label("duty").notNull(),
     /** The half-open `[period_from, period_to)` stored explicitly, never derived: a later
@@ -54,8 +54,8 @@ export const scheduledRuns = table(
     summary: json<Record<string, unknown>>("summary"),
     /** A structured code — an AppError code, or the literal "unknown". NEVER prose. */
     errorCode: label("error_code"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The claim-by-INSERT depends on this: ON CONFLICT DO NOTHING against this key is what makes

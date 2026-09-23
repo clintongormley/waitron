@@ -39,8 +39,8 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user`
- * under `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
+ * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (under
+ * `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
  * designated-node identity inside `assembleMirrorBundle`. `designated` are the four ids the primary
  * till was provisioned with (`config.till.*`).
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
@@ -107,8 +107,8 @@ export function mountMirrorBundleApi(
       // non-string/non-UUID `personId`, a non-string `password`, or a present non-string `totp` is
       // refused as `password.invalid` — the SAME code a wrong password gets, so the response never
       // tells the caller which field failed.
-      // (The `isUuid` screen turns a malformed id into this clean 401 rather than a `22P02` → opaque 500
-      // when it reaches the `uuid` column.) `readJsonBody` coerces an empty/malformed/`null` body to
+      // (The `isUuid` screen turns a malformed id into this clean 401, and it is the only refusal:
+      // the `persons.id` read would neither object to it nor match it.) `readJsonBody` coerces an empty/malformed/`null` body to
       // `{}` so a degenerate body falls through to this screen rather than a 500.
       const body = await readJsonBody<{
         personId?: string;
@@ -154,7 +154,7 @@ export function mountMirrorBundleApi(
       const standbyContactUrl = body.standbyContactUrl;
 
       // Authenticate + authorize: `loginManagerById` mints a session (password + TOTP when
-      // enrolled), `authorizeManager` checks the admin-only `mirror.create`. Runs as `app_user`
+      // enrolled), `authorizeManager` checks the admin-only `mirror.create`. Runs
       // under the designated tenant, in the database holding this venue's tenant. This flow
       // authenticates by PERSON ID, not email, because it is a server-to-server flow carrying an
       // id the operator typed — not the email dashboard-login form. Human admins carry a required
@@ -213,8 +213,13 @@ export function mountMirrorBundleApi(
  * round only to another adopt that actually COMMITTED a newer term, so the bound is the number of
  * concurrent adopts a single primary is expected to serve at once — and `MAX_NODES` (8, the size
  * every verifier refuses a document past) is the natural ceiling on how many distinct standbys a
- * chart can hold. Measured on real Postgres, 8 concurrent adopts through this route: 1-7 rounds per
- * request, 8 of 8 standbys listed.
+ * chart can hold.
+ *
+ * The measurement behind the number was taken on PostgreSQL — 8 concurrent adopts through this
+ * route, 1-7 rounds per request, 8 of 8 standbys listed — and it has NOT been retaken on this
+ * engine, where `packages/store/src/write-queue.ts` admits one write transaction on the venue file
+ * at a time. Serialised writers should need FEWER rounds, not more, so the bound is expected to be
+ * at least as generous as it was; nobody has run it, so that is an expectation and not a receipt.
  */
 const MAX_CHART_WRITE_ROUNDS = 8;
 

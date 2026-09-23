@@ -37,8 +37,10 @@ export interface AdoptRequest {
 }
 
 export interface AdoptDeps {
-  /** The OWNER connection to the mirror's database (`adminDatabaseUrl`) — stamps `deployment`,
-   * writes `mirror_config`, mints the break-glass verifier. `app_user` holds none of those writes. */
+  /** The handle that stamps `deployment`, writes `mirror_config` and mints the break-glass
+   * verifier. It was a separate owner connection, and the application role held none of those
+   * writes; since the storage switch there is one handle and nothing in the engine refuses them —
+   * `scripts/write-path-tables.test.ts` is what keeps these writes in named files. */
   ownerDb: Database;
   /** Fetches the bundle from the primary, carrying the mirror's own `standby` identity so the primary
    * can reserve + endorse it (membership promotion R2). Injected so the HTTP call is stubbable and the
@@ -66,10 +68,6 @@ export interface AdoptDeps {
    * itself. `runFinishAdoption` retries that step on every boot and cannot complete it today:
    * `finish-adoption.ts`'s `PendingAdoption` header is the one place that says why. */
   stateDir: string;
-  /** The app-pool connection string, written into `trading.env` as `DATABASE_URL`. */
-  databaseUrl: string;
-  /** The owner connection string, written into `trading.env` as `WAITRON_MIGRATIONS_DATABASE_URL`. */
-  migrationsDatabaseUrl: string;
   /** The NAME of the mirror's own database, echoed by `provisioning.foreign_tenant` when a bundle for
    * a DIFFERENT tenant is adopted into a database that already holds one. */
   database: string;
@@ -172,8 +170,6 @@ export async function adoptFromPrimary(
     // reserved series at R3b.
     nodeId: standby.nodeId,
     seriesId: designated.seriesId,
-    databaseUrl: deps.databaseUrl,
-    migrationsDatabaseUrl: deps.migrationsDatabaseUrl,
     environment: bundle.environment,
     accountKey: bundle.accountKey,
   });

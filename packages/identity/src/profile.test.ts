@@ -267,8 +267,12 @@ describe("your profile", () => {
   it("changes the PIN and ends open till sessions", async () => {
     const f = await fixture();
     const tillId = await seedTill(suite.db);
+    // `id` and `opened_at` are `$defaultFn` generators in JavaScript, not column DEFAULTs
+    // (`packages/db/src/schema/columns.ts`), so a raw insert that does not name them is refused
+    // `NOT NULL constraint failed`. They are named here for that reason, where PostgreSQL supplied
+    // both server-side.
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (person_id, till_id) values (${f.personId}, ${tillId}) returning id`,
+      sql`insert into sessions (id, person_id, till_id, opened_at) values (${randomUUID()}, ${f.personId}, ${tillId}, ${new Date().toISOString()}) returning id`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -289,8 +293,12 @@ describe("your profile", () => {
     const colleague = await seedManager(suite.db, { email: "colleague@example.com" });
     const credentialId = randomUUID();
     const otherId = randomUUID();
+    // `created_at` is a `$defaultFn` generator in JavaScript, not a column DEFAULT
+    // (`packages/db/src/schema/columns.ts`), so a raw insert that does not name it is refused
+    // `NOT NULL constraint failed`; PostgreSQL supplied it server-side.
+    const stamp = new Date().toISOString();
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name) values (${credentialId},${f.personId},'own','public','Work laptop'),(${otherId},${colleague},'other','public','Colleague laptop')`,
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,created_at) values (${credentialId},${f.personId},'own','public','Work laptop',${stamp}),(${otherId},${colleague},'other','public','Colleague laptop',${stamp})`,
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([
       { id: credentialId, name: "Work laptop", createdAt: expect.any(String) },

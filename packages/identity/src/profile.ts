@@ -1,8 +1,10 @@
 import "./errors.js";
+import { nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
+import { foldForUniqueness } from "./fold.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import {
@@ -50,12 +52,11 @@ async function ownPerson(tx: Transaction, input: Owner) {
     .from(managementSessions)
     .where(eq(managementSessions.id, input.managementSessionId));
   if (session === undefined) throw new AppError("management_session.required", {});
-  // Serialize profile changes before touching session rows: a password change also ends other sessions.
-  const [person] = await tx
-    .select()
-    .from(persons)
-    .where(eq(persons.id, session.personId))
-    .for("update");
+  // A plain read of the signed-in person. It took `for update`, so that two profile changes for
+  // one person could not interleave — a password change also ends that person's other sessions.
+  // One write transaction runs on the venue file at a time, so there is no second change to
+  // interleave with; the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+  const [person] = await tx.select().from(persons).where(eq(persons.id, session.personId));
   if (person === undefined) throw new AppError("management_session.required", {});
   await resolveManagementSession(tx, input.managementSessionId);
   return person;
@@ -120,6 +121,8 @@ export async function finishOwnTotpEnrollment(
   input: Owner & { enrollmentId: string; code: string; keyRing: TotpKeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
+  // This read took `for update` too, so that the enrollment could not be consumed twice; the same
+  // answer applies ({@link ownPerson}).
   const [enrollment] = await tx
     .select({ encryptedSecret: totpEnrollments.encryptedSecret })
     .from(totpEnrollments)
@@ -129,8 +132,7 @@ export async function finishOwnTotpEnrollment(
         eq(totpEnrollments.personId, person.id),
         gt(totpEnrollments.expiresAt, new Date().toISOString()),
       ),
-    )
-    .for("update");
+    );
   const secret =
     enrollment === undefined ? null : decryptTotpSecret(enrollment.encryptedSecret, input.keyRing);
   if (secret === null || !verifyTotp(input.code, secret.secret))
@@ -172,7 +174,7 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
 async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(managementAccountActions)
-    .set({ usedAt: sql`now()` })
+    .set({ usedAt: nowIso() })
     .where(
       and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
@@ -241,10 +243,14 @@ export async function saveOwnProfile(
       .update(persons)
       .set({
         displayName,
+        displayNameFolded: foldForUniqueness(displayName),
         firstNames,
         lastNames,
         telephone,
+        // Cleared together, always: a `pending_email` left with a stale folded value beside it
+        // would be read by the index as a request nobody made.
         pendingEmail: changedEmail ? email : null,
+        pendingEmailFolded: changedEmail ? foldForUniqueness(email) : null,
         locale,
       })
       .where(eq(persons.id, person.id));
@@ -290,7 +296,7 @@ export async function changeOwnPin(
     .where(eq(persons.id, person.id));
   await tx
     .update(sessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(sessions.personId, person.id), isNull(sessions.endedAt)));
 }
 
@@ -308,7 +314,7 @@ export async function changeOwnPassword(
   await invalidateLinks(tx, person.id);
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(
       and(
         eq(managementSessions.personId, person.id),

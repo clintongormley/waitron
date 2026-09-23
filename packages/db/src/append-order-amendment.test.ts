@@ -1,29 +1,49 @@
-import { sql } from "drizzle-orm";
+/**
+ * `appendOrderAmendment`'s per-order hash chain: the genesis shape, the link, the stored hash's
+ * coverage, and that overlapping appends land as one gap-free chain.
+ *
+ * THREE LOSSES, from the storage swap:
+ *  - the `select … for update` on the parent `working_orders` row is DELETED, not translated.
+ *    SQLite has no row locks and drizzle's SQLite query builder has no `.for()`. What serialises
+ *    writers instead is the venue file's write queue — one write transaction on the file at a time
+ *    (`packages/store/src/write-queue.ts`, and `append-order-amendment.ts`'s own header says the
+ *    same at the call site). So the last case here no longer shows that a LOCK held under
+ *    contention; it shows that the queue serialises overlapping callers. The control that used to
+ *    back it — delete `.for("update")` and watch every writer collide on
+ *    `order_amendments_chain_position_key` — has nothing left to delete. The receipt for the queue
+ *    itself, with a control in the other direction, is `racePair` in
+ *    `packages/catalogue/test/fixtures.ts`.
+ *  - the append-only case was a LAYERED proof: `app_user` is refused UPDATE and DELETE by the
+ *    grant, so the case granted the privilege inside a rolled-back transaction and watched the
+ *    trigger refuse anyway. SQLite has no roles and no grants
+ *    (`packages/db/src/testing/roles.ts`), so there is one layer and the case is now simply that
+ *    the append-only trigger refuses.
+ *  - the chain is read back through the Drizzle export rather than raw SQL. A raw `select` of
+ *    `is_first_entry` answers 0 or 1, not a boolean, and `verifyAmendmentChain` reads that field.
+ *
+ * `order_amendments` is append-only for EVERY caller, so nothing can clean it up between tests —
+ * the table only grows. Each test therefore seeds its OWN working order and scopes its reads to
+ * that order's id rather than reading a table-wide total that would drift.
+ *
+ * A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
+ * in. There is one taxpayer row: a second `tenants` row cannot be inserted.
+ */
+import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
-import type { Database, Transaction } from "./client.js";
+import type { Transaction } from "./client.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
-import { captureError, pgErrorCode } from "./testing/errors.js";
-import { useTemplateDb } from "./testing/lifecycle.js";
+import { TRIGGER_ABORT } from "./sql-state.js";
+import { isPgError } from "./unique-violation.js";
+import { captureError, pgErrorMessage } from "./testing/errors.js";
 import { seedNode } from "./testing/seed.js";
+import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
+import { orderAmendments } from "./schema/order-amendments.js";
+import { workingOrders } from "./schema/orders.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
-
-// Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite cannot show is
-// the parent-row lock serialising concurrent appends — PGlite puts every query on one backend, so
-// the race never happens and a pass there would be theatre (CLAUDE.md §4). Everything else would
-// pass on either target and rides along on the container this suite already needs, the WT001 case
-// included: `reject_mutation` fires for every actor, the owner and a superuser alike, and the case
-// grants the privilege rather than disabling the trigger.
-//
-// `order_amendments` is append-only for EVERY role, the owner included (reject_mutation blocks
-// UPDATE/DELETE/TRUNCATE), so nothing can clean it up between tests — the table only grows. Each
-// test therefore seeds its OWN working order and scopes its per-chain reads to that order's id
-// rather than reading a table-wide total that would drift as earlier tests accumulate rows.
-//
-// A second LOCATION is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps
-// in. There is one taxpayer row: a second `tenants` row cannot be inserted.
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
@@ -39,34 +59,13 @@ let nodeB = "";
 // A fresh order number per seeded working order, so no two collide on the counter's uniqueness.
 let orderNumberSeq = 0;
 
-/** A signal thrown to roll back a deliberately-destructive proof transaction (the inmutabilidad
- * layered-proof idiom): grant a privilege, observe the trigger backstop fire anyway, then unwind. */
-class RollbackSignal extends Error {}
-
-async function rollBackAfter(
-  admin: Database,
-  fn: (tx: Transaction) => Promise<void>,
-): Promise<void> {
-  await withTransaction(admin, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
-}
-
 describe("order_amendments append helper", () => {
-  // A clone of the shared container's `core` template. Docker is required (the package globalSetup
-  // fails loudly without it): the concurrency proof below opens distinct backends via
-  // `suite.pg.connect()`, which one serialised PGlite backend cannot give.
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // As the connection owner — pure setup: the one taxpayer row, then two locations, each with a
-  // till and a node (location B exists only to mint `nodeB`, the foreign node id the hash-tamper
-  // case swaps in).
+  // Pure setup: the one taxpayer row, then two locations, each with a till and a node.
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
-    const admin = suite.admin;
+    const admin = suite.db;
     await admin
       .insert(tenants)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
@@ -92,21 +91,26 @@ describe("order_amendments append helper", () => {
     nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
   });
 
-  /** Seeds one fresh open working order as the owner and returns its id. A fresh chain per test so
-   * sequence numbers are predictable and one test's rows never interleave with another's. */
+  /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence
+   * numbers are predictable and one test's rows never interleave with another's. Through the
+   * Drizzle builder, since `id` is a `$defaultFn` column applied CLIENT-side. */
   async function openOrder(till: string, node: string): Promise<string> {
     orderNumberSeq += 1;
-    const result = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
-    );
-    return result.rows[0]!.id;
+    const [row] = await suite.db
+      .insert(workingOrders)
+      .values({
+        tillId: till,
+        nodeId: node,
+        orderNumber: orderNumberSeq,
+        status: "open",
+        openedAt: AT,
+      })
+      .returning({ id: workingOrders.id });
+    return row!.id;
   }
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await tx.execute(sql`set local role app_user`);
-      return fn(tx);
-    });
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
   /** Tenant A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
@@ -123,55 +127,39 @@ describe("order_amendments append helper", () => {
     };
   }
 
-  /** Reads one order's whole chain back as verifiable rows, ordered by chain position. `event_at`
-   * is projected to a UTC ISO instant with a millisecond field (always `.000`, since the stored
-   * value is whole-second-truncated) so `verifyAmendmentChain`'s `Date.parse` sees exactly the
-   * instant the stored hash committed. Read as the owner, since it is a read-back for verification
-   * rather than anything about the app role. */
+  /** Reads one order's whole chain back as verifiable rows, ordered by chain position.
+   *
+   * Through the Drizzle export rather than raw SQL, for two reasons the engine forces: a raw
+   * `select` of `is_first_entry` returns 0 or 1 where `verifyAmendmentChain` reads a boolean, and
+   * `event_at` needs no projection at all — it is stored as the exact ISO instant
+   * `appendOrderAmendment` truncated to whole seconds, where PostgreSQL's `timestamptz` had to be
+   * rendered back with `to_char` before `Date.parse` saw the instant the hash committed. */
   async function readAmendments(order: string): Promise<VerifiableAmendment[]> {
-    // An inline row TYPE LITERAL, not `execute<VerifiableAmendment>`: `execute`'s generic is
-    // constrained to `Record<string, unknown>`, which an INTERFACE (VerifiableAmendment) does not
-    // satisfy while a structurally-identical type literal does. The literal's fields mirror
-    // VerifiableAmendment exactly, so `rows` is assignable to the return type.
-    const { rows } = await suite.admin.execute<{
-      sequenceNo: number;
-      workingOrderId: string;
-      kind: "order_placed" | "order_cancelled";
-      actorId: string;
-      reason: string | null;
-      capturedByTillId: string;
-      capturedByNodeId: string;
-      eventAt: string;
-      eventOffsetMinutes: number;
-      entryHash: string;
-      prevEntryHash: string | null;
-      isFirstEntry: boolean;
-    }>(sql`
-      select
-        sequence_no as "sequenceNo",
-        working_order_id as "workingOrderId",
-        kind,
-        actor_id as "actorId",
-        reason,
-        captured_by_till_id as "capturedByTillId",
-        captured_by_node_id as "capturedByNodeId",
-        to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "eventAt",
-        event_offset_minutes as "eventOffsetMinutes",
-        entry_hash as "entryHash",
-        prev_entry_hash as "prevEntryHash",
-        is_first_entry as "isFirstEntry"
-      from order_amendments
-      where working_order_id = ${order}
-      order by sequence_no
-    `);
-    return rows;
+    return suite.db
+      .select({
+        sequenceNo: orderAmendments.sequenceNo,
+        workingOrderId: orderAmendments.workingOrderId,
+        kind: orderAmendments.kind,
+        actorId: orderAmendments.actorId,
+        reason: orderAmendments.reason,
+        capturedByTillId: orderAmendments.capturedByTillId,
+        capturedByNodeId: orderAmendments.capturedByNodeId,
+        eventAt: orderAmendments.eventAt,
+        eventOffsetMinutes: orderAmendments.eventOffsetMinutes,
+        entryHash: orderAmendments.entryHash,
+        prevEntryHash: orderAmendments.prevEntryHash,
+        isFirstEntry: orderAmendments.isFirstEntry,
+      })
+      .from(orderAmendments)
+      .where(eq(orderAmendments.workingOrderId, order))
+      .orderBy(asc(orderAmendments.sequenceNo));
   }
 
   it("appends a hashed per-order sequence, genesis first then linked", async () => {
     const order = await openOrder(TILL_A1, nodeA);
-    const first = await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
+    const first = await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     expect(first.sequenceNo).toBe(1);
-    const second = await asApp((tx) =>
+    const second = await inTx((tx) =>
       appendOrderAmendment(tx, {
         workingOrderId: order,
         kind: "order_cancelled",
@@ -201,43 +189,28 @@ describe("order_amendments append helper", () => {
     expect(rows[1]!.eventAt).toBe("2026-08-06T10:05:00.000Z");
   });
 
-  it("is append-only at the trigger too: a granted UPDATE/DELETE still raises WT001", async () => {
-    // The layered proof (inmutabilidad.test.ts). app_user's withheld UPDATE/DELETE — the first layer,
-    // pinned by the privilege matrix in packages/fiscal-verifactu — refuses the statement at
-    // privilege-check time, so nothing in the matrix ever reaches the trigger, and a trigger nobody
-    // has seen fire is a comment, not a backstop. Grant the privilege inside a transaction that rolls
-    // back and watch reject_mutation catch it anyway. The trigger fires for every actor, the owner
-    // included, so the granted app_user is stopped by the second layer alone.
+  it("is append-only: the trigger refuses an UPDATE and a DELETE", async () => {
     const order = await openOrder(TILL_A1, nodeA);
-    await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
-    // UPDATE and DELETE each in their OWN rolled-back transaction: the first WT001 aborts its
-    // transaction (a later statement in it would return 25P02, in_failed_sql_transaction, not the
-    // trigger's code), so testing both in one transaction would measure the poisoned-transaction
-    // state for the second, not the trigger.
-    await rollBackAfter(suite.admin, async (tx) => {
-      await tx.execute(sql`grant update on order_amendments to app_user`);
-      await tx.execute(sql`set local role app_user`);
-      const eU = await captureError(() =>
-        tx.execute(
-          sql`update order_amendments set reason = 'forged' where working_order_id = ${order}`,
-        ),
-      );
-      expect(pgErrorCode(eU)).toBe("WT001");
-    });
-    await rollBackAfter(suite.admin, async (tx) => {
-      await tx.execute(sql`grant delete on order_amendments to app_user`);
-      await tx.execute(sql`set local role app_user`);
-      const eD = await captureError(() =>
-        tx.execute(sql`delete from order_amendments where working_order_id = ${order}`),
-      );
-      expect(pgErrorCode(eD)).toBe("WT001");
-    });
+    await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
+    const eU = await captureError(() =>
+      suite.db
+        .update(orderAmendments)
+        .set({ reason: "forged" })
+        .where(eq(orderAmendments.workingOrderId, order)),
+    );
+    expect(isPgError(eU, TRIGGER_ABORT)).toBe(true);
+    expect(pgErrorMessage(eU)).toBe("order_amendments is append-only");
+    const eD = await captureError(() =>
+      suite.db.delete(orderAmendments).where(eq(orderAmendments.workingOrderId, order)),
+    );
+    expect(isPgError(eD, TRIGGER_ABORT)).toBe(true);
+    expect(pgErrorMessage(eD)).toBe("order_amendments is append-only");
   });
 
   it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {
     const order = await openOrder(TILL_A1, nodeA);
-    await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
-    await asApp((tx) =>
+    await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
+    await inTx((tx) =>
       appendOrderAmendment(tx, {
         workingOrderId: order,
         kind: "order_cancelled",
@@ -274,51 +247,36 @@ describe("order_amendments append helper", () => {
     });
   });
 
-  it("serialises concurrent appends to one order into a gap-free, verifiable chain (Decision 2's parent-row lock)", async () => {
-    // The core proof of the parent-row lock, on real backends (PGlite serialises every query onto
-    // one backend, so it cannot show contention — CLAUDE.md §4). N writers append to ONE fresh
-    // order at once. The `SELECT … FOR UPDATE` on the parent row serialises them: each waits for the
-    // previous to commit, then reads the advanced max sequence, so all N commit with contiguous
-    // positions 1..N and one unbroken hash chain.
-    //
-    // Proven by deletion: drop `.for("update")` from appendOrderAmendment and the read-then-insert
-    // races — the concurrent writers all read the same max and collide on
-    // `order_amendments_chain_position_key` (23505), so `Promise.all` rejects and this test fails.
-    // (The FK from order_amendments to working_orders takes only a SHARED key-share lock on the
-    // parent, which does NOT serialise the writers — the exclusive FOR UPDATE is what does.)
+  it("serialises overlapping appends to one order into a gap-free, verifiable chain", async () => {
+    // The subject: N callers append to ONE fresh order at once and all N commit with contiguous
+    // positions 1..N and one unbroken hash chain. See this file's header for what arranges that
+    // now and what the PostgreSQL version proved instead.
     const WRITERS = 10;
     const order = await openOrder(TILL_A1, nodeA);
-    const conns = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
-      // duplicate position.
-      const results = await Promise.all(
-        conns.map((db, i) =>
-          db.transaction((tx) =>
-            appendOrderAmendment(tx, {
-              workingOrderId: order,
-              kind: i === 0 ? "order_placed" : "order_cancelled",
-              actorId: OPERATOR_A,
-              reason: i === 0 ? null : `amend ${String(i)}`,
-              capturedByTillId: TILL_A1,
-              capturedByNodeId: nodeA,
-              eventAt: new Date(Date.parse("2026-08-06T10:00:00Z") + i * 1000),
-              eventOffsetMinutes: 120,
-            }),
-          ),
+    // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
+    // duplicate position.
+    const results = await Promise.all(
+      Array.from({ length: WRITERS }, (_, i) =>
+        inTx((tx) =>
+          appendOrderAmendment(tx, {
+            workingOrderId: order,
+            kind: i === 0 ? "order_placed" : "order_cancelled",
+            actorId: OPERATOR_A,
+            reason: i === 0 ? null : `amend ${String(i)}`,
+            capturedByTillId: TILL_A1,
+            capturedByNodeId: nodeA,
+            eventAt: new Date(Date.parse("2026-08-06T10:00:00Z") + i * 1000),
+            eventOffsetMinutes: 120,
+          }),
         ),
-      );
-      // Every writer committed — none was starved or collided.
-      expect(results).toHaveLength(WRITERS);
-      const rows = await readAmendments(order);
-      // Positions are contiguous 1..N, exactly one genesis, and the whole chain re-verifies.
-      expect(rows.map((r) => r.sequenceNo)).toEqual(
-        Array.from({ length: WRITERS }, (_, i) => i + 1),
-      );
-      expect(rows.filter((r) => r.isFirstEntry)).toHaveLength(1);
-      expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
-    } finally {
-      await Promise.all(conns.map((db) => db.close()));
-    }
+      ),
+    );
+    // Every caller committed — none was starved or collided.
+    expect(results).toHaveLength(WRITERS);
+    const rows = await readAmendments(order);
+    // Positions are contiguous 1..N, exactly one genesis, and the whole chain re-verifies.
+    expect(rows.map((r) => r.sequenceNo)).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
+    expect(rows.filter((r) => r.isFirstEntry)).toHaveLength(1);
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
   });
 });

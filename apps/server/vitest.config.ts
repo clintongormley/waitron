@@ -4,7 +4,9 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // The real-Postgres and mTLS suites pull a container and mint certificates in a beforeAll.
+    // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s unless a
+    // suite passes `timeoutMs`), so `hookTimeout` bounds the hooks left untimed: that helper's
+    // per-test reset and close, and any hook a test file writes for itself.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/**/*.preprod.test.ts"],
@@ -29,10 +31,6 @@ export default defineConfig({
     // where 3.2.7 passed none and birpc's 60s default applied. See docs/developers/ci-and-gates.md →
     // "A shard can exit 1 with every one of its tests passing".
     maxWorkers: 4,
-    // Boots ONE shared container with a `manifest` template migrated through apps/server's
-    // production path; the converted real-Postgres suites clone it via `useTemplateDb` instead of
-    // booting per-file. See `src/testing/global-setup.ts`.
-    globalSetup: ["./src/testing/global-setup.ts"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

@@ -1,24 +1,25 @@
 {
-  "id": "eaf52f6e-44c1-4f29-9876-d0a24acec36e",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "7bfd178b-2fc3-43f8-b7ab-2203c739214f",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.media_image_data": {
+    "media_image_data": {
       "name": "media_image_data",
-      "schema": "",
       "columns": {
         "image_id": {
           "name": "image_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "bytes": {
           "name": "bytes",
-          "type": "bytea",
+          "type": "blob",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -37,127 +38,104 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "media_image_data_image_id_pk": {
-          "name": "media_image_data_image_id_pk",
-          "columns": [
-            "image_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.media_images": {
+    "media_images": {
       "name": "media_images",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "filename": {
           "name": "filename",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "names": {
           "name": "names",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "alt_text": {
           "name": "alt_text",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "labels": {
           "name": "labels",
-          "type": "text[]",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{}'::text[]"
+          "autoincrement": false,
+          "default": "'[]'"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
         "media_images_date_idx": {
           "name": "media_images_date_idx",
           "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "created_at",
+            "id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
+        },
+        "media_images_filename_key": {
+          "name": "media_images_filename_key",
+          "columns": [
+            "filename"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "media_images_filename_key": {
-          "name": "media_images_filename_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "filename"
-          ]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "media_images_filename_ck": {
           "name": "media_images_filename_ck",
-          "value": "\"media_images\".\"filename\" ~ '^[a-f0-9]{64}[.](jpg|png|webp)$'"
+          "value": "substr(\"media_images\".\"filename\", 1, 64) not glob '*[^0-9a-f]*' and (substr(\"media_images\".\"filename\", 65) glob '.jpg' or substr(\"media_images\".\"filename\", 65) glob '.png' or substr(\"media_images\".\"filename\", 65) glob '.webp')"
         },
         "media_images_names_ck": {
           "name": "media_images_names_ck",
-          "value": "jsonb_typeof(\"media_images\".\"names\") = 'object' and jsonb_typeof(\"media_images\".\"alt_text\") = 'object'"
+          "value": "json_type(\"media_images\".\"names\") = 'object' and json_type(\"media_images\".\"alt_text\") = 'object'"
         }
-      },
-      "isRLSEnabled": false
+      }
     }
   },
-  "enums": {},
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

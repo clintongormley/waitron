@@ -22,7 +22,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
-import { bindingFkField } from "./device.js";
+import { requireDeviceBinding } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
@@ -110,9 +110,9 @@ const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
  *    `device.station_required`, `device.register_required`, `station.not_found`, `device.join_mismatch`
  *    (a wrong number, 400) and `join_request.not_found` (404).
  *    `device.binding_invalid` is the exception: this surface throws it too, from the
- *    assign-device-profile and hardware routes' FK 23503 translation. The accept route
- *    raises it as well, through `requireLiveRegister` (`device.ts`), which is why it is the one code
- *    of this group both surfaces answer.
+ *    assign-device-profile and hardware routes' pre-read (`requireDeviceBinding`, `device.ts`). The
+ *    accept route raises it as well, through `requireLiveRegister` in the same file, which is why it
+ *    is the one code of this group both surfaces answer.
  *    `device.till_required` is not thrown here either (it is the SALE-path guard, device-session.ts) but
  *    is mapped to the SAME 400 till-api.ts gives it. `device.not_found` is this surface's own (the
  *    manager-facing revoke/reassign of an absent device id, 404).
@@ -176,7 +176,7 @@ const run = createErrorBoundary(STATUS, "device.failed");
  * errors identically:
  *
  *  1. UNAUTHENTICATED joining, a KNOCK and a POLL — mirrors the till's `POST /api/session` in carrying
- *     no prior-session guard, running as `app_user` under the tenant. `POST /api/device/join` asks to
+ *     no prior-session guard. `POST /api/device/join` asks to
  *     join: it is refused unless an admin has the venue's pairing window open, and otherwise mints a
  *     pending request, returns the number the admin must match, and sets the device cookie. In
  *     `devMode` the window is bypassed and the request is accepted on the spot with the venue's default
@@ -289,7 +289,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (dot <= 0 || dot === raw.length - 1) throw new AppError("device.unauthorized", {});
       const joinId = raw.slice(0, dot);
       const token = raw.slice(dot + 1);
-      // The selector goes into a bare-uuid comparison, where a non-uuid would `22P02` a 500.
+      // The selector goes into a by-id comparison that refuses nothing and would match nothing, so
+      // this screen is what turns a non-uuid into a clean refusal.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
       const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
@@ -362,7 +363,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
-      // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
+      // `ticket.invalid_transition` the verb raises for an unknown item. The screen is the only
+      // refusal; the `text` id column has none.
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
       // Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque
       // 500): `to` is then undefined and reaches `advanceTicketItem`'s transition screen — the SAME
@@ -425,11 +427,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. Screened
+      // A malformed id names no device — a clean `device.not_found` (404) from this screen, which is
+      // the only refusal there is (the id-screen note on `shared.invalid_id` in `till-api.ts`). Screened
       // before `gated` the way `purchasing-api.ts` screens its `:id` before the tenant transaction.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       // Revoke = flip `active = false` (instant — `requireDevice` rejects it), NEVER a hard
-      // DELETE: a device is a durable identity and app_user holds no DELETE on `devices`. 0 rows
+      // DELETE: a device is a durable identity, and this route is the only thing arranging that
+      // (`tables.ts`'s `deactivateTable` note). 0 rows
       // updated (unknown id) → `device.not_found`.
       const updated = await gated(sessionId, (tx) =>
         tx
@@ -450,38 +454,30 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. The
+      // A malformed id names no device — a clean `device.not_found` (404). The
       // same id screen the revoke route above runs before `gated`.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen the
       // target: a device is DEFINED by its profile (`device_profile_id` is NOT NULL since Task 7), so
       // this route REASSIGNS to another profile and cannot clear the binding — the target is a REQUIRED
-      // UUID SHAPE (a non-uuid would `22P02` at the bare-uuid column; an absent one is a clean
-      // `management.request_invalid` 400 naming the field), the shared `requireBodyUuid` screen.
+      // UUID SHAPE (nothing below checks it; an absent one is a clean `management.request_invalid`
+      // 400 naming the field), the shared `requireBodyUuid` screen.
       const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
       const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
-      // A non-null target must name a device profile that exists. Rather than
-      // a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
-      // raw FK 500), let the FK `devices_device_profile_fk (device_profile_id)` be
-      // the guard: it is atomic with the UPDATE (no window). Existence is all it can check — every
-      // profile in the database belongs to the one taxpayer. A 23503 on it → `device.binding_invalid`
-      // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.
-      // Any other error rethrows raw.
-      let updated: { id: string }[];
-      try {
-        updated = await gated(sessionId, (tx) =>
-          tx
-            .update(devices)
-            .set({ deviceProfileId })
-            .where(ownDeviceById(id))
-            .returning({ id: devices.id }),
-        );
-      } catch (error) {
-        if (bindingFkField(error) === "deviceProfileId") {
-          throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
-        }
-        throw error;
-      }
+      // The target must name a device profile that exists. `requireDeviceBinding` reads it on the
+      // same transaction as the UPDATE and throws `device.binding_invalid` naming the field — the
+      // SAME code and shape the hardware PATCH below raises through the same helper. The FK
+      // `devices_device_profile_fk (device_profile_id)` still refuses a dangling write; the pre-read
+      // is what turns that refusal into an error the operator can act on, because this engine's
+      // foreign-key message names no key (see the helper).
+      const updated = await gated(sessionId, async (tx) => {
+        await requireDeviceBinding(tx, { deviceProfileId });
+        return tx
+          .update(devices)
+          .set({ deviceProfileId })
+          .where(ownDeviceById(id))
+          .returning({ id: devices.id });
+      });
       // 0 rows updated (unknown device id) → `device.not_found`, the revoke idiom.
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.body(null, 204);
@@ -497,7 +493,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      // A malformed id names no device — a clean `device.not_found` (404), never a `22P02` 500. The
+      // A malformed id names no device — a clean `device.not_found` (404). The
       // same id screen the revoke / assign-device-profile routes run before `gated`.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       // Read via `readJsonBody` (empty/malformed/`null` → `{}`, never an opaque 500), then screen each
@@ -526,29 +522,19 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         throw new AppError("management.request_invalid", { field: "hardware" });
       }
       // By-id scope — an unknown device id updates 0 rows → 404, the assign-device-profile / revoke
-      // by-id idiom. A `receiptPrinterId` naming no printer at all
-      // reaches `devices_receipt_printer_fk` and is translated to
-      // `device.binding_invalid` naming the field (the same `bindingFkField` helper + shape the reassign
-      // route uses); any other error rethrows raw.
-      let updated: {
-        id: string;
-        receiptPrinterId: string | null;
-        hasCashDrawer: boolean;
-      }[];
-      try {
-        updated = await gated(sessionId, (tx) =>
-          tx.update(devices).set(set).where(ownDeviceById(id)).returning({
-            id: devices.id,
-            receiptPrinterId: devices.receiptPrinterId,
-            hasCashDrawer: devices.hasCashDrawer,
-          }),
-        );
-      } catch (error) {
-        if (bindingFkField(error) === "receiptPrinterId") {
-          throw new AppError("device.binding_invalid", { field: "receiptPrinterId" });
+      // by-id idiom. A `receiptPrinterId` naming no printer is refused by `requireDeviceBinding` as
+      // `device.binding_invalid` naming the field (the same helper and shape the reassign route
+      // uses); an explicit `null` CLEARS the binding and is accepted.
+      const updated = await gated(sessionId, async (tx) => {
+        if (set.receiptPrinterId !== undefined) {
+          await requireDeviceBinding(tx, { receiptPrinterId: set.receiptPrinterId });
         }
-        throw error;
-      }
+        return tx.update(devices).set(set).where(ownDeviceById(id)).returning({
+          id: devices.id,
+          receiptPrinterId: devices.receiptPrinterId,
+          hasCashDrawer: devices.hasCashDrawer,
+        });
+      });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
       return c.json(updated[0], 200);
     }),

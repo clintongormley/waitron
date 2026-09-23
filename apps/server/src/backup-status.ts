@@ -1,4 +1,4 @@
-import { BACKUP_KEY_PREFIX } from "./pg-dump.js";
+import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import type { StorageBackend } from "./storage-backend.js";
 
 /**

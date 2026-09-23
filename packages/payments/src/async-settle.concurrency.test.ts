@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   decimal,
   nodeId as brandNodeId,
@@ -14,6 +14,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
+import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
   associatePaymentWithSale,
   getPaymentByRef,
@@ -25,27 +26,22 @@ import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
 // This mirrors async.wiring.test.ts's capstone composition (verify -> hasPaymentWithExternalRef ->
-// withTransaction{ settleInitiated + recordSale + associate }), but proves the SAME idempotency under
-// real concurrent delivery instead of sequential redelivery: two independent Postgres connections,
-// each running the full orchestration inside its own transaction, racing on the same settlement
-// event via the acquired-signal pattern reversal.concurrency.test.ts / incident-dedup.concurrency
-// .test.ts use — reused here, not reinvented.
+// withTransaction{ settleInitiated + recordSale + associate }), but proves the SAME idempotency
+// under two deliveries arriving TOGETHER rather than under sequential redelivery.
+//
+// `resetPerTest` is left at its default: the suite's one case seeds inside its own body.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-// A clone of the `core_payments` template (CORE + PAYMENTS) from the shared container the package
-// globalSetup boots. `postgres.admin` is unchanged, so the second beforeAll below (which installs
-// the fake fiscal backend and providers on that connection) keeps working.
-const postgres = useTemplateDb({ template: "core_payments" });
-
-// Both doubles wrap the admin connection, so they cannot be built until the container is up —
-// hence a second hook rather than a module-level construction. `install` creates the fake backend's
-// own `fake_node_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
+// Both doubles wrap the suite handle, so they cannot be built until the database is open — hence a
+// hook rather than a module-level construction. `install` creates the fake backend's own
+// `fake_node_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
 let backend: FakeFiscalBackend;
 let provider: FakeAsyncProvider;
 
 beforeAll(async () => {
-  await FakeFiscalBackend.install(postgres.admin);
-  backend = new FakeFiscalBackend(postgres.admin);
-  provider = new FakeAsyncProvider(postgres.admin);
+  await FakeFiscalBackend.install(suite.db);
+  backend = new FakeFiscalBackend(suite.db);
+  provider = new FakeAsyncProvider(suite.db);
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -93,16 +89,19 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   };
 }
 
-/** Only the holder side gates: once it has advanced the row (settleInitiated returned non-null,
- * meaning it holds the row lock), it signals `acquired` and pauses on `held` BEFORE chaining the
- * sale, so the test can start the second delivery and prove it genuinely blocks on the still-open
- * first transaction. The second delivery calls this same function with no gate at all — nothing
- * needs to pause it; Postgres itself blocks its `settleInitiated` UPDATE on the row lock. */
+/**
+ * The real orchestration, with no gate in it.
+ *
+ * It had one on PostgreSQL: the holder paused after `settleInitiated` had taken the payment row's
+ * `FOR UPDATE` lock, so the second delivery could be started and PROVEN to block on it. There is
+ * no row lock to hold open here, and a paused transaction would not let the second delivery start
+ * at all — one writer holds the venue file at a time
+ * (`packages/store/src/write-queue.ts`) — so the pause and the two connections are gone together.
+ */
 async function orchestrate(
   db: Database,
   s: SeededForSale,
   payload: string,
-  gate?: { acquired: () => void; held: Promise<void> },
 ): Promise<string | null> {
   const event = provider.verifyAndParse(payload, "signature");
   if (event === null) return null;
@@ -114,10 +113,6 @@ async function orchestrate(
       settledAt: event.settledAt,
     });
     if (row === null) return null; // redelivery — already chained; do nothing
-    if (gate) {
-      gate.acquired();
-      await gate.held;
-    }
     const recorded = await recordSale(tx, backend, buildInput(s, event.settledAt));
     await associatePaymentWithSale(tx, {
       provider: event.provider,
@@ -128,9 +123,30 @@ async function orchestrate(
   });
 }
 
-describe("two simultaneous deliveries of the same settlement race on settleInitiated's row lock", () => {
+/**
+ * LOSS, stated rather than left to be noticed: what this suite asserted about WAITING is gone. The
+ * PostgreSQL version could show the second delivery still unsettled after a 200ms pause while the
+ * first held its lock, which distinguished "blocked" from "ran second". This version cannot make
+ * that distinction and does not try to; what it still discriminates is the OUTCOME — exactly one
+ * sale for one settlement, which is the fiscal invariant (`CLAUDE.md` §5: an invoice number is
+ * never reused, and a second one for this settlement could not be withdrawn afterwards).
+ *
+ * The arbiter is `settleInitiated`'s state-guarded UPDATE (`store.ts`, it matches only a row still
+ * `initiated`), not anything in this file.
+ *
+ * Proof by deletion, 2026-09-22: with `eq(payments.state, "initiated")` removed from that UPDATE's
+ * `where` and nothing else changed, this case fails — and it fails INSIDE the second delivery's
+ * `recordSale`, on `UNIQUE constraint failed: sales.working_order_id`
+ * (`packages/core/src/record-sale.ts:317`). That is the receipt for the thing a passing run cannot
+ * show on its own: both deliveries really do get past `hasPaymentWithExternalRef` — which reads
+ * outside the transaction — and both really do reach the settle, so the single sale below is the
+ * guard's doing and not an artifact of the second delivery giving up early. The guard was restored
+ * immediately; the command was
+ * `pnpm --filter @waitron/payments exec vitest run src/async-settle.concurrency.test.ts`.
+ */
+describe("two simultaneous deliveries of the same settlement", () => {
   it("chains exactly one sale — the second delivery's UPDATE matches nothing once the first has committed", async () => {
-    const s = await seedForSale(postgres.admin, backend, freshNif());
+    const s = await seedForSale(suite.db, backend, freshNif());
     const minted = await provider.initiate({
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -143,58 +159,29 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
       settledAt: BASE,
     });
 
-    const holder = await postgres.pg.connect();
-    const waiter = await postgres.pg.connect();
-    let release: () => void = () => {};
-    let holderResult: Promise<string | null> | undefined;
-    let waiterResult: Promise<string | null> | undefined;
-    try {
-      const held = new Promise<void>((resolve) => (release = resolve));
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+    // Started together on the one handle a host can build. Neither is awaited before the other
+    // begins, so both run `hasPaymentWithExternalRef` against a row still `initiated`.
+    const [holderSaleId, waiterSaleId] = await Promise.all([
+      orchestrate(suite.db, s, payload),
+      orchestrate(suite.db, s, payload),
+    ]);
 
-      // Holder: settles the tender (takes the row lock), signals it has, and pauses before
-      // chaining the sale — holding its transaction, and the lock, open.
-      holderResult = orchestrate(holder, s, payload, { acquired: acquire, held });
-      await acquired; // do not race the waiter before the lock is actually held
+    // Exactly one delivery chained a sale; the other's settleInitiated matched nothing. Which one
+    // won is not asserted — that is the order the queue happened to take, not an invariant.
+    const chained = [holderSaleId, waiterSaleId].filter((id) => id !== null);
+    expect(chained).toHaveLength(1);
 
-      // Waiter: the real orchestration, unmodified. Its settleInitiated UPDATE targets the same
-      // row, still (from its own snapshot) state='initiated' — it blocks on the holder's lock.
-      let waiterResolved = false;
-      waiterResult = orchestrate(waiter, s, payload).then((r) => {
-        waiterResolved = true;
-        return r;
-      });
-      const settledEarly = await Promise.race([
-        waiterResult.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 200)),
-      ]);
-      expect(settledEarly).toBe(false); // still blocked on the row lock
-      expect(waiterResolved).toBe(false);
+    const sales = await suite.db.execute<{ count: number }>(
+      // `count(*)::text` on PostgreSQL. SQLite has no `::` cast; `cast(… as int)` is the spelling
+      // `packages/db/src/testing/venue-db.test.ts` settled on, and the count arrives as a number.
+      sql`select cast(count(*) as int) as count from sales`,
+    );
+    expect(sales.rows[0]!.count).toBe(1); // never two invoice numbers for one settlement
 
-      release(); // holder resumes: chains the sale, associates, commits — the lock is released
-      const [holderSaleId, waiterSaleId] = await Promise.all([holderResult, waiterResult]);
-
-      // Exactly one delivery chained a sale; the other's settleInitiated matched nothing.
-      expect(holderSaleId).not.toBeNull();
-      expect(waiterSaleId).toBeNull();
-
-      const sales = await postgres.admin.execute<{ count: string }>(
-        sql`select count(*)::text as count from sales`,
-      );
-      expect(sales.rows[0].count).toBe("1"); // never two invoice numbers for one settlement
-
-      const row = await postgres.admin.transaction((tx) =>
-        getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
-      );
-      expect(row?.state).toBe("captured");
-      expect(row?.saleId).toBe(holderSaleId);
-    } finally {
-      release();
-      if (holderResult) await holderResult.catch(() => {});
-      if (waiterResult) await waiterResult.catch(() => {});
-      await holder.close();
-      await waiter.close();
-    }
+    const row = await withTransaction(suite.db, (tx) =>
+      getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
+    );
+    expect(row?.state).toBe("captured");
+    expect(row?.saleId).toBe(chained[0]);
   });
 });

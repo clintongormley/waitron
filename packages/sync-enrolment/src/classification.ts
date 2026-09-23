@@ -23,6 +23,17 @@ export interface ClassifiedTable {
   table: string;
   class: TableClass;
   reason: string;
+  /**
+   * Set by {@link appendOnly}: this table refuses an UPDATE and a DELETE once the row is written.
+   *
+   * **Orthogonal to the class, in both directions, and that is why it is its own marker.** A
+   * `ledger` table is not append-only by default — `payments` records a card payment's progress and
+   * `cadenas` and `workforce_chains` each hold a chain HEAD the next record moves, so nine
+   * `ledger`-classified tables are updated or deleted by ordinary product code. And
+   * `order_amendments` is `state` and IS append-only. Deriving the trigger set from the class
+   * instead would refuse a card capture and let an amendment be rewritten, both silently.
+   */
+  appendOnly?: true;
 }
 
 /** Declare one table's class. Takes the physical name as a string (not a Drizzle table): some
@@ -30,6 +41,40 @@ export interface ClassifiedTable {
  * not the type — is what stops a typo. */
 export function classify(table: string, cls: TableClass, reason: string): ClassifiedTable {
   return { table, class: cls, reason };
+}
+
+/**
+ * {@link classify}, plus: nothing may ever change or remove a row of this table.
+ *
+ * `applyMigrations` turns every table declared this way into a `RAISE(ABORT)` trigger pair
+ * (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`) after the owning set has
+ * migrated, so a declaration here is the whole of what protects the table at runtime — there is no
+ * second step to remember, and no way to derive it from something else the table already says.
+ *
+ * The set this marks is the set PostgreSQL's hand-written `reject_mutation()` triggers protected,
+ * table for table: read out of `origin/main`'s six trigger-carrying baselines with
+ * `grep -oiE "BEFORE (UPDATE OR DELETE|DELETE OR UPDATE) ON ..."`, ten tables across `db`,
+ * `fiscal-verifactu` and `workforce`. Guard: `scripts/append-only-triggers.test.ts`, which pins the
+ * names and then proves the refusal against a database migrated by the product's own entry point.
+ */
+export function appendOnly(table: string, cls: TableClass, reason: string): ClassifiedTable {
+  return { table, class: cls, reason, appendOnly: true };
+}
+
+/**
+ * The tables {@link appendOnly} marked, in declaration order.
+ *
+ * One derivation, three readers, because the same list is needed in three unconnected places and a
+ * second `filter`/`map` written by hand is how two of them drift: `orderedMigrationSets`
+ * (`packages/module/src/module.ts`) builds the product's boot-path sets, each owning package's own
+ * migration descriptor carries it for a caller that migrates that set alone (a test helper does
+ * exactly that), and `installAppendOnlyTriggers` turns whichever list it is handed into triggers.
+ *
+ * Guard: `scripts/append-only-migration-sets.test.ts`, which compares a package's descriptor with
+ * this function's result over the package's own classification list.
+ */
+export function appendOnlyTablesIn(classifications: readonly ClassifiedTable[]): string[] {
+  return classifications.filter((c) => c.appendOnly === true).map((c) => c.table);
 }
 
 /** The physical table names in one class. No production consumer: the package barrel exports it and

@@ -34,25 +34,23 @@ export function subscribeToChanges(fn: (change: ResourceChange) => void): () => 
  * back along with the change that wrote them — which is what the rollback case in
  * `change-log.test.ts` pins.
  *
- * No test here pins two transactions draining at the same moment — PGlite runs one backend, so that
- * interleaving cannot be produced on it (CLAUDE.md §4) — but it was measured, two clients against
- * one `change_log`, on PostgreSQL 18.6 (`postgres:18-alpine`, 2026-09-21). Overlapping writers:
- * each drain returned exactly its own row and nothing came out twice, because a `delete` sees only
- * COMMITTED rows. Two drains over the same committed backlog row: the first took it; the second had
- * still not returned seconds later and stood in `pg_locks` as one ungranted `transactionid`
- * `ShareLock`; when the first rolled back, the second received exactly that one row.
+ * **Two transactions cannot drain at the same moment on this engine**, so the question the
+ * PostgreSQL measurements here answered — what happens when they do — no longer arises. SQLite
+ * admits one writer per file and `withTransaction` goes through the write queue, so a second drain
+ * does not begin until the first has committed or rolled back. Those readings (two clients on
+ * PostgreSQL 18.6, one blocking in `pg_locks` on the other's `transactionid`) are retired with the
+ * engine; the commit that replaced them carries them if anyone needs the history.
  *
- * That second result is the consequence worth knowing: two transactions draining the same committed
- * row block on each other, so an undrained backlog turns the tail of every transaction into a
- * serialisation point. Ordinarily there is no backlog — a transaction's own rows are invisible to
- * everyone else until it commits, and it drains them itself — so creating one takes a writer that
- * did not go through `withTransaction`.
+ * What survives is the rollback property, which is a statement about one transaction and is pinned
+ * by `change-log.test.ts`'s rollback case.
  */
 export async function drainChangeLog(tx: Transaction): Promise<ResourceChange[]> {
-  const drained = await tx.execute<{ payload: ResourceChange }>(
-    sql`delete from change_log returning payload`,
-  );
-  return drained.rows.map((row) => row.payload);
+  const drained = tx.execute<{ payload: string }>(sql`delete from change_log returning payload`);
+  // `payload` is a TEXT column holding JSON, and a statement written as raw SQL is handed back as
+  // the engine stored it — Drizzle applies a column's `fromDriver` only to a query it built from
+  // the table object. So the parse happens here. On PostgreSQL the driver did it, which is why
+  // this line is new rather than moved.
+  return drained.rows.map((row) => JSON.parse(row.payload) as ResourceChange);
 }
 
 /**

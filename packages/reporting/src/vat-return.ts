@@ -35,10 +35,22 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   validatePeriod(input.year, input.period);
 
   // The filed fecha de expedición = shift(issued_at, issued_offset_minutes) then read the civil date —
-  // byte-identical to `@waitron/verifactu`'s formatDate (spec §4). `at time zone 'UTC'` yields the UTC
-  // wall-clock timestamp of the stored timestamptz; adding the snapshot offset reproduces the filed
-  // local calendar date without re-deriving any zone.
-  const filedDate = sql`((s.issued_at at time zone 'UTC') + make_interval(mins => s.issued_offset_minutes))::date`;
+  // byte-identical to `@waitron/verifactu`'s formatDate (spec §4). `date(stamp, '<n> minutes')` reads
+  // the stored stamp as the instant it names and renders the shifted civil date as `"YYYY-MM-DD"`,
+  // which is the shape `periodDateFilter` compares against. No zone is re-derived: the sale's own
+  // snapshotted offset is the whole of the shift, as it was.
+  //
+  // It replaces `((s.issued_at at time zone 'UTC') + make_interval(mins => …))::date`, and was
+  // measured against it on PGlite 0.5.8 (PostgreSQL 18.3), 2026-09-22: 960 pairs — 80 instants
+  // (eight dates including two month ends, a year end and a leap day × ten times of day clustered on
+  // midnight and the late-evening hours an offset moves across it) × twelve offsets from -840 to
+  // +840 — 0 disagreements. The control that says the measurement can fail: reading the stamp as
+  // LOCAL time instead (a trailing `'localtime'` modifier) disagrees on 144 of the 960.
+  //
+  // `printf('%+d minutes', …)` writes the sign explicitly. Measured, that sign is NOT what makes it
+  // work — `'%d minutes'` gives the same 960/960, because SQLite accepts an unsigned modifier as
+  // positive — so this is for a reader, not for the engine.
+  const filedDate = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
   const dateFilter = periodDateFilter(filedDate, input.year, input.period);
 
   const summary = await aggregateVatByRate(tx, { dateFilter });

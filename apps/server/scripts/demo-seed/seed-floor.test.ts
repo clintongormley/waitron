@@ -1,14 +1,20 @@
-// Real-Postgres proof of `seedFloor` (Phase 2, Task 7): it stands up the three floor-plan zones,
-// ~16 placed tables, and the four service statuses. Real Postgres (not PGlite): the seed runs as
-// `app_user` (SELECT/INSERT on `floor_zones`/`dining_tables`/`table_service_statuses`) exactly as
-// the demo scripts do, and PGlite's superuser connection cannot check those grants (CLAUDE.md
-// §4). Uses the shared `manifest` template, cloned per file via `useTemplateDb`, the same pattern
-// as `seed-catalogue.test.ts`.
+/**
+ * `seedFloor`: the floor-plan zones, the ~16 placed tables, and the four service statuses.
+ *
+ * **What went with PostgreSQL.** The seed used to run as `app_user`, so a missing SELECT/INSERT on
+ * `floor_zones`/`dining_tables`/`table_service_statuses` would have failed this file. SQLite has no
+ * roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below
+ * runs on the one connection. Nothing now checks who may write the floor plan.
+ *
+ * `floor_zones.active` is read RAW below, and a raw read reaches no column mapper, so a boolean
+ * column arrives as 0 or 1 rather than as `false`/`true`.
+ */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -18,11 +24,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 const LOCALE: SeedLocale = "en";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF — the same local-counter shape
-// `seed-catalogue.test.ts` uses.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -62,7 +70,7 @@ async function provisionVenue(): Promise<{ locationId: string }> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return { locationId: venue.locationId };
 }
@@ -71,11 +79,11 @@ describe("seedFloor", () => {
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
     const { locationId } = await provisionVenue();
 
-    const res = await withTransaction(suite.admin, async (tx) => {
+    const res = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await seedFloor(tx, { locationId, locale: LOCALE });
 
-      const { rows: zones } = await tx.execute<{ name: string; active: boolean }>(
+      const { rows: zones } = await tx.execute<{ name: string; active: number }>(
         sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,
       );
       const { rows: tables } = await tx.execute<{
@@ -101,7 +109,7 @@ describe("seedFloor", () => {
       "Upstairs bar",
       "Deli counter",
     ]);
-    expect(res.zones.every((z) => z.active)).toBe(true);
+    expect(res.zones.every((z) => z.active === 1)).toBe(true);
 
     // ~16 tables, each placed (a live zone, a capacity, and a full spatial placement).
     expect(res.tables.length).toBe(16);

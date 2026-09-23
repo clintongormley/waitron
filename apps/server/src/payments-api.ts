@@ -10,7 +10,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, devices, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  devices,
+  nowIso,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -159,8 +166,20 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   };
   const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
-    // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
-    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
+    // Local mutations decide from this row, so Enable cannot race a committed unpair. On PostgreSQL
+    // the read took `for update`, which kept the row still between the read and the caller's own
+    // UPDATE in the same transaction. One write transaction runs on the venue file at a time
+    // (`packages/store/src/write-queue.ts`, reached through `withTransaction` in
+    // `packages/db/src/tenancy.ts`, which is what `gated` above opens), so no OTHER write transaction
+    // can run in that gap — and there is no lock to take: SQLite has none, and drizzle's SQLite query
+    // builder has no `.for()`. Stated once for the whole tree, with its measurement and its control, on
+    // `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+    //
+    // The unpair route is the one caller this never covered and still does not: it reads here in one
+    // `gated` transaction, calls the provider, then writes in a THIRD. The lock was released at the
+    // first commit, before the network call — so that route's decision was always taken on a row it
+    // no longer held.
+    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
     if (reader === undefined) throw new AppError("reader.not_found", { id });
     return reader;
   };
@@ -253,7 +272,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             .update(cardReaders)
             .set({
               active: action === "enable",
-              disabledAt: action === "enable" ? null : sql`now()`,
+              // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this
+              // engine does not have. `nowIso` because `disabled_at` is a `tsString` column, the
+              // spelling `packages/payments/src/store.ts` stamps every other column here with.
+              disabledAt: action === "enable" ? null : nowIso(),
             })
             .where(readerWhere(id));
         });
@@ -354,6 +376,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // payments still resolve its name). `deviceCount` comes from a SEPARATE aggregate
       // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
       // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
+      // `canEnable` is derived from `unpairedAt` HERE rather than asked of the engine as
+      // `unpaired_at is null`: a `sql` predicate is an expression, not a declared column, so no read
+      // mapping reaches it and this engine answers 0/1 — which this route then put on the wire,
+      // where `apps/dashboard/src/api/client.ts` declares a boolean.
       const { readers, counts } = await gated(sessionId, async (tx) => ({
         readers: await tx
           .select({
@@ -361,20 +387,26 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: cardReaders.provider,
             name: cardReaders.name,
             active: cardReaders.active,
-            canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
+            unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
           .orderBy(cardReaders.name),
         counts: await tx
           .select({
             readerId: deviceCardReaders.readerId,
-            n: sql<number>`count(*)::int`,
+            n: sql<number>`cast(count(*) as int)`,
           })
           .from(deviceCardReaders)
           .groupBy(deviceCardReaders.readerId),
       }));
       const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));
-      return c.json(readers.map((r) => ({ ...r, deviceCount: countByReader.get(r.id) ?? 0 })));
+      return c.json(
+        readers.map(({ unpairedAt, ...r }) => ({
+          ...r,
+          canEnable: unpairedAt === null,
+          deviceCount: countByReader.get(r.id) ?? 0,
+        })),
+      );
     }),
   );
 
@@ -465,10 +497,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, (tx) => requireConnected(tx, seat));
       // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
       await seat.readers.remove(runtimeDeps(), reader.providerRef);
+      // One clock reading for both stamps, so the unpair lands as one moment — which is what
+      // PostgreSQL's `now()`, being transaction-start time, gave the two calls for free.
+      const unpairedAt = nowIso();
       await gated(sessionId, (tx) =>
         tx
           .update(cardReaders)
-          .set({ active: false, disabledAt: sql`now()`, unpairedAt: sql`now()` })
+          .set({ active: false, disabledAt: unpairedAt, unpairedAt })
           .where(readerWhere(id)),
       );
       return c.body(null, 204);
@@ -502,7 +537,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps the device FK from 23503-ing an opaque 500.
+        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps
+        // the device foreign key from refusing with an opaque 500.
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)

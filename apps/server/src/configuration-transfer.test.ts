@@ -12,16 +12,32 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { asAppUser, withTransaction } from "@waitron/db";
+import {
+  asAppUser,
+  catalogues,
+  categories,
+  diningTables,
+  printAgents,
+  printers,
+  products,
+  sales,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
+import { categoryDetails, productCategories } from "@waitron/catalogue";
+import { availability, employments, shiftTemplates } from "@waitron/workforce";
+import { convenioConfig } from "@waitron/workforce-es";
+import { bookings } from "@waitron/bookings";
+import { payments } from "@waitron/payments";
 import { nodeId, seriesId, tillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -190,7 +206,7 @@ describe("configuration transfer database path", () => {
       }),
     ).rejects.toMatchObject({ code: "setup.request_invalid" });
     const persisted = await suite.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from tenants where tax_id = ${targetRequest.taxId}
+      select count(*) as count from tenants where tax_id = ${targetRequest.taxId}
     `);
     expect(persisted.rows[0]!.count).toBe(0);
   });
@@ -211,117 +227,162 @@ describe("configuration transfer database path", () => {
         },
         { maxUploadBytes: 100 },
       );
+      // Every row below is written through its table definition rather than as raw SQL, the change
+      // `apps/server/src/testing/fiscal-fixtures.ts` took for the same reason: the timestamp
+      // columns (`created_at`, `updated_at`, `opened_at`, `enrolled_at`) are `$defaultFn`
+      // generators on this engine, which a raw insert never reaches, and each is NOT NULL — the raw
+      // form stopped at `NOT NULL constraint failed: persons.created_at`. It is also what encodes
+      // the JSON columns (`categories.name`, `sales.vat_breakdown`) and the JSON-array
+      // `invoice_locales`, whose `::jsonb` cast and `array[...]` constructor are syntax this engine
+      // refuses. `payment_policy` is the one exception below and says why.
+      await tx.insert(persons).values({
+        id: "12121212-aaaa-aaaa-aaaa-121212121212",
+        displayName: "Second admin",
+        pinHash: "second-admin-pin",
+        passwordHash: "second-admin-password",
+        email: "second-admin@example.test",
+        role: "admin",
+      });
+      await tx
+        .insert(catalogues)
+        .values({ id: "11111111-aaaa-aaaa-aaaa-111111111111", name: "Prepared menu" });
+      await tx.insert(products).values({
+        id: "22222222-aaaa-aaaa-aaaa-222222222222",
+        catalogueId: "11111111-aaaa-aaaa-aaaa-111111111111",
+        name: "Café",
+        pricingUnit: "each",
+        unitPrice: 150,
+        vatClass: "general",
+      });
+      await tx
+        .update(products)
+        .set({ image: uploaded.image.filename })
+        .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
+      await tx
+        .insert(categories)
+        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: { es: "Panadería" } });
+      await tx.insert(categoryDetails).values({
+        categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
+        image: uploaded.image.filename,
+      });
+      await tx.insert(productCategories).values({
+        productId: "22222222-aaaa-aaaa-aaaa-222222222222",
+        categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
+      });
+      await tx
+        .update(products)
+        .set({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" })
+        .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
+      await tx.insert(persons).values({
+        id: "33333333-aaaa-aaaa-aaaa-333333333333",
+        displayName: "Ada",
+        pinHash: "source-pin-secret",
+        passwordHash: "source-password-secret",
+        email: "ada@example.test",
+        role: "manager",
+      });
+      await tx.insert(employments).values({
+        id: "66666666-aaaa-aaaa-aaaa-666666666666",
+        personId: "33333333-aaaa-aaaa-aaaa-333333333333",
+        contractedMinutesPerWeek: 2400,
+        contractType: "permanent",
+        startDate: "2026-01-01",
+        payRate: 1250,
+      });
+      await tx.insert(availability).values({
+        id: "77777777-aaaa-aaaa-aaaa-777777777777",
+        personId: "33333333-aaaa-aaaa-aaaa-333333333333",
+        weekday: 1,
+        availableFromMinute: 540,
+        availableToMinute: 1020,
+        effectiveFrom: "2026-01-01",
+      });
+      await tx.insert(shiftTemplates).values({
+        id: "88888888-aaaa-aaaa-aaaa-888888888888",
+        locationId: source.locationId,
+        label: "Evening",
+        weekday: 1,
+        startsMinute: 1020,
+        endsMinute: 120,
+        role: "bar",
+      });
+      await tx.insert(convenioConfig).values({
+        id: "99999999-aaaa-aaaa-aaaa-999999999999",
+        locationId: source.locationId,
+      });
+      // `payment_policy` is the one raw statement left in this block: `@waitron/payments` does not
+      // export its table definition (`packages/payments/src/index.ts` re-exports `payments` and
+      // `cardReaders`, not `paymentPolicy`), so the two `$defaultFn` timestamps are supplied here
+      // instead. Adding that export is a change to another package and is not made from a test.
+      const policyStamp = new Date().toISOString();
       await tx.execute(sql`
-        insert into persons
-          (id, display_name, pin_hash, password_hash, email, role)
-        values
-          ('12121212-aaaa-aaaa-aaaa-121212121212', 'Second admin',
-           'second-admin-pin', 'second-admin-password', 'second-admin@example.test', 'admin')`);
-      await tx.execute(sql`
-        insert into catalogues (id, name) values
-          ('11111111-aaaa-aaaa-aaaa-111111111111', 'Prepared menu')`);
-      await tx.execute(sql`
-        insert into products
-          (id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values
-          ('22222222-aaaa-aaaa-aaaa-222222222222',
-           '11111111-aaaa-aaaa-aaaa-111111111111', 'Café', 'each', 150, 'general')`);
-      await tx.execute(
-        sql`update products set image = ${uploaded.image.filename} where id = '22222222-aaaa-aaaa-aaaa-222222222222'`,
-      );
-      await tx.execute(sql`
-        insert into categories (id, name) values
-          ('23232323-aaaa-aaaa-aaaa-232323232323', '{"es":"Panadería"}'::jsonb)`);
-      await tx.execute(sql`
-        insert into category_details (category_id, image) values
-          ('23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
-      await tx.execute(sql`
-        insert into product_categories (product_id, category_id) values
-          ('22222222-aaaa-aaaa-aaaa-222222222222',
-           '23232323-aaaa-aaaa-aaaa-232323232323')`);
-      await tx.execute(sql`
-        update products set category_id = '23232323-aaaa-aaaa-aaaa-232323232323'
-        where id = '22222222-aaaa-aaaa-aaaa-222222222222'`);
-      await tx.execute(sql`
-        insert into persons
-          (id, display_name, pin_hash, password_hash, email, role)
-        values
-          ('33333333-aaaa-aaaa-aaaa-333333333333', 'Ada',
-           'source-pin-secret', 'source-password-secret', 'ada@example.test', 'manager')`);
-      await tx.execute(sql`
-        insert into employments
-          (id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
-        values
-          ('66666666-aaaa-aaaa-aaaa-666666666666',
-           '33333333-aaaa-aaaa-aaaa-333333333333', 2400, 'permanent', '2026-01-01', 1250)`);
-      await tx.execute(sql`
-        insert into availability
-          (id, person_id, weekday, available_from_minute, available_to_minute,
-           effective_from)
-        values
-          ('77777777-aaaa-aaaa-aaaa-777777777777',
-           '33333333-aaaa-aaaa-aaaa-333333333333', 1, 540, 1020, '2026-01-01')`);
-      await tx.execute(sql`
-        insert into shift_templates
-          (id, location_id, label, weekday, starts_minute, ends_minute, role)
-        values
-          ('88888888-aaaa-aaaa-aaaa-888888888888', ${source.locationId},
-           'Evening', 1, 1020, 120, 'bar')`);
-      await tx.execute(sql`
-        insert into convenio_config (id, location_id)
-        values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.locationId})`);
-      await tx.execute(sql`
-        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 5000)`);
-      await tx.execute(sql`
-        insert into working_orders
-          (id, till_id, node_id, order_number, label)
-        values
-          ('aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.tillId},
-           ${source.nodeId}, 1, 'Practice tab')`);
-      await tx.execute(sql`
-        insert into dining_tables
-          (id, location_id, label, tab_id)
-        values
-          ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', ${source.locationId},
-           'T1', 'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa')`);
-      await tx.execute(sql`
-        insert into payments
-          (id, working_order_id, node_id, provider, payment_ref, amount, state)
-        values
-          ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc',
-           'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.nodeId}, 'simulated',
-           'practice-payment', 150, 'captured')`);
-      await tx.execute(sql`
-        insert into bookings
-          (id, location_id, booking_date, booking_time, party_size, contact_name,
-           table_id, created_by)
-        values
-          ('dddddddd-bbbb-bbbb-bbbb-dddddddddddd', ${source.locationId},
-           '2026-09-10', '20:00', 2, 'Practice guest',
-           'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-           '33333333-aaaa-aaaa-aaaa-333333333333')`);
-      await tx.execute(sql`
-        insert into print_agents
-          (id, location_id, name, token_hash, active, host)
-        values
-          ('44444444-aaaa-aaaa-aaaa-444444444444', ${source.locationId},
-           'Kitchen agent', 'source-agent-token', true, 'source-box.local')`);
-      await tx.execute(sql`
-        insert into printers
-          (id, location_id, name, transport, local_key, active,
-           paper_width, resolution, character_set)
-        values
-          ('55555555-aaaa-aaaa-aaaa-555555555555', ${source.locationId},
-           'Kitchen printer', 'usb', 'B120300001', true, '58mm', '203dpi', 'pc858')`);
-      await tx.execute(sql`
-        insert into sales
-          (till_id, series_id, node_id, invoice_number, issued_at,
-           issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
-           fiscal_backend, fiscal_state)
-        values
-          (${source.tillId}, ${source.seriesIds[0]}, ${source.nodeId}, 99,
-           '2026-09-09T10:00:00Z', 0, 150, '[]', 'es-ES', array['es-ES'],
-           'verifactu', 'recorded')`);
+        insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
+        values ('cash_only', 5000, ${policyStamp}, ${policyStamp})`);
+      await tx.insert(workingOrders).values({
+        id: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
+        tillId: source.tillId,
+        nodeId: source.nodeId,
+        orderNumber: 1,
+        label: "Practice tab",
+      });
+      await tx.insert(diningTables).values({
+        id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        locationId: source.locationId,
+        label: "T1",
+        tabId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
+      });
+      await tx.insert(payments).values({
+        id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
+        workingOrderId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
+        nodeId: source.nodeId,
+        provider: "simulated",
+        paymentRef: "practice-payment",
+        amount: 150,
+        state: "captured",
+      });
+      await tx.insert(bookings).values({
+        id: "dddddddd-bbbb-bbbb-bbbb-dddddddddddd",
+        locationId: source.locationId,
+        bookingDate: "2026-09-10",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Practice guest",
+        tableId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        createdBy: "33333333-aaaa-aaaa-aaaa-333333333333",
+      });
+      await tx.insert(printAgents).values({
+        id: "44444444-aaaa-aaaa-aaaa-444444444444",
+        locationId: source.locationId,
+        name: "Kitchen agent",
+        tokenHash: "source-agent-token",
+        active: true,
+        host: "source-box.local",
+      });
+      await tx.insert(printers).values({
+        id: "55555555-aaaa-aaaa-aaaa-555555555555",
+        locationId: source.locationId,
+        name: "Kitchen printer",
+        transport: "usb",
+        localKey: "B120300001",
+        active: true,
+        paperWidth: "58mm",
+        resolution: "203dpi",
+        characterSet: "pc858",
+      });
+      await tx.insert(sales).values({
+        tillId: source.tillId,
+        seriesId: source.seriesIds[0]!,
+        nodeId: source.nodeId,
+        invoiceNumber: 99,
+        issuedAt: "2026-09-09T10:00:00Z",
+        issuedOffsetMinutes: 0,
+        total: 150,
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
     });
     const sourceOperator = await suite.db.execute<{ id: string }>(sql`
       select id from persons
@@ -366,14 +427,23 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
+      // The category's translated name is read through the TABLE, not the raw select below: `name`
+      // is a `json` column and the decode belongs to drizzle's read mapping, which a raw select
+      // goes around — through raw SQL this engine hands back the stored text
+      // `{"es":"Panader\u00eda"}`.
+      const named = await tx.select({ name: categories.name }).from(categories);
+      expect(named).toEqual([{ name: { es: "Panadería" } }]);
       const category = await tx.execute<{
-        name: Record<string, string>;
         image: string;
-        primary: boolean;
-        member: boolean;
+        primary: number;
+        member: number;
       }>(sql`
-        select c.name, d.image,
-          p.category_id = c.id as primary,
+        select d.image,
+          -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
+          -- refused with near "primary": syntax error while the quoted form returns the column.
+          -- Measured on node:sqlite, Node v26.7.0, with "as member" as the control that needs no
+          -- quoting.
+          p.category_id = c.id as "primary",
           exists (
             select 1 from product_categories pc
             where pc.product_id = p.id and pc.category_id = c.id
@@ -383,17 +453,20 @@ describe("configuration transfer database path", () => {
         cross join products p
         where p.name = 'Café'
       `);
+      // 1, not `true`: both are SQL EXPRESSIONS rather than declared columns, so the `flag` helper's
+      // boolean mapping (`packages/db/src/schema/columns.ts`) never reaches them, and this engine
+      // has no boolean type of its own. A category the product did NOT belong to would answer 0
+      // here, so the case still separates a copied relationship from a missing one.
       expect(category.rows).toEqual([
         {
-          name: { es: "Panadería" },
           image: metadata!.filename,
-          primary: true,
-          member: true,
+          primary: 1,
+          member: 1,
         },
       ]);
     });
     const sourceSales = await suite.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from sales `,
+      sql`select count(*) as count from sales `,
     );
     expect(sourceSales.rows[0]!.count).toBe(1);
     const imported = await targetSuite.db.execute<{
@@ -417,28 +490,28 @@ describe("configuration transfer database path", () => {
       target_bookings: number;
     }>(sql`
       select
-        (select count(*)::int from products ) as products,
-        (select count(*)::int from persons where role = 'manager') as staff,
-        (select count(*)::int from persons where role = 'admin' and status = 'suspended') as suspended_admins,
-        (select count(*)::int from persons where (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
+        (select count(*) from products ) as products,
+        (select count(*) from persons where role = 'manager') as staff,
+        (select count(*) from persons where role = 'admin' and status = 'suspended') as suspended_admins,
+        (select count(*) from persons where (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
         (select status from persons where role = 'manager') as status,
-        (select count(*)::int from sales ) as target_sales,
-        (select count(*)::int from print_agents
+        (select count(*) from sales ) as target_sales,
+        (select count(*) from print_agents
           where not active) as inactive_agents,
-        (select count(*)::int from printers
+        (select count(*) from printers
           where not active and local_key = 'B120300001') as inactive_printers,
-        (select count(*)::int from print_agents
+        (select count(*) from print_agents
           where token_hash = 'source-agent-token') as source_agent_secrets,
-        (select count(*)::int from employments) as employments,
-        (select count(*)::int from availability) as availability,
-        (select count(*)::int from shift_templates) as shift_templates,
-        (select count(*)::int from convenio_config) as convenio_config,
-        (select count(*)::int from payment_policy) as payment_policy,
-        (select count(*)::int from dining_tables
+        (select count(*) from employments) as employments,
+        (select count(*) from availability) as availability,
+        (select count(*) from shift_templates) as shift_templates,
+        (select count(*) from convenio_config) as convenio_config,
+        (select count(*) from payment_policy) as payment_policy,
+        (select count(*) from dining_tables
           where tab_id is not null) as linked_tables,
-        (select count(*)::int from working_orders ) as target_orders,
-        (select count(*)::int from payments) as target_payments,
-        (select count(*)::int from bookings) as target_bookings
+        (select count(*) from working_orders ) as target_orders,
+        (select count(*) from payments) as target_payments,
+        (select count(*) from bookings) as target_bookings
     `);
     expect(imported.rows[0]).toEqual({
       products: 1,
@@ -510,9 +583,13 @@ describe("configuration transfer database path", () => {
         },
       ),
     );
+    // `first_record` is 1, not `true`: `primer_registro` is a `flag` column, and the boolean read
+    // mapping that helper carries (`packages/db/src/schema/columns.ts`) belongs to a drizzle select
+    // over the column, which this raw statement goes around. The property is unchanged — a
+    // CONTINUED chain would answer 0 here and carry a non-null `anterior_huella`.
     const firstLive = await targetSuite.db.execute<{
       invoice_number: number;
-      first_record: boolean;
+      first_record: number;
       previous_hash: string | null;
     }>(
       sql`
@@ -522,9 +599,7 @@ describe("configuration transfer database path", () => {
         join registros_facturacion r on r.sale_id = s.id
       `,
     );
-    expect(firstLive.rows).toEqual([
-      { invoice_number: 1, first_record: true, previous_hash: null },
-    ]);
+    expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
 });
 

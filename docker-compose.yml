@@ -1,9 +1,9 @@
-# Local development Postgres for `pnpm dev:setup` / `pnpm dev`.
+# Local development services for `pnpm dev:setup` / `pnpm dev`.
 #
-# Throwaway PREPRODUCTION data only — never point real/production data at this container. The named
-# volume persists the provisioned venue across restarts (so `dev:setup` reuses it rather than minting
-# a new fiscal chain); `docker compose down -v` wipes it, which is the sanctioned "start over" that
-# `pnpm dev:reset` runs.
+# The `db` service NO LONGER HOLDS THE DEV VENUE: `dev:setup` provisions into a venue DIRECTORY on
+# the host (two SQLite files), and `pnpm dev:reset` removes that directory — `docker compose down -v`
+# resets nothing any more. The service is left here for the storage switch's tidy-up item (T2) to
+# remove along with the rest of the PostgreSQL dev wiring; nothing in this repository reads it today.
 services:
   db:
     # `wa-wt` starts this service under the fixed `waitron` Compose project. Keeping Mailpit as its

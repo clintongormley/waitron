@@ -35,15 +35,24 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
-  await suite.db.execute(sql`truncate tenant_credentials`);
+  // `delete`, not TRUNCATE: this engine has no TRUNCATE at all, and the statement did not even
+  // reach execution — running this suite before the change printed `Error: near "truncate": syntax
+  // error` from `packages/store/src/node-sqlite-adapter.ts:64`, which killed every case in the
+  // file in its `beforeEach`. `tenant_credentials` is classified `local` (`./classification.ts`),
+  // so it carries no append-only trigger to refuse the delete — the same reasoning as
+  // `packages/fiscal-verifactu/src/acks.test.ts:123`.
+  await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
 /**
- * The seal's additional authenticated data is the purpose alone (`aadFor`, cipher.ts). These run as
- * `app_user` so the round trip also proves the role's grants cover the whole write-then-read path.
+ * The seal's additional authenticated data is the purpose alone (`aadFor`, cipher.ts).
+ *
+ * The `asAppUser` calls below no longer add anything: it is an empty function on this engine, which
+ * has no roles and no grants (`packages/db/src/testing/roles.ts`), so the round trip proves the
+ * seal and the store, and nothing about who is allowed to make it.
  */
 describe("the seal binds each credential to its purpose", () => {
-  it("round-trips a credential written and read as app_user", async () => {
+  it("round-trips a credential through the seal and the store", async () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE });
@@ -117,9 +126,16 @@ describe("putCredential and getCredential", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
-    const rows = await suite.db.execute<{ blob: string }>(sql`
-      select encode(ciphertext, 'escape') as blob from tenant_credentials`);
-    expect(rows.rows[0]!.blob).not.toContain("sk_test_x");
+    // `encode(ciphertext, 'escape')` is a PostgreSQL function this engine does not have
+    // (`no such function: encode`, measured on node v26.7.0), and it is not needed: `binary` is a
+    // BLOB column and a raw select of it hands back the bytes as a `Uint8Array` (same measurement,
+    // `r.b.constructor.name === "Uint8Array"`). The decode moves to the READ, as in
+    // `packages/fiscal-verifactu/src/reconcile.test.ts`'s `incidentsFor`. `latin1` is what makes
+    // this the same search the SQL did: it maps every byte to one character, so any ASCII run
+    // present in the ciphertext appears verbatim in the string being searched.
+    const rows = await suite.db.execute<{ blob: Uint8Array }>(sql`
+      select ciphertext as blob from tenant_credentials`);
+    expect(Buffer.from(rows.rows[0]!.blob).toString("latin1")).not.toContain("sk_test_x");
   });
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
@@ -155,8 +171,9 @@ describe("putCredential and getCredential", () => {
     // all.
     //
     // `updated_at` is checked by BACKDATING the row to a value no clock can produce, rather than
-    // comparing two `now()` reads taken moments apart: PGlite's `now()` has limited sub-second
-    // resolution, and two `withTransaction` round trips can land inside the same tick, so a
+    // comparing two clock reads taken moments apart: the value comes from JavaScript
+    // (`nowIso`, `packages/db/src/schema/columns.ts`), whose ISO string carries milliseconds and
+    // no more, and two `withTransaction` round trips can land inside the same one, so a
     // correctly-behaving implementation can produce byte-identical timestamps — verified flaky
     // (2/15, then 5/20 runs) when this test compared "before" and "after" reads of the real clock
     // instead. Backdating removes the race entirely: `2020-01-01T00:00:00Z` can only ever be the
@@ -204,8 +221,9 @@ describe("putCredential and getCredential", () => {
     // not what a rollback erased on its behalf. Carrying on inside the transaction is safe HERE
     // for one reason: `credentials.invalid_payload` is a JavaScript throw raised BEFORE any
     // statement reaches the database (`putCredential` calls `validatePayload` first), which is the
-    // property this test is about. Catching a refusal PostgreSQL itself issued is a different
-    // shape — that transaction is already aborted and needs a savepoint (CLAUDE.md §3).
+    // property this test is about. Catching a refusal the DATABASE issued is a different shape:
+    // on SQLite the transaction survives it, so what a savepoint buys there is discarding the
+    // failed attempt's own earlier writes (`packages/store/src/node-sqlite-adapter.ts`).
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {
@@ -214,8 +232,11 @@ describe("putCredential and getCredential", () => {
         }),
       );
       expect(hasCode(error, "credentials.invalid_payload")).toBe(true);
+      // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number,
+      // and this engine returns one already — measured on node v26.7.0, `select count(*) as n`
+      // over a one-row table gives `{ n: 1 }` with `typeof n === "number"`.
       const rows = await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from tenant_credentials`);
+        select count(*) as n from tenant_credentials`);
       return rows.rows[0]!.n;
     });
     expect(n).toBe(0);

@@ -1,7 +1,7 @@
 import "./errors.js";
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
-import { UNIQUE_VIOLATION, refusalOn, type Transaction } from "@waitron/db";
+import { indexViolated, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
@@ -9,7 +9,8 @@ import { assertPinLength, hashPin } from "./verify-pin.js";
 import { startManagementSession, type ManagementSession } from "./management-session.js";
 import { managementAccountActions } from "./schema/management-account-actions.js";
 import { managementSessions } from "./schema/management-sessions.js";
-import { persons } from "./schema/persons.js";
+import { loginEmailKey, persons } from "./schema/persons.js";
+import { foldForUniqueness } from "./fold.js";
 import { PERSONS_EMAIL } from "./person-constraints.js";
 
 export type AccountActionPurpose = "invitation" | "password_reset" | "email_change";
@@ -161,8 +162,7 @@ export async function confirmEmailChangeByCode(
       ),
     )
     .orderBy(sql`${managementAccountActions.createdAt} desc`)
-    .limit(1)
-    .for("update");
+    .limit(1);
   if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
     return null;
   const supplied = Buffer.from(
@@ -186,13 +186,19 @@ export async function confirmEmailChangeByCode(
   try {
     const changed = await tx
       .update(persons)
-      .set({ email: action.targetEmail, pendingEmail: null, emailVerifiedAt: nowIso })
+      .set({
+        email: action.targetEmail,
+        emailFolded: foldForUniqueness(action.targetEmail),
+        pendingEmail: null,
+        pendingEmailFolded: null,
+        emailVerifiedAt: nowIso,
+      })
       .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.targetEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
     return changed[0]!.email;
   } catch (error) {
-    if (refusalOn(error, UNIQUE_VIOLATION, PERSONS_EMAIL)) {
+    if (indexViolated(error, PERSONS_EMAIL)) {
       throw new AppError("person.email_taken", { email: action.targetEmail });
     }
     throw error;
@@ -258,8 +264,7 @@ async function finishClaimedAction(
   const [person] = await tx
     .select({ status: persons.status })
     .from(persons)
-    .where(eq(persons.id, personId))
-    .for("update");
+    .where(eq(persons.id, personId));
   if (
     person === undefined ||
     (input.purpose === "invitation" ? person.status !== "pending" : person.status !== "active")
@@ -281,7 +286,7 @@ async function finishClaimedAction(
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});
   await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso })
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   return {
     personId,
@@ -289,7 +294,18 @@ async function finishClaimedAction(
   };
 }
 
-/** Lock the account before replacing its setup or reset action; unavailable accounts remain silent. */
+/**
+ * Resolve the account before replacing its setup or reset action; unavailable accounts remain
+ * silent.
+ *
+ * The read took `for update`, so that two recovery requests for one account could not each issue an
+ * action and leave two live tokens. One write transaction runs on the venue file at a time, so the
+ * second request cannot start until the first has committed and superseded the earlier action —
+ * the pattern is stated once on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The two
+ * other reads in this file that dropped the same clause are `confirmEmailChangeByCode`'s (which
+ * read the live action before bumping its attempt counter) and `finishClaimedAction`'s (which read
+ * the person's status before writing it).
+ */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
   input: { email: string; now?: Date },
@@ -300,9 +316,12 @@ export async function requestAccountRecoveryAction(
     .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(
-      and(eq(sql`lower(${persons.email})`, email), inArray(persons.status, ["active", "pending"])),
-    )
-    .for("update");
+      and(
+        // The index's own expression, for the reason `assertEmailAvailable` (`./staff.ts`) states.
+        eq(loginEmailKey(), foldForUniqueness(email)),
+        inArray(persons.status, ["active", "pending"]),
+      ),
+    );
   if (person === undefined) return null;
   return issueAccountAction(tx, {
     personId: person.id,

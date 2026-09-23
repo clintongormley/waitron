@@ -15,7 +15,8 @@ import {
 } from "./categories.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
-// PGlite covers authoring results; the sibling PostgreSQL suite covers grants and contention.
+// Authoring results. The two transactions started together, and the cases that used to sit in a
+// real-PostgreSQL sibling, are in categories.db.test.ts.
 const fx = useCatalogueDb();
 async function fixture() {
   await seedTenant(fx.db);

@@ -32,8 +32,10 @@ export interface OutstandingSale {
  * voided. This is a plain read over the database's one taxpayer.
  */
 export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
-  // Both money expressions are counts of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment for why the cast is there and why it is not `::int`.
+  // Both money expressions are counts of whole cents read raw, cast to text and converted by
+  // `rawCentsToDecimal` — see its doc comment for why it is text and not an integer cast.
+  // `issued_at` needs no cast at all: the column IS text on this engine (`ts` in
+  // `packages/db/src/schema/columns.ts`), so the raw read already hands back the stored spelling.
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;
@@ -45,10 +47,10 @@ export async function listOutstandingSales(tx: Transaction): Promise<Outstanding
     select
       s.id             as sale_id,
       s.invoice_number as invoice_number,
-      s.issued_at::text as issued_at,
+      s.issued_at      as issued_at,
       s.till_id        as till_id,
-      s.total::text    as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::text
+      cast(s.total as text) as total,
+      cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0) as text)
         as correction_total
     from sales s
     where s.corrects_sale_id is null

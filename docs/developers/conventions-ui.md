@@ -129,7 +129,7 @@ The request primitive marks only GETs as passive. Automatic pairing renewal uses
 authenticated route that resolves the session without touching its activity time. Cost: renewing
 the Add print agent dialog through the ordinary Open route moved session expiry forward by ten
 minutes in the regression; the renewal route leaves it unchanged and still refuses expired sessions
-(`apps/server/src/join-api.pg.test.ts`, “renews the window without extending the session”).
+(`apps/server/src/join-api.db.test.ts`, “renews the window without extending the session”).
 
 ## Dashboard subscription names travel with their server sources
 

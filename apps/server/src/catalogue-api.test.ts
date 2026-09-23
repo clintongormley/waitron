@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { CATALOGUE_MIGRATIONS, contentLanguages, menuSections } from "@waitron/catalogue";
 import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -26,7 +26,7 @@ import "./errors.js";
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.pg.test.ts`);
+// turns the staff refusals green→red) is the real-Postgres suite (`catalogue-api.full-manifest.test.ts`);
 // PGlite connects as a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
@@ -43,27 +43,33 @@ const suite = useVenueDb({
     await seedLegacySellingUnits(db);
     // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
     // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Main', array['es-ES'], 'Venta') returning id`);
-    locationId = loc.rows[0]!.id;
+    // Through the table definition: `locations.id` is a `$defaultFn` generator on this engine, which
+    // a raw insert never reaches, and `invoice_locales` is encoded by the column's own write mapping
+    // — the `array[...]` constructor it replaces is a syntax error here.
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
     // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
     // supplied even though these sessions are minted directly rather than via a PIN/password login.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const [stf] = await tx
+        .insert(persons)
+        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
-        personId: mgr.rows[0]!.id,
+        personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        personId: stf.rows[0]!.id,
+        personId: stf!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
     });
@@ -1566,7 +1572,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 describe("mountCatalogueApi — null request bodies map to the route's own 4xx, never a 500", () => {
   // A literal JSON `null` body parses to `null`; each write route coerces it with `?? {}` so a field
   // access is the route's documented 4xx (or, for PATCH, the empty-body 204) rather than a TypeError →
-  // opaque 500 — the same guard the management routes carry (management-api.pg.test.ts).
+  // opaque 500 — the same guard the management routes carry (management-api.accounts-and-receipt-config.test.ts).
   it("POST /catalogues null body → 400 management.request_invalid", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: null });
     expect(res.status).toBe(400);
@@ -2330,7 +2336,7 @@ describe("mountCatalogueApi — extras lists", () => {
       expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
     }
     // A well-formed id naming no list, on each of the four `:id` routes — the read reaches
-    // `getExtraList`, the update and the delete reach `lockExtraList`, the preview reaches
+    // `getExtraList`, the update and the delete reach `assertExtraListForWrite`, the preview reaches
     // `assertExtraList`, and all four must answer 404 rather than the boundary's 400 default. The
     // PATCH body is a VALID one, or the contract would refuse it before the list is looked up.
     const absentId = "33333333-3333-4333-8333-333333333333";
@@ -2403,18 +2409,30 @@ describe("menu-section translations", () => {
   it("updates translations with default-language validation and rejects unknown section ids", async () => {
     const app = mountApp("en-GB");
     const seedSection = async () => {
-      const menu = await suite.db.execute<{ id: string }>(sql`
-        insert into catalogues (name) values ('Section edit') returning id`);
-      return (
-        await suite.db.execute<{ id: string }>(sql`
-        insert into menu_sections (menu_id, name)
-        values (${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
-      ).rows[0]!.id;
+      // Through the table definitions: both ids are `$defaultFn` generators here, and `name` is a
+      // JSON column whose own write mapping encodes the object — the `'{…}'::jsonb` literal it
+      // replaces carries a cast this engine refuses.
+      const [menu] = await suite.db
+        .insert(catalogues)
+        .values({ name: "Section edit" })
+        .returning({ id: catalogues.id });
+      const [section] = await suite.db
+        .insert(menuSections)
+        .values({ menuId: menu!.id, name: { en: "Cocktails", de: "Getränke" } })
+        .returning({ id: menuSections.id });
+      return section!.id;
     };
     const sectionId = await seedSection();
-    await suite.db.execute(sql`
-      insert into content_languages (default_language, languages) values ('en', array['en','fr'])
-      on conflict (id) do update set default_language = 'en', languages = array['en','fr']`);
+    // `content_languages` is a singleton keyed on id = 1 (`content_languages_singleton_ck`), so the
+    // upsert targets that primary key. `languages` is a JSON list column here, not a PostgreSQL
+    // array, so it goes over as an array and the column encodes it.
+    await suite.db
+      .insert(contentLanguages)
+      .values({ defaultLanguage: "en", languages: ["en", "fr"] })
+      .onConflictDoUpdate({
+        target: contentLanguages.id,
+        set: { defaultLanguage: "en", languages: ["en", "fr"] },
+      });
     try {
       const path = `/management-api/menu-sections/${sectionId}`;
       const input = { name: { en: "Drinks", fr: "Boissons", de: "Getränke" } };
@@ -2442,12 +2460,17 @@ describe("menu-section translations", () => {
         ).status,
       ).toBe(404);
       expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
-      const own = await suite.db.execute<{ name: Record<string, string> }>(
-        sql`select name from menu_sections where id = ${sectionId}`,
-      );
-      expect(own.rows).toEqual([input]);
+      // Read back through the table definition, not as raw SQL. `name` is a JSON column stored as
+      // TEXT on this engine, and a raw `select name` hands back the stored string
+      // (`{"en":"Drinks",…}`) — only the column's own read mapping parses it. The assertion is
+      // unchanged; the decode moved from the driver to the column.
+      const own = await suite.db
+        .select({ name: menuSections.name })
+        .from(menuSections)
+        .where(eq(menuSections.id, sectionId));
+      expect(own).toEqual([input]);
     } finally {
-      await suite.db.execute(sql`delete from content_languages`);
+      await suite.db.delete(contentLanguages);
     }
   });
 });
@@ -2456,9 +2479,10 @@ describe("menu-section list", () => {
   it("lists empty sections in display order", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Empty sections");
-    await suite.db.execute(sql`insert into menu_sections (menu_id, name, display_order)
-      values (${menuId}, '{"es":"Postres"}'::jsonb, 2),
-             (${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
+    await suite.db.insert(menuSections).values([
+      { menuId, name: { es: "Postres" }, displayOrder: 2 },
+      { menuId, name: { es: "Bebidas" }, displayOrder: 1 },
+    ]);
     const path = `/management-api/catalogues/${menuId}/sections`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);

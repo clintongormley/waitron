@@ -64,10 +64,10 @@ describe("SumUp card details mapping", () => {
   });
 });
 
-// PGlite: this file proves the adapter's LOGIC (T1/T1.5/T2 sequencing, outcome mapping, the poll
-// window). Whether the same writes land as a non-superuser app_user member is sumup.test.ts's
-// question, which needs real Postgres (CLAUDE.md §4). Nothing here depends on the role or on
-// concurrency. `setup` is shared with `reverse.test.ts` (`./testing/setup.ts`).
+// This file proves the adapter's LOGIC (T1/T1.5/T2 sequencing, outcome mapping, the poll window).
+// Whether the same writes land as a non-superuser `app_user` member used to be `sumup.test.ts`'s
+// question; that question has no home now, because this engine has no roles. `setup` is shared
+// with `reverse.test.ts` (`./testing/setup.ts`).
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   timeoutMs: 60_000,

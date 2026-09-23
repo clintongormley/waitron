@@ -1,4 +1,15 @@
-import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import {
+  CHECK_VIOLATION,
+  CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
+  UNIQUE_VIOLATION,
+  captureError,
+  isPgError,
+  newId,
+  nowIso,
+  pgErrorMessage,
+  refusalOn,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -7,7 +18,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   appendToChain,
-  lockChainHead,
+  readChainHead,
   readChain,
   type ChainKey,
   type TimeEntryAppend,
@@ -15,16 +26,18 @@ import {
 import { verifyChain } from "./chain-hash.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
+import { timeEntries } from "./schema/time-entries.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: this suite is about appendToChain's OWN logic — ordering, the genesis
-// shape, the error shape, and that a real appended chain re-verifies. True lock CONTENTION is proven
-// elsewhere, in chain.concurrency.test.ts on real Postgres — PGlite serialises every query onto one
-// backend, so it cannot test contention, see chain.pglite-cannot-test-contention.test.ts. What the
-// app role may do on `workforce_chains` is the privilege matrix's
-// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
-// suite's. PGlite connects as a superuser holding every grant, so no withTransaction/asAppUser wrapper is
-// needed here.
+// This suite is about appendToChain's OWN logic — ordering, the genesis shape, the error shape, and
+// that a real appended chain re-verifies. Serialisation between two appenders is proven elsewhere,
+// in ./chain.concurrency.test.ts. The sentence that used to stand here said this suite ran on PGlite
+// while the contention one ran on real Postgres through Testcontainers, and pointed at a permanent
+// demonstration that PGlite serialises every query onto one backend; all three of those are gone
+// with the engine, and one writer at a time is now the product's design rather than a test target's
+// limitation. What the app role may do on `workforce_chains` was the privilege matrix's
+// (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`) — there are no
+// roles on this engine, which is also why no asAppUser wrapper is needed here.
 const pg = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
@@ -63,8 +76,12 @@ function clockEvent(): TimeEntryAppend {
 
 /** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
 async function seedTill(location: string): Promise<string> {
+  // `id` and `created_at` come from the table's `$defaultFn` generators, which drizzle runs for a
+  // builder insert and never for raw SQL; the generated DDL declares no SQL default for either, so
+  // without them the statement is refused `NOT NULL constraint failed: tills.id`.
   const { rows } = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location}, 'Till 1')
+    insert into tills (id, location_id, name, created_at)
+    values (${newId()}, ${location}, 'Till 1', ${nowIso()})
     returning id`);
   return rows[0]!.id;
 }
@@ -158,11 +175,14 @@ describe("appendToChain", () => {
 
   it("stamps recorded_at as a whole second from the injected clock", async () => {
     // recorded_at is the injected clock, truncated to a whole second and fed to BOTH the hash and the
-    // stored column — so the chain re-verifies even from a millisecond-precision clock.
+    // stored column — so the chain re-verifies even from a millisecond-precision clock. The read-back
+    // is the stored text, and the truncation writes `toISOString()`, so the fractional field is
+    // present and zero: `.678` is gone, `.000` is what a whole second is spelled as here, and
+    // `time_entries_recorded_at_second_ck` admits no other form.
     const clock = () => new Date(Date.parse("2026-09-07T08:00:05.678Z"));
     await pg.db.transaction((tx) => appendToChain(tx, key(), clockEvent(), clock));
     const [row] = await readChain(pg.db, key());
-    expect(row?.recordedAt).toBe("2026-09-07T08:00:05Z");
+    expect(row?.recordedAt).toBe("2026-09-07T08:00:05.000Z");
     expect(verifyChain(await readChain(pg.db, key()))).toEqual({ ok: true });
   });
 
@@ -176,9 +196,9 @@ describe("appendToChain", () => {
   });
 
   it("re-verifies an event_at that carries a sub-second fraction", async () => {
-    // The trusted clock is millisecond-precision, but every read-back projects event_at at SECOND
-    // precision (`to_char(… 'HH24:MI:SS')`). Hashing the fractional instant at insert while the
-    // read-back recomputes over the truncated one is a spurious hash_mismatch on genuine, untouched
+    // The trusted clock is millisecond-precision, but the column stores whole seconds and
+    // `time_entries_event_at_second_ck` refuses anything else. Hashing the fractional instant at
+    // insert while the read-back recomputes over the truncated one is a spurious hash_mismatch on genuine, untouched
     // data — a false tamper alarm on ~999/1000 of real timestamps. Truncating to whole seconds ONCE
     // at the write choke point makes the stored column, the committed hash and the read-back one
     // identical representation, so the chain re-verifies.
@@ -193,12 +213,17 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
-          ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+          '2026-01-05T09:00:00.123Z', 0,
+          ${personId}, '2026-01-05T09:00:00.000Z', ${"0".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    // This engine reports every refusal under one `code`, so the CLASS comes off `errcode` and the
+    // constraint's NAME off the message — a check's message is `CHECK constraint failed: <name>`.
+    // Both are needed: the class alone is also satisfied by any of the six other checks this row
+    // passes through.
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toContain("time_entries_event_at_second_ck");
   });
 
@@ -207,41 +232,88 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+          '2026-01-05T09:00:00.000Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
   });
 
+  /**
+   * `time_entries_chain_position_uq` on (node_id, location_id, sequence_no) — the thing that makes
+   * a fork of the working-time chain impossible (CLAUDE.md §5). It is checked here from OUTSIDE
+   * `appendToChain`, because what it has to hold against is a writer that never went through this
+   * file at all: a survivor's row out of a restored backup.
+   *
+   * It is checked against the index BY NAME, with a control that inserts the same row at the next
+   * free position and succeeds. The reason the name matters: this engine reports a primary key, a
+   * unique index, a NOT NULL and a CHECK all under one `code` (`ERR_SQLITE_ERROR`), so asserting
+   * the code alone passes for a row refused for a completely different reason — which is what the
+   * PostgreSQL-era assertion (`23505`) turned into here. The row is written through the table
+   * definition so its `id` comes from `$defaultFn`; the raw insert this replaced omitted `id` and
+   * was refused NOT NULL, under that same code, before the index was ever reached.
+   *
+   * Proven by deletion, 2026-09-21, Node v26.7.0: with `drop index time_entries_chain_position_uq`
+   * run on the open file first, the fork below is ACCEPTED — `captureError` reports "expected the
+   * operation to be rejected, but it succeeded". With the index in place the refusal reads
+   * `UNIQUE constraint failed: time_entries.node_id, time_entries.location_id,
+   * time_entries.sequence_no`. Note what this engine names: the COLUMNS, not the index, so a test
+   * looking for the string `time_entries_chain_position_uq` in the message finds nothing.
+   */
   it("rejects a second entry claiming an occupied chain position", async () => {
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    // Bypasses appendToChain: the unique index is the backstop and must hold against a writer that
-    // never took the head lock. Position 1 is already occupied on this (node, location).
+    const fork = {
+      personId,
+      locationId,
+      nodeId,
+      entryKind: "out" as const,
+      // Whole seconds with the fractional field present, and a predecessor hash beside
+      // `isFirstEntry: false` — the two CHECKs (`time_entries_event_at_second_ck`,
+      // `time_entries_chaining_ck`) that a fork has to clear before the index is even consulted.
+      // Both refused this row first while it was being written, under the SAME `code` the index
+      // raises.
+      eventAt: "2026-01-05T18:00:00.000Z",
+      eventOffsetMinutes: 0,
+      recordedByPersonId: personId,
+      recordedAt: "2026-01-05T18:00:00.000Z",
+      entryHash: "0".repeat(64),
+      prevEntryHash: "1".repeat(64),
+      isFirstEntry: false,
+    };
     const error = await captureError(() =>
-      pg.db.execute(sql`
-        insert into time_entries (
-          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
-          ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
+      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 1 }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "time_entries",
+        columns: ["node_id", "location_id", "sequence_no"],
+      }),
+    ).toBe(true);
+    // The control, in the other direction: the same row at the next free position is accepted, so
+    // the refusal above is the POSITION and not something else about the row.
+    await expect(
+      pg.db.insert(timeEntries).values({ ...fork, sequenceNo: 2 }),
+    ).resolves.toBeDefined();
   });
 
   it("retries inside a savepoint, then surfaces exhaustion as attendance.append_contention", async () => {
-    // Occupy position 1 directly, so every attempt collides for the same reason — three REAL 23505s
-    // from Postgres, which only a savepoint per attempt can survive. Without one, the first 23505
-    // aborts the whole transaction and the second attempt fails 25P02, a code the retry does not
-    // recognise. Mirrors fiscal chain.test.ts's equivalent.
+    // Occupy position 1 directly, so every attempt collides for the same reason — three refusals
+    // the database issued, driving the retry to exhaustion. The savepoint-deletion proof this was
+    // written as belonged to PostgreSQL, where the first 23505 aborted the whole transaction and
+    // the second attempt came back 25P02; SQLite backs out the refused statement and leaves the
+    // transaction open, and whether the case still discriminates the savepoint here is UNMEASURED
+    // (this suite does not pass on this branch yet). Mirrors fiscal chain.test.ts's equivalent,
+    // where the same note is recorded.
     await pg.db.execute(sql`
       insert into time_entries (
-        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
-        ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
+      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+        '2026-01-05T08:00:00.000Z', 0,
+        ${personId}, '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db
       .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
@@ -252,11 +324,16 @@ describe("appendToChain", () => {
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
-    // Stubbing tx.transaction is the only deterministic way to reach exhaustion: PGlite cannot
-    // generate three real CONCURRENT collisions. appendToChain touches only tx.transaction on this
-    // path, so the stub is exactly that one method.
+    // Stubbing tx.transaction is the only deterministic way to reach exhaustion: one write
+    // transaction runs on the venue file at a time, so three real CONCURRENT collisions cannot be
+    // generated. appendToChain touches only tx.transaction on this path, so the stub is exactly
+    // that one method. The forged rejection carries `errcode`, which is where `node:sqlite` puts
+    // the discriminating value and where `isUniqueViolation` reads it (`packages/db/src/sql-state.ts`);
+    // 2067 is a unique index. A stub carrying the old `code: "23505"` is not a collision to this
+    // predicate and the retry would never run — which is what the control below rests on.
     const alwaysCollides = {
-      transaction: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+      transaction: () =>
+        Promise.reject(Object.assign(new Error("dup"), { errcode: UNIQUE_VIOLATION[0] })),
     } as never;
     const error = await appendToChain(alwaysCollides, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,
@@ -267,14 +344,16 @@ describe("appendToChain", () => {
   });
 
   it("does not retry an error that is not a chain collision", async () => {
+    // The control in the other direction: a refusal of a DIFFERENT class is re-thrown untouched.
     const alwaysFk = {
-      transaction: () => Promise.reject(Object.assign(new Error("fk"), { code: "23503" })),
+      transaction: () =>
+        Promise.reject(Object.assign(new Error("fk"), { errcode: FOREIGN_KEY_VIOLATION[0] })),
     } as never;
     const error = await appendToChain(alwaysFk, key(), inputAt("2026-01-05T09:00:00Z")).catch(
       (caught: unknown) => caught,
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(error).toMatchObject({ code: "23503" });
+    expect(error).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
   });
 });
 
@@ -346,9 +425,9 @@ describe("appendToChain commits the correction and capture content to the hash",
   });
 });
 
-describe("lockChainHead", () => {
+describe("readChainHead", () => {
   it("creates the chain head row from scratch when a (node, location) has none yet", async () => {
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
     expect(head).toEqual({
       sequenceNo: 0,
       lastEntryId: null,
@@ -356,20 +435,20 @@ describe("lockChainHead", () => {
       lastRecordedAt: null,
     });
     const { rows } = await pg.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from workforce_chains
+      select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
-  it("locks the existing head rather than creating a second one", async () => {
+  it("reads the existing head rather than creating a second one", async () => {
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
-    const head = await pg.db.transaction((tx) => lockChainHead(tx, key()));
+    const head = await pg.db.transaction((tx) => readChainHead(tx, key()));
     expect(head.sequenceNo).toBe(1);
     expect(head.lastEntryId).not.toBeNull();
     expect(head.lastEntryHash).not.toBeNull();
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await pg.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from workforce_chains
+      select count(*) as count from workforce_chains
       where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });

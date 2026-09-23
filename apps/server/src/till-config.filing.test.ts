@@ -1,5 +1,5 @@
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { locations, nodes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,17 +19,31 @@ let bare: NodeId;
 
 beforeAll(async () => {
   await seedTenant(suite.db);
-  const loc = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const s = await suite.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name, filing_module, tax_module)
-    values (${locationId}, 'stamped', 'verifactu', 'vat') returning id`);
-  const b = await suite.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${locationId}, 'bare') returning id`);
-  stamped = brandNodeId(s.rows[0]!.id);
-  bare = brandNodeId(b.rows[0]!.id);
+  // Through the table definitions: `locations.id`, `nodes.id` and `nodes.created_at` are JavaScript
+  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
+  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
+  // error here. The two `nodes` rows keep exactly the columns they carried: `stamped` names both
+  // module columns and `bare` names neither, which is what the null case under test turns on. No
+  // chain, series or `registros_facturacion` row is touched by this fixture.
+  const [loc] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [s] = await suite.db
+    .insert(nodes)
+    .values({ locationId, name: "stamped", filingModule: "verifactu", taxModule: "vat" })
+    .returning({ id: nodes.id });
+  const [b] = await suite.db
+    .insert(nodes)
+    .values({ locationId, name: "bare" })
+    .returning({ id: nodes.id });
+  stamped = brandNodeId(s!.id);
+  bare = brandNodeId(b!.id);
 });
 
 describe("readFilingModule", () => {

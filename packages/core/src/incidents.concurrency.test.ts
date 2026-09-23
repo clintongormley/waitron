@@ -1,9 +1,7 @@
-// Real Postgres: two callers on distinct backends. PGlite serialises every query onto one backend,
-// so a race there is a false pass (CLAUDE.md §4).
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import {
@@ -13,28 +11,48 @@ import {
   recordIncident,
 } from "./incidents.js";
 
-const postgres = useTemplateDb({ template: "core_identity" });
+/**
+ * Two managers acknowledging one incident, started together.
+ *
+ * ## What this file used to be, and what changed
+ *
+ * It opened two PostgreSQL backends, had the first hold the incident row's write lock open, polled
+ * `pg_stat_activity` until the second backend was genuinely WAITING on that lock, and then
+ * released. None of that exists here: a venue file has one connection, there are no row locks, and
+ * `pg_stat_activity` has no counterpart — so `waitForLockWaiter` is gone with it.
+ *
+ * **LOST: the observation that the second caller had actually reached the contended row** rather
+ * than merely not having finished yet. That was the thing which made this a race test. Nothing
+ * replaces it here; the general receipt that the venue file's write queue serialises two
+ * overlapping transactions lives in `packages/db/src/tenancy.write-lock.test.ts` ("runs two
+ * overlapping transactions one after the other") and, for a fiscal chain, in
+ * `packages/fiscal-verifactu/src/chain.concurrency.test.ts`.
+ *
+ * ## What still holds, and why the case was kept rather than deleted
+ *
+ * First-wins was never the lock's doing. `markIncidentHandled` (`./incidents.ts:219-222`) updates
+ * `where id = ? and acknowledged_at is null`, so the SECOND update matches no row whatever order
+ * the two arrive in — that predicate is the whole mechanism and it is engine-independent. The
+ * assertion below is unchanged: the stored handler and time are the FIRST caller's, and neither
+ * call throws.
+ *
+ * PROOF BY DELETION, run 2026-09-22: with `isNull(incidents.acknowledgedAt)` removed from that
+ * `where` clause, this case fails with the second manager's person id and timestamp stored
+ * (`00000000-…-002` / `2026-03-01T12:05:05.000Z` in place of `…-001` / `2026-03-01T12:05:00.000Z`).
+ * Restored afterwards.
+ *
+ * Migration sets: CORE then IDENTITY, the pair the deleted `core_identity` template this file
+ * cloned was built from (`git show origin/main:packages/core/src/testing/global-setup.ts`). Kept
+ * as the pair rather than narrowed to CORE, so the fixture is the one the suite always had.
+ */
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS], timeoutMs: 60_000 });
 
 const BASE = new Date("2026-03-01T12:05:00.000Z");
 
-/** Waits until a backend in this clone is waiting on a lock: the proof that the second caller has
- * reached the row the first caller holds, rather than merely not having finished yet. */
-async function waitForLockWaiter(): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  for (;;) {
-    const { rows } = await postgres.admin.execute<{ n: number }>(sql`
-      select count(*)::int as n from pg_stat_activity
-      where wait_event_type = 'Lock' and datname = current_database()`);
-    if ((rows[0]?.n ?? 0) >= 1) return;
-    if (Date.now() > deadline) throw new Error("no backend waited on a lock within 10s");
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
 describe("markIncidentHandled — two managers at once", () => {
   it("keeps the first committed handler and time, and both calls succeed", async () => {
-    const seed = await seedTenant(postgres.admin);
-    await withTransaction(postgres.admin, async (tx) => {
+    const seed = await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
         tillId: seed.tillId,
@@ -46,7 +64,7 @@ describe("markIncidentHandled — two managers at once", () => {
         detectedAt: BASE,
       });
     });
-    const [open] = await withTransaction(postgres.admin, async (tx) => {
+    const [open] = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return listOpenIncidents(tx);
     });
@@ -55,48 +73,18 @@ describe("markIncidentHandled — two managers at once", () => {
       personId: "00000000-0000-4000-8000-000000000002",
       handledAt: new Date(BASE.getTime() + 5_000),
     };
-    const mark = (db: Database, by: typeof first) =>
-      withTransaction(db, async (tx) => {
+    const mark = (by: typeof first) =>
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await markIncidentHandled(tx, { id: open!.id, ...by });
       });
 
-    let holder: Database | undefined;
-    let waiter: Database | undefined;
-    let release: () => void = () => {};
-    let holderRun: Promise<void> | undefined;
-    let waiterRun: Promise<void> | undefined;
-    try {
-      holder = await postgres.pg.connect();
-      waiter = await postgres.pg.connect();
-      const held = new Promise<void>((resolve) => (release = resolve));
-      let acquire!: () => void;
-      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+    // Both started together and NOT awaited in turn. The write queue decides which transaction
+    // runs first; `Promise.all` starting `first` first is what makes it the one that gets there,
+    // and the queue is FIFO on `begin immediate` (`packages/store/src/write-queue.ts`).
+    await Promise.all([mark(first), mark(second)]);
 
-      // The holder's update locks the row and pauses before commit, so the waiter's update must
-      // wait for it and then re-check the row the holder committed.
-      holderRun = withTransaction(holder, async (tx) => {
-        await asAppUser(tx);
-        await markIncidentHandled(tx, { id: open!.id, ...first });
-        acquire();
-        await held;
-      });
-      await acquired;
-      waiterRun = mark(waiter, second);
-      await waitForLockWaiter();
-
-      release();
-      await holderRun;
-      await waiterRun;
-    } finally {
-      release();
-      if (holderRun !== undefined) await holderRun.catch(() => {});
-      if (waiterRun !== undefined) await waiterRun.catch(() => {});
-      if (holder !== undefined) await holder.close();
-      if (waiter !== undefined) await waiter.close();
-    }
-
-    const stored = await withTransaction(postgres.admin, async (tx) => {
+    const stored = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return findIncident(tx, open!.id);
     });

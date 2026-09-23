@@ -17,7 +17,7 @@ import type {
   RegistroAlta,
 } from "@waitron/verifactu";
 import { writeAck } from "./acks.js";
-import { fromRegistroRow, toAeatDate } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
@@ -139,16 +139,49 @@ export interface DrainDeps {
 type DueRow = RegistroRow & { intentos: number };
 
 /**
- * Is there anything to send, read before the drain opens its own transaction and with the caller's
- * grants? Lone stale claims count, so `drainDue` can recover them even with no pending row.
- * The SQL interval in `envios_work_due` matches RECUPERACION_ENVIANDO_MS;
- * migrations.test.ts checks both sides of that threshold.
+ * Is there anything to send, read on the supplied handle before the drain opens its own
+ * transaction? Lone stale claims count, so `drainDue` can recover them even with no pending row.
+ *
+ * An ordinary query. It replaces a PostgreSQL function, `envios_work_due(timestamptz)`, which this
+ * engine has no counterpart for — SQLite defines no SQL functions of its own and parses no
+ * `::timestamptz` cast, and the two gaps were measured one at a time: with the cast the call threw
+ * `unrecognized token: ":"`, and with the cast removed `no such function: envios_work_due`
+ * (`packages/fiscal-verifactu/src/drain.containment.test.ts`, run 2026-09-22 before this
+ * replacement). The old body is at
+ * `git show origin/main:packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql`.
+ *
+ * Its two disjuncts are carried over with their comparisons unchanged, and the difference between
+ * them is not cosmetic:
+ *
+ * - `proximo_intento_en <= now` — INCLUSIVE, so a row whose next attempt falls exactly on this
+ *   instant is due now rather than one pass later. The same comparison `countDue` and `claimBatch`
+ *   make below, which is what stops this gate from opening on a row neither of them would claim.
+ * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` — STRICT, and the threshold is read from that
+ *   constant instead of the `interval '300000 milliseconds'` literal the SQL carried. Two literals
+ *   across a TS/SQL boundary are what `migrations.test.ts`'s threshold cases were written to pin;
+ *   there is one literal now, so the drift they watched for is unrepresentable rather than merely
+ *   tested. (Those cases still call the SQL function directly and are red — see that file.)
+ *   `recoverStaleClaims` recomputes the identical cutoff the identical way, so a row this reports
+ *   stale is a row that pass will actually recover.
+ *
+ * Both columns are compared as TEXT, which is what the ISO-8601 encoding makes sound: the `ts`
+ * helper writes every value through `Date.prototype.toISOString`
+ * (`packages/db/src/schema/columns.ts`'s `isoTimestamp`), whose output is fixed-width UTC, so
+ * lexical order is chronological order. Same treatment as `countDue`, `claimBatch` and
+ * `recoverStaleClaims` in this file.
+ *
+ * Boundary coverage: `drain.containment.test.ts`'s two threshold cases, each with the other side of
+ * the boundary beside it.
  */
 async function workIsDue(db: Database, now: Date): Promise<boolean> {
-  const rows = await db.execute<{ due: boolean }>(sql`
-    select envios_work_due(${now.toISOString()}::timestamptz) as due
+  const staleCutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
+  const rows = await db.execute<{ due: number }>(sql`
+    select 1 as due from envios
+    where (estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()})
+       or (estado = 'enviando' and enviado_en < ${staleCutoff})
+    limit 1
   `);
-  return rows.rows[0]?.due === true;
+  return rows.rows.length > 0;
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
@@ -393,14 +426,27 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
- * can also be used to decide whether more work remains after a chunk. */
+/**
+ * How many rows are due right now — the SAME predicate `claimBatch` re-runs a moment later, so it
+ * can also be used to decide whether more work remains after a chunk.
+ *
+ * The count comes back as a plain JavaScript number, so nothing converts it. This used to read
+ * `count(*)::text` and wrap the result in `Number(...)`, because the PostgreSQL driver handed a
+ * `count` over as a BigInt. SQLite parses no `::` cast — it reads the first colon as the start of a
+ * bind parameter and refuses the whole statement at prepare time with `unrecognized token: ":"`,
+ * which is where every drain pass stopped: this is the second statement `drainDue` runs. Measured
+ * 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement minus the cast as
+ * the control: the cast threw, the control returned `[{ count: 3 }]`, and `typeof` on that value
+ * read `number`. Measured again on an empty selection, where the row is `{ count: 0 }` and `typeof`
+ * still reads `number` — so a zero count is a row carrying 0, never a missing row, and `rows[0]!`
+ * is sound. `proximo_intento_en` is compared as TEXT, the same treatment as `workIsDue` above.
+ */
 async function countDue(tx: Transaction, now: Date): Promise<number> {
-  const rows = await tx.execute<{ count: string }>(sql`
-    select count(*)::text as count from envios
+  const rows = await tx.execute<{ count: number }>(sql`
+    select count(*) as count from envios
     where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
-  return Number(rows.rows[0]!.count);
+  return rows.rows[0]!.count;
 }
 
 /** Upserts the one flow-control row: when the next envío may go, and the `t` that produced that
@@ -550,12 +596,14 @@ async function claimBatch(
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
-  // `of: "e"` locks the envío rows alone, and this join is why the helper takes that parameter at
-  // all: `app_user` may read `registros_facturacion` and never write it, so a lock this claim did
-  // not narrow would be refused `42501`. Held over these same two tables and this same join, both
-  // ways round, by `drain.test.ts`'s "refuses the same selection when the lock is not narrowed" —
-  // which runs a shorter select list and predicate, since the refusal turns on the join alone.
-  const rows = await claimLockedRows<DueRow>(tx, {
+  // The claim is this transaction, not anything in the statement. `claimLockedRows` no longer adds
+  // a lock clause — SQLite has none, and one writer holds the file at a time — so what keeps a
+  // second drain off these rows is that this selection and the stamps that follow it commit
+  // together inside one `withTransaction`. The helper's own paragraph in `@waitron/db` carries the
+  // reasoning. The `of: "e"` that narrowed the lock is gone with the lock: it existed because
+  // `app_user` may read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
+  // over this join was refused `42501`.
+  const claimed = await claimLockedRows<Record<string, unknown>>(tx, {
     selection: sql`
       select r.*, e.intentos from envios e
       join registros_facturacion r on r.id = e.registro_id
@@ -563,8 +611,11 @@ async function claimBatch(
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
       order by r.sif_id, r.secuencia
       limit ${maxPorEnvio}`,
-    of: "e",
   });
+  // `r.*` reaches no drizzle column mapper, so the registro's JSON columns arrive as text and
+  // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `e.intentos` is not this table's
+  // column and passes through untouched.
+  const rows = claimed.map((row) => decodeRegistroRow<DueRow>(row));
 
   const sendable: DueRow[] = [];
   for (const row of rows) {
@@ -936,7 +987,7 @@ async function setEstado(
       confirmado_en = ${opts.confirmadoEn ? opts.confirmadoEn.toISOString() : null},
       codigo_error = ${codigoError},
       mensaje_error = ${opts.mensajeError ?? null},
-      incidencia = ${opts.incidencia ?? false} or incidencia
+      incidencia = ${opts.incidencia ? 1 : 0} or incidencia
     where registro_id = ${registroId}
   `);
   // The choke point for the per-row terminal estados THIS function writes (accepted /
@@ -965,17 +1016,27 @@ async function setEstado(
  * the ack↔estado invariant intact. Each successor id is distinct from the rejected `row.id` whose
  * ack `setEstado` already wrote, so there is no double-write.
  *
- * No `WHERE ... AND e.registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
+ * No `WHERE ... AND registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
  * moved to `rechazado` by `setEstado` (called by `applyOutcome` before this), so it can never
  * match this UPDATE's own `estado in ('pendiente', 'enviando')` filter a second time.
+ *
+ * The chain is reached through a subquery rather than the `UPDATE ... FROM` this statement used
+ * to carry, which is the same replacement `packages/db/src/job-claim.ts` already made and for the
+ * same reason. Measured on this engine (`node:sqlite`, probe kept at `/tmp/f1-updfrom-probe.mjs`):
+ * `update envios e set … from registros_facturacion r …` is refused `near "e": syntax error`, and
+ * spelling the alias `as e` gets past the parser only to be refused `no such column: e.registro_id`
+ * in the `returning` clause. The subquery form and `returning registro_id` both name the same two
+ * successor rows the `FROM` form named.
  */
 async function haltSuccessors(tx: Transaction, row: DueRow, now: Date): Promise<string[]> {
   const halted = await tx.execute<{ registro_id: string }>(sql`
-    update envios e set estado = 'detenido', incidencia = true
-    from registros_facturacion r
-    where r.id = e.registro_id and r.sif_id = ${row.sif_id} and r.secuencia > ${row.secuencia}
-      and e.estado in ('pendiente', 'enviando')
-    returning e.registro_id
+    update envios set estado = 'detenido', incidencia = true
+    where estado in ('pendiente', 'enviando')
+      and registro_id in (
+        select id from registros_facturacion
+        where sif_id = ${row.sif_id} and secuencia > ${row.secuencia}
+      )
+    returning registro_id
   `);
   const haltedIds = halted.rows.map((r) => r.registro_id);
   for (const id of haltedIds) await writeAck(tx, id, now);

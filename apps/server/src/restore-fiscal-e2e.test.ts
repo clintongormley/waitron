@@ -1,22 +1,44 @@
-import { uploadImage, readImageBytes } from "@waitron/media";
-import { withTransaction } from "@waitron/db";
-import { execFile } from "node:child_process";
+// Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
+// which is what makes this an end-to-end proof rather than a fixture: the append-only triggers on
+// `registros_facturacion`, and the schema every assertion reads, are the ones a box would carry.
+// `useVenueDb` is deliberately not used: it migrates through `runMigrations`
+// (`packages/db/src/testing/venue-db.ts:169`), which hands drizzle a folder and a table name and
+// nothing else (`packages/db/src/migrate.ts:37-40`), so it never reaches the trigger installer —
+// a database it built could only answer the ledger-immutability case with a trigger this file had
+// installed itself.
+import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-import { sql } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPostgresDb, readStandardSeriesId, type Database } from "@waitron/db";
+import { mediaImageData, mediaImages, readImageBytes } from "@waitron/media";
 import {
-  cloneTemplate,
-  nextCloneName,
-  pickTemplate,
-  resolveSharedHandle,
-} from "@waitron/db/testing/lifecycle.js";
-import { databaseUrl, type RealPostgres } from "@waitron/db/testing/postgres.js";
-import { FISCAL_RESTORE, installationFloor } from "@waitron/fiscal-verifactu";
-import { expectedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
+  readStandardSeriesId,
+  sales,
+  tenants,
+  tills,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
+import {
+  FISCAL_RESTORE,
+  cadenas,
+  contadoresInstalacion,
+  installationFloor,
+  registroSif,
+  registrosFacturacion,
+} from "@waitron/fiscal-verifactu";
+import {
+  applyMigrations,
+  expectedSchemaVersion,
+  manifestSets,
+  migrationOptionsFor,
+} from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { buildManifest, schemaVersionsByModule } from "./backup-manifest.js";
@@ -30,16 +52,13 @@ import {
 } from "./restore.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
-import type { PgRestoreRunner } from "./pg-restore.js";
-import { locateSharedContainer } from "./testing/locate-shared-container.js";
 
-// Real PostgreSQL exercises restored triggers and origin capture as the container superuser.
-// The suite owns baseline clones and empty targets so pg_restore sees a fresh database.
-const execFileAsync = promisify(execFile);
 const RECOVERY_KEY = "s3cr3t-recovery-key-for-fiscal-restore-e2e";
 const BASELINE_MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 const HUELLA = "A".repeat(64);
 const noopLog: Logger = () => {};
+/** SQLite's `SQLITE_CONSTRAINT_TRIGGER`, which `node:sqlite` puts on the thrown error's `errcode`. */
+const SQLITE_CONSTRAINT_TRIGGER = 1811;
 
 const F = {
   locationId: "c0000000-0000-4000-8000-000000000002",
@@ -50,145 +69,236 @@ const F = {
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 
-async function seedFiscalRegistro(admin: Database): Promise<void> {
-  await admin.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')`,
-  );
-  await admin.execute(
-    sql`insert into locations (id, name, invoice_locales, operation_description) values (${F.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')`,
-  );
-  await admin.execute(
-    sql`insert into tills (id, location_id, name) values (${F.tillId}, ${F.locationId}, 'Caja 1')`,
-  );
-  await admin.execute(
-    sql`insert into nodes (id, location_id, name) values (${F.nodeId}, ${F.locationId}, 'Node 1')`,
-  );
-  await admin.execute(
-    sql`insert into invoice_series (id, node_id, code, purpose, next_number) values (${F.seriesId}, ${F.nodeId}, 'FA', 'standard', 5)`,
-  );
-  await admin.execute(
-    sql`insert into invoice_series (node_id, code, purpose) values (${F.nodeId}, 'RE', 'rectificative')`,
-  );
-  await admin.execute(
-    sql`insert into contadores_instalacion (nif, id_sistema_informatico, proximo_numero) values ('89890001K', 'W1', 2)`,
-  );
-  await admin.execute(
-    sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion) values (${F.sifId}, ${F.nodeId}, '89890001K', 'W1', 1)`,
-  );
-  await admin.execute(
-    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, 0, '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`,
-  );
-  const registro = await admin.execute<{ id: string }>(sql`
-    insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-      tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
-      primer_registro, sistema_informatico, fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella)
-    values (${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
-      '89890001K', 'FA/4', '2026-07-20', 'Waitron SL',
-      'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
-      true, '{}'::jsonb, '2026-07-20T19:20:30+01:00', 60, '01', ${HUELLA})
-    returning id`);
+/**
+ * Through the table definitions, not raw SQL: `id` and every `created_at` here is a `$defaultFn`
+ * generator that only the insert builder runs, so a hand-written INSERT gets a NOT NULL refusal
+ * (`packages/db/src/schema/columns.ts`).
+ */
+async function seedFiscalRegistro(db: Database): Promise<void> {
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
+  await db.insert(locations).values({
+    id: F.locationId,
+    name: "Local principal",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await db.insert(tills).values({ id: F.tillId, locationId: F.locationId, name: "Caja 1" });
+  await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
+  await db
+    .insert(invoiceSeries)
+    .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });
+  await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "rectificative" });
+  await db.insert(contadoresInstalacion).values({
+    nif: "89890001K",
+    idSistemaInformatico: "W1",
+    proximoNumero: 2,
+  });
+  await db.insert(registroSif).values({
+    id: F.sifId,
+    nodeId: F.nodeId,
+    nif: "89890001K",
+    idSistemaInformatico: "W1",
+    numeroInstalacion: 1,
+  });
+  await db.insert(sales).values({
+    id: F.saleId,
+    tillId: F.tillId,
+    nodeId: F.nodeId,
+    seriesId: F.seriesId,
+    invoiceNumber: 4,
+    issuedAt: "2026-07-20T19:20:30+01:00",
+    issuedOffsetMinutes: 60,
+    total: 0,
+    vatBreakdown: [],
+    locale: "es",
+    invoiceLocales: ["es"],
+    fiscalBackend: "verifactu",
+    fiscalState: "recorded",
+  });
+  const [registro] = await db
+    .insert(registrosFacturacion)
+    .values({
+      tillId: F.tillId,
+      nodeId: F.nodeId,
+      sifId: F.sifId,
+      saleId: F.saleId,
+      secuencia: 1,
+      tipoRegistro: "alta",
+      idEmisorFactura: "89890001K",
+      numSerieFactura: "FA/4",
+      fechaExpedicionFactura: "2026-07-20",
+      nombreRazonEmisor: "Waitron SL",
+      tipoFactura: "F2",
+      descripcionOperacion: "Venta en establecimiento",
+      desglose: [],
+      cuotaTotal: "12.35",
+      importeTotal: "123.45",
+      primerRegistro: true,
+      sistemaInformatico: {},
+      fechaHoraHusoGenRegistro: new Date("2026-07-20T19:20:30+01:00"),
+      offsetMinutos: 60,
+      tipoHuella: "01",
+      huella: HUELLA,
+    })
+    .returning({ id: registrosFacturacion.id });
   // The chain head: no row exists until an append or a registration creates one — insert it
   // explicitly, pointing at the record, at sequence 1 (both pointers set: `cadenas_puntero_ck`).
-  await admin.execute(
-    sql`insert into cadenas (node_id, secuencia, ultimo_registro_id, ultima_huella) values (${F.nodeId}, 1, ${registro.rows[0]!.id}, ${HUELLA})`,
-  );
+  await db.insert(cadenas).values({
+    nodeId: F.nodeId,
+    secuencia: 1,
+    ultimoRegistroId: registro!.id,
+    ultimaHuella: HUELLA,
+  });
 }
 
-function containerPgRestore(containerId: string): PgRestoreRunner {
-  let n = 0;
-  return async ({ databaseUrl: url, inFile, signal }) => {
-    const dbn = new URL(url).pathname.replace(/^\//, "");
-    const internal = internalUrl(url, dbn);
-    const inContainer = `/tmp/waitron-restore-fiscal-e2e-${process.pid}-${(n += 1)}.dump`;
-    await execFileAsync("docker", ["cp", inFile, `${containerId}:${inContainer}`]);
-    try {
-      await execFileAsync(
-        "docker",
-        ["exec", containerId, "pg_restore", "--no-owner", "--dbname", internal, inContainer],
-        { signal },
-      );
-    } finally {
-      await execFileAsync("docker", ["exec", containerId, "rm", "-f", inContainer]).catch(() => {});
-    }
-  };
+/**
+ * The uploaded image, seeded through the table definitions rather than through `uploadImage`.
+ *
+ * `uploadImage` cannot run on this engine: it calls `listImageLabels`, whose statement is
+ * `select distinct unnest(labels) …` (`packages/media/src/images.ts:263`), and `node:sqlite`
+ * refuses that at PREPARE with `no such function: unnest` — measured here on 2026-09-22, Node
+ * v26.7.0, before this helper replaced the call. `packages/media`'s query layer is not converted
+ * yet. What this suite asserts about the image is that the RESTORE carries its metadata and its
+ * bytes across, which is unchanged; the READ side below still goes through the real
+ * `readImageBytes`. The filename is built the way `uploadImage` builds it — sha256 hex plus the
+ * extension — because `media_images_filename_ck` refuses anything else.
+ */
+async function seedImage(db: Database): Promise<void> {
+  const filename = `${createHash("sha256").update(BASELINE_MEDIA).digest("hex")}.jpg`;
+  const [row] = await db
+    .insert(mediaImages)
+    .values({
+      filename,
+      names: { es: "Pan" },
+      altText: { es: "Una hogaza" },
+      labels: ["Food"],
+    })
+    .returning({ id: mediaImages.id });
+  await db.insert(mediaImageData).values({ imageId: row!.id, bytes: BASELINE_MEDIA });
 }
 
-/** The internal (container-side) libpq URL for `db` on the shared container, from a host admin URL. */
-function internalUrl(adminUrl: string, db: string): string {
-  const u = new URL(adminUrl);
-  return `postgresql://${u.username}:${u.password}@localhost:5432/${db}`;
-}
-
-let adminUri: string;
-let containerId: string | undefined;
+let scratchRoot: string;
 let migrationsRoot: string;
 /** {@link migrationsRoot} plus one extra core migration — see the OLDER-artifact note in `beforeAll`. */
 let olderMigrationsRoot: string;
-let scratchRoot: string;
 let artifactPath: string;
 let olderArtifactPath: string;
-let baselinePg: RealPostgres | undefined;
-let olderBaselinePg: RealPostgres | undefined;
-const targets: string[] = [];
-let targetCounter = 0;
 
-async function makeFreshTarget(): Promise<string> {
-  const name = `restore_fiscal_${process.pid}_${targetCounter++}`;
-  // PostgreSQL utility statements cannot bind identifiers.
-  if (!/^restore_fiscal_[0-9]+_[0-9]+$/.test(name)) throw new Error("Invalid target name");
-  await execFileAsync("docker", [
-    "exec",
-    containerId!,
-    "psql",
-    internalUrl(adminUri, "postgres"),
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-c",
-    `create database ${name}`,
-  ]);
-  targets.push(name);
-  return databaseUrl(adminUri, name);
-}
-
-async function arrangeDirs(): Promise<{ stateDir: string }> {
-  const stateDir = await mkdtemp(join(scratchRoot, "state-"));
-  return { stateDir };
+/** A brand-new empty venue directory: this engine's "create a fresh database". */
+async function arrangeDirs(): Promise<{ stateDir: string; venueDir: string }> {
+  return {
+    stateDir: await mkdtemp(join(scratchRoot, "state-")),
+    venueDir: await mkdtemp(join(scratchRoot, "venue-")),
+  };
 }
 
 async function restoreDepsFor(
-  targetUrl: string,
-  dirs: { stateDir: string },
+  dirs: { stateDir: string; venueDir: string },
   artifact = artifactPath,
 ): Promise<RestoreDeps> {
   return {
     artifact: await readFile(artifact),
     recoveryKey: RECOVERY_KEY,
-    databaseUrl: targetUrl,
     ...dirs,
     stagingDir: join(dirs.stateDir, "restore-staging"),
     // The OLDER artifact is one migration behind ITS root, not behind the shipped one.
     migrationsRoot: artifact === olderArtifactPath ? olderMigrationsRoot : migrationsRoot,
     modules: ALL_MODULES,
     environment: "preproduction",
-    runRestore: containerPgRestore(containerId!),
     log: noopLog,
   };
 }
 
-async function drive(targetUrl: string, dirs: { stateDir: string }, artifact = artifactPath) {
-  return restoreFromArtifact(await restoreDepsFor(targetUrl, dirs, artifact));
+async function drive(dirs: { stateDir: string; venueDir: string }, artifact = artifactPath) {
+  return restoreFromArtifact(await restoreDepsFor(dirs, artifact));
+}
+
+/** The node's series as the assertions read them, oldest code first, booleans mapped in JavaScript. */
+async function seriesOfNode(
+  db: Database,
+): Promise<{ code: string; retired: boolean; next: number }[]> {
+  const rows = await db
+    .select({
+      code: invoiceSeries.code,
+      retiredAt: invoiceSeries.retiredAt,
+      next: invoiceSeries.nextNumber,
+    })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.nodeId, F.nodeId))
+    .orderBy(invoiceSeries.code);
+  return rows.map(({ code, retiredAt, next }) => ({ code, retired: retiredAt !== null, next }));
+}
+
+/** How many series are retired, whole table — counted in JavaScript, not by `count(*)` in SQL. */
+async function retiredSeriesCount(db: Database): Promise<number> {
+  const rows = await db.select({ retiredAt: invoiceSeries.retiredAt }).from(invoiceSeries);
+  return rows.filter((row) => row.retiredAt !== null).length;
+}
+
+/**
+ * Builds one encrypted backup artifact from a real migrated venue directory.
+ *
+ * `older: true` builds the SAME database and then drops `invoice_series.retired_at` from it, so the
+ * artifact is genuinely one migration behind `olderMigrationsRoot` (which re-adds that column).
+ */
+async function buildArtifact(older: boolean, artifact: string): Promise<void> {
+  const baselineDir = await mkdtemp(join(scratchRoot, older ? "baseline-older-" : "baseline-"));
+  await applyMigrations(baselineDir, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(baselineDir);
+  try {
+    await seedFiscalRegistro(store.venue);
+    await seedImage(store.venue);
+    const head = await store.venue
+      .select({ secuencia: cadenas.secuencia, ultimaHuella: cadenas.ultimaHuella })
+      .from(cadenas);
+    expect(head).toEqual([{ secuencia: 1, ultimaHuella: HUELLA }]);
+    // The journal table is left alone: this database is at the head of the SHIPPED chain and one
+    // behind `olderMigrationsRoot`, which is what the artifact's manifest then records.
+    if (older) {
+      store.venue.run(sql.raw(`alter table invoice_series drop column retired_at`));
+    }
+    const manifest = await buildManifest({
+      db: store.venue,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      now: new Date(),
+    });
+    const core = ALL_MODULES.find((m) => m.name === "core")!;
+    expect(manifest.modules.core).toBe(
+      expectedSchemaVersion(core.migrations, older ? olderMigrationsRoot : migrationsRoot) -
+        (older ? 1 : 0),
+    );
+
+    // The engine's own copy statement. This is the shape `restoreDatabase` expects the archive's
+    // `db.dump` entry to be — a whole SQLite venue file, not a `pg_dump` archive (`restore.ts`).
+    const dumpPath = join(scratchRoot, `baseline-${older}.dump`);
+    await store.venue.archiveTo(dumpPath);
+    const entries: ArchiveEntry[] = [
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+      { name: "db.dump", bytes: await readFile(dumpPath) },
+      {
+        name: "secrets/trading.env",
+        bytes: Buffer.from(
+          formatEnvFile({
+            WAITRON_TILL_TILL_ID: F.tillId,
+            WAITRON_TILL_NODE_ID: F.nodeId,
+            WAITRON_TILL_SERIES_ID: F.seriesId,
+            WAITRON_TILL_LOCATION_ID: F.locationId,
+            WAITRON_ENV: "preproduction",
+          }),
+        ),
+      },
+      { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_CREDENTIALS_KEY=deadbeef\n") },
+    ];
+    await writeFile(artifact, encryptArtifact(packArchive(entries), RECOVERY_KEY));
+  } finally {
+    await store.close();
+  }
 }
 
 beforeAll(async () => {
-  const handle = resolveSharedHandle(undefined);
-  adminUri = handle.uri;
-  containerId = await locateSharedContainer(new URL(adminUri), {
-    tag: "fiscal restore e2e",
-    unproven: "the fiscal restore end-to-end flow is UNPROVEN in this run.",
-  });
-  if (containerId === undefined) return; // LOUD skip already logged; each `it` returns early too
-
   const fromSource = migrationOptionsFor(manifestSets(), null);
   scratchRoot = await mkdtemp(join(tmpdir(), "waitron-restore-fiscal-e2e-"));
   migrationsRoot = join(scratchRoot, "migrations");
@@ -199,11 +309,10 @@ beforeAll(async () => {
   }
 
   // The OLDER artifact needs a database one core migration behind the code it is restored with.
-  // Rewinding the journal table cannot express that any more: core ships a two-file baseline, so
-  // "one behind" would re-run `0001_db_baseline_sql` against a database that already holds its
-  // functions — `42723, function ... already exists`. Instead the older restore gets its OWN root:
-  // the shipped sets plus one extra core step that re-adds the column its dump lacks. The dump is
-  // then genuinely one migration behind that root, and only the extra step replays.
+  // Rewinding the journal table cannot express that: core's journal holds a single entry,
+  // `0000_baseline`, so "one behind core" is "unmigrated". Instead the older restore gets its OWN
+  // root: the shipped sets plus one extra core step that re-adds the column its dump lacks. The
+  // dump is then genuinely one migration behind that root, and only the extra step replays.
   olderMigrationsRoot = join(scratchRoot, "migrations-older");
   await cp(migrationsRoot, olderMigrationsRoot, { recursive: true });
   const coreSet = ALL_MODULES.find((m) => m.name === "core")!.migrations;
@@ -211,7 +320,7 @@ beforeAll(async () => {
   const olderCoreDir = join(olderMigrationsRoot, coreSet.name);
   await writeFile(
     join(olderCoreDir, `${extraTag}.sql`),
-    `ALTER TABLE "invoice_series" ADD COLUMN "retired_at" timestamp with time zone;`,
+    `ALTER TABLE "invoice_series" ADD COLUMN "retired_at" text;`,
   );
   const journalPath = join(olderCoreDir, "meta", "_journal.json");
   const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
@@ -219,207 +328,137 @@ beforeAll(async () => {
   };
   journal.entries.push({
     idx: journal.entries.length,
-    version: "7",
+    version: "6",
     // Drizzle replays an entry only when its `when` is later than the newest applied row's
-    // created_at, and every shipped `when` was stamped at `db:generate` time — in the past.
+    // created_at, and every shipped `when` was stamped at `db:generate` time — in the past. The
+    // SQLite dialect does the same arithmetic the PostgreSQL one did
+    // (`drizzle-orm@0.45.2/sqlite-core/dialect.js:660`).
     when: Date.now(),
     tag: extraTag,
     breakpoints: true,
   });
   await writeFile(journalPath, JSON.stringify(journal));
 
-  baselinePg = await cloneTemplate(adminUri, pickTemplate(handle, "manifest"), nextCloneName());
-  olderBaselinePg = await cloneTemplate(
-    adminUri,
-    pickTemplate(handle, "manifest"),
-    nextCloneName(),
-  );
   artifactPath = join(scratchRoot, "baseline.backup.enc");
   olderArtifactPath = join(scratchRoot, "older.backup.enc");
-  for (const [pg, artifact, older] of [
-    [baselinePg, artifactPath, false],
-    [olderBaselinePg, olderArtifactPath, true],
-  ] as const) {
-    const baselineAdmin = await createPostgresDb(pg.uri);
-    try {
-      await seedFiscalRegistro(baselineAdmin);
-      await withTransaction(baselineAdmin, async (tx) => {
-        await uploadImage(
-          tx,
-          {
-            bytes: BASELINE_MEDIA,
-            names: { es: "Pan" },
-            altText: { es: "Una hogaza" },
-            labels: ["Food"],
-          },
-          { maxUploadBytes: 100, fallbackLanguage: "es" },
-        );
-      });
-      const head = await baselineAdmin.execute<{ secuencia: number; ultima_huella: string }>(
-        sql`select secuencia, ultima_huella from cadenas`,
-      );
-      expect(head.rows).toEqual([{ secuencia: 1, ultima_huella: HUELLA }]);
-      // The journal table is left alone: this database is at the head of the SHIPPED chain and one
-      // behind `olderMigrationsRoot`, which is what the artifact's manifest then records.
-      if (older) {
-        await baselineAdmin.execute(sql`alter table invoice_series drop column retired_at`);
-      }
-      const manifest = await buildManifest({
-        db: baselineAdmin,
-        modules: ALL_MODULES,
-        environment: "preproduction",
-        now: new Date(),
-      });
-      const core = ALL_MODULES.find((m) => m.name === "core")!;
-      expect(manifest.modules.core).toBe(
-        expectedSchemaVersion(core.migrations, older ? olderMigrationsRoot : migrationsRoot) -
-          (older ? 1 : 0),
-      );
-
-      const baselineName = new URL(pg.uri).pathname.replace(/^\//, "");
-      const dumpInContainer = `/tmp/waitron-restore-fiscal-baseline-${process.pid}-${older}.dump`;
-      const hostDump = join(scratchRoot, `baseline-${older}.dump`);
-      await execFileAsync("docker", [
-        "exec",
-        containerId,
-        "pg_dump",
-        "--format=custom",
-        "--file",
-        dumpInContainer,
-        internalUrl(adminUri, baselineName),
-      ]);
-      await execFileAsync("docker", ["cp", `${containerId}:${dumpInContainer}`, hostDump]);
-      await execFileAsync("docker", ["exec", containerId, "rm", "-f", dumpInContainer]).catch(
-        () => {},
-      );
-      const dumpBytes = await readFile(hostDump);
-      const entries: ArchiveEntry[] = [
-        { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-        { name: "db.dump", bytes: dumpBytes },
-        {
-          name: "secrets/trading.env",
-          bytes: Buffer.from(
-            formatEnvFile({
-              WAITRON_TILL_TILL_ID: F.tillId,
-              WAITRON_TILL_NODE_ID: F.nodeId,
-              WAITRON_TILL_SERIES_ID: F.seriesId,
-              WAITRON_TILL_LOCATION_ID: F.locationId,
-              DATABASE_URL: "postgres://app@localhost/waitron",
-              WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron",
-              WAITRON_ENV: "preproduction",
-            }),
-          ),
-        },
-        { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_CREDENTIALS_KEY=deadbeef\n") },
-      ];
-      await writeFile(artifact, encryptArtifact(packArchive(entries), RECOVERY_KEY));
-    } finally {
-      await baselineAdmin.close();
-    }
-  }
-});
+  await buildArtifact(false, artifactPath);
+  await buildArtifact(true, olderArtifactPath);
+}, 300_000);
 
 afterAll(async () => {
-  if (containerId !== undefined) {
-    for (const name of targets) {
-      await execFileAsync("docker", [
-        "exec",
-        containerId,
-        "psql",
-        internalUrl(adminUri, "postgres"),
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-c",
-        `drop database ${name} with (force)`,
-      ]).catch(() => {});
-    }
-  }
-  if (baselinePg !== undefined) await baselinePg.stop().catch(() => {});
-  if (olderBaselinePg !== undefined) await olderBaselinePg.stop().catch(() => {});
   if (scratchRoot !== undefined) await rm(scratchRoot, { recursive: true, force: true });
 });
 
-describe("fiscal restore (real Postgres, end to end)", () => {
+describe("fiscal restore, end to end", () => {
   it("re-registers the SIF, retires and replaces the series, rewrites trading.env, keeps the ledger immutable", async () => {
-    if (containerId === undefined) return;
-    const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    await drive(target, dirs);
+    await drive(dirs);
 
-    const db = await createPostgresDb(target);
+    const store = await openVenueDatabase(dirs.venueDir);
+    const db = store.venue;
     try {
-      const sifs = await db.execute<{ numero_instalacion: number; revocado_en: string | null }>(
-        sql`select numero_instalacion, revocado_en from registro_sif where node_id = ${F.nodeId}::uuid order by numero_instalacion`,
-      );
-      expect(sifs.rows).toHaveLength(2);
-      expect(sifs.rows[0]).toMatchObject({ numero_instalacion: 1 });
-      expect(sifs.rows[0]?.revocado_en).not.toBeNull();
-      expect(sifs.rows[1]?.revocado_en).toBeNull();
-      expect(sifs.rows[1]!.numero_instalacion).toBeGreaterThanOrEqual(
+      const sifs = await db
+        .select({
+          numeroInstalacion: registroSif.numeroInstalacion,
+          revocadoEn: registroSif.revocadoEn,
+        })
+        .from(registroSif)
+        .where(eq(registroSif.nodeId, F.nodeId))
+        .orderBy(registroSif.numeroInstalacion);
+      expect(sifs).toHaveLength(2);
+      expect(sifs[0]).toMatchObject({ numeroInstalacion: 1 });
+      expect(sifs[0]?.revocadoEn).not.toBeNull();
+      expect(sifs[1]?.revocadoEn).toBeNull();
+      expect(sifs[1]!.numeroInstalacion).toBeGreaterThanOrEqual(
         installationFloor(new Date(Date.now() - 60_000)),
       );
-      const n = sifs.rows[1]!.numero_instalacion;
-      const head = await db.execute<{ ultima_huella: string | null; secuencia: number }>(
-        sql`select ultima_huella, secuencia from cadenas where node_id = ${F.nodeId}::uuid`,
-      );
-      expect(head.rows[0]).toEqual({ ultima_huella: null, secuencia: 1 });
-      const series = await db.execute<{ code: string; retired: boolean; next_number: number }>(
-        sql`select code, retired_at is not null as retired, next_number from invoice_series where node_id = ${F.nodeId}::uuid order by code`,
-      );
-      expect(series.rows).toEqual([
-        { code: "FA", retired: true, next_number: 5 },
-        { code: `FA-${n}`, retired: false, next_number: 1 },
-        { code: "RE", retired: true, next_number: 1 },
-        { code: `RE-${n}`, retired: false, next_number: 1 },
+      const n = sifs[1]!.numeroInstalacion;
+      const head = await db
+        .select({ ultimaHuella: cadenas.ultimaHuella, secuencia: cadenas.secuencia })
+        .from(cadenas)
+        .where(eq(cadenas.nodeId, F.nodeId));
+      expect(head[0]).toEqual({ ultimaHuella: null, secuencia: 1 });
+      expect(await seriesOfNode(db)).toEqual([
+        { code: "FA", retired: true, next: 5 },
+        { code: `FA-${n}`, retired: false, next: 1 },
+        { code: "RE", retired: true, next: 1 },
+        { code: `RE-${n}`, retired: false, next: 1 },
       ]);
       const env = parseEnvFile(await readFile(join(dirs.stateDir, "trading.env"), "utf8"));
       expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.nodeId));
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
-      expect(env.DATABASE_URL).toBe("postgres://app@localhost/waitron");
+      // A key the rewrite does not touch survives it. `DATABASE_URL` used to stand here; it is
+      // retired on this engine (`config.ts` reads no such value), and asserting a key the product
+      // no longer has would be asserting nothing.
+      expect(env.WAITRON_ENV).toBe("preproduction");
+      expect(env.WAITRON_TILL_TILL_ID).toBe(F.tillId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );
       await withTransaction(db, async (tx) => {
-        const images = await tx.execute<{
-          filename: string;
-          names: Record<string, string>;
-          labels: string[];
-        }>(sql`select filename, names, labels from media_images`);
-        expect(images.rows).toHaveLength(1);
-        expect(images.rows[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
-        const restored = await readImageBytes(tx, images.rows[0]!.filename);
+        // Through the table definitions: `names` and `labels` are JSON columns, and a raw
+        // `select` hands them back as the TEXT they are stored as, so the assertion below would
+        // be comparing a string with an object.
+        const images = await tx
+          .select({
+            filename: mediaImages.filename,
+            names: mediaImages.names,
+            labels: mediaImages.labels,
+          })
+          .from(mediaImages);
+        expect(images).toHaveLength(1);
+        expect(images[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
+        const restored = await readImageBytes(tx, images[0]!.filename);
         expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
       });
-      const ledger = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from registros_facturacion`,
-      );
-      expect(ledger.rows[0]?.n).toBe(1);
-      const blocked = await db
-        .execute(sql`update registros_facturacion set huella = ${"E".repeat(64)}`)
-        .then(() => undefined)
-        .catch((e: unknown) => e as { code?: string; cause?: { code?: string } });
-      expect(blocked?.code ?? blocked?.cause?.code).toBe("WT001");
+      const ledger = await db
+        .select({ huella: registrosFacturacion.huella })
+        .from(registrosFacturacion);
+      expect(ledger).toHaveLength(1);
+      // The restored ledger still REFUSES a rewrite. On PostgreSQL that refusal arrived as
+      // SQLSTATE `WT001`; here it is the engine's own `SQLITE_CONSTRAINT_TRIGGER` carrying the
+      // installer's message.
+      //
+      // WHERE to read it from depends on which call you make, which is why this is pinned rather
+      // than described. The same UPDATE was sent both ways against this restored database on
+      // 2026-09-22, Node v26.7.0: through `execute()` it comes back a plain `Error` with
+      // `errcode: 1811`, `code: "ERR_SQLITE_ERROR"` and NO `cause`; through `run()` it comes back
+      // a `DrizzleError` whose `cause.errcode` is 1811. `execute()` is this adapter's own method
+      // (`packages/store/src/node-sqlite-adapter.ts`); `run()` is drizzle's, and drizzle wraps.
+      // `restore-fiscal-receipt.test.ts` reads `.cause` because it calls `run()`.
+      const blocked = ((): { errcode?: number; message?: string } | undefined => {
+        try {
+          db.execute(sql`update registros_facturacion set huella = ${"E".repeat(64)}`);
+          return undefined;
+        } catch (error) {
+          return error as { errcode?: number; message?: string };
+        }
+      })();
+      expect(
+        blocked,
+        "the restored ledger accepted an UPDATE — the append-only trigger is inert",
+      ).toBeDefined();
+      expect(blocked?.errcode).toBe(SQLITE_CONSTRAINT_TRIGGER);
+      expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
       expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),
         ),
       );
     } finally {
-      await db.close();
+      await store.close();
     }
     await expect(stat(join(dirs.stateDir, "restore-staging", "db.dump"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
+  }, 120_000);
 
   it("an OLDER artifact (one core migration behind) is migrated before the hook runs — and is NOT without the migrate step", async () => {
-    if (containerId === undefined) return;
-    const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    await drive(target, dirs, olderArtifactPath);
-    const db = await createPostgresDb(target);
+    await drive(dirs, olderArtifactPath);
+    const store = await openVenueDatabase(dirs.venueDir);
     try {
-      expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
+      expect(await schemaVersionsByModule(store.venue, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [
             m.name,
@@ -427,55 +466,51 @@ describe("fiscal restore (real Postgres, end to end)", () => {
           ]),
         ),
       );
-      const series = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from invoice_series where retired_at is not null`,
-      );
-      expect(series.rows[0]?.n).toBe(2);
+      expect(await retiredSeriesCount(store.venue)).toBe(2);
     } finally {
-      await db.close();
+      await store.close();
     }
     // Control: with the migrate step stubbed out the hook reads a column the older dump lacks.
-    const control = await makeFreshTarget();
     const controlDirs = await arrangeDirs();
-    // DrizzleQueryError exposes PostgreSQL's missing retired_at column error through cause.
+    // The refusal arrives with `errcode` and `message` on the error itself and no `.cause` — the
+    // same place `execute()`'s refusals land in the case above. `errcode: 1` is SQLite's catch-all
+    // `SQL logic error`, shared with a syntax error and a missing table
+    // (`packages/migrations/src/schema-version.ts` measured those three together), so the column
+    // NAME in the message is what discriminates.
     await expect(
       restoreFromArtifact({
-        ...(await restoreDepsFor(control, controlDirs, olderArtifactPath)),
+        ...(await restoreDepsFor(controlDirs, olderArtifactPath)),
         migrate: async () => {},
       }),
     ).rejects.toMatchObject({
-      cause: { code: "42703", message: expect.stringContaining("retired_at") },
+      errcode: 1,
+      message: expect.stringContaining("retired_at"),
     });
     await expect(stat(join(controlDirs.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
+  }, 120_000);
 
   it("NEGATIVE CONTROL — skipSecrets:true (the rejoin shape) leaves SIF, series and stateDir untouched", async () => {
-    if (containerId === undefined) return;
-    const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    await restoreFromArtifact({ ...(await restoreDepsFor(target, dirs)), skipSecrets: true });
-    const db = await createPostgresDb(target);
+    await restoreFromArtifact({ ...(await restoreDepsFor(dirs)), skipSecrets: true });
+    const store = await openVenueDatabase(dirs.venueDir);
     try {
-      const sifs = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from registro_sif where revocado_en is null and numero_instalacion = 1`,
-      );
-      expect(sifs.rows[0]?.n).toBe(1);
-      const retired = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from invoice_series where retired_at is not null`,
-      );
-      expect(retired.rows[0]?.n).toBe(0);
+      const live = await store.venue
+        .select({ numeroInstalacion: registroSif.numeroInstalacion })
+        .from(registroSif)
+        .where(isNull(registroSif.revocadoEn));
+      expect(live).toEqual([{ numeroInstalacion: 1 }]);
+      expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
-      await db.close();
+      await store.close();
     }
     await expect(stat(join(dirs.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
+  }, 120_000);
 
   it("a failure AFTER the fiscal hook minted and the series were retired rolls everything back and writes no identity", async () => {
-    if (containerId === undefined) return;
     // The real fiscal hook runs, then its outcome is replaced by a code the node already holds — the
     // orchestrator's insert collides after the retire, and the whole transaction (SIF included) must roll back.
     const sabotaged: WaitronModule[] = ALL_MODULES.map((m) =>
@@ -492,30 +527,26 @@ describe("fiscal restore (real Postgres, end to end)", () => {
           }
         : m,
     );
-    const target = await makeFreshTarget();
     const dirs = await arrangeDirs();
-    const rd = await restoreDepsFor(target, dirs);
+    const rd = await restoreDepsFor(dirs);
     const validated = await validateArtifact(rd);
     await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "fiscal-verifactu", code: "series.code_collision" },
     });
-    const db = await createPostgresDb(target);
+    const store = await openVenueDatabase(dirs.venueDir);
     try {
-      const sifs = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from registro_sif`,
-      );
-      expect(sifs.rows[0]?.n).toBe(1); // the hook's new row rolled back
-      const counter = await db.execute<{ proximo_numero: number }>(
-        sql`select proximo_numero from contadores_instalacion`,
-      );
-      expect(counter.rows[0]?.proximo_numero).toBe(2); // the floor rolled back with it
-      const retired = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from invoice_series where retired_at is not null`,
-      );
-      expect(retired.rows[0]?.n).toBe(0);
+      const sifs = await store.venue
+        .select({ numeroInstalacion: registroSif.numeroInstalacion })
+        .from(registroSif);
+      expect(sifs).toHaveLength(1); // the hook's new row rolled back
+      const counter = await store.venue
+        .select({ proximoNumero: contadoresInstalacion.proximoNumero })
+        .from(contadoresInstalacion);
+      expect(counter[0]?.proximoNumero).toBe(2); // the floor rolled back with it
+      expect(await retiredSeriesCount(store.venue)).toBe(0);
     } finally {
-      await db.close();
+      await store.close();
     }
     await expect(stat(join(dirs.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -523,5 +554,5 @@ describe("fiscal restore (real Postgres, end to end)", () => {
     await expect(stat(join(dirs.stateDir, "secrets.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
+  }, 120_000);
 });

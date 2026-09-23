@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, newId, nowIso } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -17,8 +17,15 @@ const suite = useVenueDb({
   },
 });
 
-// A fresh location per test, so the shared PGlite database keeps each test's convenio_config row
-// isolated on its own location key — the tests stay order-independent.
+// A fresh location per test, so the one database this suite opens keeps each test's
+// convenio_config row isolated on its own location key — the tests stay order-independent. It has
+// to be: `resetPerTest: false` above keeps the taxpayer row the setup seeds, so nothing empties
+// the tables between tests.
+//
+// `id` and `created_at` come from the table's `$defaultFn`, which drizzle runs per insert rather
+// than the database supplying a DEFAULT, so each RAW insert below names both itself. The raw form
+// is kept where a test is setting a specific STORED count — the two premium scales — because that
+// is the value the resolver's mapping is being read against.
 
 /** The ruleset a DEFAULT convenio_config row resolves to — every field the ET statutory floor or
  * today's default. This is the value that must reproduce current behaviour (§3). */
@@ -58,12 +65,14 @@ describe("resolveWorkTimeRuleset", () => {
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (
+        id, created_at,
         location_id, working_days_per_week, overtime_model, reference_period_days,
         compensation_window_days, daily_target_minutes, max_weekly_minutes,
         min_inter_shift_rest_minutes, max_ordinary_daily_minutes, break_threshold_minutes,
         min_break_minutes, weekly_rest_minutes, annual_overtime_cap_hours, night_window_start_minute,
         night_window_end_minute, night_premium_pct, split_shift_premium, breaks_count_as_worked
-      ) values (${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
+      ) values (${newId()}, ${nowIso()},
+        ${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
         1380, 300, 2500, 1250, true)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset).toEqual({
@@ -94,8 +103,8 @@ describe("resolveWorkTimeRuleset", () => {
   it("reads a whole-percent night premium back as a percentage", async () => {
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (location_id, night_premium_pct)
-      values (${locationId}, 2500)`);
+      insert into convenio_config (id, created_at, location_id, night_premium_pct)
+      values (${newId()}, ${nowIso()}, ${locationId}, 2500)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset.nightPremiumPct).toBe(25);
   });
@@ -103,8 +112,8 @@ describe("resolveWorkTimeRuleset", () => {
   it("reads a half-percent night premium back as a percentage", async () => {
     const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (location_id, night_premium_pct)
-      values (${locationId}, 1250)`);
+      insert into convenio_config (id, created_at, location_id, night_premium_pct)
+      values (${newId()}, ${nowIso()}, ${locationId}, 1250)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset.nightPremiumPct).toBe(12.5);
   });

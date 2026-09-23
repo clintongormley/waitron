@@ -6,7 +6,7 @@ import { isUnset } from "./env-value.js";
 /** Later files win over earlier ones: `trading.env` is rewritten by provisioning and by a promote,
  *  so it is the most recent statement of the box's identity. `backup.env` is the wizard's file and
  *  is read last. */
-const FILES = ["instance.env", "secrets.env", "trading.env", "backup.env"] as const;
+const FILES = ["secrets.env", "trading.env", "backup.env"] as const;
 
 /**
  * The environment `startServer` is handed: the box's own env files merged under the real

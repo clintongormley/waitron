@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, unique } from "drizzle-orm/pg-core";
-import { count, id, label, table, ts } from "./columns.js";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { count, id, label, newId, table, ts } from "./columns.js";
 import { nodes } from "./nodes.js";
 
 /**
@@ -26,7 +26,7 @@ import { nodes } from "./nodes.js";
 export const invoiceSeries = table(
   "invoice_series",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The node that owns this series and its chain (node-id rekey, 2026-08-03:
     // was `till_id`). Bare column: the (node_id) → nodes(id) FK is declared in
     // extraConfig below (mirroring the `sales`/`working_orders`/`payments` node
@@ -47,9 +47,11 @@ export const invoiceSeries = table(
       foreignColumns: [nodes.id],
       name: "invoice_series_node_fk",
     }),
-    // A CHECK rather than a pgEnum, deliberately: the permitted set depends on
-    // asesor Q5(b), which is unverified. Widening a CHECK is one line of
-    // migration; widening an enum needs ALTER TYPE.
+    // A hand-written CHECK rather than the `enumType`/`enumCheck` pair, deliberately: the permitted
+    // set depends on asesor Q5(b), which is unverified, and a set still being decided is not a
+    // vocabulary. (Until 2026-09-21 this comment justified the choice against a `pgEnum`, whose
+    // widening needed an `ALTER TYPE`; the storage swap left no enum type on either side of that
+    // comparison, and the two shapes now differ only in where the values are written.)
     check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'rectificative')`),
     check("invoice_series_next_number_ck", sql`${t.nextNumber} >= 1`),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),

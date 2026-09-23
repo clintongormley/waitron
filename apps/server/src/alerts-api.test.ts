@@ -3,23 +3,34 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import {
+  asAppUser,
+  locations,
+  printJobs,
+  printers,
+  tills,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
 import {
   hashPin,
+  persons,
+  type PersonRoleValue,
   resolveManagementSession,
   startManagementSession,
   withPassiveManagementRead,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { AlertSource } from "@waitron/module";
-import type {
-  CardProviderContribution,
-  CardProviderRuntimeDeps,
-  ReaderStatus,
+import {
+  cardReaders,
+  type CardProviderContribution,
+  type CardProviderRuntimeDeps,
+  type ReaderStatus,
 } from "@waitron/payments";
 import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
@@ -70,23 +81,35 @@ interface Venue {
 
 async function seedVenue(): Promise<Venue> {
   await seedTenant(db);
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
-  const cookie = (role: string, name: string) =>
+  // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: each `id` here (and `tills.created_at`, `persons.created_at`) is a `$defaultFn` generator
+  // on this engine which a raw insert never reaches while the column is NOT NULL, and
+  // `invoice_locales` is a JSON array in a text column, so the `array[...]` constructor was refused
+  // with `near "['es-ES']": syntax error`.
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Sala",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const cookie = (role: PersonRoleValue, name: string) =>
     withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values (${name}, ${hashPin("1234")}, ${role}) returning id`);
-      const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
+      const [p] = await tx
+        .insert(persons)
+        .values({ displayName: name, pinHash: hashPin("1234"), role })
+        .returning({ id: persons.id });
+      const session = await startManagementSession(tx, { personId: p!.id });
       return `${MANAGEMENT_COOKIE}=${session.id}`;
     });
   return {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     manager: await cookie("manager", "Marta"),
     supervisor: await cookie("supervisor", "Sergio"),
     admin: await cookie("admin", "Ana"),
@@ -359,24 +382,43 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
 }
 
 async function seedLowReader(name = "Datafono"): Promise<void> {
-  await db.execute(sql`
-    insert into card_readers (provider, provider_ref, name, active)
-    values ('stub', ${`ref-${name}`}, ${name}, true)`);
+  // `active` is an integer column here, so a JavaScript boolean bound into a raw template is
+  // refused with `TypeError: Provided value cannot be bound to SQLite parameter`; the table
+  // definition is what maps it.
+  await db
+    .insert(cardReaders)
+    .values({ provider: "stub", providerRef: `ref-${name}`, name, active: true });
 }
 
 /** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
  * fires `printer.jobs_waiting` for this tenant. */
 async function seedStuckPrintJob(): Promise<void> {
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Retail') returning id`);
-  const printer = await db.execute<{ id: string }>(sql`
-    insert into printers (location_id, name, transport, host, active)
-    values (${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
-  await db.execute(sql`
-    insert into print_jobs (location_id, printer_id, payload, kind, status, attempts, created_at)
-    values (${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
-            'document', 'queued', 0, ${new Date(NOW.getTime() - 5 * 60_000).toISOString()})`);
+  // Through the table definitions for the same reasons as `seedVenue`, plus one more:
+  // `print_jobs.payload` is a blob on this engine, so the one-byte payload is bound as bytes rather
+  // than built by PostgreSQL's `decode('01', 'hex')` (`no such function: decode`).
+  const [loc] = await db
+    .insert(locations)
+    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .returning({ id: locations.id });
+  const [printer] = await db
+    .insert(printers)
+    .values({
+      locationId: loc!.id,
+      name: "Barra",
+      transport: "network_tcp",
+      host: "10.0.0.1",
+      active: true,
+    })
+    .returning({ id: printers.id });
+  await db.insert(printJobs).values({
+    locationId: loc!.id,
+    printerId: printer!.id,
+    payload: Uint8Array.from([0x01]),
+    kind: "document",
+    status: "queued",
+    attempts: 0,
+    createdAt: new Date(NOW.getTime() - 5 * 60_000).toISOString(),
+  });
 }
 
 const liveGet = (app: Hono, cookie: string) =>
@@ -459,9 +501,12 @@ describe("ongoing alert sources through the route", () => {
     const v = await seedVenue();
     const app = appFor(ongoingRegistry());
     const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
-    // Age the session so a touch would visibly move its expiry away from the aged baseline.
+    // Age the session so a touch would visibly move its expiry away from the aged baseline. The
+    // clock is read in JavaScript and the instant bound: this engine has neither `now()` nor an
+    // interval type. One statement, so there is no transaction-start reading to preserve.
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await db.execute(
-      sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${sid}`,
+      sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where id = ${sid}`,
     );
     const expiryOf = () =>
       withTransaction(db, (tx) => resolveManagementSession(tx, sid, { touch: false }));

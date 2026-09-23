@@ -6,11 +6,12 @@
 // end-to-end proof of Phase 1's union-reprice: `parkOrder` re-prices the basket against the
 // location's WHOLE accessible catalogue set, so a line drawn from a non-default menu must resolve.
 //
-// Real Postgres (not PGlite): the sub-seeds run as `app_user`, `seedSales` writes real
-// hash-chained preproduction `registros_facturacion` rows through `recordSale`, and `parkOrder`
-// re-prices in the same app-role transaction — PGlite's superuser connection cannot check those
-// grants; its triggers still fire (CLAUDE.md §4). Cloned per file from the shared `manifest`
-// template via `useTemplateDb`.
+// What went with PostgreSQL: the sub-seeds used to run as `app_user` and `parkOrder` re-priced in
+// the same app-role transaction, so a grant they do not hold would have failed this file. SQLite
+// has no roles, `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every
+// call below runs on the one connection. Nothing now checks who may write any seeded table.
+// `seedSales` still writes real hash-chained preproduction `registros_facturacion` rows through
+// `recordSale`, and the append-only triggers `useVenueDb` installs still fire.
 //
 // Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
 // `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
@@ -19,7 +20,8 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -44,11 +46,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 const LOCALE: SeedLocale = "en";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF. A distinct base (95_000_000) keeps this suite's NIFs
-// from colliding with seed.test's 90M, seed-sales' 80M and seed-catalogue's 50M ranges.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -95,7 +99,7 @@ async function provisionVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return {
     tillId: venue.tillId,
@@ -128,10 +132,10 @@ describe("demo seed end-to-end", () => {
     const start = Date.now();
 
     // A small horizon so the back-dated sales are cheap but non-empty (fills yesterday fully).
-    await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 3 });
+    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 3 });
 
-    // --- Read the seeded catalogue set and a business day's close in one app_user transaction. ---
-    const read = await withTransaction(suite.admin, async (tx) => {
+    // --- Read the seeded catalogue set and a business day's close in one transaction. ---
+    const read = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
@@ -191,7 +195,7 @@ describe("demo seed end-to-end", () => {
     // filename shape AND resolves to image bytes in the database.
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
-    const storedImage = await withTransaction(suite.admin, async (tx) => {
+    const storedImage = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return readImageBytes(tx, read.image!);
     });
@@ -204,7 +208,7 @@ describe("demo seed end-to-end", () => {
     // must resolve. (`parkOrder` throws `sale.unknown_product` for any line it cannot price.)
     const cfg = tillConfigFor(venue);
     const orderId = randomUUID();
-    const { orderNumber } = await parkOrder({ db: suite.admin }, cfg, {
+    const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
       id: orderId,
       lines: [
         { productId: casaProduct.id, quantity: "1" },
@@ -214,7 +218,7 @@ describe("demo seed end-to-end", () => {
     });
     expect(orderNumber).toBeGreaterThan(0);
 
-    const held = await getHeldOrder({ db: suite.admin }, cfg, orderId);
+    const held = await getHeldOrder({ db: suite.db }, cfg, orderId);
     // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
     expect(held.lines.map((l) => l.productId)).toEqual([casaProduct.id, diaProduct.id]);
     expect(held.lines[1]!.quantity).toBe("2.000");

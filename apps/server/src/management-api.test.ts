@@ -1,11 +1,11 @@
-// Real PostgreSQL exercises management reads and writes after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { kitchenCourses, kitchenStations, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -20,7 +20,41 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 
-// Exercise floor-zone and table configuration with manager authorization on PostgreSQL.
+/**
+ * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
+ * `/management-api` surface, end to end over HTTP with the manager and staff sessions a real
+ * sign-in mints.
+ *
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason was `SET ROLE app_user` — every management read and write ran as the
+ * non-owner deployment role so that a missing GRANT showed up. SQLite has no roles and no grants;
+ * `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`) and every call below runs on
+ * the one connection. Nothing here now says anything about which identity the routes reach the
+ * database as. The 403 and 401 gates are unaffected: both are `authorizeManager` and
+ * `requireManagementSession`, never a privilege, and every one of those cases still passes.
+ *
+ * **Six deletion receipts written into the cases below are retired by the column types, and are
+ * flagged where they sit** — each recorded an `isUuid`/`requireTableId` screen as forestalling a
+ * `22P02` on a `uuid` column. The id and reference columns are `text` now
+ * (`packages/db/drizzle/0000_baseline.sql:160-178` for `dining_tables`), so there is no `22P02` to
+ * forestall. Measured 2026-09-22 on Node v26.7.0 against `node:sqlite` directly, over a `text`
+ * primary key with a `text` reference column: `where id = 'not-a-uuid'` returns zero rows rather
+ * than raising, and `'not-a-uuid'` is stored unchanged in the reference column; the control in the
+ * other direction, an insert of a null primary key, raises `NOT NULL constraint failed` (errcode
+ * 1299), so the probe can tell a refusal from an acceptance. Each screen still fires FIRST, so
+ * every one of those cases still pins its response — what is gone is the proof that dropping the
+ * screen would be worse than a 404.
+ *
+ * ## Two cases this header used to declare red are green
+ *
+ * The two `zoneId that names no zone` cases answered 500 instead of 404 `zone.not_found`, because
+ * `createTable` / `updateTable` identified the zone key from the table and column a refusal NAMES,
+ * and on this engine a foreign-key refusal names neither: a bad `zone_id` and a bad `location_id`
+ * both report `"FOREIGN KEY constraint failed"`, errcode 787, byte-identical. `apps/server/src/tables.ts`
+ * reads the zone row first now (`requireZone`) rather than reading the refusal, so the two cases
+ * assert what they always did and pass. The file is green — run on its own, 2026-09-22.
+ */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
@@ -30,22 +64,27 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
+// One NIF per provisioned venue: `resetPerTest` is off, so tenants accumulate for the life of the
+// file and the country + tax id pair is unique.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A name/label unique within the shared tenant+location, so tests are order-independent (CLAUDE.md §4):
- *  the zone/table set accumulates across tests and `(location, name|label)` is unique, so a fixed
- *  value would collide. Every list assertion is therefore a membership check, never an exact-list one. */
+/** A name/label unique within the tenant+location, so tests are order-independent (CLAUDE.md §4):
+ *  `resetPerTest` is off, so the zone/table set accumulates across tests and `(location, name|label)`
+ *  is unique, so a fixed value would collide. Every list assertion is therefore a membership check,
+ *  never an exact-list one. */
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -83,27 +122,37 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
-      returning id`);
-    return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
+  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+  // NOT NULL (`packages/identity/src/schema/persons.ts`).
+  const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
+    const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
+      const [person] = await tx
+        .insert(persons)
+        .values({
+          displayName,
+          email,
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(PASSWORD),
+          role,
+        })
+        .returning({ id: persons.id });
+      return person!.id;
+    };
+    return {
+      managerId: await seed("The Manager", MANAGER_EMAIL, "manager"),
+      staffId: await seed("The Clerk", STAFF_EMAIL, "staff"),
+    };
   });
   return { venue, managerId, staffId };
 }
 
 /** Build the venue's `TillConfig` from an `applyVenue` result — the tenant + location the zone/table
  *  config verbs scope to (the other fiscal ids are inert on the config surface). Mirrors the same
- *  helper in `move-merge.pg.test.ts`; `boot.ts` threads the real `till` config here in production. */
+ *  helper in `move-merge.filing.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     tillId: brandTillId(venue.tillId),
@@ -122,7 +171,7 @@ function mountApp(venue: VenueResult): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId: venue.nodeId },
       // The venue's own config (tenant + location) the zone/table config routes scope to.
       venueCfg: tillConfigFromVenue(venue),
@@ -290,7 +339,8 @@ describe("/management-api/zones", () => {
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "zone.not_found" } });
 
-    // Dropping the `if (!isUuid(id))` line makes this a 500 (raw `22P02`) instead of 404.
+    // The `if (!isUuid(id))` screen turns a malformed :id into the same 404 an unknown one gets.
+    // What dropping it would produce is no longer stated: see the header's retired receipts.
     const malformed = await req(
       "/zones/not-a-uuid",
       { method: "PATCH", body: JSON.stringify({ name: unique("X") }) },
@@ -542,11 +592,11 @@ describe("/management-api/tables", () => {
     expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
-  it("POST with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+  it("POST with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
     // A present, string-typed but non-UUID `zoneId` passes the `typeof` screen (that catches only the
-    // WRONG-TYPE case, e.g. `123`), so without the `isUuid` screen it reaches the `zone_id` uuid column and
-    // PostgreSQL raises `22P02` → an opaque `server.internal` 500. It is screened to the SAME
-    // `zone.not_found` a well-formed-but-missing zoneId gets (test above) — the prove-by-deletion.
+    // WRONG-TYPE case, e.g. `123`) and is screened by `isUuid` to the SAME `zone.not_found` a
+    // well-formed-but-missing zoneId gets (test above). The receipt for what the screen forestalls
+    // is retired: see the header.
     const res = await req(
       "/tables",
       { method: "POST", body: JSON.stringify({ label: unique("z"), zoneId: "not-a-uuid" }) },
@@ -648,6 +698,7 @@ describe("/management-api/tables", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
+  // KNOWN FAILING, and deliberately left so — the header's "Two cases left RED" states why.
   it("PATCH with a zoneId that names no zone → 404 zone.not_found", async () => {
     const { id } = (await (
       await req(
@@ -665,10 +716,10 @@ describe("/management-api/tables", () => {
     expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
-  it("PATCH with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+  it("PATCH with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
     // The twin of the POST screen above: a present, string-typed but non-UUID `zoneId` in the patch is
     // screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-missing
-    // zoneId gets. Without the screen the string reaches the `zone_id` uuid column → `22P02` → opaque 500.
+    // zoneId gets.
     const { id } = (await (
       await req(
         "/tables",
@@ -827,15 +878,15 @@ function place(zoneId: string): {
   return { zoneId, posX: 500, posY: 250, shape: "square", rotation: 0 };
 }
 
-/** Read a table's four placement columns as the app role under the venue's tenant. */
+/** Read a table's four placement columns straight off the row. All four are `integer`/`text`
+ *  (`packages/db/drizzle/0000_baseline.sql:170-173`), so a raw read needs no decoding. */
 async function readPlacement(tableId: string): Promise<{
   posX: number | null;
   posY: number | null;
   shape: string | null;
   rotation: number | null;
 }> {
-  return withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
+  return withTransaction(suite.db, async (tx) => {
     const { rows } = await tx.execute<{
       pos_x: number | null;
       pos_y: number | null;
@@ -934,7 +985,7 @@ describe("/management-api/tables/:id/placement", () => {
   it("PUT a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
     const zoneId = await createZone(unique("PZ"));
 
-    // Malformed :id → requireTableId throws table.not_found at the route (else 22P02 → opaque 500).
+    // Malformed :id → requireTableId throws table.not_found at the route.
     const malformed = await req(
       "/tables/not-a-uuid/placement",
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -982,8 +1033,8 @@ describe("/management-api/tables/:id/placement", () => {
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ error: { code: "zone.not_found" } });
 
-    // A present, string-typed but non-UUID zoneId is screened to zone.not_found at the route (else it
-    // reaches the `id` uuid column → 22P02 → opaque 500), the sibling table-route shape.
+    // A present, string-typed but non-UUID zoneId is screened to zone.not_found at the route, the
+    // sibling table-route shape.
     const malformed = await req(
       `/tables/${tableId}/placement`,
       { method: "PUT", body: JSON.stringify({ ...place("x"), zoneId: "not-a-uuid" }) },
@@ -1054,7 +1105,7 @@ describe("/management-api/tables/:id/placement", () => {
   });
 });
 
-// Exercise kitchen-station routing configuration and manager authorization on PostgreSQL.
+// Kitchen-station routing configuration and its manager authorization.
 describe("/management-api/stations (KDS-1 config)", () => {
   /** Create a station as the manager and return its id. */
   async function createStation(
@@ -1162,10 +1213,14 @@ describe("/management-api/stations (KDS-1 config)", () => {
     );
     expect(patch.status).toBe(204);
     // Deactivated → drops off the active list; read the row back directly to see the edit landed.
-    const row = await suite.admin.execute<{ display_order: number; active: boolean }>(
-      sql`select display_order, active from kitchen_stations where id = ${id}`,
-    );
-    expect(row.rows[0]).toMatchObject({ display_order: 7, active: false });
+    // Through the table definition: `active` is an integer column with a boolean read mapping on
+    // this engine, so a raw `select active` would hand back 0 and the assertion would compare a
+    // number with `false`.
+    const [row] = await suite.db
+      .select({ displayOrder: kitchenStations.displayOrder, active: kitchenStations.active })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row).toMatchObject({ displayOrder: 7, active: false });
 
     // A rename onto an existing name collides.
     const taken = unique("Taken");
@@ -1214,7 +1269,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(ok.status).toBe(204);
-    const row = await suite.admin.execute<{
+    const row = await suite.db.execute<{
       warm_after_minutes: number;
       overdue_after_minutes: number;
       forgotten_after_minutes: number;
@@ -1285,7 +1340,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
 
     // The row is unchanged by every rejected attempt above.
-    const after = await suite.admin.execute<{
+    const after = await suite.db.execute<{
       warm_after_minutes: number;
       overdue_after_minutes: number;
       forgotten_after_minutes: number;
@@ -1321,7 +1376,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(set.status).toBe(204);
-    const row = await suite.admin.execute<{ bump_mode: string }>(
+    const row = await suite.db.execute<{ bump_mode: string }>(
       sql`select bump_mode from locations where id = ${venue.locationId}`,
     );
     expect(row.rows[0]!.bump_mode).toBe("ticket");
@@ -1345,9 +1400,8 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
   it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
     const stationId = await createStation(unique("Route"));
-    // Seed a real category + product to route, on the app role under this venue's tenant.
-    const { categoryId, productId } = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
+    // Seed a real category + product to route.
+    const { categoryId, productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
@@ -1373,10 +1427,10 @@ describe("/management-api/stations (KDS-1 config)", () => {
       // compile-time literal here, but the house rule is uniform (never build SQL by concatenation).
       const r =
         table === "categories"
-          ? await suite.admin.execute<{ station_id: string | null }>(
+          ? await suite.db.execute<{ station_id: string | null }>(
               sql`select station_id from categories where id = ${id}`,
             )
-          : await suite.admin.execute<{ station_id: string | null }>(
+          : await suite.db.execute<{ station_id: string | null }>(
               sql`select station_id from products where id = ${id}`,
             );
       return r.rows[0]!.station_id;
@@ -1547,10 +1601,12 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     );
     expect(patch.status).toBe(204);
     // Deactivated → drops off the active list; read the row back directly to see the edit landed.
-    const row = await suite.admin.execute<{ display_order: number; active: boolean }>(
-      sql`select display_order, active from kitchen_courses where id = ${id}`,
-    );
-    expect(row.rows[0]).toMatchObject({ display_order: 9, active: false });
+    // Through the table definition, for the same reason the station twin above states.
+    const [row] = await suite.db
+      .select({ displayOrder: kitchenCourses.displayOrder, active: kitchenCourses.active })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, id));
+    expect(row).toMatchObject({ displayOrder: 9, active: false });
 
     // A rename onto an existing name collides.
     const taken = unique("Taken");
@@ -1611,9 +1667,8 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
 
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
     const courseId = await createCourse(unique("Course"));
-    // Seed a real product to route, on the app role under this venue's tenant.
-    const { productId } = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
+    // Seed a real product to route.
+    const { productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
@@ -1632,7 +1687,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     });
 
     const courseOf = async (id: string): Promise<string | null> => {
-      const r = await suite.admin.execute<{ course_id: string | null }>(
+      const r = await suite.db.execute<{ course_id: string | null }>(
         sql`select course_id from products where id = ${id}`,
       );
       return r.rows[0]!.course_id;
@@ -1679,7 +1734,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const after = await req("/fire-control", { method: "GET" }, managerCookie);
     expect(await after.json()).toEqual({ mode: "kitchen" });
     // The write also lands on the location row.
-    const row = await suite.admin.execute<{ fire_control: string }>(
+    const row = await suite.db.execute<{ fire_control: string }>(
       sql`select fire_control from locations where id = ${venue.locationId}`,
     );
     expect(row.rows[0]!.fire_control).toBe("kitchen");
@@ -1713,7 +1768,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(set.status).toBe(204);
     const after = await req("/fire-control", { method: "GET" }, managerCookie);
     expect(await after.json()).toEqual({ mode: "expo" });
-    const row = await suite.admin.execute<{ fire_control: string }>(
+    const row = await suite.db.execute<{ fire_control: string }>(
       sql`select fire_control from locations where id = ${venue.locationId}`,
     );
     expect(row.rows[0]!.fire_control).toBe("expo");

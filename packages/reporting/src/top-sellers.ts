@@ -44,11 +44,11 @@ export async function computeTopSellers(
   }
   const nodeClause = nodeScopeClause(input.nodeId);
   // Deterministic order: quantity desc, then the staff name/variant text as a stable tiebreak for ties.
-  // Both sums are counts read raw, cast `::text` and converted by the reader named after the
-  // scale: the total counts whole cents (`rawCentsToDecimal`) and the quantity counts whole
-  // thousandths (`rawThousandthsToDecimal`). The quantity's own cast used to be
-  // `::numeric(12, 3)::text`, which refused a sum past nine integer digits with a 22003; that
-  // bound is now the reader's and the refusal is an `AppError`.
+  // Both sums are counts read raw, handed over as TEXT (`cast(… as text)`, which is what `::text`
+  // was) and converted by the reader named after the scale: the total counts whole cents
+  // (`rawCentsToDecimal`) and the quantity counts whole thousandths (`rawThousandthsToDecimal`).
+  // The quantity's own cast used to be `::numeric(12, 3)::text`, which refused a sum past nine
+  // integer digits with a 22003; that bound is now the reader's and the refusal is an `AppError`.
   const { rows } = await tx.execute<{
     name: string;
     variant_name: string | null;
@@ -58,8 +58,8 @@ export async function computeTopSellers(
     select
       sl.name as name,
       sl.variant_name as variant_name,
-      sum(sl.quantity)::text as quantity,
-      sum(sl.line_total)::text as total
+      cast(sum(sl.quantity) as text) as quantity,
+      cast(sum(sl.line_total) as text) as total
     from sale_lines sl
     join sales s on s.id = sl.sale_id
     where ${businessDayRangeClause(sql`s.issued_at`, input)}

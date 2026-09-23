@@ -11,9 +11,8 @@
 // `packages/catalogue/src/offered-modifiers.ts`, pinned by "listAvailableProducts carries the
 // product-side walk" in its test file), and the till's picker draws that field.
 //
-// `seedOptionLists` runs inside the CALLER's transaction, under the app_user role the caller
-// selected with `withTransaction`/`asAppUser` — the posture `seedCatalogues` and `seedOptions` use
-// in this database. `createOptionList` and `writeProductModifiers` (`@waitron/catalogue`) are plain
+// `seedOptionLists` runs inside the CALLER's transaction, opened with `withTransaction` — the same
+// posture `seedCatalogues` and `seedOptions` use in this database. `createOptionList` and `writeProductModifiers` (`@waitron/catalogue`) are plain
 // catalogue operations, not session-gated the way `createPerson` (`@waitron/identity`) is, so this
 // calls them directly rather than raw-inserting.
 

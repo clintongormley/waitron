@@ -173,16 +173,57 @@ announce_ready() {
   if [ -w /dev/tty1 ]; then print_links >/dev/tty1 2>/dev/null || true; fi
 }
 
+# Reads the deployment stamp out of the venue database. It runs inside the app image, which carries
+# both the node that has node:sqlite and, as that compose service, the state volume; it resolves the
+# venue directory from the same two variables `apps/server/src/config.ts` resolves `venueDir` from,
+# so a box whose server was pointed elsewhere is read where that server writes.
+#
+# Three answers, because is_production needs three. The environment on stdout; nothing at all, exit
+# 0, when there is no venue file, no deployment TABLE, or no stamp row — a read that SUCCEEDED and
+# found nothing, and a box with no records to protect; and a non-zero exit for everything else, which
+# is_production treats as "cannot establish" and fails closed on. Where config.ts falls back to a
+# state root boot computed, this has none to fall back to, so an unset directory is REFUSED: joining
+# onto an empty string would read a relative path under the container's working directory, find
+# nothing, and report a clean box.
+#
+# The table is probed through sqlite_master BEFORE the stamp row is selected, for the reason
+# `packages/db/src/deployment.ts` gives at `deploymentTableExists`: the file exists long before the
+# table does. `openVenueStore` creates `venue.db` on any open and the server opens the venue
+# directory for its own stamp probe before it runs migrations, so a box that booted and then failed
+# sits with the file present and the table absent — and that is exactly the box being reset. Without
+# the probe the select raises `no such table: deployment` and reset is refused as production on a box
+# that was never provisioned.
+#
+# scripts/waitron-sh.test.mjs extracts this text and RUNS it against real databases — the docker stub
+# answers for it everywhere else, so nothing else in that suite can see whether it reads a file right.
+VENUE_STAMP_JS='
+const { DatabaseSync } = require("node:sqlite");
+const { existsSync } = require("node:fs");
+const { join } = require("node:path");
+const state = process.env.WAITRON_STATE_DIR;
+const dir = process.env.WAITRON_VENUE_DIR || (state ? join(state, "venue") : "");
+if (!dir) throw new Error("neither WAITRON_VENUE_DIR nor WAITRON_STATE_DIR is set");
+const file = join(dir, "venue.db");
+if (!existsSync(file)) process.exit(0);
+const db = new DatabaseSync(file, { readOnly: true });
+const present = db.prepare("select name from sqlite_master where type = ? and name = ?").get("table", "deployment");
+if (!present) process.exit(0);
+const row = db.prepare("select environment from deployment where id = 1").get();
+if (row && row.environment) process.stdout.write(String(row.environment));
+'
+
 # Is this box stamped production? Two signals, production from EITHER. trading.env is read from the
-# state volume with a throwaway container so no database need be up; the db stamp is the box's own
-# authority when the cluster is reachable.
+# state volume with a throwaway container; the deployment stamp is read from the venue database on
+# that same volume, by a container built from the app image. Neither needs the box to be running,
+# which matters because the box being reset is often one that will not come up.
 #
 # Fiscal safety (CLAUDE.md §5): a reset is irreversible, so an environment we CANNOT establish is
 # treated as production and refused. Each signal ends in one of three states — a VALUE, "nothing
 # there" (a read that succeeded and found the box unprovisioned — safe to wipe), or ERRORED (the
 # read itself failed). We fail CLOSED only when a read ERRORED and no signal returned a value; a
-# genuinely unprovisioned box (trading.env absent, stamp empty) reads cleanly and stays resettable,
-# which keeps the demo workflow working. The operator overrides a false refusal with --force-production.
+# genuinely unprovisioned box (trading.env absent, stamp empty or its table not created yet) reads
+# cleanly and stays resettable, which keeps the demo workflow working. The operator overrides a false
+# refusal with --force-production.
 is_production() {
   local env_out env_rc stamp_out stamp_rc env_value="" stamp_value="" errored=0
   # trading.env from the state volume via a throwaway container. The __ABSENT__ sentinel separates an
@@ -205,11 +246,13 @@ is_production() {
   fi
   [ "$env_value" = "production" ] && return 0
 
-  # The deployment stamp lives in the app database, named `waitron` (node-entry.ts DATABASE), NOT the
-  # default `postgres` db — so `-d waitron` is required or the query errors. pipefail makes the
-  # pipeline's exit the psql exit, so a db that is down is a non-zero rc here, not a silent empty read.
-  if stamp_out="$(docker compose -f "$WAITRON_DIR/compose.yml" exec -T db psql -U postgres -d waitron -tAc \
-    'select environment from deployment where id = 1' 2>/dev/null | tr -d '[:space:]')"; then
+  # The deployment stamp, read from the venue database by VENUE_STAMP_JS above. `run` rather than
+  # `exec`: it builds its own container from the app image, so the stamp is still readable on a box
+  # whose app is down — which is the box an operator is most likely to be resetting. --no-deps keeps
+  # it from starting the rest of the compose file to read a file. pipefail makes the pipeline's exit
+  # the node exit, so a failed read is a non-zero rc here, not a silent empty one.
+  if stamp_out="$(docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
+    --entrypoint node app -e "$VENUE_STAMP_JS" 2>/dev/null | tr -d '[:space:]')"; then
     stamp_rc=0
   else
     stamp_rc=$?

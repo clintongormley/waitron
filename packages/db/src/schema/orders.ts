@@ -1,17 +1,35 @@
 import type { OptionSnapshot } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { count, id, json, label, money, quantity, rate, table, tsString } from "./columns.js";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  count,
+  enumCheck,
+  enumType,
+  id,
+  json,
+  label,
+  money,
+  newId,
+  nowIso,
+  quantity,
+  rate,
+  table,
+  tsString,
+} from "./columns.js";
 import { products } from "./catalogue.js";
+import { diningTables } from "./dining-tables.js";
+import { kitchenCourses } from "./kitchen-courses.js";
 import { nodes } from "./nodes.js";
 import { tills } from "./tenants.js";
 
 /**
- * A pgEnum rather than a text CHECK, deliberately: unlike invoice_series.purpose
- * these four values are settled by the spec, and one declaration yields both
- * the TypeScript union and the database constraint.
+ * One declaration rather than a repeated list, deliberately: unlike invoice_series.purpose
+ * these four values are settled by the spec, and the single `enumType` call yields both
+ * the TypeScript union and the database constraint (`working_orders_status_ck` below reads
+ * its values back off the column).
  */
-export const workingOrderStatus = pgEnum("working_order_status", [
+export const workingOrderStatus = enumType([
   "open",
   // placed (7c): the order is finalized — composition FROZEN (require_open_parent already rejects
   // line writes on a non-open parent) and the fiscal issuance basis fixed. A NON-terminal state
@@ -39,7 +57,7 @@ export const workingOrderStatus = pgEnum("working_order_status", [
 export const workingOrders = table(
   "working_orders",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     tillId: id("till_id")
       .notNull()
       /* v8 ignore start */
@@ -64,14 +82,16 @@ export const workingOrders = table(
     // Walk-up orders without a label or table keep NULL.
     label: label("label"),
     status: workingOrderStatus("status").notNull().default("open"),
-    openedAt: tsString("opened_at").notNull().defaultNow(),
+    openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     settledAt: tsString("settled_at"),
     // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
     // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
-    // tab-membership column — only this delivery link. BARE column: its FK
-    // (delivery_table_id) → dining_tables(id) is hand-written in the mutual-FK
-    // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
-    deliveryTableId: id("delivery_table_id"),
+    // tab-membership column — only this delivery link. `dining_tables` carries the reverse key, so
+    // the two tables name each other; the `AnySQLiteColumn` annotation on the thunk is what stops
+    // TypeScript inferring each table's type from the other's (see dining-tables.ts).
+    /* v8 ignore start */
+    deliveryTableId: id("delivery_table_id").references((): AnySQLiteColumn => diningTables.id),
+    /* v8 ignore stop */
     collectedAt: tsString("collected_at"),
   },
   (t) => [
@@ -81,6 +101,7 @@ export const workingOrders = table(
       foreignColumns: [nodes.id],
       name: "working_orders_node_fk",
     }),
+    check("working_orders_status_ck", enumCheck(t.status)),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
     check(
@@ -111,7 +132,7 @@ export const workingOrders = table(
 export const workingOrderLines = table(
   "working_order_lines",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     lineNo: count("line_no").notNull(),
     // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
@@ -172,7 +193,12 @@ export const workingOrderLines = table(
     // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
     category: label("category"),
     servedAt: tsString("served_at"),
+    // The kitchen course this line was rung under, resolved from the product's default at ring
+    // time. NULLABLE: no course means the line fires earliest (spec §2b), and a foreign key does
+    // not check a NULL.
     courseId: id("course_id"),
+    // The dish line an extras pick belongs to; a top-level line leaves it NULL. The self-key is
+    // declared in the extra-config callback below, because the table cannot name itself here.
     parentLineId: id("parent_line_id"),
     note: label("note"),
   },
@@ -187,6 +213,16 @@ export const workingOrderLines = table(
       foreignColumns: [products.id],
       name: "working_order_lines_product_fk",
     }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.courseId],
+      foreignColumns: [kitchenCourses.id],
+      name: "working_order_lines_course_fk",
+    }),
+    foreignKey({
+      columns: [t.parentLineId],
+      foreignColumns: [t.id],
+      name: "working_order_lines_parent_fk",
+    }),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
     check(
       "working_order_lines_unit_precision_ck",

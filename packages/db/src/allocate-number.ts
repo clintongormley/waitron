@@ -21,12 +21,15 @@ import { invoiceSeries } from "./schema/series.js";
 /**
  * Allocates the next invoice number from a series.
  *
- * Strictly increasing, and never reused once used. One statement: the UPDATE
- * takes a row lock, so two concurrent allocators on the same series serialise
- * and the second re-evaluates `next_number + 1` against the first's committed
- * value. At READ COMMITTED that is exactly the semantics required — the
- * blocked statement re-reads the updated row rather than proceeding from its
- * stale snapshot.
+ * Strictly increasing, and never reused once used. One statement, so the read
+ * of `next_number` and the write of its successor cannot be separated.
+ *
+ * On PostgreSQL the UPDATE also took a row lock, and that is what made a second
+ * allocator on the same series re-evaluate `next_number + 1` against the first's
+ * committed value instead of its own stale snapshot. There is no second
+ * allocator to overlap with: one write transaction runs on the venue file at a
+ * time, and the pattern is stated once, with its measurement and its control, on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  *
  * Allocation is transactional. A rollback returns the number, and the next
  * caller receives it again; no gap appears. This is correct rather than a
@@ -34,15 +37,17 @@ import { invoiceSeries } from "./schema/series.js";
  * numbering and PERMITS gaps without requiring them, and a number that was
  * allocated inside a transaction that aborted was never used — nothing was
  * recorded under it. The property that must hold, "no two committed sales
- * share a number", is enforced by UNIQUE (series_id,
- * invoice_number) on `sales`, which does not depend on this function being
- * correct.
+ * share a number", is enforced by `sales_series_invoice_number_key`, UNIQUE
+ * (series_id, invoice_number) on `sales`
+ * (`packages/db/src/schema/sales.ts:152`, generated at
+ * `packages/db/drizzle/0000_baseline.sql:617`). That does not depend on this
+ * function being correct, and it is engine-independent.
  *
- * Deliberately NOT a per-series Postgres sequence. `nextval` would put the
- * counter outside transactional visibility and burn the number on rollback,
- * but a sequence per series row means CREATE SEQUENCE executed from a trigger
- * on every insert — dynamic DDL on the write path, plus a SECURITY DEFINER
- * function to run it — to buy a gap the regulation never asked for.
+ * A counter in a row, rather than a counter the engine owns. That was the
+ * decision on PostgreSQL — a per-series `nextval` would have put the number
+ * outside transactional visibility and burnt it on rollback, to buy a gap the
+ * regulation never asked for — and this engine has no sequences at all, so the
+ * alternative it rejected no longer exists to reconsider.
  */
 export async function allocateInvoiceNumber(tx: Transaction, seriesId: string): Promise<number> {
   const updated = await tx

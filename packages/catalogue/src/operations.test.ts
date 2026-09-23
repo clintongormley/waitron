@@ -55,7 +55,7 @@ import type { AvailableProduct } from "./operations.js";
 import { createUnit, EACH_UNIT, readProductUnitId } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
-// Query behaviour runs on PGlite; each case starts with empty authoring tables.
+// Query behaviour. Each case starts with empty authoring tables.
 const fx = useCatalogueDb();
 
 describe("catalogue operations", () => {
@@ -219,7 +219,7 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Every test body runs as app_user on its own transaction.
+  // Every test body runs on its own transaction.
   const asTenant = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
@@ -291,6 +291,47 @@ describe("catalogue operations", () => {
       expect(seenHam.vatClass).toBe("reduced");
       expect(seenHam.name).toBe("sliced ham");
       expect(seenHam.active).toBe(true);
+    });
+  });
+
+  // Two rows written with the SAME `created_at`, the earlier insert carrying the LEXICALLY GREATER
+  // id, so insert order and id order disagree and the read has to come back as one or the other.
+  // Ties are ordinary rather than contrived: `created_at` is an ISO string at millisecond
+  // resolution and two authoring transactions land inside one millisecond most of the time (22 of
+  // 30 pairs, measured 2026-09-22).
+  //
+  // What settles the tie is the `group by products.id`, not the `id` in the `order by`: the group
+  // key is the table's primary key, so the engine walks that index and hands the rows back in id
+  // order. Deleting `products.id` from `listProducts`'s `orderBy` therefore moves nothing here —
+  // this case pins the ORDER the read returns, and nothing pins that tiebreak.
+  //
+  // Note what it does NOT give: `id` is a random v4 UUID, so which of two same-millisecond rows
+  // comes first is decided afresh on every run. A caller that needs creation order cannot get it
+  // from these two columns.
+  it("settles a created_at tie on the product id rather than on insert order", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const sameMoment = new Date("2026-09-22T10:00:00.000Z");
+      const row = (id: string, name: string) => ({
+        id,
+        catalogueId: cat.id,
+        name,
+        pricingUnit: "each",
+        unitPrice: 100,
+        vatClass: "general",
+        createdAt: sameMoment,
+        updatedAt: sameMoment,
+      });
+      await tx
+        .insert(products)
+        .values(row("ffffffff-0000-4000-8000-000000000001", "written first"));
+      await tx
+        .insert(products)
+        .values(row("00000000-0000-4000-8000-000000000002", "written second"));
+      expect((await listProducts(tx, cat.id)).map((p) => p.name)).toEqual([
+        "written second",
+        "written first",
+      ]);
     });
   });
 
@@ -1381,7 +1422,7 @@ describe("catalogue operations", () => {
         { id: casa.id, name: "Casa", isDefault: true },
       ]);
       const members = await tx.execute<{ count: number }>(
-        sql`select count(*)::int as count from location_catalogues where location_id = ${locationId}`,
+        sql`select count(*) as count from location_catalogues where location_id = ${locationId}`,
       );
       expect(members.rows[0]!.count).toBe(0);
     });

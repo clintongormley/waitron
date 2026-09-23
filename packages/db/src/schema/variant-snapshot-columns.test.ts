@@ -1,0 +1,150 @@
+// What this suite proves: the B1 snapshot columns round-trip, and the variant-locales trigger
+// (`working_order_lines_check_variant_locales_insert` / `_update`) refuses a map that is not
+// exactly the venue's locales. Nothing here ever turned on the connecting role, so the storage
+// swap costs this suite no assertion — only its last case changes how it reads the schema (see it).
+import { sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "vitest";
+import type { Database } from "../client.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { VARIANT_LOCALES_REFUSAL } from "../trigger-refusals.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { useVenueDb } from "../testing/venue-db.js";
+import { catalogues, products } from "./catalogue.js";
+import { workingOrderLines, workingOrders } from "./orders.js";
+import { locations, tenants, tills } from "./tenants.js";
+
+const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
+const AT = "2026-07-20T19:20:30+00:00";
+
+// Bilingual on purpose: a single-locale venue cannot tell "exactly these locales" from
+// "at least one locale", so the trigger is exercised against two configured locales.
+const LOCALES = ["es", "ca"] as const;
+
+describe("B1 snapshot columns and the variant-descriptions locales trigger", () => {
+  // The venue, catalogue and order below are seeded ONCE in `beforeAll`, so the per-test reset
+  // `useVenueDb` runs by default would empty them after the first case. Each case that writes a
+  // line uses its own `line_no` and reads back only its own row, so they do not need the reset.
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
+  let db: Database;
+  let productId = "";
+  let orderId = "";
+
+  beforeAll(async () => {
+    db = suite.db;
+    await db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
+    await db.insert(locations).values({
+      id: LOCATION,
+      name: "Fixture Location",
+      invoiceLocales: [...LOCALES],
+      operationDescription: "Hostelería",
+    });
+    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "A1" });
+    const [cat] = await db
+      .insert(catalogues)
+      .values({ name: "Deli" })
+      .returning({ id: catalogues.id });
+    const [prod] = await db
+      .insert(products)
+      .values({
+        catalogueId: cat!.id,
+        name: "Café solo",
+        pricingUnit: "each",
+        unitPrice: 130,
+        vatClass: "general",
+      })
+      .returning({ id: products.id });
+    productId = prod!.id;
+    const [order] = await db
+      .insert(workingOrders)
+      .values({ tillId: TILL, orderNumber: 1, status: "open", openedAt: AT })
+      .returning({ id: workingOrders.id });
+    orderId = order!.id;
+  });
+
+  function lineValues(overrides: Record<string, unknown> = {}) {
+    return {
+      workingOrderId: orderId,
+      lineNo: 1,
+      name: "Café solo",
+      productId,
+      variantName: "Grande",
+      variantDescriptions: { es: "Café solo", ca: "Cafè sol" },
+      variantKitchenName: "CAFE GR",
+      descriptions: { es: "Café solo", ca: "Cafè sol" },
+      quantity: 1000,
+      unitPrice: 130,
+      unitPriceGross: 143,
+      vatRate: 1000,
+      lineTotal: 143,
+      ...overrides,
+    };
+  }
+
+  it("round-trips the new snapshot columns (name, text variant_name, variant_descriptions, variant_kitchen_name)", async () => {
+    const [line] = await db.insert(workingOrderLines).values(lineValues()).returning();
+    expect(line!.name).toBe("Café solo");
+    // variant_name is plain text, not a map.
+    expect(line!.variantName).toBe("Grande");
+    expect(line!.variantDescriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
+    expect(line!.variantKitchenName).toBe("CAFE GR");
+  });
+
+  it("accepts a null variant_descriptions (the optional column is skipped by the trigger)", async () => {
+    const [line] = await db
+      .insert(workingOrderLines)
+      .values(lineValues({ lineNo: 2, variantDescriptions: null }))
+      .returning();
+    expect(line!.variantDescriptions).toBeNull();
+  });
+
+  it("rejects a variant_descriptions that is missing a configured locale", async () => {
+    const error = await captureError(() =>
+      db
+        .insert(workingOrderLines)
+        .values(lineValues({ lineNo: 3, variantDescriptions: { es: "Café solo" } })),
+    );
+    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
+  });
+
+  it("rejects a variant_descriptions carrying an unconfigured locale", async () => {
+    const error = await captureError(() =>
+      db.insert(workingOrderLines).values(
+        lineValues({
+          lineNo: 4,
+          variantDescriptions: { es: "Café solo", ca: "Cafè sol", en: "Black coffee" },
+        }),
+      ),
+    );
+    expect(pgErrorMessage(error)).toBe(VARIANT_LOCALES_REFUSAL);
+  });
+
+  it("applied the same new columns to sale_lines with matching types", async () => {
+    // sale_lines' round-trip needs a full fiscal sale (node, series, invoice number) to satisfy its
+    // parent FK; this reads the live applied schema instead.
+    //
+    // `pragma table_info` replaces `information_schema.columns`, and the answer it gives is
+    // COARSER: PostgreSQL reported `jsonb` for `variant_descriptions` and `text` for the other
+    // three, so the old assertion separated a JSON column from a plain one. Every one of the four
+    // is `text` here — `json` in `packages/db/src/schema/columns.ts` is `text(..., { mode: "json" })`,
+    // a Drizzle read/write mode with no counterpart in the stored type — so the column's JSON-ness
+    // is no longer something the catalogue can be asked about. What survives is presence,
+    // nullability and the storage type, which the catalogue reports in the case the DDL declared it
+    // (`TEXT`), not normalised.
+    const cols = db
+      .all<{ name: string; type: string; notnull: number }>(
+        sql`select name, type, "notnull" from pragma_table_info('sale_lines')
+             where name in ('name','variant_name','variant_descriptions','variant_kitchen_name')
+             order by name`,
+      )
+      .map((c) => ({ name: c.name, type: c.type, notnull: c.notnull }));
+    expect(cols).toEqual([
+      { name: "name", type: "TEXT", notnull: 1 },
+      { name: "variant_descriptions", type: "TEXT", notnull: 0 },
+      { name: "variant_kitchen_name", type: "TEXT", notnull: 0 },
+      { name: "variant_name", type: "TEXT", notnull: 0 },
+    ]);
+  });
+});

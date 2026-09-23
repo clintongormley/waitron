@@ -36,7 +36,14 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 /** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
-  await suite.db.execute(sql`truncate tenant_credentials cascade`);
+  // `delete`, not `truncate ... cascade`: this engine has no TRUNCATE at all, and the statement
+  // did not even reach execution — running this suite before the change printed
+  // `Error: near "truncate": syntax error` from `packages/store/src/node-sqlite-adapter.ts:64`,
+  // which killed every case in the file in its `beforeEach`. Nothing is lost with `cascade`:
+  // no table references `tenant_credentials` (it is classified `local`, `./classification.ts`,
+  // and `packages/db/src/schema` declares no foreign key into it), so the cascade had nothing to
+  // follow. It carries no append-only trigger either, so the delete is not refused.
+  await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
 describe("rotateCredentials", () => {
@@ -98,8 +105,11 @@ describe("rotateCredentials", () => {
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(1);
 
+    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number, and
+    // this engine returns one already — measured on node v26.7.0, `select count(*) as n` over a
+    // one-row table gives `{ n: 1 }` with `typeof n === "number"`.
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials where key_version = 2`);
+      select count(*) as n from tenant_credentials where key_version = 2`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
@@ -183,15 +193,27 @@ describe("rotateCredentials", () => {
     );
     let transactions = 0;
     const db = suite.db;
+    // The proxy intercepts `withWriteLock`, not `transaction`: `withTransaction` now opens its
+    // transaction by handing the body to the file's write lock
+    // (`packages/db/src/tenancy.ts:44`) rather than by calling `db.transaction`. Intercepting the
+    // old seam counted nothing — the case failed `expected +0 to be 2` — so the delete never
+    // landed and what the case is about was never exercised. Only the interception point moved;
+    // both assertions below are unchanged, and `withWriteLock` is called exactly where
+    // `transaction` used to be: once for the listing, once for the row's re-seal
+    // (`./store.ts`'s `rotateCredentials`).
+    //
+    // The delete runs on `target` OUTSIDE the lock, so it commits in its own autocommit statement
+    // before the re-seal's `begin immediate` is taken (`packages/store/src/write-queue.ts`) —
+    // which is the ordering the case needs.
     const deletingDb = new Proxy(db, {
       get(target, property, receiver) {
-        if (property !== "transaction") return Reflect.get(target, property, receiver) as unknown;
-        const transaction: Database["transaction"] = async (fn, config) => {
+        if (property !== "withWriteLock") return Reflect.get(target, property, receiver) as unknown;
+        const withWriteLock: Database["withWriteLock"] = async (body) => {
           transactions += 1;
           if (transactions === 2) await target.execute(sql`delete from tenant_credentials`);
-          return target.transaction(fn, config);
+          return target.withWriteLock(body);
         };
-        return transaction;
+        return withWriteLock;
       },
     });
 

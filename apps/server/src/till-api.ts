@@ -339,8 +339,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.tender_shortfall": 400,
   "quantity.invalid": 400,
   // A malformed working-order id in a `POST /api/sales` / `POST /api/pay` / `POST /api/working-orders`
-  // body — the shared branded-id code (`@waitron/shared`), screened by `requireUuidParam` so it is a
-  // clean 400, not a `22P02` → 500.
+  // body — the shared branded-id code (`@waitron/shared`), screened by `requireUuidParam`.
+  //
+  // WHY AN ID SCREEN IS NOW THE ONLY REFUSAL. Stated once, here; the other `isUuid` screens in this
+  // app's route files point back at this note rather than repeating it. Every id column is plain
+  // `text` — `packages/db/src/schema/columns.ts` is where the engine's helpers are declared and its
+  // header carries the measurement, seven values the PostgreSQL types refused, every one of them now
+  // accepted and stored. Confirmed again for an id: `insert into … values ('not-a-uuid')` into a
+  // `text primary key` succeeds and reads the value back (Node v26.7.0, `node:sqlite`). So a
+  // malformed id no longer meets anything that objects to it — a by-id read simply matches no row,
+  // and a write stores it.
+  //
+  // The practical point for a reader: deleting one of these screens does not fall back to a database
+  // refusal, it removes the last one. Each screen is what turns a malformed id into this clean 400,
+  // or into whatever 404/401 its own surface gives an id that names nothing — never a silent miss or
+  // a stored malformed id.
   "shared.invalid_id": 400,
   "authorization.not_permitted": 403,
   // A sale the FISCAL FILING itself refuses — the record would break a rule AEAT applies
@@ -493,8 +506,10 @@ export const run = createErrorBoundary(STATUS, "till.failed");
 
 /**
  * Screen a path `:id` param as a UUID before it reaches a query, returning it for the caller. A
- * malformed id passed straight into `eq(workingOrders.id, id)` would `22P02` in the DB → an opaque 500;
- * screening it here refuses it with the SAME domain `code` an absent/wrong-state id gets on that route
+ * malformed id passed straight into `eq(workingOrders.id, id)` is not refused by the column at all —
+ * it matches no row and the route answers as if the order were absent (the id-screen note on
+ * `shared.invalid_id` in the STATUS map above). Screening it here refuses it with the SAME domain
+ * `code` an absent/wrong-state id gets on that route
  * — the fail-closed shape each route documents. `code` is the caller's deliberate per-route choice
  * (`working_order.not_found` for retrieve → 404 — the retrieve route's absent-order code;
  * `working_order.not_open` for edit/abandon/place → 409; `working_order.not_placed` for collect/cancel
@@ -525,8 +540,8 @@ function requireUuidId(
  * When an override IS supplied it must be well-formed, mapped to the SAME codes the credential gate
  * gives a bad credential so a malformed one never becomes an opaque 500:
  *   • `personId` must be a UUID string — a non-string or malformed value is refused `person.not_found`
- *     (401) BEFORE it can reach the `persons.id` uuid column inside `verifyPersonCredential` as a
- *     `22P02` → opaque 500, the same code a well-formed-but-absent id gets from that gate;
+ *     (401) BEFORE it reaches `verifyPersonCredential`'s `persons.id` read, where it would simply
+ *     match nothing — the same code a well-formed-but-absent id gets from that gate;
  *   • `pin` must be a string — a missing/non-string PIN is refused `pin.invalid` (401), the code a
  *     wrong PIN already gets, rather than reaching `verifyPin` as a non-string.
  * (A well-formed-but-UNKNOWN personId needs no screen here — the credential gate returns
@@ -552,8 +567,10 @@ function parseDrawerOverride(
  * column (int4) on the create/patch table routes. Optional, so an ABSENT capacity (`undefined`)
  * passes through untouched — the column stays NULL / unchanged; a value present but not a
  * non-negative integer within int4's range (`< 0`, `> 2_147_483_647`, fractional, or not a number)
- * would otherwise reach the insert/update and raise `22003`/`22P02` — a non-AppError the boundary
- * turns into an opaque `server.internal` 500, the same class the `:lineNo` range screen prevents.
+ * would otherwise reach the insert/update and be STORED: `capacity` is `integer`, and this engine's
+ * INTEGER is 64-bit whatever the declared type says, so nothing below this screen bounds the value
+ * (`packages/db/src/schema/columns.ts` carries the measurement). The screen is the whole bound, the
+ * same way the `:lineNo` range screen is.
  * Refused here as `management.request_invalid` naming the FIELD, the generic request-shape 400 the
  * sibling surfaces (`workforce-api.ts`'s `requireOffsetMinutes`) use for an out-of-range numeric body
  * field. Only the field NAME travels, matching that code's no-value discipline (a headcount is not a
@@ -568,8 +585,9 @@ function requireCapacity(capacity: number | undefined): void {
 
 /**
  * Screen a tab `:id` path param as a UUID before it reaches a query — a malformed id passed into
- * `eq(workingOrders.id, id)` would `22P02` → an opaque 500 (the fail-closed shape the working-order
- * routes' `requireUuidId` uses). A non-UUID names no open tab exactly as legitimately as an absent one,
+ * `eq(workingOrders.id, id)` reaches no refusal of its own (the id-screen note above) and would match
+ * nothing — the fail-closed shape the working-order routes' `requireUuidId` uses. A non-UUID names no
+ * open tab exactly as legitimately as an absent one,
  * so it is refused with `tab.not_open` (409). See Plan note 3 on the param key (`tabId`).
  */
 function requireTabParam(id: string): string {
@@ -585,8 +603,9 @@ function requireTabParam(id: string): string {
  * POST/DELETE all share. `line_no` is int4 (orders.ts) and `voidTabLine`/`markLineServed`/
  * `unmarkLineServed` bind it parameterised, so a non-numeric value (`NaN`) or a fractional one is
  * refused before any query, and an integer ABOVE int4's max (which clears `Number.isInteger`) is too —
- * un-screened it would reach `where line_no = $n` and raise `22003` (out of range), a non-AppError the
- * boundary turns into an opaque `server.internal` 500. A line number that cannot exist names no line,
+ * un-screened it would reach `where line_no = $n` and match nothing, silently: the column is
+ * `integer` and this engine's INTEGER is 64-bit whatever the declared type says, so no width refuses
+ * it (`packages/db/src/schema/columns.ts`). A line number that cannot exist names no line,
  * so it is refused as `tab.line_not_found` (404) — the honest 404 an absent line gets, exactly as the
  * verbs themselves throw for an in-range `line_no` matching nothing. `tabId` travels for the same
  * fail-closed error shape the void-line route carries.
@@ -605,8 +624,8 @@ function requireLineNo(tabId: string, raw: string): number {
  * in. SESSION-GUARDED (`requireSession`, no permission — the `fire_control` venue setting decides which UI
  * SHOWS the button, not who may call it; every surface is session-gated, spec §3c). `:id` (the order) is
  * `isUuid`-screened as `working_order.not_found` (404) and `:courseId` as `course.not_found` (404) BEFORE
- * either reaches a `uuid` column — a malformed id passed straight into `eq(…, id)` would `22P02` → an
- * opaque 500 — then `verb(tx, cfg, orderId, courseId)` runs under the till's `app_user` transaction and
+ * either reaches a query — a malformed id passed straight into `eq(…, id)` meets no refusal of its own
+ * and matches nothing (the id-screen note above) — then `verb(tx, cfg, orderId, courseId)` runs in the till's own transaction and
  * the route returns 200 with an empty body (the display re-reads the queue). The three verbs differ only
  * in what they stamp on `ticket_items` and whether they existence-check the course — `fireCourse`/
  * `markCourseAway` do (via `requireCourse`, so an unknown/foreign course is `course.not_found`),
@@ -666,13 +685,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId: rawPersonId, pin } = await readJsonBody<{ personId: string; pin: string }>(
         c,
       );
-      // Canonicalise the personId BEFORE it keys the throttle. Postgres canonicalises UUIDs on cast, so
-      // `loginWithPin` resolves the SAME person from an uppercase/dash-free spelling — but the throttle
-      // keys on the STRING, so each spelling would be a distinct back-off bucket a brute-forcer cycles
-      // to evade the window (§5). One canonical value feeds BOTH the throttle and the login. A value
-      // that is no UUID in any spelling Postgres accepts names no person — refused `person.not_found`
+      // Canonicalise the personId BEFORE it keys the throttle — and before the lookup. The throttle
+      // keys on the STRING, so each spelling would otherwise be a distinct back-off bucket a
+      // brute-forcer cycles to evade the window (§5); and the id column is plain `text`, which folds
+      // no spellings, so an uppercase or dash-free personId would name nobody at all
+      // (`canonicaliseUuid` in `till-session.ts` carries the measurement). One canonical value feeds
+      // BOTH the throttle and the login. A value that is no UUID in any spelling names no person —
+      // refused `person.not_found`
       // (401), the same code+status a well-formed-but-unknown id gets and the shape `parseDrawerOverride`
-      // gives a non-uuid personId — never reaching `persons.id` as a `22P02` → opaque 500.
+      // gives a non-uuid personId — never reaching `persons.id`, where it would simply match no row.
       const personId = canonicaliseUuid(rawPersonId);
       if (personId === null)
         throw new AppError("person.not_found", { personId: String(rawPersonId) });
@@ -723,10 +744,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, one
-  // whose cookie is not even UUID-shaped (so it names no `uuid` row and would 22P02 in the DB), or one
-  // naming an already-closed session (`endSession` returns false), still clears the cookie and answers
-  // 200, so a double logout or a stale tab is never an error. The `isUuid` screen keeps a malformed
-  // cookie a 200 no-op rather than the opaque 500 the raw value would raise (see `till-session.ts`).
+  // whose cookie is not even UUID-shaped (so it names no session row), or one naming an
+  // already-closed session (`endSession` returns false), still clears the cookie and answers 200, so
+  // a double logout or a stale tab is never an error. The `isUuid` screen keeps a malformed cookie a
+  // 200 no-op and is the only thing looking at its shape (see `till-session.ts`).
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const id = readSessionId(c);
@@ -787,7 +808,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
   // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
   // rather than a session-guarded one. `venueName`/`nif` still come from the taxpayer row via
-  // `readTenant` (@waitron/db), under `withTransaction` + `asAppUser`: `app_user` holds SELECT on
+  // `readTenant` (@waitron/db), under `withTransaction` + `asAppUser`, which reads
   // `tenants`.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
@@ -1108,8 +1129,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<TillSaleRequest>(c);
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
-      // becomes `payWorkingOrder`'s `req.id` and `22P02`s at its `eq(workingOrders.id, req.id)` lock read
-      // (till-sale.ts) → an opaque 500 (the 7b follow-up). `requireUuidParam` refuses it 400 first.
+      // becomes `payWorkingOrder`'s `req.id` and travels unchallenged into its
+      // `eq(workingOrders.id, req.id)` read (till-sale.ts), matching nothing (the id-screen note
+      // above). `requireUuidParam` refuses it 400 first.
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
@@ -1165,9 +1187,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // INTEGRATED leg here is fenced.)
       await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const body = await readJsonBody<IntegratedPayRequest>(c);
-      // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
-      // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
-      // 500 — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
+      // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it travels
+      // unchallenged into `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` read
+      // (till-sale.ts) — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
       // provider guard, so a malformed body is a 400 whatever the till's card config) as the 7b sibling.
       requireUuidParam(body.id, "WorkingOrderId");
       if (
@@ -1182,7 +1204,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
       // A named reader override (Task 17's picker) must be a well-formed uuid before it reaches the
-      // by-id read below, so a malformed one is a 400, not a `22P02` → 500.
+      // by-id read below, so a malformed one is a 400 rather than a read that quietly finds nothing.
       if (body.readerId !== undefined) {
         requireUuidParam(body.readerId, "CardReaderId");
       }
@@ -1250,10 +1272,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // sale routes: `requireSession` runs FIRST, and the guard — not the browser — supplies the
   // attribution, so `operatorId` is `session.personId`. The client mints `body.id` and holds it stable
   // across a retry, which makes park IDEMPOTENT: a re-sent park (a lost-response retry) PK-collides on
-  // the primary key, and `parkOrder` catches that 23505 and REPLAYS the existing open order's
+  // the primary key, and `parkOrder` catches that refusal and REPLAYS the existing open order's
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
-  // is no longer open re-throws the raw 23505). `parkOrder` re-reads the catalogue and prices
+  // is no longer open re-throws the raw refusal). `parkOrder` re-reads the catalogue and prices
   // authoritatively (the request carries no price), opening its OWN `withTransaction`/`asAppUser` transaction,
   // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
@@ -1275,8 +1297,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
       }>(c);
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
-      // (a `uuid` column), so un-screened a malformed one `22P02`s → an opaque 500, the same 7b exposure
-      // as the sale/pay bodies. (Distinct from the 23505 re-park idempotency `parkOrder` now handles: that
+      // (a plain `text` column), so un-screened a malformed one is STORED as the order's id — the same
+      // 7b exposure as the sale/pay bodies, and this screen is the only thing refusing it (the
+      // id-screen note above). (Distinct from the re-park idempotency `parkOrder` now handles: that
       // is a VALID id colliding with an existing open row, which REPLAYS; this is a malformed one refused
       // before any INSERT.)
       requireUuidParam(body.id, "WorkingOrderId");
@@ -1317,9 +1340,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // same-tenant order on another node IS reachable) surfaces `working_order.not_found`, which `STATUS`
   // maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only, never a stored
   // price, so the till re-prices on retrieve. The id is `isUuid`-screened before the query: a
-  // malformed one passed straight into `eq(workingOrders.id, id)` would `22P02` → an opaque 500
-  // (the 7b follow-up), so it is refused as `working_order.not_found` — the SAME 404 an absent
-  // open order gets.
+  // malformed one passed straight into `eq(workingOrders.id, id)` meets no refusal of its own and
+  // matches nothing, so it is refused HERE as `working_order.not_found` — the SAME 404 an absent open
+  // order gets.
   app.get("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1334,7 +1357,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // non-open or unknown id surfaces `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
   // no price) and returns nothing, so this answers 200 with an empty body. The id is `isUuid`-screened
   // before the query, refused as `working_order.not_open` → 409 — the SAME code a non-open/absent id
-  // gets — rather than the `22P02`-driven opaque 500 the raw value would raise (the 7b follow-up).
+  // gets — rather than a read that quietly matches nothing (the id-screen note above).
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1363,8 +1386,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open, unknown, or foreign-node
   // id surfaces `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
   // an empty body. The id is `isUuid`-screened before the query, refused as `working_order.not_open`
-  // → 409 — the SAME code — rather than the `22P02`-driven opaque 500 the raw value would raise (the
-  // 7b follow-up).
+  // → 409 — the SAME code — rather than a read that quietly matches nothing (the id-screen note
+  // above).
   app.delete("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1379,8 +1402,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `queued` (send-to-prep = placing, inside `placeOrder` itself). SESSION-GUARDED — `operatorId` is
   // `session.personId`, never a browser-sent value, both for the amendment's `actor_id` and (Mode I)
   // the deferred invoice's attribution. The id is `isUuid`-screened BEFORE any query: passed straight
-  // into `eq(workingOrders.id, id)` a malformed one would `22P02` in the DB → an opaque 500 (the 7b
-  // follow-up docs/backlog.md names), so it is refused as `working_order.not_open` instead — the SAME
+  // into `eq(workingOrders.id, id)` a malformed one meets no refusal of its own and matches nothing,
+  // so it is refused as `working_order.not_open` instead — the SAME
   // code an absent id gets, the fail-closed shape that code's own note in `errors.ts` describes.
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
@@ -1423,8 +1446,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // already-sent order collides on the per-line unique and is refused `ticket.already_fired` (409, mapped
   // in `fireLines`) rather than an opaque 500; a venue with no default station fails the fire loud with
   // `station.no_default` (409). The id is `isUuid`-screened before any query, refused as
-  // `working_order.not_settled` — the SAME code a non-settled/absent id gets — rather than the `22P02`
-  // opaque 500 the raw value would raise. Returns 200 with an empty body.
+  // `working_order.not_settled` — the SAME code a non-settled/absent id gets — rather than a read
+  // that quietly matches nothing. Returns 200 with an empty body.
   app.post("/api/working-orders/:id/prep", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1456,8 +1479,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // SESSION-GUARDED. `listStationQueue` is venue-wide (till-reroute §3.6 — not node-scoped). The
   // `:id` is `isUuid`-screened first: an unknown station id already yields an empty queue (it
   // names no items), so a MALFORMED one — which likewise names no live station — is refused
-  // `station.not_found` (404) rather than reaching the `station_id` uuid column and raising
-  // `22P02` → an opaque 500, the SAME 404 the config surface gives an absent station.
+  // `station.not_found` (404) rather than reaching the `station_id` comparison, which would refuse
+  // nothing — the SAME 404 the config surface gives an absent station.
   app.get("/api/stations/:id/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1477,7 +1500,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // (including a missing body — the verb's TICKET_TRANSITIONS-table lookup throws BEFORE any query when
   // `to` is not a key, so no bad enum reaches the DB) all surface `ticket.invalid_transition` (409). The
   // `:id` is `isUuid`-screened first, refused as that SAME code — a malformed id names no item exactly as
-  // an absent one — rather than a `22P02` 500. Returns 200 with an empty body; the display re-reads the
+  // an absent one — rather than a read that quietly matches nothing. Returns 200 with an empty body; the display re-reads the
   // station queue.
   app.post("/api/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
@@ -1506,7 +1529,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // error), so the route screens `to` itself — a non-{preparing,ready} value is `management.request_invalid`
   // (400, the request-shape code the sibling routes use), which also keeps a bad enum off the column. A
   // malformed order/station id names nothing, which is the SAME no-op the verb makes for an unknown one, so
-  // it is screened to a clean 200 (never the `22P02` 500 the raw value would raise). Returns 200 empty.
+  // it is screened to a clean 200. Returns 200 empty.
   app.post("/api/orders/:id/stations/:sid/advance", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1579,8 +1602,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // lives here). A non-settled/absent/foreign id is refused `working_order.not_settled` (409), an
   // already-handed-over order `working_order.already_collected` (409), and an order never fired
   // `ticket.not_fired` (409) — all BEFORE any write. The id is `isUuid`-screened first, refused as
-  // `working_order.not_settled` (the SAME code an absent/non-settled id gets) rather than the `22P02`
-  // opaque 500 the raw value would raise. Returns 200 with an empty body; the display re-reads the queue.
+  // `working_order.not_settled` (the SAME code an absent/non-settled id gets) rather than a read that
+  // quietly matches nothing. Returns 200 with an empty body; the display re-reads the queue.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1598,8 +1621,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // broken/absent printer can never make this hang, and it touches no fiscal record. An order with no
   // fired items (unknown/never-fired, or all-held) enqueues nothing and is a 200 NO-OP — no new error
   // code (design §6). The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404,
-  // the honest "no such order") rather than the `22P02` opaque 500 a malformed value would raise in the
-  // uuid column. Returns 200 with an empty body; the display re-reads its queue.
+  // the honest "no such order") rather than a read that quietly matches nothing. Returns 200 with an
+  // empty body; the display re-reads its queue.
   app.post("/api/orders/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1675,13 +1698,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // regardless of printer state. An optional `override: { personId, pin }` is parsed from the body (a
   // supervisor opening directly, and every `open`-policy open, sends NO body): a missing/empty/malformed
   // body is coerced to `{}` (`readJsonBody`), never a 500. A present-but-malformed `override.personId`
-  // (non-UUID) is screened to `person.not_found` (401) rather than reaching the `persons.id` uuid column
-  // as a 22P02 → opaque 500 — the same code a well-formed-but-absent id gets from the credential gate.
+  // (non-UUID) is screened to `person.not_found` (401) rather than reaching the `persons.id` read,
+  // where it would match nothing — the same code a well-formed-but-absent id gets from that gate.
   //
   // A till with NO receipt printer set has nothing to kick, refused `drawer.no_printer` (400, errors.ts)
   // — the resolve + throw is at this route layer (which imports errors.js), so `receipt-print.ts` stays
-  // throw-free. `resolveReceiptPrinter` takes the same `active = true` + `FOR SHARE` posture the sale hook
-  // uses, so an absent/inactive printer is the no-printer case. Returns 200 with an empty body.
+  // throw-free. `resolveReceiptPrinter` takes the same `active = true` posture the sale hook uses (its
+  // row lock is gone with the engine — see that function), so an absent/inactive printer is the
+  // no-printer case. Returns 200 with an empty body.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
@@ -1804,9 +1828,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       requireCapacity(body.capacity);
       // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
       // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
-      // `zone.not_found` (the FK's 23503, `isZoneFkViolation`); a MALFORMED one un-screened
-      // reaches the `zone_id` uuid column and raises `22P02` → an opaque `server.internal` 500, so it
-      // gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
+      // `zone.not_found`, from the verb's own zone read; a MALFORMED one un-screened would be stored
+      // in `zone_id` unchallenged, so it gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
       // table and is left alone.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
@@ -1887,8 +1910,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ label?: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
       // Screen a present `zoneId` as a UUID BEFORE the DB touch — same as the create route above and the
-      // `:id` screen on this route: a malformed zoneId un-screened reaches the `zone_id` uuid column →
-      // `22P02` → opaque 500, so it gets the SAME `zone.not_found` a well-formed-but-missing one does. An
+      // `:id` screen on this route: a malformed zoneId un-screened would be stored in `zone_id`
+      // unchallenged, so it gets the SAME `zone.not_found` a well-formed-but-missing one does. An
       // ABSENT zoneId is left alone (an unassigned table, legitimate).
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
@@ -1900,7 +1923,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Deactivate a table (DELETE = deactivate; app_user holds no hard DELETE). SESSION-GUARDED.
+  // Deactivate a table (DELETE = deactivate; the verb is the only thing keeping it one —
+  // (`tables.ts`'s `deactivateTable` note)). SESSION-GUARDED.
   app.delete("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1972,8 +1996,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a :lineNo that is
   // not a valid int4 line number → tab.line_not_found (it names no line) — the SAME `requireLineNo`
   // screen the served POST/DELETE routes use (see its doc for why the int4 upper bound is not cosmetic:
-  // `voidTabLine` binds `line_no` parameterised, so an out-of-range integer un-screened would reach the
-  // `where line_no = $n` delete and raise `22003` → an opaque `server.internal` 500). `voidTabLine`
+  // `voidTabLine` binds `line_no` parameterised, so an out-of-range integer un-screened would reach
+  // the `where line_no = $n` delete and quietly match nothing — no width refuses it). `voidTabLine`
   // still throws tab.not_open / tab.line_not_found for the in-range cases it reaches.
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
@@ -1991,8 +2015,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Read ONE open tab's lines for the table-order screen (design §3b, FP-1) — per line: `lineNo`,
   // `productId`, `quantity`, the LOCKED gross unit price (`unitPriceGross`) and the `servedAt` marker.
-  // SESSION-GUARDED. A READ, so no FOR UPDATE lock (`readTabLines` uses `assertTabOpen`, not
-  // `lockOpenTab`). Malformed :id → `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
+  // SESSION-GUARDED. A READ, so it makes only the status check (`readTabLines` uses `assertTabOpen`,
+  // not `assertAnchoredTabOpen`, so a tab no table points at still reads). Malformed :id →
+  // `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
   // screen the served routes use; `readTabLines` throws `tab.not_open` for a non-open/absent tab. Returns
   // `TabLine[]`. A tab does NOT re-price — the STORED locked gross rides back verbatim (see `readTabLines`).
   app.get("/api/working-orders/:id/lines", (c) =>
@@ -2013,8 +2038,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // operational field (design H2) — it never enters `registros`/`computeHuella`/`recordSale`, so this is
   // a floor-ops route with no fiscal path. The `:id`/`:lineNo` screens are the SAME as the sibling
   // void-line DELETE above (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
-  // `tab.line_not_found` on a non-int4/out-of-range one), so a bad param is a clean 4xx, never a
-  // `22P02`/`22003` 500. `markLineServed` still throws `tab.not_open` (a non-open/absent/foreign tab a
+  // `tab.line_not_found` on a non-int4/out-of-range one), so a bad param is a clean 4xx rather than a
+  // query that quietly matches nothing — neither the id column nor the line-number column refuses
+  // one (the id-screen note above). `markLineServed` still throws `tab.not_open` (a non-open/absent/foreign tab a
   // table points at) / `tab.line_not_found` (an in-range line matching nothing) for the cases it reaches.
   app.post("/api/working-orders/:id/lines/:lineNo/served", (c) =>
     run(c, log, async () => {
@@ -2146,19 +2172,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `authorize(venue.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
   // guard: the session only IDENTIFIES the operator, and the write is a manager-level venue-config
   // action. So this route pulls `sessionId` out of the session (the sale routes ignore it) and, inside
-  // the app_user transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
+  // the route's transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
   // — which resolves the OPERATOR's OWN role and throws `authorization.not_permitted` (→ 403) when it
   // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
   // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a
   // rejected operator performs no write (proven by-deletion in the suite — dropping the `authorize` call
   // flips the staff case to a 204). The `:id` isUuid screen runs FIRST (before the tx), refusing a
   // malformed value with the SAME domain code the sibling table routes use — `table.not_found` (404) —
-  // rather than the 22P02→500 the raw value would raise. The body-shape screen mirrors the
+  // rather than a read that quietly matches nothing. The body-shape screen mirrors the
   // `management-api.ts` placement sibling exactly: a non-object body → `management.request_invalid`
   // naming "body", each MISSING or wrong-TYPE field → the same code naming THAT field, and a
   // string-typed but MALFORMED `zoneId` → `zone.not_found` (the sibling POST/PATCH `/api/tables`
-  // convention, one field over — un-screened it reaches the `floor_zones.id` uuid column in
-  // `setTablePlacement` → 22P02 → opaque 500). The verb owns the placement VALUE validation
+  // convention, one field over — un-screened it reaches `setTablePlacement`'s `floor_zones` read,
+  // which refuses nothing and matches nothing). The verb owns the placement VALUE validation
   // (`placement.invalid`) and the live-table/live-zone reads. Returns 204 (the management-api
   // placement sibling's convention).
   app.put("/api/tables/:id/placement", (c) =>
@@ -2179,8 +2205,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.zoneId !== "string")
         throw new AppError("management.request_invalid", { field: "zoneId" });
       // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
-      // verb reads `floor_zones … where id = ${zoneId}`, so an un-screened non-UUID reaches the `uuid`
-      // column → 22P02 → opaque 500. Give it the SAME zone.not_found a well-formed-but-missing one gets.
+      // verb reads `floor_zones … where id = ${zoneId}`, which neither refuses an un-screened
+      // non-UUID nor matches it. Give it the SAME zone.not_found a well-formed-but-missing one gets.
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
       if (typeof body.posX !== "number")
         throw new AppError("management.request_invalid", { field: "posX" });
@@ -2208,7 +2234,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Un-place a table (NULL the four placement columns, leave zone_id as-is — an FP-1 assignment).
   // Mirrors the PUT's gate exactly: the operator's OWN `venue.configure` via `authorize` (no override),
   // BEFORE `clearPlacement`, so a staff operator is 403 and writes nothing. Malformed :id → table.not_found
-  // (the isUuid screen, never a 22P02 500); an absent row → table.not_found (the verb's row-count check).
+  // (the isUuid screen, which is the only refusal); an absent row → table.not_found (the verb's
+  // row-count check).
   // Returns 204.
   app.delete("/api/tables/:id/placement", (c) =>
     run(c, log, async () => {
@@ -2282,8 +2309,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Move SELECTED items — whole lines or PART of a line — from one open tab to another (TS-4, design
   // §3a). `:id` is the SOURCE tab; the body carries the destination and the line selection. SESSION-
   // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
-  // `eq(workingOrders.id, …)` would 22P02 → an opaque 500, so it is refused as `tab.not_open` (the SAME
-  // fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
+  // `eq(workingOrders.id, …)` would meet no refusal and match nothing, so it is refused as
+  // `tab.not_open` (the SAME fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
   // opens the `withTransaction`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
   // re-reads the two tabs' state.
   app.post("/api/tabs/:id/transfer", (c) =>
@@ -2307,7 +2334,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // separately-filing check — a detached, table-LESS open working order the till then pays via the
   // existing pay path. SESSION-GUARDED. The tab `:id` is `requireTabParam`-screened (a malformed id →
   // `tab.not_open` 409, the SAME fail-closed code the sibling tab routes use — a malformed id passed into
-  // `eq(workingOrders.id, …)` would 22P02 → an opaque 500). The body is shape-screened (non-object/null/
+  // `eq(workingOrders.id, …)` would meet no refusal and match nothing). The body is shape-screened (non-object/null/
   // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
   // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
   // tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around it. Returns 200

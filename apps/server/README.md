@@ -1,7 +1,7 @@
 # `@waitron/server`
 
 The host process. It boots from environment config, loads the credential vault's key ring, applies
-every migration set behind an advisory lock, resolves the AEAT transport and the Stripe
+every migration set behind the venue directory's own migration lock, resolves the AEAT transport and the Stripe
 account, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile, the
 per-tick card `resolvePending` sweep (this node's own `attempting` card rows), fold the result into
 a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
@@ -26,11 +26,15 @@ a `503` as noise or its absence as "nothing is wrong."
 ## Running it
 
 ```
-DATABASE_URL=postgres://app_user_role@host/db \
+WAITRON_STATE_DIR=/var/lib/waitron/state \
 WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
 WAITRON_CREDENTIALS_KEY_VERSION=1 \
 node dist/server.js
 ```
+
+There is no connection string. The whole database is a **directory** — see
+["The venue directory"](#the-venue-directory) below — and unless you name one with
+`WAITRON_VENUE_DIR`, it is `venue` under whatever `WAITRON_STATE_DIR` names.
 
 Build with `pnpm --filter @waitron/server build` — this bundles `src/bin.ts` with esbuild AND copies
 every migration package's `drizzle/` folder beside the bundle (`scripts/copy-migrations.mjs`), which
@@ -40,7 +44,7 @@ fails loudly at boot with `migrations.set_missing`, not silently.
 Every boot failure exits non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and
 exits `1` directly. Bad config, an unloadable key ring, a mismatched deployment environment (see below), a
-failed migration, and an unreachable database instead **throw**, and `bin.ts` has no `try`/`catch` around `startServer` — Node prints the
+failed migration, and a venue directory that cannot be opened instead **throw**, and `bin.ts` has no `try`/`catch` around `startServer` — Node prints the
 `AppError`'s stack to **stderr** as an unhandled rejection and exits non-zero, not as a JSON line on
 the stdout stream a log collector reads. (Catching those five in `bin.ts` and logging them
 structurally the same way would be a real improvement; it is not done here — check stderr for those,
@@ -48,162 +52,60 @@ stdout for a bind failure.) Either way there is no "boots half-configured and re
 background": a supervisor (systemd, Docker's restart policy) is expected to restart the process, and
 it will keep failing until whatever is wrong is fixed.
 
-## Database roles and grants
+## The venue directory
 
-Spec §10 requires `DATABASE_URL` to be **the non-superuser deployment role** — not the container's
-or provider's superuser/admin user. This section is the concrete answer to "grant that role what,
-exactly," because getting it wrong is the single most common way this process fails to boot (C1 of
-the 2026-07-26 whole-branch review; `boot.test.ts`'s own `beforeAll` is the source of the
-already-migrated grants below — they are empirically checked against a real Postgres container in
-this package's own test suite, not merely read off the SQL).
+There is no database server, no connection string and no database role. One process opens **one
+directory**, and that directory is the whole database: `openVenueStore`
+(`packages/store/src/index.ts`) creates `venue.db` and `node.db` inside it, each with write-ahead
+journalling, foreign keys on and a busy timeout. The operating-system permissions on that directory
+are the whole of the access control; there is nothing to `GRANT`, and nothing that could be granted
+too widely.
 
-### Two connection strings, one purpose split
+Two files, because a table's declared class chooses which one it belongs in — but **today every
+migration set is applied to `venue.db`, and `node.db` is created and left empty**
+(`packages/migrations/src/apply.ts`, and `useVenueDb`'s own note in
+`packages/db/src/testing/venue-db.ts`). That is what is true now, not a prediction: nothing yet
+splits a set across the two.
 
-| Variable                          | What it is used for                                                                                                                                                                                                                                            |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                    | The long-running pool every duty pass runs its queries over. **Least privilege**: this is the role spec §10 means.                                                                                                                                             |
-| `WAITRON_MIGRATIONS_DATABASE_URL` | The connection `applyMigrations` runs the migration SQL over, once, at boot, behind an advisory lock. **Defaults to `DATABASE_URL`** — a deployment that sets nothing extra keeps one connection string doing both jobs, exactly as before this split existed. |
+`WAITRON_VENUE_DIR` names the directory. Left unset — or set to the empty string, which counts as
+unset everywhere in this codebase — it is `venue` under `WAITRON_STATE_DIR`, so the databases live
+beside the box's other persisted state (`config.ts`, `ServerConfig.venueDir`). Put it on durable,
+protected storage: it holds the fiscal records.
 
-Splitting them is what makes "the non-superuser deployment role" and "migrations run at every boot"
-(spec §11) jointly satisfiable. Against an **already-migrated** database, Drizzle's migrator issues
-`CREATE SCHEMA IF NOT EXISTS "public"` and `CREATE TABLE IF NOT EXISTS` per set — and Postgres checks
-the privilege for those statements **before** it evaluates whether the object already exists, so a
-role with only ordinary duty-level grants (`app_user` membership, nothing else) fails on the very
-first statement even though every migration is a no-op. Against an **empty** database, the core baseline also creates
-`app_user NOLOGIN`, which needs `CREATEROLE`. Keep these schema-changing privileges on your
-migration connection and use `app_user` membership for the day-to-day pool.
+Migrations run at every boot, over that directory. Two processes starting together are serialised
+by a third SQLite file, `migrations.lock`, which the migrator holds an open transaction on for the
+length of the run — a second migrator waits up to two minutes and is then refused
+`database is locked`. It is a SQLite file rather than an exclusively-created lock file on purpose:
+closing the connection releases it, and so does killing the process, where a plain lock file would
+survive the crash and wedge every later boot. `packages/migrations/src/apply.ts` carries the races
+that were run to decide both.
 
-### `DATABASE_URL` — the deployment role, always
+`applyMigrations` also installs each set's **append-only triggers** as it goes, from the table names
+that set declares. Those are SQLite `RAISE(ABORT)` triggers (`packages/store/src/append-only.ts`),
+and they are what makes a ledger row unrewritable now that there is no `REVOKE` to lean on.
 
-Make this login a member of `app_user`, the NOLOGIN role that receives the migrations' table
-grants — and nothing more: `app_user` cannot update or delete a fiscal record, a sale or a tender,
-because the grants and triggers say so and `privileges.test.ts` pins it. The application login
-inherits those grants:
+### The deployment-environment check
 
-```sql
-create role waitron_app login password '<secret>' in role app_user;
-```
-
-Nothing else. If `WAITRON_MIGRATIONS_DATABASE_URL` is left unset (the default, meaning this SAME
-role also runs migrations), see the already-migrated grants below and add them too.
-
-### `WAITRON_MIGRATIONS_DATABASE_URL` — against an already-migrated database (the normal case)
-
-**This list covers an idempotent RE-RUN — every migration set already applied, nothing new to do —
-not every boot after the first.** The schema exists, every migration set is already recorded in its
-own `__drizzle_migrations_*` journal table, and Drizzle only needs to confirm that and stop. The
-exact grants below are what `boot.test.ts`'s own real-Postgres suite grants its probe role and then
-asserts the whole host boots with — this is not a derived or best-guess list, but it is also not
-sufficient for a boot that ships a genuinely NEW migration: Drizzle must `INSERT` a row per applied
-migration into the journal table, which only carries `SELECT` below, and any new SQL that `ALTER`s
-an existing table or `GRANT`s on one needs the role to own that table (or hold the equivalent
-privilege explicitly) — `CREATE ON SCHEMA public` only covers creating objects that don't exist yet,
-not modifying ones that do. See the "Practical recommendation" below for what actually satisfies
-both cases across a database's lifetime.
-
-```sql
-create role waitron_migrator login password '<secret>' in role app_user;
--- Drizzle's migrator issues "CREATE SCHEMA IF NOT EXISTS public" (database-level CREATE) then
--- "CREATE TABLE IF NOT EXISTS" per set (schema-level CREATE) BEFORE it checks whether either
--- already exists — confirmed empirically, not assumed. Both are needed even though every one of
--- these statements is a no-op against a current database.
-grant create on database <dbname> to waitron_migrator;
-grant create on schema public to waitron_migrator;
--- SELECT on every table includes the migration journals: this role did not create them
--- (whoever originally bootstrapped the database did), so it does not own them and cannot read them
--- back without an explicit grant — and reading them back is how Drizzle decides nothing new needs
--- applying.
-grant select on all tables in schema public to waitron_migrator;
-```
-
-`in role app_user` here is only required if this same role is ALSO `DATABASE_URL` (the unset-override
-default); a migrations-only role that never runs a duty pass does not need it.
-
-### `WAITRON_MIGRATIONS_DATABASE_URL` — against an empty database (first boot ever)
-
-Use [`waitron-provision instance`](../../packages/provisioning/README.md) to bootstrap the
-database. It creates the database, applies the full migration manifest as the admin, then creates
-exactly two logins: `waitron_migrator` and `waitron_app`. Both join `app_user`; only the migrator
-gets `CREATEROLE`, database CREATE and schema CREATE WITH GRANT OPTION. It writes the deployment
-stamp and prints each newly created login's connection string once. Keep those strings: a rerun
-preserves existing passwords and cannot print them again.
-
-The admin that ran `instance` owns the migrated objects. The generated migrator login's CREATE
-grants do not make it their owner or give it journal SELECT. Use the original owner connection for
-later schema changes. If you use the generated login only to check an already-current database,
-the SELECT grant in the preceding recipe supplies the journal reads; that recipe does not authorize
-future changes to existing tables.
-
-`packages/provisioning/src/instance-apply.pg.test.ts` checks the bootstrap against a real Postgres
-container. Its first test reads `current_user = prov_admin` and `rolsuper = false`; setup creates
-that login with `CREATEDB` and `CREATEROLE`. The next test runs the full plan through that admin's
-connection string and checks the database exists, every listed manifest journal is present, the
-stamp is `preproduction`, and the role keys are exactly `waitron_app` and `waitron_migrator`.
-It checks CREATEROLE is true for the migrator and false for the app, and that the app's direct
-membership is exactly `["app_user"]`. It checks the migrator's effective database/schema CREATE
-and reads its schema ACL entry directly for `C*`, the grant-option marker.
-
-That test then checks a second plan has no role creation or stamp, still includes migration, and
-applies it without throwing. It does not count newly applied migrations. The separate
-`packages/migrations/src/apply.concurrency.test.ts` checks that a repeated migration leaves one
-journal's row count unchanged. Neither receipt means a rerun is privilege-free: Drizzle still
-issues its schema/table setup statements before reading each journal.
-
-Read direct grants from the ACL, as the provisioning test does. Effective privilege checks also
-count inherited grants, so they cannot tell you whether the specific direct grant you issued took
-effect. The provisioning suite tests membership repair and delegated grants separately. Its
-bootstrap test checks the role/grant shape; the server's `boot.test.ts` exercises the running host.
-
-For a manual first boot, create a separate migration login and grant it CREATE on the target
-database and schema from the database owner:
-
-```sql
-create role waitron_migrator login password '<secret>' createrole;
-grant create on database <dbname> to waitron_migrator;
-grant create on schema public to waitron_migrator with grant option;
-```
-
-The grant option matches the tool's current grant shape. No baseline currently re-grants schema
-CREATE; its necessity has not been established. It remains a candidate for removal after a
-separate privilege review. `CREATEROLE` permits creation of `app_user` on an empty cluster.
-After the migrations create `app_user`, create the application login with the membership shown
-above. Business rows are a separate step: `waitron-provision venue` creates the taxpayer row,
-location, till, node, invoice series and composed module seeds. The retired `bootstrap-tenant.sql` script is
-not a fallback for that flow.
-
-**Keep the same owner for later migrations.** If the manual migration login creates the tables
-and journals, retaining that connection preserves the ownership needed to modify them. Switching
-to a different login requires a separate review of object ownership and grants; the
-already-migrated recipe only covers a rerun with no pending migration. Database ownership itself
-does not imply the `CREATEROLE` attribute, so check the actual login before the first migration.
-
-### The deployment-environment check needs no grant beyond the above
-
-Before `applyMigrations` runs, `startServer` opens a short-lived connection over
-`WAITRON_MIGRATIONS_DATABASE_URL` and compares this host's `WAITRON_ENV` against the `deployment`
+Before `applyMigrations` runs — before any write at all — `startServer` opens the venue directory
+on its own short-lived handle and compares this host's `WAITRON_ENV` against the `deployment`
 table's own stamp, throwing `deployment.environment_mismatch` (see "Running it" above) rather than
-letting a host boot against another environment's database. This needs nothing beyond what the
-already-migrated grants above already give `waitron_migrator`: `to_regclass` (checking whether
-`deployment` exists at all) needs no object privilege, and reading the row once the table exists is
-covered by the blanket `grant select on all tables in schema public` — there is no separate grant to
-add for this table.
+letting a host boot against another environment's database. That probe is closed again before
+migrations start, so boot never holds two opens of one directory at once.
 
-**What actually writes the stamp.** `waitron-provision instance` does, as the last action of its
-plan: it calls the programmatic `stampDeployment` (`@waitron/db`).
-`packages/provisioning/src/instance-apply.pg.test.ts` asserts the stamp is present after a real run
-against a container, so this is an automated provisioning path that runs it against a real database.
-Nothing else writes it in an automated path — in particular `waitron-provision venue` **refuses** a
-database that carries no stamp (`provisioning.database_unstamped`) rather than stamping one itself,
-because stamping is `instance`'s job and one database per environment is a fiscal invariant. (The
-retired `apps/server/sql/bootstrap-tenant.sql` used to write the stamp too, via an
-`insert into deployment (id, environment) values (1, :'environment') on conflict (id) do nothing`; it
-was removed on 2026-08-04.)
+**What actually writes the stamp.** Two paths do, and both call the same programmatic
+`stampDeployment` (`@waitron/db`) rather than writing the row themselves. The browser setup wizard's
+provision handler does it (`provisionVenue`, `apps/server/src/provision.ts`), from the demo/live
+choice the operator made. `waitron-provision venue` does it for a directory that carries no stamp,
+from `WAITRON_ENV` — unset means `preproduction` and `production` has to be typed out in full — which
+is what lets an automated deployment stand a venue up with no browser. Neither can move a stamp that
+is already there: `stampDeployment` refuses a different value with `deployment.already_stamped`, and
+both let it propagate. (`waitron-provision instance`, which used to be the only stamping path, was
+deleted with the PostgreSQL deployment model. So was the retired
+`apps/server/sql/bootstrap-tenant.sql`, removed on 2026-08-04, which wrote the row by hand.)
 
-Concretely, a database is stamped if and only if someone ran `waitron-provision instance` (or called
-`stampDeployment` by hand). Every database that predates this feature, and every database provisioned
-without doing so — including any set up before this note was written — has never been stamped: it
-reads `deployment` as `null` and **boots normally, with this check inert**, exactly as if the check
-did not exist. Only a database stamped for the OTHER environment refuses.
+A database nobody has stamped reads `deployment` as `null` and **boots normally, with this check
+inert**, exactly as if the check did not exist. Only a database stamped for the OTHER environment
+refuses.
 
 ## Provisioning a venue
 
@@ -212,12 +114,13 @@ location, a till, a node, and a standard plus a rectificative invoice series —
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
-It runs **against a database `instance` has already migrated and stamped**. A venue cannot be filed
-against an unstamped database — it is refused with `provisioning.database_unstamped`, because one
-database per environment is a fiscal invariant and stamping is `instance`'s job. It connects to that
-target database as the **owner-admin** (the role that created the tables when it ran `instance`) over
-`WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
-role and no grant to widen: `applyVenue` inserts as the table owner in one transaction. A database
+It runs **against a directory something has already migrated**, and stamps that directory itself
+when it carries no stamp (see "What actually writes the stamp" above). A directory nothing has
+migrated is refused with `provisioning.database_unmigrated`, and one stamped for the other
+environment with `deployment.already_stamped` — one database per environment is a fiscal invariant. It opens the venue
+**directory** — `--venue-dir`, else `WAITRON_VENUE_DIR` (the same variable this server reads, so a
+box's own setting is what stands its venue up), else a prompt — and writes through `venue.db`. There
+is no connection string, no role and no grant to widen: `applyVenue` writes in one transaction. A database
 already holds one taxpayer, so a run naming a different country or tax id is refused with
 **`provisioning.foreign_tenant`** — that is the code an operator who mistyped a NIF on a re-run
 sees, and the refusal happens before anything is applied. The country and tax id are trimmed and
@@ -227,12 +130,11 @@ narrower refusal, raised inside the apply transaction only when another run comm
 taxpayer between this one's read and its write. A mistyped NIF is `foreign_tenant`, not this.)
 
 ```bash
-pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations
-WAITRON_ADMIN_DATABASE_URL=postgres://owner_admin:secret@host:5432/waitron \
+pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js, and that is the whole build
+WAITRON_VENUE_DIR=/var/lib/waitron/state/venue \
 WAITRON_ADMIN_PIN=1234 \
 WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
   node packages/provisioning/dist/bin.js venue \
-    --database waitron \
     --country ES --tax-id B12345678 --legal-name 'Deli SL' \
     --location-name Mostrador --territory ES-common --locale es-ES \
     --operation-description 'Venta en establecimiento' \
@@ -262,8 +164,10 @@ confirmation for a non-interactive run. `--territory` currently accepts only
 `ES-common` (common-territory Spain, filing under Veri\*Factu with IVA); any other territory is
 refused with `fiscal.regime_not_implemented`. The SIF's `id_sistema_informatico` is **not** an
 option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's
-software, not the venue. The admin connection string is read only from `WAITRON_ADMIN_DATABASE_URL`
-or an echo-off prompt, never from `argv`, so it stays out of `ps` and shell history. See
+software, not the venue. The venue directory carries no password, so it is an ordinary
+`--venue-dir` flag; the two login secrets stay out of `argv`, and the parser rejects the retired
+`--admin-url` outright rather than ignoring it, so an operator reaching for the old connection
+string is told instead of having it dropped on the floor. See
 [`packages/provisioning/README.md`](../../packages/provisioning/README.md) for the full option list,
 what the command prints, and what it refuses.
 
@@ -272,15 +176,19 @@ what the command prints, and what it refuses.
 When a failed on-prem box is replaced by a promoted cloud primary and later comes back, it returns as a
 FENCED ex-primary (membership rejoin R1) — it cannot sell, because the cloud is now the serving primary.
 `waitron-rejoin rejoin` WIPES that box's local database and re-adopts it as a secondary of the current
-primary. There is no artifact input: the wipe `DROP`s the database as the migrator-owner and re-migrates
-from source, then adopts in setup mode.
+primary. There is no artifact input: the wipe deletes both database files and their write-ahead
+sidecars out of the venue directory (`src/db-wipe.ts` — a committed row can live in a `-wal` file
+alone, so the sidecars go too), re-migrates the directory from source, then adopts in setup mode.
+`migrations.lock` is deliberately left in place; it holds no data, and removing it would stop two
+migrators being serialised.
 
 ```
 waitron-rejoin rejoin [--accept-loss]
 ```
 
-It reads its own boot env — `DATABASE_URL`, `WAITRON_MAINTENANCE_DATABASE_URL` and the five
-`WAITRON_TILL_*_ID`. Two ordered guards refuse LOUD rather than wipe a box that is not safe to wipe:
+It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both resolved exactly as
+`config.ts` resolves them, so an empty value takes the default rather than the working directory),
+`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Two ordered guards refuse LOUD rather than wipe a box that is not safe to wipe:
 
 - **`rejoin.not_fenced`** — the box is not a fenced ex-primary; only a fenced one is safe to wipe.
 - **`rejoin.no_carrier`** — the held membership chart names no serving-primary to re-adopt from, so there
@@ -296,14 +204,13 @@ waives nothing: it only records the operator's acknowledgement in the log. The w
 
 | Variable                                   | Required | Default                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------ | -------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                             | yes      | —                                          | The deployment role's pool. See grants above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `WAITRON_MIGRATIONS_DATABASE_URL`          | no       | `DATABASE_URL`                             | The connection migrations run over. See grants above. The live change feed installs its triggers over this SAME connection, because that runs as the table OWNER.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `WAITRON_MAINTENANCE_DATABASE_URL`         | no       | —                                          | Not read at boot. `waitron-rejoin rejoin` alone reads it (`src/rejoin-command.ts`) and fails closed when it is unset or empty: a privileged `createdb createrole` admin connected to a DIFFERENT database on the same server, because the wipe DROPs the database `DATABASE_URL` names.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `WAITRON_STATE_DIR`                        | no       | a `state` folder beside the running module | The durable, protected directory the box keeps its own secrets, TLS material, logs and databases under. Deployment sets it to a real path (`deploy/Dockerfile` sets `/var/lib/waitron/state`); the development default sits beside the running module and is gitignored, because it holds secrets. An unset OR EMPTY value takes the default — never the working directory.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `WAITRON_VENUE_DIR`                        | no       | `venue` under `WAITRON_STATE_DIR`          | The directory holding this venue's `venue.db` and `node.db` — the whole database. See ["The venue directory"](#the-venue-directory) above. An unset OR EMPTY value takes the default; an override is resolved to an absolute path at load, because these files are opened by path for the life of the process.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `WAITRON_CREDENTIALS_KEY`                  | yes      | —                                          | Base64, 32 bytes. Owned by `loadKeyRing` (`packages/credentials`) — see below, not redeclared here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `WAITRON_CREDENTIALS_KEY_VERSION`          | no       | `1`                                        | Integer ≥ 1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `WAITRON_CREDENTIALS_KEY_PREVIOUS`         | no       | —                                          | Base64, 32 bytes. Set only during a key rotation window; must be set together with the next variable, never alone.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION` | no       | —                                          | Integer ≥ 1, and different from `WAITRON_CREDENTIALS_KEY_VERSION`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `WAITRON_ENV`                              | no       | `preproduction`                            | `preproduction` \| `production`. **One setting for the whole deployment, not one per provider** — it selects both the AEAT endpoint family `aeatEndpointFor` resolves to and the Stripe key mode (`sk_live_` vs `sk_test_`) the `payments.stripe` credential must match (a mismatch there is a `payment.credential_environment_mismatch` on the reconcile duty, not a boot failure — see ["Log events"](#log-events)). Also checked against the database itself at boot, before any migration runs — see "Database roles and grants" above. **Production numbering can never be reused, even for a test invoice — this default is deliberately the safe one, and production must be typed out.** **Rollback warning:** `deploymentEnvironment` reads ONLY this variable — the pre-branch code read ONLY `WAITRON_AEAT_ENV`, and both default to `preproduction`. During any window in which a rollback to a pre-`WAITRON_ENV` build remains possible, keep `WAITRON_AEAT_ENV` set to the SAME value as `WAITRON_ENV`. Left unset while only `WAITRON_ENV=production` is configured, a rolled-back host silently resolves `preproduction`, submits this deployment's `production`-generated fiscal records to AEAT's PRE-PRODUCTION endpoint, and AEAT accepts them there — written terminal `aceptado`, never retried, while the real AEAT never receives them and those invoice numbers are permanently spent. This is a deploy-config safeguard for the rollback window only, not a code change: the resolver must NOT fall back to `WAITRON_AEAT_ENV`, or the two-variables-that-must-agree problem this branch exists to remove would simply come back.                                                             |
+| `WAITRON_ENV`                              | no       | `preproduction`                            | `preproduction` \| `production`. **One setting for the whole deployment, not one per provider** — it selects both the AEAT endpoint family `aeatEndpointFor` resolves to and the Stripe key mode (`sk_live_` vs `sk_test_`) the `payments.stripe` credential must match (a mismatch there is a `payment.credential_environment_mismatch` on the reconcile duty, not a boot failure — see ["Log events"](#log-events)). Also checked against the database itself at boot, before any migration runs — see ["The venue directory"](#the-venue-directory) above. **Production numbering can never be reused, even for a test invoice — this default is deliberately the safe one, and production must be typed out.** **Rollback warning:** `deploymentEnvironment` reads ONLY this variable — the pre-branch code read ONLY `WAITRON_AEAT_ENV`, and both default to `preproduction`. During any window in which a rollback to a pre-`WAITRON_ENV` build remains possible, keep `WAITRON_AEAT_ENV` set to the SAME value as `WAITRON_ENV`. Left unset while only `WAITRON_ENV=production` is configured, a rolled-back host silently resolves `preproduction`, submits this deployment's `production`-generated fiscal records to AEAT's PRE-PRODUCTION endpoint, and AEAT accepts them there — written terminal `aceptado`, never retried, while the real AEAT never receives them and those invoice numbers are permanently spent. This is a deploy-config safeguard for the rollback window only, not a code change: the resolver must NOT fall back to `WAITRON_AEAT_ENV`, or the two-variables-that-must-agree problem this branch exists to remove would simply come back.                                           |
 | `WAITRON_HTTP_PORT`                        | no       | `8080`                                     | Positive integer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `WAITRON_HTTP_HOST`                        | no       | `127.0.0.1`                                | `/health` is unauthenticated (see below) — loopback by default so it is not reachable off the host unless you deliberately widen it (e.g. `0.0.0.0` behind your own network boundary).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `WAITRON_MIN_TICK_MS`                      | no       | `5000` (5s)                                | Floor on the sleep between passes — stops a hot loop when a duty reports work due `now`. **Must not exceed `WAITRON_SKIP_RETRY_MS`** — raising this past that value fails boot the other way round; see that row's own constraint below before widening this one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -320,8 +227,6 @@ waives nothing: it only records the operator's acknowledgement in the log. The w
 Every value boot reads is validated once, at boot, with a structured `server.config_invalid` /
 `server.config_missing` error naming the variable and (for an invalid value) a reason code — never
 the value itself, since an operator's mistyped input could be a secret pasted into the wrong place.
-`WAITRON_MAINTENANCE_DATABASE_URL` is the exception in the table above: boot never reads it, and the
-rejoin command validates it itself.
 
 Preproduction fiscal submission is off by default. A dedicated integration target can set
 `WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`; a Demo or Prepare installation still refuses to drain even
@@ -364,9 +269,10 @@ account link. The inbox is served through Waitron's authenticated API; Mailpit's
 the box loopback only.
 
 `pnpm dev:setup`, `pnpm dev:reset`, `pnpm dev:onboard`, `pnpm dev:reset:onboard`, and the `wa-wt`
-worktree launcher also start
-Mailpit with the shared development database. During local development you can inspect its own UI at
-`http://127.0.0.1:8025`.
+worktree launcher also start Mailpit. During local development you can inspect its own UI at
+`http://127.0.0.1:8025`. The development venue is a directory of SQLite files under the same state
+directory the server resolves, and `dev:reset` removes that directory so the next run provisions
+from scratch — what `docker compose down -v` used to do.
 
 For a production or on-prem venue, put its SMTP relay in the encrypted credential vault. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:
@@ -555,8 +461,8 @@ The ones worth grepping for:
 - **`transport.close_failed`** (`warn`) — `{ errorCode, message }`. An mTLS
   `Agent` failed to close gracefully at the end of a pass (`aeatClientResolver`'s `closeAll`,
   `packages/fiscal-verifactu/src/aeat-transport.ts`). `message` is the raw `Error#message` — safe to log here, unlike
-  `server.shutdown_failed`'s `pg`-driver errors, because `Agent.close()` can only ever throw a
-  socket-layer error, never one carrying a connection string or other secret. Any other
+  `server.shutdown_failed`, which reports only a structured code for the value it caught, because
+  `Agent.close()` can only ever throw a socket-layer error, never one carrying a secret. Any other
   `Agent` the pass opened is still released concurrently, regardless of this one failing — it does not stop the
   sweep, does not stop the pass, and does not flip `/health`.
 - **`pass.complete`** (`info`) — one line per pass: both duties' `ok`/`errorCode`/`durationMs` (the
@@ -587,11 +493,13 @@ most — a purpose and a field NAME, never decrypted material, a Stripe secret, 
 
 ## Migrations
 
-Applied at boot, every time, behind a Postgres advisory lock (`MIGRATION_LOCK_KEY` in
-`@waitron/migrations`'s `apply.ts`) so two replicas starting together cannot race the same journal.
-Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current database —
-the cost is the privilege check described above, not any actual DDL. A migration failure is a boot
-failure: the process logs and exits non-zero rather than starting half-migrated.
+Applied at boot, every time, behind the venue directory's own `migrations.lock` file
+(`@waitron/migrations`'s `apply.ts`) so two processes starting together cannot race the same
+journal. Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current
+database — the cost is opening the files and reading each journal, not any actual DDL. A migration
+failure is a boot failure: the process logs and exits non-zero rather than starting half-migrated.
+Each set's append-only triggers are installed in the same run; see
+["The venue directory"](#the-venue-directory) above.
 
 ## Build
 

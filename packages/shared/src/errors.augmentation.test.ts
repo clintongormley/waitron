@@ -6,7 +6,7 @@ import { AppError } from "./errors.js";
  * mechanism every consuming package uses to add its own codes without `packages/shared` ever
  * enumerating them on the dependent's behalf — see the design note atop `errors.ts`.
  * `packages/db`'s real augmentation lives in `packages/db/src/errors.ts` and is exercised there
- * by `allocate-number.test.ts` against real Postgres/PGlite; this file plays the same role from
+ * by `allocate-number.test.ts` against a real migrated database; this file plays the same role from
  * a location `errors.ts` itself never imports, so the merge being visible here proves it is a
  * property of the type-checker's whole-program view, not of some import edge from `errors.ts` to
  * its consumer.

@@ -32,36 +32,24 @@ import "@waitron/shared";
  * they drift on every edit, which is how this list went stale on the node_id rekey that dropped
  * `till.*` for `node.*`), `packages/core/src/errors.ts` holds `sale.*` and `chain.*`,
  * `packages/fiscal/src/errors.ts` holds `clock.*` and `fiscal.*`, `packages/db/src/errors.ts` holds
- * `series.*` and `deployment.*` across two codes — and this very file mixes, at
- * `deployment.unknown_environment` below. Splitting was available, so each unshipped code was
- * re-decided on its own merits. Each kept `provisioning.*`, for these reasons:
+ * `series.*` and `deployment.*` across two codes. Splitting was available, so each unshipped code
+ * was re-decided on its own merits. Each kept `provisioning.*`, for these reasons:
  *
- * - `role_over_privileged`, `role_unusable`, `role_creation_failed`, `membership_grant_failed`,
- *   `grant_ineffective`: none is a general fact about a role or about a grant. Each is a refusal or
- *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries SUPERUSER", "a grant this
- *   run issued did not take". A `role.*` or `grant.*` code should be true of any role or grant
- *   anywhere, and none of these is.
  * - `state_unreadable` is the one worth arguing, because its own text opens with "reading what a
  *   DEPLOYMENT already has" and it carries a `database` param, which makes `deployment.*` look
  *   natural. It is wrong on both counts. `deployment.*` here denotes the environment STAMP and
  *   nothing else — `deployment.already_stamped` (`packages/db/src/errors.ts:44`),
- *   `deployment.environment_mismatch` (`apps/server/src/errors.ts:120`) and
- *   `deployment.unknown_environment` below are all about WHICH ENVIRONMENT a deployment belongs to,
- *   and this code is about none of that. Two of the four things it covers are `pg_database` and
- *   `pg_roles`, which are cluster-global and readable with no deployment in existence
- *   (`instance-state.ts:45-46`), and its 28P01 case fails at the CONNECT, before any deployment has
- *   been reached at all. Its structural sibling is `credentials.payload_unreadable`
+ *   and `deployment.environment_mismatch` (`apps/server/src/errors.ts:120`) are both about WHICH
+ *   ENVIRONMENT a deployment belongs to, and this code is about none of that. Its refused-OPEN case
+ *   fails before any deployment has been reached at all. Its structural sibling is
+ *   `credentials.payload_unreadable`
  *   (`packages/credentials/src/errors.ts:79-85`): a CLI that could not read an input it needs,
  *   named for the domain of the CLI's work and carrying the thing it failed to read as a param,
  *   exactly as `database` is carried here.
- * - `admin_uri_missing` names an input THIS TOOL needs, at a moment when nothing has been reached:
- *   no deployment, no database, no role. `credentials.key_missing`
+ * - `venue_dir_missing` names an input THIS TOOL needs, at a moment when nothing has been reached:
+ *   no deployment, no directory, no file. `credentials.key_missing`
  *   (`packages/credentials/src/errors.ts:16`) is the same fact under its own domain's prefix, and
  *   `server.config_missing` (`apps/server/src/errors.ts:19`) is the same fact under the process's.
- *
- * `deployment.unknown_environment` is the one that does NOT take the prefix: the fact is about a
- * deployment environment, so it sits beside `deployment.already_stamped` (`packages/db`) and
- * `deployment.environment_mismatch` (`apps/server`) instead.
  *
  * NO PARAM HERE EVER CARRIES A GENERATED PASSWORD, A KEY, OR A CONNECTION STRING.
  *
@@ -75,101 +63,27 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** An operator typed something that is not a deployment environment. Named for the DOMAIN
-     * concept, not for this package — it sits beside `deployment.already_stamped`
-     * (`packages/db/src/errors.ts`) and `deployment.environment_mismatch`
-     * (`apps/server/src/errors.ts`), because the fact is about a deployment environment and the
-     * provisioning CLI is merely where it was typed. Both params ARE echoed: `environment` is
-     * operator-typed configuration and `known` is the legal set, which is what lets the refusal be
-     * acted on without reading the source.
+    /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,
+     * AND the prompt answered nothing — which is what an exhausted stdin or a Ctrl+D produces,
+     * deliberately, in `bin.ts`'s `ask`.
      *
-     * `environment`, not `value`, because that is the shape the sibling this comment cites actually
-     * has: `credentials.unknown_purpose` is `{ purpose, known }`
-     * (`packages/credentials/src/errors.ts:64`) — it names the CONCEPT. So do both `deployment.*`
-     * siblings: `{stamped, requested}` (`packages/db/src/errors.ts:44`) and
-     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:120`). Nearly every param
-     * named `value` in the registry belongs instead to a code about an input that failed a FORMAT
-     * check, where there is no concept left to name: `shared.invalid_id`,
-     * `shared.invalid_decimal`, `shared.decimal_overflow`, `shared.invalid_cents`,
-     * `shared.invalid_thousandths` and `shared.invalid_basis_points`
-     * (`packages/shared/src/errors.ts:86-91` — the cents one arrived with the money-in-cents
-     * change and the last two with the scaled-integer one), `server.config_invalid`,
-     * `sif.id_sistema_invalid`, and `provisioning.invalid_identifier` and
-     * `provisioning.invalid_country` below — the second of which says in its own comment that it is
-     * the same format-check family. The one that does NOT fit is `diet.invalid_label`
-     * (`packages/catalogue/src/errors.ts:50`, `{ field, value }`): a membership refusal that has a
-     * concept to name, names it in `field`, and still echoes the rejected word as `value`. So the
-     * sentence above is a strong default, not something every sibling obeys.
+     * Refused rather than passed through, because an empty directory is not "no directory": every
+     * path the store builds is `join(directory, …)`, and `join("", "venue.db")` is the RELATIVE
+     * `venue.db`. So an unset variable plus a non-interactive stdin, which is exactly the shape
+     * `README.md` documents for CI, would have `venue` mint a taxpayer, a node and its invoice
+     * series into a pair of files in whatever directory the process happened to be started from.
+     * A chain and a series number cannot be taken back (CLAUDE.md §5). `apps/server`'s `config.ts`
+     * carries the same guard on the same variable, for the same reason.
      *
-     * A hand-copied cross-package list goes stale in silence, and this one has done it twice. The
-     * 2026-09-20 pass added `shared.invalid_cents` and `provisioning.invalid_country`, which the
-     * list was missing; re-running the same command on 2026-09-21 found it missing
-     * `shared.invalid_thousandths` and `shared.invalid_basis_points`, which arrived with the
-     * change that turned the quantity and rate columns into scaled integers. The command, both
-     * times, is `grep -rn 'value[?]\?:' --include=errors.ts packages apps`. Its output also
-     * contains lines that are not code declarations at all — prose in comments (this paragraph
-     * among them, and two in `apps/server/src/errors.ts`) and a function parameter
-     * (`isAppError(value: unknown)` in `packages/shared/src/errors.ts`); read past those. Twice in
-     * two days is what a hand-copied list does, so treat the sentence above as a default to
-     * re-check with that command rather than an inventory to trust. `staging` is a well-formed string that names
-     * no environment, which is the other case. Written as `value` here and renamed while renaming
-     * was still free: this code has not shipped. */
-    "deployment.unknown_environment": { environment: string; known: string[] };
-    /** Nothing supplied the admin connection string: `WAITRON_ADMIN_DATABASE_URL` was unset or
-     * empty AND the echo-off prompt answered nothing — which is what an exhausted stdin or a Ctrl+D
-     * produces, deliberately, in `bin.ts`'s `ask`.
-     *
-     * Refused rather than passed through, because `pg` does not refuse it either. Run against this
-     * repo's `pg@8.23.0`: `new Client({ connectionString: "" })` resolved to
-     * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}` — an empty string is
-     * falsy, so nothing is parsed and every default applies — and `pg-pool@3.14.0` builds each
-     * client with `new this.Client(this.options)` (`index.js:241`) off the same options object. So
-     * an unset or misspelled variable plus a non-interactive stdin, which is exactly the shape
-     * `README.md` documents for CI, had `instance` create, migrate and STAMP a database on whatever
-     * cluster answers on localhost:5432. One database per environment is a fiscal invariant and a
-     * stamp cannot be taken back.
-     *
-     * `variable` is our own declared environment-variable NAME, never its value — the shape
-     * `credentials.key_missing` and `server.config_missing` both carry, for the same reason. The
-     * value it names is the one secret this tool takes as INPUT, and printing it is the thing this
-     * whole file forbids. */
-    "provisioning.admin_uri_missing": { variable: string };
-    /** The admin connection string was supplied and is not a URL `new URL` can parse.
-     *
-     * Refused rather than accepted, because `pg` and `new URL` disagree about real, WORKING
-     * connection strings and this tool needs both to agree. Run inside a `postgres:18-alpine`
-     * container (PostgreSQL 18.4) with `pg@8.22.0` and the connection string
-     * `/var/run/postgresql`: pg parsed it to `{host:"/var/run/postgresql",port:5432}`, `connect()`
-     * succeeded, and `select inet_server_addr() is null` returned `t` — a live connection over the
-     * cluster's Unix socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the
-     * same process.
-     *
-     * `pg` is not the only consumer here. This tool RE-POINTS the admin string at another database
-     * three times — `withDatabase` for the state read and for the migrator's URL
-     * (`instance-apply.ts`), `roleUri` for each printed connection string (`cli.ts`) — and each is a
-     * `new URL`. With the socket path above, `withDatabase(uri, "waitron_prod")` and
-     * `roleUri(uri, "waitron_app", "pw", "waitron_prod")` both threw `TypeError: Invalid URL`. On
-     * the `instance` path that throw landed in `reportRoles`, i.e. AFTER `create database`,
-     * `migrate` and `stamp` had run, and reached the operator as `unexpected failure (TypeError)`
-     * (`bin.ts`'s catch-all) with the generated passwords lost.
-     *
-     * Supporting the non-URL forms properly was the alternative and was rejected: re-pointing a
-     * libpq keyword/value string at a different database, user and password means parsing and
-     * re-serialising conninfo (quoting, escaping, `host=` vs `hostaddr=`), and a mistake there
-     * points `migrate` and `stamp` at the WRONG database — which one database per environment
-     * makes unrecoverable. Refusing the form this tool cannot re-point is the honest answer.
-     *
-     * `variable` is our own declared environment-variable NAME — the same param
-     * `provisioning.admin_uri_missing` carries, and named for the same reason: the string itself may
-     * carry a password in every form `pg` accepts (`host=db.example password=hunter2` is one), so it
-     * is never echoed. The variable is named even when this run read the string from the echo-off
-     * prompt instead; it is where the tool reads it from, and the operator's fix goes in one of
-     * those two places. */
-    "provisioning.admin_uri_not_a_url": { variable: string };
+     * `variable` is our own declared environment-variable NAME, never a path an operator typed —
+     * the shape `credentials.key_missing` and `server.config_missing` both carry. A directory is
+     * not a secret, but there is nothing to echo here: the whole point of the refusal is that
+     * nothing supplied one. */
+    "provisioning.venue_dir_missing": { variable: string };
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
-    "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    "provisioning.invalid_identifier": { kind: "database"; value: string };
     /** The `venue --country` value is not two ASCII letters — the SHAPE of an ISO-3166-1 alpha-2
      * code such as `ES`, not a membership check against a country list. Refused in the CLI while
      * resolving options, before the admin credential is asked for (`cli.ts`'s `assertCountry`), so a
@@ -181,15 +95,45 @@ declare module "@waitron/shared" {
      * header describes. `value` IS echoed, the same format-check family as
      * `provisioning.invalid_identifier` above: an operator's typo, never a secret. */
     "provisioning.invalid_country": { value: string };
-    /** A venue was requested against a database with no environment stamp. `venue` reads the stamp
-     * with `readDeploymentEnvironment` (`packages/db`) on the target BEFORE it applies anything; a
-     * `null` result means the database was never stamped by `instance`, so there is no environment to
-     * file its sales under. Refused here rather than stamped — stamping is `instance`'s job, and one
-     * database per environment is a fiscal invariant a stamp cannot take back.
+    /** `WAITRON_ENV` holds something that is not `production`, `preproduction` or `dev`. It is the
+     * variable `venue` derives a venue directory's environment stamp from (`environment.ts`'s
+     * `resolveEnvironment`), and that stamp is permanent, so an approximation of the word is
+     * refused rather than rounded to the nearer of the two: `Production` and ` production` both land
+     * here. UNSET is not a refusal — it means `preproduction` (CLAUDE.md §5).
+     *
+     * Refused in the CLI before the venue directory is opened, so a bad variable costs no open and
+     * writes nothing.
+     *
+     * `provisioning.*` and not `server.*`: `server.*` is reserved for facts about the SERVER
+     * process, and this is a refusal of an input to standing a venue up — the activity the header
+     * describes. `apps/server`'s own `deploymentEnvironment` refuses the same values under
+     * `server.config_invalid`, which is right for the server and wrong here.
+     *
+     * `value` IS echoed, the same format-check family as `provisioning.invalid_country` above: it
+     * is the operator's own deployment configuration, a word rather than a secret, and a refusal
+     * that withheld it could not be acted on. */
+    "provisioning.invalid_environment": { variable: string; value: string };
+    /** A venue was requested against a venue directory nothing has migrated — its venue file holds
+     * no `deployment` table, which is the table `venue` would stamp and one of the first the core
+     * migration set creates.
+     *
+     * This is what a MISTYPED PATH meets, and it is why the check exists: opening a virgin
+     * directory SUCCEEDS — the store creates it — so the open is not where a wrong path is caught.
+     * Without it the run reaches a query against a table that does not exist yet — the taxpayer
+     * read first, the stamp's own insert behind it (`no such table: deployment`,
+     * `code: "ERR_SQLITE_ERROR"`, errcode 1, measured on Node v26.7.0 by calling `stampDeployment`
+     * against a virgin directory) — and the operator meets `unexpected failure (Error)` instead:
+     * measured, by deleting this block, rebuilding the bundle and running the same command against
+     * a virgin directory.
+     *
+     * An unstamped but MIGRATED directory is not this: `venue` stamps that one itself, from
+     * `WAITRON_ENV`, so that a scripted cloud deployment can stand a venue up with no browser.
      *
      * `provisioning.*`: a refusal of standing a venue up, the same activity the header describes.
-     * `database` is operator-typed configuration and never a secret. */
-    "provisioning.database_unstamped": { database: string };
+     * `database` is the venue DIRECTORY — operator-typed configuration, never a secret. The param
+     * keeps the name the whole family uses; `apps/server`'s boot made the same choice when the
+     * directory became the database (`ownerDatabaseName = config.venueDir`). */
+    "provisioning.database_unmigrated": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
      * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the keys it knows —
      * the taxpayer row's `id` and each series `(node_id, code)` — with `ON CONFLICT DO NOTHING`, so
@@ -236,11 +180,17 @@ declare module "@waitron/shared" {
      * reached). This code catches what that pre-read cannot see: another run committing a different
      * taxpayer between the pre-read and this write, and the caller that does no pre-read at all.
      *
-     * The write itself is `insert … on conflict do nothing` followed by a `for update` read of the
-     * row, so the loser of that race waits for the winner's transaction and then reads the winner's
-     * identity — landing here or on the idempotent path, never on a raw `23505`
-     * (`venue-apply.race.pg.test.ts`). Comparison is on the canonical values — both sides trimmed
-     * and upper-cased, the same normalisation `planVenue` applies — so a casing or
+     * The write itself is `insert … on conflict do nothing` on the pinned `id = 1` row, followed by
+     * a plain read of that row (`venue-apply.ts`, the `ensure-tenant` case). The `for update` this
+     * paragraph used to describe is gone — this engine refuses it outright — and nothing needs it:
+     * `withTransaction` runs the whole plan inside one `begin immediate` and SQLite admits one
+     * writer per file, so two plans are serialised by the engine rather than by anything this write
+     * does (`packages/db/src/tenancy.ts` → `withWriteLock`, `packages/store/src/write-queue.ts`).
+     * What `on conflict do nothing` therefore absorbs is a RE-RUN, not a race, and it reports
+     * neither the re-run nor the clash — so the read-back is the only thing that can tell the same
+     * taxpayer from a foreign one, which is what raises this code (`venue-apply.test.ts`, "refuses
+     * a re-run whose tax id differs, by name"). Comparison is on the canonical values — both sides
+     * trimmed and upper-cased, the same normalisation `planVenue` applies — so a casing or
      * surrounding-space difference is the SAME identity and proceeds as an idempotent re-run.
      *
      * No params, the shape `provisioning.second_venue` above keeps: this is a refusal INSIDE
@@ -313,96 +263,33 @@ declare module "@waitron/shared" {
     "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
-    /** A role this tool would use already exists carrying SUPERUSER. Refused rather
-     * than adopted: a superuser can disable the append-only triggers. */
-    "provisioning.role_over_privileged": { role: string; superuser: boolean };
-    /** A role exists but cannot log in, or lacks an attribute it needs. Refused rather than
-     * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
-     * something an operator made by hand is not its call. */
-    "provisioning.role_unusable": { role: string; missing: string[] };
-    /** Every action ran without error, and at least one privilege is still not there afterwards.
+    /** Opening the venue directory, or reading the deployment stamp out of it, failed. `venue`
+     * reads before it decides, so this is where a directory the tool cannot use surfaces.
      *
-     * This is not defensive: PostgreSQL answers a `GRANT` from a grantor that holds some privilege
-     * on the object but no grant option with a **WARNING, not an error** — the command tag is still
-     * `GRANT` and the driver reports success. Observed directly on `postgres:18-alpine`: as a
-     * non-owning `login createdb createrole` admin, `grant create on database acl_db to r_app`
-     * printed `WARNING: no privileges were granted for "acl_db"`, and `pg_database.datacl`
-     * afterwards still read `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}` — no `r_app` entry.
-     * (A grantor holding nothing at all errors with 42501 instead; on a database that needs
-     * `PUBLIC`'s default `CONNECT` revoked first, which is why the warning is the usual case.)
-     * `GRANT ALL PRIVILEGES` is quieter still: when only part of the list is grantable it prints no
-     * diagnostic whatsoever. Without this check
-     * `instance` reported success and left a deployment whose migrator cannot migrate at the next
-     * boot, which is the worst available failure shape.
+     * Measured on Node v26.7.0 against the real `openVenueDatabase`, which is what makes the two
+     * reachable shapes concrete rather than defensive: a path running through a regular file gives
+     * `code: "ENOTDIR"` from the `mkdir`, and a directory whose `venue.db` is not a database gives
+     * `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN directory is
+     * neither — it is created and opened — so a mistyped path lands on
+     * `provisioning.database_unmigrated` instead. `cli.ts`'s `withVenueState` carries the same
+     * receipt at the site that acts on it.
      *
-     * `missing` names each privilege that did not take, in the same words the plan summary used, so
-     * the line an operator reads on failure is the line they approved. That is structural, not a
-     * convention someone has to maintain: both call `describeAction` (instance-plan.ts). An earlier
-     * version of this sentence was simply false — `verifyGrants` formatted its own strings and
-     * dropped the leading `grant` the summary carries. Database names, role names and privilege
-     * words only, the same class of value `provisioning.role_unusable`'s own `missing` already
-     * carries. */
-    "provisioning.grant_ineffective": { database: string; missing: string[] };
-    /** Reading what a deployment already has — `pg_database`, `pg_roles`, the journal tables, the
-     * deployment stamp — failed at the database. Every command here reads before it decides, so
-     * this is where an admin connection that cannot see the target database surfaces, and it is a
-     * REACHABLE case rather than a defensive one: an admin that did not create the database holds
-     * no privilege on the tables inside it, and `select environment from deployment` fails with
-     * 42501. Observed directly against `postgres:18-alpine` — see `README.md`'s "When the admin did
-     * not create the database" for the transcript and the remedy. 28P01 (a wrong password in the
-     * admin connection string) arrives here too, from the CONNECT rather than from a read: `pg`
-     * authenticates when the pool hands out its first connection. An earlier version of this
-     * sentence claimed the opposite — that `pg` authenticates lazily on first use, so a bad password
-     * would surface at the first read — and the container disproved it, printing
-     * `unexpected failure (error)` while the connect sat outside the guard. `cli.ts`'s `withState`
-     * carries the same receipt at the site that acts on it.
+     * Raised ONLY when the failure carries a string `code`. Anything else is a bug, not a fact
+     * about this directory, and is rethrown unchanged rather than dressed up as one. `reason` is
+     * that `code` and never the message: a driver message can quote the failing statement, which
+     * this file's header forbids echoing. `database` is the venue directory — operator-typed
+     * configuration, never a secret. */
+    "provisioning.state_unreadable": { database: string; reason: string };
+    /** A database being migrated is owned by a role other than `waitron_migrator`.
      *
-     * Raised ONLY when the failure carries a SQLSTATE. Anything else is a bug or a broken socket,
-     * not a fact about this database, and is rethrown unchanged rather than dressed up as one.
-     * `database` is operator-typed and `sqlState` is five `[0-9A-Z]` characters (sql-state.ts);
-     * neither can carry the admin connection string that produced it. */
-    "provisioning.state_unreadable": { database: string; sqlState: string };
-    /** `CREATE ROLE` failed. `role` and the SQLSTATE only — never the underlying driver error, and
-     * never a `cause`: the failing statement carries a generated password in its literal text, and
-     * both Drizzle's own wrapped error and Postgres's own error message quote the statement back
-     * verbatim. See `instance-apply.ts`'s `create-role` case for the receipt.
+     * **NOTHING IN THIS REPOSITORY RAISES THIS TODAY.** Both throwers lived on the
+     * `waitron-provision instance` path, deleted when a venue became a directory of SQLite files
+     * rather than a database on a PostgreSQL server. The declaration is kept because
+     * `apps/server/src/recovery-surface.ts` still maps it to operator wording, and that map is
+     * typed `Partial<Record<ErrorCode, …>>` — removing the code here fails that file's typecheck.
+     * Retiring the pair is a change to the recovery page, not to this registry.
      *
-     * `sqlState` is `sqlStateOf`'s output (sql-state.ts) — five characters of `[0-9A-Z]`, or
-     * `null`. It is what tells an operator which of "already exists" (42710), "the membership
-     * target does not exist" (42704) and "this admin is not allowed to" (42501) they hit; `role`
-     * alone sent them to the Postgres log for that. Safe by SHAPE rather than by promise: a
-     * generated password is 32 base64url characters (identifiers.ts) and a connection string is
-     * longer still, so neither can satisfy five `[0-9A-Z]`. */
-    "provisioning.role_creation_failed": { role: string; sqlState: string | null };
-    /** `GRANT <memberOf> TO <role>` failed — the repair path for a membership that drifted, or that
-     * a hand-made role never had. `memberOf` rather than `of`: this package already names the
-     * concept that way in four places (`instance-state.ts`'s `RoleFacts.memberOf`,
-     * `instance-plan.ts`'s `create-role` action and `REQUIREMENTS`, `status-command.ts`'s report),
-     * and a relational preposition would have been the only one among every code in the registry.
-     * Same `sqlState` treatment and same reasoning as
-     * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
-     * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
-     * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
-     * OPTION on `app_user` — 42501, proven in `instance-apply.pg.test.ts`). */
-    "provisioning.membership_grant_failed": {
-      role: string;
-      memberOf: string;
-      sqlState: string | null;
-    };
-    /** A database `instance` would migrate is owned by a role other than `waitron_migrator`. Refused
-     * rather than adopted: `instance` creates the database `OWNER waitron_migrator` and migrates AS
-     * that role (a session `SET ROLE` over the admin's credentials), because a plain admin connection
-     * to a migrator-owned database cannot even `CREATE TABLE` in `public` — `42501`, asserted against
-     * a real server by `instance-apply.pg.test.ts`'s C5 case. A pre-existing database owned by someone
-     * else cannot be made to satisfy that by granting — ownership is fixed at CREATE (owner decision
-     * 2026-09-07, never `REASSIGN OWNED`) — so the developer drops it and re-runs (`wa-wt reset`;
-     * nothing is deployed, CLAUDE.md §3).
-     *
-     * Raised in TWO places for the same fact: the pure planner refuses an existing wrongly-owned
-     * database before spending an action, and `verifyGrants` (instance-apply.ts) reads
-     * `pg_database.datdba` back after apply and refuses if the owner is not the migrator — ownership
-     * is a FACT (`datdba`), not a `has_*` privilege, so the §3 recursive-closure false positive does
-     * not apply. `provisioning.*` because it is a fact about standing a deployment up; `database` is
+     * `provisioning.*` because it is a fact about standing a deployment up; `database` is
      * operator-typed configuration and `owner` is a role NAME read from the catalog — neither is a
      * secret. */
     "provisioning.database_not_owned": { database: string; owner: string | null };

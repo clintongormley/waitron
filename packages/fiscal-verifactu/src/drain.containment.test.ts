@@ -1,12 +1,30 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
-import { createPgliteDb, runMigrations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
+
+/**
+ * `drain()`'s first act is `workIsDue`, which used to ask the database for
+ * `envios_work_due(<instant>::timestamptz)` — a PostgreSQL scalar function behind a PostgreSQL
+ * cast, and this engine has neither. It is an ordinary query now (`./drain.ts`), and the five cases
+ * that were red for that one reason went green without one of them being adjusted:
+ * `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.containment.test.ts` reports
+ * 7 passed, the two threshold cases at the foot of this file included.
+ *
+ * The measurement kept from when they were red, because it is what showed the two gaps were
+ * SEPARATE and that closing either alone would only have moved the failure:
+ *
+ * - `select envios_work_due('2026-07-21T00:01:00Z'::timestamptz) as due` → `unrecognized token: ":"`
+ * - the same statement with the cast removed → `no such function: envios_work_due`
+ * - the control, `select count(*) as n from envios` → no error
+ *
+ * So the table was there and the connection sound; it was the function and the cast that were not.
+ */
 
 // A `now` a minute after the fixtures' fixed `2026-07-21T00:00:00Z`, so the seeded rows are due.
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -37,19 +55,43 @@ function recordingResolver(): { resolveClient: () => Promise<VerifactuClient>; a
 
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
+/**
+ * A second database of its own, for the one case below whose subject is an EMPTY one.
+ *
+ * The dedicated instance this replaces was opened and closed inside the test body. The reason it
+ * existed is unchanged — the tests sharing `pg` leave permanently-due rows behind, and "nothing is
+ * due" has to be true of the whole database — but the helper owns the lifecycle now, so nothing in
+ * this file opens or closes a file itself (CLAUDE.md §4).
+ */
+const idle = useVenueDb({
+  migrations: TEST_MIGRATIONS,
+  // Wrapped rather than passed straight through: `seedTenantWithSif` resolves to the seeded till,
+  // and `setup` is typed `(db) => Promise<void>`. Nothing here reads the till.
+  setup: async (db) => {
+    await seedTenantWithSif(db);
+  },
+});
+
+/**
+ * A third, for the one case that CLOSES its database as the experiment.
+ *
+ * `resetPerTest: false` is required rather than tidy: the helper's `afterEach` empties the tables,
+ * and a database the test just closed refuses that with `database is not open`, which would fail
+ * the case for a reason unrelated to what it asserts. The helper's `afterAll` still closes and
+ * removes it — `StoreHandle.close` is idempotent by construction
+ * (`packages/store/src/index.ts:178`), so the second close is a no-op rather than a throw.
+ */
+const solo = useVenueDb({ migrations: TEST_MIGRATIONS, resetPerTest: false });
+
 describe("drain resolves a client only when it has work", () => {
   it("never asks the resolver when nothing is due", async () => {
     // The negative half, and it is not pedantry: the resolver DECRYPTS a certificate, so resolving
     // one on a pass with no due work would put the venue's private key in memory for nothing.
-    // Its own PGlite instance, not the suite's shared one: the tests below leave permanently-due
-    // rows behind, and "nothing is due" has to be true of the whole database.
-    const idleDb = await createPgliteDb();
-    for (const migrations of TEST_MIGRATIONS) await runMigrations(idleDb, migrations);
-    await seedTenantWithSif(idleDb); // a venue with a till and a SIF, but no envios
+    // `idle` is seeded with a venue, a till and a SIF, but no envios.
     const resolver = recordingResolver();
     const result = await drain(
       {
-        db: idleDb,
+        db: idle.db,
         resolveClient: resolver.resolveClient,
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -58,7 +100,6 @@ describe("drain resolves a client only when it has work", () => {
     );
     expect(resolver.asked).toBe(0);
     expect(result.tenantsWithWork).toBe(0);
-    await idleDb.close();
   });
 
   it("reports a pass whose client cannot be resolved, rather than throwing out of the sweep", async () => {
@@ -156,10 +197,9 @@ describe("drain resolves a client only when it has work", () => {
     // already run — makes that first statement throw for real, with nothing inside `drainDue`
     // positioned to catch it.
     //
-    // A dedicated PGlite instance, not the suite's own `pg.db`: this test closes its database,
-    // which the rest of this suite cannot survive sharing.
-    const soloDb = await createPgliteDb();
-    for (const migrations of TEST_MIGRATIONS) await runMigrations(soloDb, migrations);
+    // A dedicated database, not the suite's own `pg.db`: this test closes its database, which the
+    // rest of this suite cannot survive sharing. See `solo`'s own note above.
+    const soloDb = solo.db;
     await seedPendingEnvios(soloDb, { count: 1 });
 
     const result = await drain(
@@ -180,7 +220,104 @@ describe("drain resolves a client only when it has work", () => {
       NOW,
     );
 
-    // `codeOf`'s fallback: PGlite's own error on a closed instance is not an `AppError`.
+    // `codeOf`'s fallback: the driver's own error on a closed database is not an `AppError`.
     expect(result.skipped).toEqual([{ errorCode: "unknown" }]);
+  });
+});
+
+/**
+ * The due-work gate's two thresholds, each probed on BOTH sides.
+ *
+ * `workIsDue` (`./drain.ts`) is the only reader of either, and it is not exported, so these reach
+ * it the way production does: through `drain`, reading `tenantsWithWork` — which `drain` increments
+ * the moment the gate opens, before it resolves a client. Nothing else in this package pins these
+ * two comparisons on this engine. The cases that used to, in `migrations.test.ts`, call the
+ * PostgreSQL function `envios_work_due` directly and cannot survive its removal; they are left as
+ * they are rather than rewritten here.
+ *
+ * Both halves of each case are deliberately ordered "not due" first: the due half runs `drainDue`,
+ * which claims the row and rewrites it, so it cannot be followed by another read of the same row.
+ */
+describe("the due-work gate's thresholds", () => {
+  it("counts a pendiente row whose next attempt falls exactly on this instant, and not one a millisecond later", async () => {
+    // `<=`, not `<`. A row stamped exactly `now` is due NOW — `claimBatch` makes the same
+    // comparison, so a gate reading `<` here would leave a claimable row sitting for a whole pass.
+    // `proximo_intento_en` is written explicitly rather than taken from the fixture's own default,
+    // so this case states the instant it is probing.
+    await seedPendingEnvios(pg.db, { count: 1 });
+    await pg.db.execute(sql`
+      update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+    `);
+
+    const early = recordingResolver();
+    const notYet = await drain(
+      {
+        db: pg.db,
+        resolveClient: early.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      new Date(NOW.getTime() - 1),
+    );
+    expect(notYet.tenantsWithWork).toBe(0);
+    expect(early.asked).toBe(0);
+
+    const onTime = recordingResolver();
+    const due = await drain(
+      {
+        db: pg.db,
+        resolveClient: onTime.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(due.tenantsWithWork).toBe(1);
+    expect(onTime.asked).toBe(1);
+  });
+
+  it("counts a lone enviando row past RECUPERACION_ENVIANDO_MS, and not one exactly at it", async () => {
+    // `<`, not `<=`, against a cutoff derived from RECUPERACION_ENVIANDO_MS — the same constant,
+    // recomputed the same way, that `recoverStaleClaims` uses. Equal instants are NOT stale, which
+    // is what keeps the gate from opening on a row that pass would then decline to recover.
+    //
+    // A lone `enviando` row, with no `pendiente` row beside it: that is the only shape in which
+    // this disjunct decides the answer on its own.
+    await seedPendingEnvios(pg.db, { count: 1 });
+    await pg.db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS).toISOString()}
+    `);
+
+    const exact = recordingResolver();
+    const notYet = await drain(
+      {
+        db: pg.db,
+        resolveClient: exact.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(notYet.tenantsWithWork).toBe(0);
+    expect(exact.asked).toBe(0);
+
+    await pg.db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(NOW.getTime() - RECUPERACION_ENVIANDO_MS - 1).toISOString()}
+    `);
+
+    const stale = recordingResolver();
+    const due = await drain(
+      {
+        db: pg.db,
+        resolveClient: stale.resolveClient,
+        skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(due.tenantsWithWork).toBe(1);
+    expect(stale.asked).toBe(1);
   });
 });

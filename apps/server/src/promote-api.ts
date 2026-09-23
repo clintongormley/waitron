@@ -10,7 +10,7 @@
 //    the primary that held the admin's credentials is the very node that died. A wrong secret is
 //    `promotion.break_glass_invalid` (401) and `run` is never reached.
 //  - Otherwise the admin-login path — `loginManagerById` → `authorizeManager("node.promote")` →
-//    `endManagementSession`, as `app_user` under `withTransaction`, the `mirror-bundle-api.ts` shape.
+//    `endManagementSession`, all under one `withTransaction`, the `mirror-bundle-api.ts` shape.
 //    `node.promote` is ADMIN-only, so a staff credential authenticates but fails authorization (403).
 //  - Neither usable (no secret, and no well-formed id+password) → `password.invalid` (401), the same
 //    code a wrong password gets, so the response never says which field was missing.
@@ -39,7 +39,7 @@ export interface PromoteRunResult {
 }
 
 /**
- * `appDb` authenticates + authorizes (as `app_user` under `withTransaction` + `asAppUser`, the
+ * `appDb` authenticates + authorizes (under `withTransaction` + `asAppUser`, the
  * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read. `run` is the boot-wired
  * promote closure (Task 7) — the endpoint delegates to it and
  * never calls the promote functions itself.
@@ -106,9 +106,9 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         (body.totp === undefined || typeof body.totp === "string")
       ) {
         // The dashboard-login shape (`mirror-bundle-api.ts`): authenticate by PERSON ID, authorize the
-        // admin-only `node.promote`, end the throwaway session — all as `app_user` in one transaction.
-        // The `isUuid` screen turns a malformed id into this path's clean 401 rather than a `22P02` →
-        // opaque 500 when it reaches the `uuid` column.
+        // admin-only `node.promote`, end the throwaway session — all in one transaction.
+        // The `isUuid` screen turns a malformed id into this path's clean 401. It is the only
+        // refusal: the `persons.id` read would neither object to it nor match it.
         const { personId, password, totp } = body;
         await withTransaction(deps.appDb, async (tx) => {
           await asAppUser(tx);

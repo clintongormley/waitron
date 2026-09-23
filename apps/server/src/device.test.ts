@@ -1,81 +1,258 @@
+/**
+ * Device join-and-accept binding, on the engine the box now runs.
+ *
+ * ## The role this file was written around is gone, and is replaced by nothing
+ *
+ * Its old header argued that real PostgreSQL was MANDATORY here rather than PGlite, because the
+ * `till` branch mints a NEW `tills` row and only a real cluster would refuse a missing
+ * `INSERT ON tills` grant. **SQLite has no roles and no grants**: one process opens one file and
+ * `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). So the
+ * grant half of every case below is no longer checked by anything, here or elsewhere.
+ *
+ * What survives is the binding RULE, which is what the seven case names describe:
+ * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
+ * shape through `device_binding_rule_insert` / `_update`, created by
+ * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
+ * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.test.ts`.
+ *
+ * ## The disposition document expected a seventh case to be RED here, and it is not
+ *
+ * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records this file as "convert 6, BLOCKER 1",
+ * on the ground that `tills_tenant_location_name_key` was absent from the SQLite baseline, so a
+ * duplicate register name would insert cleanly and the refusal would never come. That is no longer
+ * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and all SEVEN
+ * cases pass. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
+ * giving the colliding device a name that does NOT collide ("Caja 2") fails the case with
+ * `promise resolved "{ …(2) }" instead of rejecting`, and the name restored, it passes again.
+ */
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { bindingFkField } from "./device.js";
+import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import type { FormFactor } from "@waitron/layouts";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tillId as brandTillId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
+import type { TillConfig } from "./till-config.js";
+import { createStation } from "./kitchen.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import "./errors.js";
 
-// Pure unit tests — no database. The binding rules themselves are proven against real Postgres in
-// device.pg.test.ts, and the two FK translations end-to-end in device-api.pg.test.ts; this file covers
-// the crafted-error branches a DB cannot reach.
+const LOCALE = "es-ES";
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-describe("bindingFkField", () => {
-  // The 23503 → field accessor, exercised with CRAFTED errors (no DB) so every branch is covered: the
-  // `tables.ts` `isZoneFkViolation` idiom. The end-to-end 23503 translation is proven against real
-  // Postgres in device-api.pg.test.ts; here we pin the table+columns mapping and the deliberate
-  // NON-matches (another column of the same table, the same column on another table, a different
-  // SQLSTATE, a refusal naming no key).
-  //
-  // A crafted error carries the three fields `refusalOn` reads off one layer — `code`, `table` and
-  // `detail`'s `Key (…)=(…)` clause. That this is the real drivers' shape is pinned in
-  // packages/db/src/constraint-target.test.ts.
-  const fk = (table: string, column: string): Error =>
-    Object.assign(new Error("fk"), {
-      code: "23503",
-      table,
-      detail: `Key (${column})=(0f9e) is not present in table "other".`,
+interface SeededVenue {
+  cfg: TillConfig;
+  stationId: string;
+}
+
+/** A fresh tenant + venue + one station + one seeded `tills` row ('Caja 1'). Every test calls it,
+ * and `useVenueDb` empties the data tables between tests, so the device and till counts each case
+ * reads are its own. */
+async function setupVenue(): Promise<SeededVenue> {
+  const admin = suite.db;
+  await seedTenant(admin);
+  // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators a raw
+  // insert never reaches while the columns are NOT NULL, and `invoice_locales` is a JSON array in a
+  // text column rather than the PostgreSQL `text[]` the `array[...]` constructor built.
+  const [loc] = await admin
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await admin
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const nodeId = await seedNode(admin, brandLocationId(locationId));
+  const cfg: TillConfig = {
+    tillId: brandTillId(till!.id),
+    nodeId: brandNodeId(nodeId),
+    seriesId: brandSeriesId(randomUUID()),
+    locationId: brandLocationId(locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+  const st = await withTransaction(admin, async (tx) => {
+    await asAppUser(tx);
+    return createStation(tx, cfg, { name: "Cocina", isDefault: true });
+  });
+  return { cfg, stationId: st.id };
+}
+
+/** Seed a device profile of the given form factor (owner SQL for setup). `name` is unique per tenant
+ * (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two distinct names. */
+async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
+  const [row] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name, formFactor })
+    .returning({ id: deviceProfiles.id });
+  return row!.id;
+}
+
+async function tillCount(): Promise<number> {
+  const { rows } = await suite.db.execute<{ n: number }>(
+    // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
+    // syntax error to this parser (`unrecognized token: ":"`).
+    sql`select count(*) as n from tills `,
+  );
+  return rows[0]!.n;
+}
+
+/** The enrolled device's binding columns and label, read straight off the table rather than out of
+ * the verb's return value: what is checked is that `acceptDeviceJoinRequest` (via
+ * `resolveDeviceBinding`) STAMPED the station or register its branch resolved. */
+async function deviceRow(deviceId: string): Promise<{
+  station_id: string | null;
+  till_id: string | null;
+  device_profile_id: string;
+  label: string;
+}> {
+  const { rows } = await suite.db.execute<{
+    station_id: string | null;
+    till_id: string | null;
+    device_profile_id: string;
+    label: string;
+  }>(sql`
+    select station_id, till_id, device_profile_id, label from devices where id = ${deviceId}`);
+  return rows[0]!;
+}
+
+describe("device join-and-accept binds the device by its profile's form factor", () => {
+  it("a till profile auto-creates exactly ONE register named after the device and binds it (station NULL)", async () => {
+    // The `till` branch (spec §2.2): the device describes itself as a till, so resolveDeviceBinding
+    // MINTS the cash register it rings against, names it after the device, and binds it. What the
+    // case turns on is that exactly ONE new till exists, named after the device, and the device
+    // points at it with a NULL station.
+    //
+    // A `till_id` left NULL would also be refused by `device_binding_rule_insert`
+    // (`packages/db/drizzle/0001_behavioural_triggers.sql`, its non-kds arm); what these assertions
+    // add is WHICH register — the one this branch mints, named after the device.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    const before = await tillCount();
+
+    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Caja Nueva", profileId });
+
+    // Exactly ONE new till, named after the device.
+    expect(await tillCount()).toBe(before + 1);
+    const { rows: created } = await suite.db.execute<{ id: string }>(
+      sql`select id from tills where location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
+    );
+    expect(created).toHaveLength(1);
+    // …and the device is bound to THAT register, with no station.
+    const row = await deviceRow(dev.deviceId);
+    expect(row.till_id).toBe(created[0]!.id);
+    expect(row.station_id).toBeNull();
+    expect(row.device_profile_id).toBe(profileId);
+    expect(row.label).toBe("Caja Nueva");
+  });
+
+  it("a handheld profile binds an EXISTING register named by registerId and creates no new till", async () => {
+    // The else branch (phone-portrait / tablet-landscape): a handheld rings against an already-created
+    // register, so resolveDeviceBinding binds the named `registerId` and mints NO till.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    const before = await tillCount();
+
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Camarero 1",
+      profileId,
+      registerId: cfg.tillId,
+    });
+    expect(await tillCount()).toBe(before); // no register minted
+
+    const row = await deviceRow(dev.deviceId);
+    expect(row.till_id).toBe(cfg.tillId);
+    expect(row.station_id).toBeNull();
+  });
+
+  it("a kds profile binds the named station (till NULL)", async () => {
+    const { cfg, stationId } = await setupVenue();
+    const profileId = await seedProfile("kds", "Perfil KDS");
+
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Pantalla Cocina",
+      profileId,
+      stationId,
     });
 
-  it("maps the device binding FKs' table and column to their input fields", () => {
-    // The device-binding FKs on the `devices` table: `devices_device_profile_fk (device_profile_id)`
-    // (a reassign to a profile that names no row → `deviceProfileId`, the assign-device-profile route)
-    // and `devices_receipt_printer_fk (receipt_printer_id)` (a hardware PATCH naming no such printer →
-    // `receiptPrinterId`). Only `devices` carries a binding FK, so these are the only two.
-    expect(bindingFkField(fk("devices", "device_profile_id"))).toBe("deviceProfileId");
-    expect(bindingFkField(fk("devices", "receipt_printer_id"))).toBe("receiptPrinterId");
+    const row = await deviceRow(dev.deviceId);
+    expect(row.station_id).toBe(stationId);
+    expect(row.till_id).toBeNull();
   });
 
-  it("returns undefined for a target the list does not name — both near-misses included", () => {
-    // The list keys on the table AND the column, so a 23503 on any other key rethrows raw rather than
-    // being mislabelled `device.binding_invalid`. One near-miss per half. The COLUMN half: two more
-    // FK columns of `devices` itself. The TABLE half: `devices` is the only table carrying a
-    // `device_profile_id` today, so that case is crafted from a table that does not carry one — it
-    // exists to pin that the table is compared at all, not just the column.
-    expect(bindingFkField(fk("devices", "station_id"))).toBeUndefined();
-    expect(bindingFkField(fk("devices", "till_id"))).toBeUndefined();
-    expect(bindingFkField(fk("join_requests", "device_profile_id"))).toBeUndefined();
-    expect(bindingFkField(fk("device_profiles", "canvas_id"))).toBeUndefined();
+  it("a kds profile with NO station is device.station_required", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("kds", "Perfil KDS");
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Pantalla", profileId }),
+    ).rejects.toMatchObject({ code: "device.station_required" });
   });
 
-  it("finds the 23503 wrapped in a DrizzleQueryError-style cause chain", () => {
-    const wrapped = new Error("outer", {
-      cause: new Error("mid", { cause: fk("devices", "device_profile_id") }),
-    });
-    expect(bindingFkField(wrapped)).toBe("deviceProfileId");
+  it("a handheld profile with NO register is device.register_required", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Camarero", profileId }),
+    ).rejects.toMatchObject({ code: "device.register_required" });
   });
 
-  it("returns undefined for a 23503 on a NON-binding constraint (rethrown raw, not mislabelled)", () => {
-    // A 23503 on the direct location FK is not a binding fault — the catch rethrows it raw.
-    expect(bindingFkField(fk("devices", "location_id"))).toBeUndefined();
+  it("a handheld profile naming a register of another venue is device.binding_invalid (field tillId)", async () => {
+    // The explicit by-id read carries its own tenant AND location predicate (CLAUDE.md §3): a register
+    // that is not this venue's is rejected here, not trusted. A foreign-venue till (another location of
+    // the SAME tenant) trips it.
+    const { cfg } = await setupVenue();
+    const [other] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Terraza",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const [foreignTill] = await suite.db
+      .insert(tills)
+      .values({ locationId: other!.id, name: "Caja 1" })
+      .returning({ id: tills.id });
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, {
+        name: "Camarero",
+        profileId,
+        registerId: foreignTill!.id,
+      }),
+    ).rejects.toMatchObject({ code: "device.binding_invalid", params: { field: "tillId" } });
   });
 
-  it("returns undefined for a 23503 that names no key at all", () => {
-    expect(bindingFkField(Object.assign(new Error("fk"), { code: "23503" }))).toBeUndefined();
-  });
-
-  it("returns undefined for a non-23503 error, a self-referential cause loop, and nullish input", () => {
-    // The SQLSTATE half is checked as well as the target: a 23505 naming a binding table and column is
-    // still not a binding-FK fault, so it rethrows raw.
-    expect(
-      bindingFkField(
-        Object.assign(new Error("dup"), {
-          code: "23505",
-          table: "devices",
-          detail: "Key (device_profile_id)=(0f9e) already exists.",
-        }),
-      ),
-    ).toBeUndefined();
-    const looped: { code?: string; cause?: unknown } = {};
-    looped.cause = looped; // a self-referential cause must not spin forever
-    expect(bindingFkField(looped)).toBeUndefined();
-    expect(bindingFkField(null)).toBeUndefined();
-    expect(bindingFkField(undefined)).toBeUndefined();
+  it("a till profile whose name collides at the venue is device.register_name_taken", async () => {
+    // setupVenue already seeded a 'Caja 1' at cfg.locationId, so a till device named 'Caja 1'
+    // collides on `tills_tenant_location_name_key` (`packages/db/drizzle/0000_baseline.sql:49`) and
+    // the unique violation is translated to this code. Control, 2026-09-22: naming the device
+    // 'Caja 2' instead resolves the promise rather than rejecting it, so the assertion is reading
+    // the collision and not the happy path.
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    const before = await tillCount();
+    await expect(
+      enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId }),
+    ).rejects.toMatchObject({ code: "device.register_name_taken" });
+    expect(await tillCount()).toBe(before); // the colliding register did not land
   });
 });

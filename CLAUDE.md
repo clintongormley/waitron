@@ -18,7 +18,7 @@ to check a claim rather than follow it.
 | [ci-and-gates.md](docs/developers/ci-and-gates.md)         | CI, the pre-push hook, shards, coverage, test concurrency                     |
 | [conventions-ui.md](docs/developers/conventions-ui.md)     | a screen, a form, a `wt-*` primitive, the dashboard shell, printing, hardware |
 | [conventions-data.md](docs/developers/conventions-data.md) | the database, SQL, grants, migrations, module boundaries, provisioning        |
-| [testing-guide.md](docs/developers/testing-guide.md)       | a test — especially real-PostgreSQL, container or browser tests               |
+| [testing-guide.md](docs/developers/testing-guide.md)       | a test — especially a database, container or browser test                     |
 | [workflow-guide.md](docs/developers/workflow-guide.md)     | starting or landing a branch, or running the dev stack from a worktree        |
 | [design-system.md](docs/developers/design-system.md)       | anything visual — it is the UI contract and it grows as screens land          |
 | [products.md](docs/developers/products.md)                 | a product's three names, what each surface shows, the translation gap report  |
@@ -34,10 +34,11 @@ Comments and docs that assert more than the code delivers are this repo's most c
 wide margin. This section stays in full deliberately: it applies to every change, in every area.
 
 - **A claim of necessity or impossibility needs a receipt** — the command that was run, or a cited
-  `file:line`. Good shape: _"Proven on PostgreSQL 18 against the real migrations, as a LOGIN role with
-  rolsuper = f: the four inserts succeed."_ When a claim names a privilege, name the role SHAPE that
-  holds it: owner, grantee, or member. Cost: three false claims in one day on `bootstrap-tenant.sql`,
-  each one born correcting the last.
+  `file:line`. Good shape: _"Measured 2026-09-22 on `node:sqlite`, Node v26.7.0, inside one
+  transaction: a duplicate key, a null in a `not null` column and an append-only trigger's
+  `raise(abort)` each left the transaction usable, and the rows written beside them committed."_ —
+  it names the engine, the version, the conditions and what happened, so a reader can re-run it.
+  Cost: three false claims in one day on one file, each one born correcting the last.
 - **Reading is not verification.** Run the thing. Cost: a false "superuser is unavoidable" survived a
   correction pass, a four-agent simplify, a fresh-context review and Copilot — all of them reading.
 - **State the experiment, not the conclusion.** "I deleted the tenant predicate and the test failed"
@@ -119,8 +120,7 @@ sees it — and its `mutate` list covers two named files, not the package. **`db
 own stryker config**, because CI splits its run across ten shards and a `thresholds.break` there
 would gate a slice: the ten reports are merged and scored once by the `mutation-db-aggregate` job,
 so a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing. Like `fiscal`'s,
-db's 90 is not quite package-wide — two files are out of its `mutate` set: `src/testing/global-setup.ts`,
-which vitest runs in the main process where Stryker records no coverage, and `src/english-only.ts`,
+db's 90 is not quite package-wide — one file is out of its `mutate` set, `src/english-only.ts`,
 whose only suite is in the root project and which nothing under `packages/db` imports today.
 Receipts: `scripts/mutation-shard.mjs`'s `NOT_MUTATED`. Which package
 holds which bar is pinned by `scripts/mutation-break-thresholds.test.mjs`, weaker than its name in
@@ -205,9 +205,12 @@ hook, or how tests are scheduled:
   SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
   what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
-- **Only the `core` migration set has an upgrade test; every module set is still migrated from a
-  VIRGIN database only**, so a green gate is no evidence that a module set can upgrade a box. Cost: a
-  bricked box, an hour of guesswork, and a wipe that destroyed the evidence.
+- **No migration set has an upgrade test; every set is migrated from a VIRGIN database only**, so a
+  green gate is no evidence that any set can upgrade a box. The one that covered `core` was deleted
+  with the PostgreSQL harness, its subject being a rule about changing an enum type that this engine
+  has no statement for; what it proved, and that nothing replaced it, is in
+  [ci-and-gates.md](docs/developers/ci-and-gates.md). Cost: a bricked box, an hour of guesswork, and
+  a wipe that destroyed the evidence.
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
@@ -337,12 +340,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   time, so a `bin` under `dist/` is never linked by the install that reads it.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts` and `asAppUser` has one import path.
-- **Schema-qualify helper calls inside SQL functions used by expression indexes.** A restore rebuilt
-  the image index with an empty search path. See [conventions-data.md](docs/developers/conventions-data.md).
-- **Never build SQL by string concatenation — except for utility statements, which PostgreSQL will not
-  bind.** For those, either escape (`quoteIdent`/`quoteLiteral`) or validate and throw
-  (`probeRoleStatement`). Neither is not acceptable; "the callers only pass safe values" is the §1
-  defect class.
+- **Never build SQL by string concatenation — except where the engine takes no bound value**: an
+  identifier, and the body of a generated trigger. For those, either escape
+  (`quoteIdent`/`quoteLiteral`, as the change feed does with each source's type,
+  `packages/db/src/change-feed.ts`) or validate and throw (as the append-only installer does with
+  each table name, `packages/store/src/append-only.ts`). Neither is not acceptable; "the callers
+  only pass safe values" is the §1 defect class.
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
   emitted SQL with `.toSQL()`.
@@ -351,47 +354,45 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   empty result as a specific cause. Untargeted calls remain in the tree and nothing guards this.
   See [conventions-data.md](docs/developers/conventions-data.md).
 - **Rewriting rows one at a time inside a transaction can break a unique index the FINAL state
-  satisfies.** Two items swapping products refused with `23505` midway through. Replacing the set —
-  delete then insert — needs TWO conditions, and the `REFERENCES` grep is only the first: nothing
-  outside the table may hold a key into it, AND the writers must be serialised on something, because
-  a `delete` cannot see a concurrent transaction's uncommitted inserts, so the second writer removes
-  nothing and collides on a SECOND unique index. A `select … for update` on the parent row is the
-  cheap way. See [conventions-data.md](docs/developers/conventions-data.md).
+  satisfies.** Two items swapping products were refused midway through — on this engine
+  `UNIQUE constraint failed: <table>.<column>`, errcode 2067. Replacing the set — delete then
+  insert — needs the `REFERENCES` grep first: nothing outside the table may hold a key into it. The
+  second condition the PostgreSQL rule carried, that the writers be serialised on something, is now
+  the engine's: one write transaction at a time per file, because `withTransaction` IS
+  `withWriteLock` (`packages/db/src/tenancy.ts:44`). See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
-- **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
-  deliberately. If a test needs a privilege the role does not have, the test is asserting the wrong
-  thing or the code is reaching somewhere it should not — establish which before touching any grant.
-- **Four tables the application role may read and never write — `tenants`, `nodes`, `deployment`,
-  `mirror_config` — and today PostgreSQL is the only thing refusing the write.** A write of one of
-  them belongs on a path that opens its own owner handle, never on the connection a request is served
-  on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in four ways, among those its
+- **Four tables request code may read and never write — `tenants`, `nodes`, `deployment`,
+  `mirror_config` — and since the storage switch NOTHING refuses the write.** The database engine is
+  a file: there are no roles and no grants, so the guard is the whole of the enforcement, where it
+  used to be the second line behind a `GRANT` the server could not talk its way past. A write of one
+  of them belongs on a path that opens the store deliberately for it, never on the handle a request
+  is served on. Guard: `scripts/write-path-tables.test.ts`, weaker than its name in three ways its
   own header states — it reads TEXT, so a table name reached through a variable is invisible to it;
   it judges a FILE against an allowance list rather than a call chain, so a request path that calls
-  into an allowed file writes through it unseen; it walks `<member>/src` under `apps` and `packages`
-  alone, so a package's `test/` directory and `apps/<app>/scripts` are outside it; and what the
-  grants refuse one operation at a time it does not cover at all (`docs/backlog.md` → B9).
-- **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** A partial
-  grant WARNs and exits 0, and `PUBLIC`'s default `CONNECT`/`TEMP` counts as "held" so the hard error
-  is rarely reached. Read the ACL back rather than trusting the exit code; `has_*` functions also
-  count privileges held only through group membership, which a provisioner must not accept.
-  Role-membership grants are different: they always ERROR.
+  into an allowed file writes through it unseen; and it walks `<member>/src` under `apps` and
+  `packages` alone, so a package's `test/` directory and `apps/<app>/scripts` are outside it.
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is assignable
   to `Transaction`. **Splitting one logical change across transactions is a commented decision, never
-  a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — pg 9 removes
-  the queueing that makes it work; no guard enforces it (receipt in
-  [conventions-data.md](docs/developers/conventions-data.md)).
-- **A statement PostgreSQL REFUSES aborts the whole transaction, so catching its error and carrying
-  on in the same `tx` needs a SAVEPOINT** — a nested `tx.transaction(...)`. Cost: `enqueueSuccessor`
-  (`packages/scheduler/src/store.ts`) swallowed a lost race's duplicate key and threw away the run
-  completion written beside it; nothing failed. Guard: the loser's second enqueue in
-  `packages/scheduler/src/store.concurrency.test.ts`. **A TEST catches such a refusal OUTSIDE the
-  transaction**, around the whole `withTransaction` — and no guard enforces that half, so a third
-  test written the wrong way round is caught by nobody. Receipt for both:
-  [conventions-data.md](docs/developers/conventions-data.md).
+  a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — the reason
+  the pg driver gave for that is gone, and the convention is not: this engine is synchronous, so two
+  statements issued together run one after the other in an order nothing states. Measured
+  2026-09-22: two reads and two `create table`s issued with `Promise.all` inside one
+  `withTransaction` all completed, so the hazard is ORDER, not loss. No guard enforces it.
+- **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
+  a refusal and carrying on in the same `tx` is safe, and the SAVEPOINT the PostgreSQL rule required
+  here is not what makes it safe. Measured 2026-09-22 on `node:sqlite` (Node v26.7.0): inside one
+  transaction a duplicate key (errcode 2067), a null in a `not null` column (1299) and an
+  append-only trigger's `raise(abort)` (1811) each left the transaction usable and the rows written
+  beside them committed. The nested `tx.transaction(...)` calls in `enqueueSuccessor`
+  (`packages/scheduler/src/store.ts`), `appendToChain` and `insertClose` stay for a different
+  reason, stated at each: they confine a losing attempt's own writes. **A TEST still catches such a
+  refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
+  Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** (2026-09-14, spec
   [2026-09-14-drop-tenant-id-design.md](docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md).)
@@ -404,25 +405,31 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   passes; it does not read test files; and it exempts, whole, each of the core migration files that
   historically carried the column, so a column re-added inside one of those is seen by nothing.
 - **`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
-  types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `uuid()`
-  or `numeric()` straight from `drizzle-orm/pg-core`, so the SQLite switch replaces one file rather
-  than every column in the tree. One scoped exception: `text` in
+  types.** A table declares `id`, `money`, `label`, `table` and the rest from there, never `text()`
+  or `integer()` straight from `drizzle-orm/sqlite-core`, so the NEXT engine change replaces one
+  file rather than every column in the tree. One scoped exception: `text` in
   `packages/fiscal-verifactu/src/schema/registros.ts`, whose two amount columns store the bytes the
   huella hashed. Guard: `scripts/column-vocabulary.test.ts`, weaker than its name — it reads the
   IMPORT or re-export line as text, so a builder reached through `import * as` is invisible to it,
-  and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `bigserial`,
-  met on the change-log table — is in no forbidden set and passes anywhere. A builder the
-  vocabulary STOPS importing would leave the set the same day, which `numeric` did; retired
-  builders are held by a hand-written list beside the derived one.
+  and it forbids only the builders the vocabulary ITSELF imports, so one it does not — `blob`, a
+  real `drizzle-orm/sqlite-core` column builder — is in no forbidden set and passes anywhere
+  (measured 2026-09-23: a file importing `blob` and a file importing `text` added side by side
+  under `packages/fiscal-verifactu/src`, and the guard reported only the `text` one). A builder the
+  vocabulary STOPS importing would leave the set the same day; the hand-written list that holds
+  such a name forbidden sits beside the derived one, and it is empty, because its one entry named a
+  PostgreSQL builder and went with the engine.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
   (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
-  for a raw-SQL read of an AMOUNT, which casts the expression `::text`, never `::int` — a test
-  asserting the stored COUNT is not reading an amount and several cast `::int`). Above the row every
-  amount stays the exact `Decimal`. Money held as decimal strings inside `jsonb` is not a cents
-  column and is still summed as `numeric` (`packages/reporting/src/vat-summary.ts`). **Nothing
-  guards the boundary itself** — a bare whole number written into a money column by raw SQL now
-  silently means CENTS (a QUOTED decimal still fails loudly, `22P02`; an UNQUOTED one does not —
-  `25.00` takes PostgreSQL's assignment cast and stores 25, measured 2026-09-21). Guards, both narrower than their names:
+  for a raw-SQL read of an AMOUNT, which casts the expression `cast(x as text)` — this engine has no
+  `::` operator, and an uncast integer arrives as a JavaScript number, which that reader refuses).
+  Above the row every amount stays the exact `Decimal`. A money total summed out of JSON is summed
+  in JavaScript at the money scale, because this engine has no exact decimal type
+  (`packages/reporting/src/vat-summary.ts`). **Nothing guards the boundary itself, and since the
+  storage switch there is no LOUD form of getting it wrong left.** A money column is a plain
+  `integer` column with no strictness, so every one of these is accepted, measured 2026-09-22 on
+  `node:sqlite` (Node v26.7.0), bound parameter and raw SQL alike: `25.00` and `"25.00"` store the
+  integer 25, `"21.50"` stores the REAL 21.5, and `"abc"` stores the text `abc`. PostgreSQL's
+  `22P02` on a quoted decimal is the receipt that retired with the engine. Guards, both narrower than their names:
   `packages/db/src/schema/columns.test.ts` (`money` and `bigCount` emit the SAME SQL type, so only
   its read-mode case separates them) and `packages/shared/src/conventions.test.ts` (reads
   `cents.ts` as TEXT, and nothing outside `packages/shared/src`, so a second file crossing into the
@@ -430,26 +437,42 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
   money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`, with the same two raw-SQL
-  readers and the same `::text` rule). A blanket "every numeric becomes cents" does not EMPTY a
+  readers and the same cast-to-text rule). A blanket "every numeric becomes cents" does not EMPTY a
   quantity, it misreads one — `decimalToCents` rounds the third place rather than dropping it, so
-  0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale.
-  A quantity is `bigint` and a rate `integer`, because the decimal columns they replace
-  differed in width. The bound each of those enforced — nine integer digits for a quantity, three
-  for a rate — moved into the converters, since an integer column takes silently what `numeric`
-  refused with a `22003`. The money rule's two guards and both its hedges apply unchanged, and
-  `quantity` emits the same SQL type as `money` and `bigCount`, so only the caller separates them.
-  A rate's CHECK constraint is the one thing that does NOT follow the column:
-  `ALTER COLUMN ... SET DATA TYPE` keeps it and casts it, so a `rate <= 100` left alone refuses
-  every rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core
-  set only.
+  0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale. The bound the
+  decimal columns they replaced enforced — nine integer digits for a quantity, three for a rate —
+  lives in the converters now, because an integer column takes silently what `numeric` refused. The
+  money rule's two guards and both its hedges apply unchanged, and `quantity`, `money` and
+  `bigCount` are all `integer(name)`, so only the caller separates them. A rate's CHECK constraint
+  is re-derived against 10000 rather than carried across: one written as `rate <= 100` refuses every
+  rate above one percent. Guard: `packages/db/src/schema/schema-conformance.test.ts`, core set
+  only.
+- **The database never rounds a quantity — `decimalToThousandths` owns the third place.** The
+  column stores what the converter already decided, so no SQL rounding stands behind it and a test
+  asking storage to round is testing something no product path does. Cost: a
+  `1.2345::numeric(12,3)` cross-check in `packages/catalogue/src/units.operations.test.ts`, which
+  the storage switch left red with no reading it could be rewritten to — this engine has no exact
+  decimal type. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
-  list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — a replication
-  apply worker skips ordinary triggers. No PRODUCT code replicates today (2026-09-19) — some test
-  suites still do, named in [testing-guide.md](docs/developers/testing-guide.md) — and the flag stays
-  anyway; why, and what does not carry into the replacement, in
-  [conventions-data.md](docs/developers/conventions-data.md). No policies, no RLS: one tenant per
-  database. Guards, on a new table: `scripts/classification-complete.test.ts`,
-  `scripts/append-only-enable-always.test.ts`.
+  list, and a table that must never be corrected is declared with `appendOnly()` instead of
+  `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair
+  after each set migrates (`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`), so
+  every migrating path installs them and none can forget. **The CLASS is not the trigger set.**
+  Nine `ledger` tables are updated or deleted by ordinary product code — `payments` records a card
+  payment's progress, `cadenas` and `workforce_chains` hold chain heads — and `order_amendments` is
+  `state` and must still refuse both; deriving the triggers from the class refused a card capture
+  and left an amendment rewritable, measured 2026-09-22. It needs `PRAGMA recursive_triggers`,
+  which the store turns on: without it `INSERT OR REPLACE` rewrites a protected row silently, while
+  the other three mutation shapes are refused either way — so a suite that omits the replace case
+  passes with the hole open. What a trigger cannot refuse is `DROP TABLE`: SQLite has no trigger
+  event for it and no `TRUNCATE` statement at all, so the truncate-blocking trigger the PostgreSQL
+  schema carried has no equivalent (2026-09-21, the storage switch; the `ENABLE ALWAYS` rule that
+  stood here belonged to PostgreSQL's replication apply worker and went with it). No policies, no
+  RLS: one tenant per database. Guards, on a new table:
+  `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` — which migrates
+  a real database through `applyMigrations` and then tries a plain `UPDATE` and `DELETE` on every
+  declared table, and leaves the other two shapes to `packages/store/src/append-only.test.ts`, where
+  a conflicting key is available.
 - **The class also chooses the database FILE, so no foreign key may join a `local` table to a
   `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
   and names, at the column, what establishes the target exists — or that nothing does, and where the
@@ -458,25 +481,43 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   in hand-written migration SQL, is invisible to it. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
-- **`waitron-provision instance` migrates AS the migrator, via a `role=` session option, never as a
-  plain admin** — the database is created `OWNER waitron_migrator`, and a plain admin connection to
-  such a database cannot even `CREATE TABLE` in `public` (`42501`), so the migrate has to run as the
-  migrator and every table it creates is migrator-owned. Receipt, run against a real server:
-  `packages/provisioning/src/instance-apply.pg.test.ts` (C5). Any new provisioning path that creates
-  schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
-  trigger executing a function owned by a different migration set. Both exist today — `workforce` and
-  `fiscal-verifactu` run append-only `reject_mutation()` triggers, and that function is owned by
-  `core` (harmless: both declare `requires.core`). Guard: `scripts/module-graph-honesty.test.ts`,
-  which reads text (and says so) for any cross-module `EXECUTE FUNCTION`, not one named function.
+  trigger executing a function owned by a different migration set. Only the first has an instance
+  today: the SQLite baselines carry no `CREATE TRIGGER` at all — a `create trigger` grep over
+  `packages/*/drizzle/*.sql` counted 0 on 2026-09-22 — because append-only enforcement moved to
+  `applyMigrations` at runtime, and the `workforce`/`fiscal-verifactu` → `core` edge that
+  `reject_mutation()` used to make went with it. The rule stays because the SHAPE can come back.
+  Guard: `scripts/module-graph-honesty.test.ts`, which reads text (and says so) for any
+  cross-module `EXECUTE FUNCTION`, not one named function.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
-  table a module owns belongs to that module's own set, where its grants travel with it.
+  table a module owns belongs to that module's own set, where its append-only classification
+  travels with it — `applyMigrations` installs each set's triggers from the `appendOnlyTables` the
+  module declared. Not its grants: this engine has none, and a `grant` grep over every `.sql` under
+  `packages/` and `apps/` counted 0 on 2026-09-23.
+- **A constraint that lives only in hand-written migration SQL is one regeneration away from gone,
+  and nothing else in the tree notices.** Declare every foreign key and every unique index in the
+  TypeScript schema, so `drizzle-kit generate` carries it; where one genuinely cannot be declared,
+  say at the column what it cost and where the refusal moved to. Cost: regenerating the thirteen
+  sets for the storage switch dropped 33 foreign keys and 13 unique indexes, so an insert naming a
+  `device_profile_id` that exists nowhere was accepted and stored the dangling id; the first thing
+  that would have failed was a route test several step groups later. Guard:
+  `scripts/schema-constraints.test.ts`, weaker than its name in ways its header states — it reads
+  the schema the migrations BUILD rather than trying an offending insert, so it cannot tell a key
+  SQLite records from a key SQLite enforces, and it matches a unique index by NAME, so an index
+  whose columns changed under a kept name passes.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
   snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
-  RUNNING the grant assertions and `inmutabilidad`.
-- **A new unique target must precede the foreign key that references it in generated SQL.** Drizzle
-  emitted the reverse order for a new table referencing an altered existing table; PostgreSQL rejected
-  it with `42830`. See [conventions-data.md](docs/developers/conventions-data.md).
+  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts` and
+  `inmutabilidad` — the first two because a regeneration is exactly what has dropped constraints and
+  triggers declared outside the TypeScript schema before.
+- **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
+  time.** This engine creates a table naming a parent that does not exist yet, and a whole migration
+  set applies clean; the first insert then fails `foreign key mismatch - "child" referencing
+"parent"` (errcode 1), and it keeps failing until a unique index over the parent's columns exists.
+  Measured 2026-09-22 on `node:sqlite` (Node v26.7.0), with the control: the same insert passes the
+  moment the index is created. So a green migrate is no evidence a new key is sound — write through
+  it. On PostgreSQL this was a `42830` at migrate time. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. The core journal
   is already in a shape no edit repairs — a database at core release points 1–6 cannot reach HEAD.
@@ -485,9 +526,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   rather than serving a half-migrated schema.
 - **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
   `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
-  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: `waitron-provision
-instance`, the cold restore, `rejoin-command` and `dev-setup` each migrate a live database with no
-  ahead check. Cost: without it an ahead database re-migrates CLEANLY and surfaces later as an
+  `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: the cold restore,
+  `rejoin-command` and `dev-setup` each migrate a live database with no ahead check. (A fourth,
+  `waitron-provision instance`, went when a venue became a directory of SQLite files — the reason
+  is recorded at `packages/provisioning/src/errors.ts`.) Cost: without it an ahead database re-migrates CLEANLY and surfaces later as an
   unclassified driver error.
 - **An empty connection string is a valid connection string** — it resolves to localhost with every
   default. Anything reading a URL from env or a prompt refuses `""` explicitly.
@@ -500,44 +542,37 @@ instance`, the cold restore, `rejoin-command` and `dev-setup` each migrate a liv
 ## 4. Testing
 
 One line each; the mechanism, the measurement and the incident behind every one are in
-[testing-guide.md](docs/developers/testing-guide.md). **Read it before writing a real-PostgreSQL,
-container or browser test** — most of these rules exist because a test passed while proving nothing.
+[testing-guide.md](docs/developers/testing-guide.md). **Read it before writing a database or
+browser test** — most of these rules exist because a test passed while proving nothing.
 
-- **Two targets.** **PGlite** is hermetic and fast, and its connection arrives as a superuser — so a
-  grant assertion that forgets `asAppUser(tx)` silently asserts nothing. Grants themselves ARE
-  enforced once the session assumes the role, table-wide and column-scoped alike, so an ordinary
-  grant test belongs here and needs no container. Two things PGlite cannot show: every query
-  serialises onto its one backend, so a contention test on it is a **false pass**; and the session
-  can step back out with `reset role`, so it cannot prove code is confined to a role. **Real
-  Postgres** via Testcontainers is required for concurrency, for triggers running as the deployment
-  role, and for anything that turns on who CONNECTED rather than who the session made itself.
-  `describeEachTarget` runs a suite against both. Pick the lighter one when the heavier one's
-  justification does not apply, and say why in a comment.
-- **A grant assertion must call `asAppUser(tx)` before the query under test.** Without it the test
-  runs as the owner and asserts nothing, however much it asserts.
-- **A suite that would once have called `usePgliteDb` calls `useVenueDb`, and no `.ts` file under
-  `packages/` or `apps/` outside `packages/db` NAMES `usePgliteDb`.** That helper is the one
-  body the SQLite switch replaces. Guard: `scripts/venue-db-helper.test.ts`, weaker than its name in
-  ways its header lists — it sees ONE of the three doors to a PGlite database, so a suite reaching
-  one through `createPgliteDb` or `describeEachTarget` is outside the rule as well as the guard
-  (both are task F1's — `describeEachTarget` is a shared helper too, so "ask a helper" is NOT the
-  rule), and markdown is outside its scope entirely. Cost: the rule had to wait for
-  the last conversion, because a rule with standing violations needs a guard and the guard could not
-  pass; by then seven comments named a helper no suite in their own package called any more, five of
-  them in a `vitest.config.ts`, where a call-shaped grep never looks. Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md).
-- **Don't own a database in a suite — let a helper own it** (`useVenueDb` / `useRealPostgres`). Raw
-  `beforeAll`/`afterAll` only when the suite legitimately builds its own resource, and then guarded.
-  Guard: `scripts/guarded-teardowns.test.ts`.
+- **One target.** A suite that needs a database gets a REAL one: `useVenueDb` makes a temporary
+  directory, opens it with the product's own opener, applies the migration sets it was given and
+  installs the append-only triggers. There is nothing lighter to pick and nothing heavier to justify.
+  What this retired, so an older comment does not mislead: PGlite, `describeEachTarget`, the
+  Testcontainers PostgreSQL tier, and the whole question of which target a suite belongs on.
+- **A suite asks for its database through `useVenueDb`, and no `.ts` file under `packages/` or
+  `apps/` NAMES `usePgliteDb`** — including inside `packages/db`, which used to be exempt. Guard:
+  `scripts/venue-db-helper.test.ts`, weaker than its name — it holds that the retired NAME stays
+  retired, not that a suite opens its database sensibly, and markdown is outside its scope. Cost:
+  the rule had to wait for the last conversion, because a rule with standing violations needs a
+  guard and the guard could not pass; by then seven comments named a helper no suite in their own
+  package called any more, five of them in a `vitest.config.ts`, where a call-shaped grep never
+  looks. Receipt: [testing-guide.md](docs/developers/testing-guide.md).
+- **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
+  when the suite legitimately builds its own resource, and then guarded. Guard:
+  `scripts/guarded-teardowns.test.ts`.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with Ryuk off an INTERRUPTED run
   leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`, and
-  `docker volume inspect` before any manual `rm`.
+  `docker volume inspect` before any manual `rm`. **Only `bench/sqlite-failover` starts a container
+  now** — it is the one place stamping `com.waitron.reapable` (`bench/sqlite-failover/src/store.ts`),
+  so a package suite that seems to hang is not waiting on Docker.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.
-- **Networked PostgreSQL fixtures use one Docker network and unique container names for DNS.** A
-  second bridge with a different MTU stalled larger queries while small ones passed. Use
-  `networkedPostgresContainer`.
+- **A container fixture that needs DNS between containers uses ONE Docker network and unique
+  container names.** A second bridge with a different MTU stalled larger queries while small ones
+  passed. The fixture that carried this (`networkedPostgresContainer`) went with the storage switch,
+  so what is left is the mechanism, for whoever writes the next one.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
   one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
   the same package end in `ENOENT`; and a leftover directory inside the package under a non-dot name
@@ -547,11 +582,11 @@ container or browser test** — most of these rules exist because a test passed 
   evidence that a container global setup already started is absent.
 - **A container port-binding timeout needs Docker state as well as database logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the fixture.
-- **Locate the unfinished package before diagnosing a silent shard as PostgreSQL contention.** A
+- **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline, and
   never a retry as proof of repair.
-- **A recurrent real-PG stall needs a retained log and a live database snapshot.** Locate the stalled
-  operation before assigning its cause to resource contention.
+- **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate the
+  stalled operation before assigning its cause to resource contention.
 - **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback** —
   so `packages/bookings`, `payments-stripe`, `payments-sumup` and `venue-service` each set
   `maxWorkers: 1` inside a project. **A cap that must apply to every project still belongs on the
@@ -575,17 +610,19 @@ container or browser test** — most of these rules exist because a test passed 
   test can take, which is the SUM of its waits plus its untimed work, not the largest one. **Under
   `packages/` and `apps/` the bound usually comes from the package's `vitest.config.ts`, not the
   file** — and an `expect.poll` or `vi.waitFor` is a wait like any other. Guard:
-  `scripts/spawn-timeout-budget.test.ts`, weaker than its name in several ways its comments state —
-  it reads TEXT, cannot tell code from strings, checks only the largest SINGLE wait, and declines
-  wherever a bound or a config cannot be resolved rather than risk failing a correct file. Receipt:
+  `scripts/spawn-timeout-budget.test.ts`, which scans `scripts/` ALONE — **the rule holds under
+  `packages/` and `apps/` and nothing checks it there**, so the trap returns unguarded the day a
+  suite under either root waits longer than its budget. Weaker than its name over the half it does
+  cover, too: it reads TEXT, cannot tell code from strings, checks only the largest SINGLE wait, and
+  declines wherever a bound cannot be resolved rather than risk failing a correct file. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included.** Getting the
   Vitest bound right says nothing about this one: the test timeout fails a healthy test for its
   duration, while the spawn timeout KILLS the child and returns `status: null`, which reads as a
   broken test. Cut the WAIT, not the retrying (`WAITRON_SH_HEALTH_DELAY`) — which reduces the
   exposure rather than removing it, since the probes' own cost stays. **`scripts/spawn-timeout-budget.test.ts`
-  does not cover this** — it reads the SUITE's declared waits, never the child's, so nothing guards
-  the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
+  does not cover this** — it reads a `scripts/` suite's own declared waits, never the child's, so
+  nothing guards the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only where the stubs are a large share of
@@ -626,18 +663,23 @@ container or browser test** — most of these rules exist because a test passed 
   typecheck, and a module tested only from there must be in the root `coverage.include` AND excluded
   from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
+- **A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own
+  case.** Deletion shows the guard catches what it was written for; only a case in the other
+  direction — the legitimate call that must still be served — shows it is not too wide. Cost: a
+  write-queue re-entrancy guard written as a flag passed every case in its own file, including the
+  one about queued callers (whose three callers are dispatched in ONE tick, before any body starts,
+  so the flag is still false when each checks it), and turned every concurrent request in
+  `packages/payments` into a 500. The distinction the flag could not make — nested INSIDE a running
+  body, versus merely waiting BEHIND one — is now read from asynchronous context, and the missing
+  case is the second caller in `packages/store/src/write-queue.test.ts`.
 - **A proof-by-deletion belongs to the SHAPE of the code it was taken against.** Restructure that
   code and the deletion can stop failing while every test stays green — re-run the control, and move
   the proof to whatever still catches it. Cost: a one-statement job claim left `packages/printing`'s
   race suite passing with `for update skip locked` deleted, where the header of that suite recorded
-  the two-statement claim it replaced failing; the proof moved to
-  `packages/db/src/job-claim.pg.test.ts`. The control runs, and the old receipt nothing now holds:
-  [testing-guide.md](docs/developers/testing-guide.md).
-- **A claim that stamps the rows a locking selection chose finds them again by their KEY, never by
-  `ctid`.** A row's physical address changes when anything rewrites it, and the UPDATE around the
-  selection is still reading the row where it used to be — so the claim silently misses that row and
-  comes back short. Guard: the `takes a row another transaction rewrote while the claim was running`
-  case in `packages/db/src/job-claim.pg.test.ts`.
+  the two-statement claim it replaced failing; the proof moved to the real-PostgreSQL job-claim
+  suite, which the SQLite switch has since deleted with the rest of that tier
+  (`git show origin/main:packages/db/src/job-claim.pg.test.ts`). The control runs, and the old
+  receipt nothing now holds: [testing-guide.md](docs/developers/testing-guide.md).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   Cost: the shared alta fixture had drifted into a record AEAT would reject, masking a real defect in
   `recordSale`; correcting it took 42 tests red-to-green across eight files and left three red that
@@ -688,8 +730,8 @@ container or browser test** — most of these rules exist because a test passed 
   two `supportedAlgorithmIDs` assertions in `packages/identity/src/passkey.test.ts`. Receipt (the
   `@simplewebauthn/server` 14 case): [testing-guide.md](docs/developers/testing-guide.md).
 
-Adding a new real-PG test package: the shared-container pattern and its knobs are in
-`docs/backlog.md` → _Reference_.
+Adding a database test to a new package: give it `useVenueDb` and the migration sets it needs —
+there is no container to share and no knobs to set.
 
 ---
 
@@ -716,8 +758,11 @@ Adding a new real-PG test package: the shared-container pattern and its knobs ar
   residuals_). The till follows the primary and never chooses
   (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is an outbox,
   never inline.
-- **`registros_facturacion` is immutable**: `REVOKE ALL`, an append-only trigger, and a
-  TRUNCATE-blocking trigger. Do not work around them; a value written wrong there stays wrong.
+- **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
+  (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
+  trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
+  wrong. Since the storage switch that trigger pair is the WHOLE of the enforcement — there is no
+  `REVOKE` and no role to revoke from, and a `DROP TABLE` is refused by nothing at all.
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
@@ -730,9 +775,11 @@ Adding a new real-PG test package: the shared-container pattern and its knobs ar
   fiscal chain, the working-time chain is NOT reset on a cold restore — it continues from the backup's
   head, because the fiscal reset exists to mint a fresh SIF for AEAT and the working-time record has
   no equivalent. A survivor's forked row is refused by the chain-position unique index
-  (`time_entries_chain_position_uq`, SQLSTATE `23505`) however it reaches the database; nothing
+  (`time_entries_chain_position_uq`, reported by this engine as
+  `UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never
+  the index) however it reaches the database; nothing
   carries rows between nodes today. Guard:
-  `packages/workforce/src/restore-continuation.pg.test.ts`.
+  `packages/workforce/src/restore-continuation.test.ts`.
 
 ---
 

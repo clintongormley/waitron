@@ -1,76 +1,66 @@
 {
-  "id": "9a6628a4-a10a-4b6d-b913-3b5a3211e3b7",
-  "prevId": "1a21fcdc-4a13-46c6-a0bc-616aff8d2aac",
-  "version": "7",
-  "dialect": "postgresql",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "a72f0932-b672-4735-8e80-ce7fe013c7e2",
+  "prevId": "bddfb43f-e72e-4285-b43f-d890677a16ef",
   "tables": {
-    "public.google_oidc_states": {
+    "google_oidc_states": {
       "name": "google_oidc_states",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "mode": {
           "name": "mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "state_hash": {
           "name": "state_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "nonce": {
           "name": "nonce",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "verifier": {
           "name": "verifier",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "expires_at": {
           "name": "expires_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "google_oidc_states_person_fk": {
-          "name": "google_oidc_states_person_fk",
-          "tableFrom": "google_oidc_states",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "tableTo": "persons",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "google_oidc_states_mode_ck": {
           "name": "google_oidc_states_mode_ck",
@@ -80,139 +70,124 @@
           "name": "google_oidc_states_state_hash_ck",
           "value": "length(\"google_oidc_states\".\"state_hash\") = 64"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.management_account_actions": {
+    "management_account_actions": {
       "name": "management_account_actions",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "purpose": {
           "name": "purpose",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "target_email": {
           "name": "target_email",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "token_hash": {
           "name": "token_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "code_hash": {
           "name": "code_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "code_expires_at": {
           "name": "code_expires_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "code_attempts": {
           "name": "code_attempts",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "expires_at": {
           "name": "expires_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "used_at": {
           "name": "used_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "management_account_actions_token_hash_uq": {
           "name": "management_account_actions_token_hash_uq",
           "columns": [
-            {
-              "expression": "token_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "token_hash"
           ],
-          "isUnique": true,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
+          "isUnique": true
         },
         "management_account_actions_person_idx": {
           "name": "management_account_actions_person_idx",
           "columns": [
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "purpose",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "person_id",
+            "purpose"
           ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
+          "isUnique": false
         }
       },
       "foreignKeys": {
         "management_account_actions_person_fk": {
           "name": "management_account_actions_person_fk",
           "tableFrom": "management_account_actions",
+          "tableTo": "persons",
           "columnsFrom": [
             "person_id"
           ],
-          "tableTo": "persons",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "management_account_actions_purpose_ck": {
           "name": "management_account_actions_purpose_ck",
@@ -238,236 +213,244 @@
           "name": "management_account_actions_expiry_ck",
           "value": "\"management_account_actions\".\"expires_at\" > \"management_account_actions\".\"created_at\""
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.management_sessions": {
+    "management_sessions": {
       "name": "management_sessions",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "last_seen_at": {
           "name": "last_seen_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "ended_at": {
           "name": "ended_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "management_sessions_open_idx": {
           "name": "management_sessions_open_idx",
           "columns": [
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "management_sessions_person_fk": {
-          "name": "management_sessions_person_fk",
-          "tableFrom": "management_sessions",
-          "columnsFrom": [
             "person_id"
           ],
-          "tableTo": "persons",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.persons": {
-      "name": "persons",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "first_names": {
-          "name": "first_names",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_names": {
-          "name": "last_names",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "telephone": {
-          "name": "telephone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "password_hash": {
-          "name": "password_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "totp_secret": {
-          "name": "totp_secret",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "passkey_offered_at": {
-          "name": "passkey_offered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pending_email": {
-          "name": "pending_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email_verified_at": {
-          "name": "email_verified_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "google_subject": {
-          "name": "google_subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "role": {
-          "name": "role",
-          "type": "person_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
-        },
-        "status": {
-          "name": "status",
-          "type": "person_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "persons_tenant_google_subject_uq": {
-          "name": "persons_tenant_google_subject_uq",
-          "columns": [
-            {
-              "expression": "google_subject",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "with": {},
-          "method": "btree",
-          "where": "\"persons\".\"google_subject\" is not null",
-          "concurrently": false
-        },
-        "persons_tenant_pending_email_uq": {
-          "name": "persons_tenant_pending_email_uq",
-          "columns": [
-            {
-              "expression": "lower(\"pending_email\")",
-              "isExpression": true,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "with": {},
-          "method": "btree",
-          "where": "\"persons\".\"pending_email\" is not null",
-          "concurrently": false
+          "isUnique": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
+      "checkConstraints": {}
+    },
+    "persons": {
+      "name": "persons",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name_folded": {
+          "name": "display_name_folded",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_names": {
+          "name": "first_names",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_names": {
+          "name": "last_names",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pin_hash": {
+          "name": "pin_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "totp_secret": {
+          "name": "totp_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "locale": {
+          "name": "locale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "passkey_offered_at": {
+          "name": "passkey_offered_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email_folded": {
+          "name": "email_folded",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pending_email": {
+          "name": "pending_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pending_email_folded": {
+          "name": "pending_email_folded",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email_verified_at": {
+          "name": "email_verified_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "google_subject": {
+          "name": "google_subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'staff'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "persons_tenant_email_uq": {
+          "name": "persons_tenant_email_uq",
+          "columns": [
+            "case when \"email_folded\" is null then lower(\"email\") else \"email_folded\" end"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"email\" is not null"
+        },
+        "persons_tenant_live_display_name_uq": {
+          "name": "persons_tenant_live_display_name_uq",
+          "columns": [
+            "case when \"display_name_folded\" is null then lower(trim(\"display_name\")) else \"display_name_folded\" end"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"status\" <> 'suspended'"
+        },
+        "persons_tenant_google_subject_uq": {
+          "name": "persons_tenant_google_subject_uq",
+          "columns": [
+            "google_subject"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"google_subject\" is not null"
+        },
+        "persons_tenant_pending_email_uq": {
+          "name": "persons_tenant_pending_email_uq",
+          "columns": [
+            "case when \"pending_email_folded\" is null then lower(\"pending_email\") else \"pending_email_folded\" end"
+          ],
+          "isUnique": true,
+          "where": "\"persons\".\"pending_email\" is not null"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "persons_display_name_ck": {
           "name": "persons_display_name_ck",
@@ -504,429 +487,365 @@
         "persons_pending_email_ck": {
           "name": "persons_pending_email_ck",
           "value": "\"persons\".\"pending_email\" is null or length(\"persons\".\"pending_email\") > 0"
+        },
+        "persons_role_ck": {
+          "name": "persons_role_ck",
+          "value": "\"persons\".\"role\" in ('staff', 'supervisor', 'manager', 'admin')"
+        },
+        "persons_status_ck": {
+          "name": "persons_status_ck",
+          "value": "\"persons\".\"status\" in ('pending', 'active', 'suspended')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.recovery_codes": {
+    "recovery_codes": {
       "name": "recovery_codes",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "code_hash": {
           "name": "code_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "used_at": {
           "name": "used_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "recovery_codes_person_idx": {
           "name": "recovery_codes_person_idx",
           "columns": [
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "person_id"
           ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
+          "isUnique": false
         }
       },
       "foreignKeys": {
         "recovery_codes_person_fk": {
           "name": "recovery_codes_person_fk",
           "tableFrom": "recovery_codes",
+          "tableTo": "persons",
           "columnsFrom": [
             "person_id"
           ],
-          "tableTo": "persons",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "recovery_codes_hash_ck": {
           "name": "recovery_codes_hash_ck",
           "value": "length(\"recovery_codes\".\"code_hash\") = 64"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.sessions": {
+    "sessions": {
       "name": "sessions",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "till_id": {
           "name": "till_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "opened_at": {
           "name": "opened_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "ended_at": {
           "name": "ended_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "sessions_open_idx": {
           "name": "sessions_open_idx",
           "columns": [
-            {
-              "expression": "till_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "sessions_person_fk": {
-          "name": "sessions_person_fk",
-          "tableFrom": "sessions",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "tableTo": "persons",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        },
-        "sessions_till_fk": {
-          "name": "sessions_till_fk",
-          "tableFrom": "sessions",
-          "columnsFrom": [
             "till_id"
           ],
-          "tableTo": "tills",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "isUnique": false
         }
       },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.totp_enrollments": {
+    "totp_enrollments": {
       "name": "totp_enrollments",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "encrypted_secret": {
           "name": "encrypted_secret",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "expires_at": {
           "name": "expires_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
         "totp_enrollments_person_idx": {
           "name": "totp_enrollments_person_idx",
           "columns": [
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "totp_enrollments_person_fk": {
-          "name": "totp_enrollments_person_fk",
-          "tableFrom": "totp_enrollments",
-          "columnsFrom": [
             "person_id"
           ],
-          "tableTo": "persons",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "isUnique": false
         }
       },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "totp_enrollments_secret_ck": {
           "name": "totp_enrollments_secret_ck",
           "value": "length(\"totp_enrollments\".\"encrypted_secret\") > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.webauthn_challenges": {
+    "webauthn_challenges": {
       "name": "webauthn_challenges",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "challenge": {
           "name": "challenge",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.webauthn_credentials": {
+    "webauthn_credentials": {
       "name": "webauthn_credentials",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "person_id": {
           "name": "person_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "credential_id": {
           "name": "credential_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "public_key": {
           "name": "public_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "counter": {
           "name": "counter",
-          "type": "bigint",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "transports": {
           "name": "transports",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
         "webauthn_credentials_person_idx": {
           "name": "webauthn_credentials_person_idx",
           "columns": [
-            {
-              "expression": "person_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "person_id"
           ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
+          "isUnique": false
+        },
+        "webauthn_credentials_credential_id_uq": {
+          "name": "webauthn_credentials_credential_id_uq",
+          "columns": [
+            "credential_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
         "webauthn_credentials_person_fk": {
           "name": "webauthn_credentials_person_fk",
           "tableFrom": "webauthn_credentials",
+          "tableTo": "persons",
           "columnsFrom": [
             "person_id"
           ],
-          "tableTo": "persons",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "webauthn_credentials_credential_id_uq": {
-          "name": "webauthn_credentials_credential_id_uq",
-          "columns": [
-            "credential_id"
-          ],
-          "nullsNotDistinct": false
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "persons_tenant_email_uq": {
+        "columns": {
+          "case when \"email_folded\" is null then lower(\"email\") else \"email_folded\" end": {
+            "isExpression": true
+          }
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "persons_tenant_live_display_name_uq": {
+        "columns": {
+          "case when \"display_name_folded\" is null then lower(trim(\"display_name\")) else \"display_name_folded\" end": {
+            "isExpression": true
+          }
+        }
+      },
+      "persons_tenant_pending_email_uq": {
+        "columns": {
+          "case when \"pending_email_folded\" is null then lower(\"pending_email\") else \"pending_email_folded\" end": {
+            "isExpression": true
+          }
+        }
+      }
     }
-  },
-  "enums": {
-    "public.person_role": {
-      "name": "person_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
-      ]
-    },
-    "public.person_status": {
-      "name": "person_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "active",
-        "suspended"
-      ]
-    }
-  },
-  "schemas": {},
-  "views": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
-  "_meta": {
-    "columns": {},
-    "schemas": {},
-    "tables": {}
   }
 }

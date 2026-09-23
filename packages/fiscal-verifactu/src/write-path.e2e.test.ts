@@ -7,12 +7,12 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { asAppUser, incidents, saleLines, sales, withTransaction } from "@waitron/db";
+import { asAppUser, incidents, newId, saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
-import { fromRegistroRow } from "./registro-row.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
@@ -69,12 +69,12 @@ async function sell(overrides: Record<string, unknown> = {}) {
  * why the two are not interchangeable: a `timestamptz` column renders differently through each
  * path). Mirrors `./verify.ts`'s and `./chain.test.ts`'s identical convention. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await pg.db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
   if (row === undefined) throw new Error(`rawRegistro: no row for sale ${saleId}`);
-  return row;
+  return decodeRegistroRow(row);
 }
 
 describe("the write path against the real Veri*Factu backend", () => {
@@ -482,10 +482,17 @@ describe("a line's note is not part of the huella", () => {
     // column for the field, so nothing a kitchen line carries can ride into a filed record. If a
     // future migration ever added `note` to `sale_lines`, this fails — the earliest possible
     // warning that the NON-FISCAL boundary has moved.
-    const { rows } = await pg.db.execute<{ column_name: string }>(
-      sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
+    // `information_schema.columns` reached this engine as `no such table:
+    // information_schema.columns`. `pragma_table_info` answers the same question here, the way
+    // `packages/db/src/schema/sales.test.ts`'s own `columnsOf` helper reads it; the table name is
+    // bound, which `pragma_table_info(?)` accepts (measured on node v26.7.0 against `node:sqlite`).
+    const { rows } = await pg.db.execute<{ name: string }>(
+      sql`select name from pragma_table_info(${"sale_lines"})`,
     );
-    const cols = rows.map((r) => r.column_name);
+    const cols = rows.map((r) => r.name);
+    // The control for the read itself: a column the projection DOES have. Without it a
+    // `pragma_table_info` call that returned nothing would satisfy the assertion below.
+    expect(cols).toContain("sale_id");
     expect(cols).not.toContain("note");
   });
 });
@@ -543,8 +550,13 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
     const { rows: locRows } = await pg.db.execute<{ location_id: string }>(
       sql`select location_id from tills where id = ${tillId}`,
     );
+    // `id` and `created_at` are stated rather than omitted: both are `$defaultFn` columns only the
+    // insert BUILDER fills, so the raw statement this replaces was refused `NOT NULL constraint
+    // failed: tills.id`.
     const { rows: tillYRows } = await pg.db.execute<{ id: string }>(
-      sql`insert into tills (location_id, name) values (${locRows[0]!.location_id}, 'Caja 2') returning id`,
+      sql`insert into tills (id, location_id, name, created_at)
+           values (${newId()}, ${locRows[0]!.location_id}, 'Caja 2', ${new Date().toISOString()})
+           returning id`,
     );
     const tillX = tillId;
     const tillY = brandTillId(tillYRows[0]!.id);

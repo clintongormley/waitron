@@ -1,4 +1,4 @@
-import { mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { eq } from "drizzle-orm";
 import {
@@ -8,9 +8,9 @@ import {
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import {
-  createPostgresDb,
   insertNodeSeriesTx,
   nodes,
+  openVenueDatabase,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
@@ -24,17 +24,21 @@ import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
-import { type PgRestoreRunner, realPgRestore } from "./pg-restore.js";
 import type { BundleFiles } from "./recovery-bundle.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
 
-/** Images are database rows; the archive carries the dump and protected state files. */
+/** Images are database rows; the archive carries the database and protected state files. */
 const MANIFEST_NAME = "manifest.json";
+/**
+ * The archive's database entry. Its bytes are now a whole SQLite venue database — the file
+ * `packages/store/src/archive.ts`'s `archiveTo` writes with `VACUUM INTO` — not a `pg_dump`
+ * archive. The NAME is unchanged so a reader who met it in an older archive, a runbook or the
+ * `restore.archive_incomplete` params still finds the same string.
+ */
 const DB_DUMP_NAME = "db.dump";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
@@ -46,39 +50,61 @@ const IDENTITY_KEYS = [
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
 ] as const;
-/** The staged database dump contains protected data. */
-const STAGED_DUMP_MODE = 0o600;
+/** The venue database file `openVenueStore` opens inside the venue directory. */
+const VENUE_FILE = "venue.db";
+/**
+ * SQLite's write-ahead sidecars, kept beside the main file and named from its PATH. A committed row
+ * can live in `-wal` alone, so these are part of the database, not scratch.
+ */
+const VENUE_SIDECARS = ["-wal", "-shm"] as const;
+/** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
+const INCOMING_SUFFIX = ".incoming";
+/** The venue file holds the whole database, the same protected content the artifact carried. */
+const VENUE_FILE_MODE = 0o600;
 
 /**
  * Everything BR-3's restore orchestrator needs to turn one encrypted backup artifact back into a
- * live box: the ciphertext + its recovery key, a privileged connection to the FRESH target database,
+ * live box: the ciphertext + its recovery key, the directory this node's database files live in,
  * the state-secrets and scratch staging roots, the module list (for
  * both the compatibility gate's `expectedVersions` and the restore hooks), and this binary's target
- * environment. `runRestore` is injected so a unit test drives the flow without spawning `pg_restore`;
- * it defaults to {@link realPgRestore}. `migrationsRoot` is `config.migrationsRoot` (or `null` when
+ * environment. `migrationsRoot` is `config.migrationsRoot` (or `null` when
  * running from source) — the same value boot feeds `expectedSchemaVersion`.
+ *
+ * There is no injected database-restore runner any more. The restore is a file placement now
+ * ({@link restoreDatabase}), so a fake standing in for it would hide the two failures that
+ * placement exists to avoid — see that function's own comment.
  */
-export interface RestoreDeps {
+export interface RestoreDeps extends ValidationDeps {
+  /** The directory holding `venue.db` and `node.db` (`packages/store/src/index.ts`). */
+  readonly venueDir: string;
+  /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file. */
+  readonly openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
+  /** Migrates the restored database to this binary's schema before any hook runs. Default
+   * `applyMigrations`; tests stub it. */
+  readonly migrate?: typeof applyMigrations;
+  readonly log: Logger;
+}
+
+/**
+ * What {@link validateArtifact} reads, and nothing else.
+ *
+ * The write-free pass decides everything from the artifact bytes, the module list and the two
+ * destination roots it guards entry names against. It opens no database and writes no log line, so
+ * neither the venue directory nor a {@link Logger} belongs in its parameter — a caller that had to
+ * supply one would be supplying a value the function cannot use.
+ */
+export interface ValidationDeps {
   readonly artifact: Uint8Array;
   readonly recoveryKey: string;
-  readonly databaseUrl: string;
   readonly stateDir: string;
   readonly stagingDir: string;
   readonly migrationsRoot: string | null;
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
-  readonly runRestore?: PgRestoreRunner;
-  /** Opens the privileged connection the hook transaction runs on. Default `createPostgresDb`;
-   * tests hand in a PGlite. */
-  readonly openDb?: (url: string) => Promise<{ db: Database; close(): Promise<void> }>;
-  /** Migrates the restored database to this binary's schema before any hook runs. Default
-   * `applyMigrations`; tests stub it. */
-  readonly migrate?: typeof applyMigrations;
   /** Skip restoring `secrets/*`, the set-aside of any existing identity, AND the restore hooks: a
    * returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity
    * trade-safe (spec §3.3). */
   readonly skipSecrets?: boolean;
-  readonly log: Logger;
 }
 
 /**
@@ -100,16 +126,21 @@ export interface ValidatedArtifact {
  * incompatible target (the GATE) → refuse an unroutable entry → mkdir the destination roots → validate
  * EVERY entry name against its destination root (the GUARD) → check identity completeness unless
  * `skipSecrets`. Returns the classified pieces; writes NOTHING to the database and no artifact
- * content to disk (it only `mkdir`s the destination roots the guard must `realpath`). Every rejection
+ * content to disk (it only `mkdir`s the roots the guard must `realpath`). Every rejection
  * here — a wrong recovery key, a cross-environment or
  * schema-too-new manifest, a crafted entry name, an incomplete identity — is decidable from the
  * artifact bytes alone.
  *
- * The GATE and the GUARD live HERE, before any write, on purpose: `pg_restore` mutates the live
- * database irreversibly and secret writes land permanently on disk, so an incompatible manifest
- * or a single crafted-but-authentic entry name must abort before the first byte is written — never
- * after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so the same
- * rejections refuse the whole operation while the old database is still intact.
+ * `stagingDir` is no longer a DESTINATION: the database entry goes straight into the venue
+ * directory under a fixed name, and nothing is written under `stagingDir` at all. It stays as the
+ * root every non-secret entry name is resolved against, which is what refuses a crafted-but-
+ * authentic name before any write — and that resolution needs a real directory to `realpath`.
+ *
+ * The GATE and the GUARD live HERE, before any write, on purpose: {@link restoreDatabase} unlinks
+ * the venue file irreversibly and secret writes land permanently on disk, so an incompatible
+ * manifest or a single crafted-but-authentic entry name must abort before the first byte is written
+ * — never after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so
+ * the same rejections refuse the whole operation while the old database is still intact.
  *
  * Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
  * `restore.identity_incomplete` for missing identity keys/file when secrets are restored,
@@ -118,7 +149,7 @@ export interface ValidatedArtifact {
  * `restore.unsafe_entry_path` for an unsafe or duplicate destination (plus `recovery.passphrase_invalid`/`backup.*` from
  * decrypt/unpack).
  */
-export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArtifact> {
+export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedArtifact> {
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
   const entries = unpackArchive(plaintext);
 
@@ -189,57 +220,53 @@ export async function validateArtifact(deps: RestoreDeps): Promise<ValidatedArti
  * secrets. Once the old identity is set
  * aside, a failure before the secrets write leaves no bootable identity. `skipSecrets` keeps the
  * target's identity and skips hooks.
- * The GATE and GUARD belong to `validateArtifact`; staging is cleaned even on failure.
+ * The GATE and GUARD belong to `validateArtifact`.
+ *
+ * Nothing is staged outside the venue directory any more, so there is no `finally` cleanup here:
+ * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
+ * failed write.
  */
 export async function writeValidated(
   validated: ValidatedArtifact,
   deps: RestoreDeps,
 ): Promise<void> {
   const { log } = deps;
-  const staged = join(deps.stagingDir, DB_DUMP_NAME);
-  try {
-    if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
-    await restoreDatabase({
-      dumpBytes: validated.dumpEntry.bytes,
-      stagingDir: deps.stagingDir,
-      databaseUrl: deps.databaseUrl,
-      runRestore: deps.runRestore ?? realPgRestore,
-      log,
-    });
-    // The gate admits an OLDER schema; a hook written against today's must not run against
-    // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
-    await (deps.migrate ?? applyMigrations)(
-      deps.databaseUrl,
-      migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
-    );
-    log("info", "restore.migrated", {});
-    if (deps.skipSecrets) {
-      log("info", "restore.identity.kept", {});
-      return;
-    }
-    // Completeness is a validation precondition; this pure read recovers the already-checked ids.
-    const identity = readArtifactIdentity(validated.secretEntries);
-    const opened = await (deps.openDb ?? openPostgres)(deps.databaseUrl);
-    let seriesId: string;
-    try {
-      ({ seriesId } = await runRestoreHooks({
-        db: opened.db,
-        modules: deps.modules,
-        node: identity.node,
-        log,
-      }));
-    } finally {
-      await opened.close();
-    }
-    const entries =
-      seriesId === identity.seriesId
-        ? validated.secretEntries
-        : rewriteTradingEnv(validated.secretEntries, seriesId);
-    await restoreSecrets({ entries, stateDir: deps.stateDir, log });
-  } finally {
-    // Remove the whole-DB plaintext dump even if pg_restore fails; force tolerates a failure before staging.
-    await rm(staged, { force: true });
+  if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
+  await restoreDatabase({
+    dumpBytes: validated.dumpEntry.bytes,
+    venueDir: deps.venueDir,
+    log,
+  });
+  // The gate admits an OLDER schema; a hook written against today's must not run against
+  // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
+  await (deps.migrate ?? applyMigrations)(
+    deps.venueDir,
+    migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+  );
+  log("info", "restore.migrated", {});
+  if (deps.skipSecrets) {
+    log("info", "restore.identity.kept", {});
+    return;
   }
+  // Completeness is a validation precondition; this pure read recovers the already-checked ids.
+  const identity = readArtifactIdentity(validated.secretEntries);
+  const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
+  let seriesId: string;
+  try {
+    ({ seriesId } = await runRestoreHooks({
+      db: opened.db,
+      modules: deps.modules,
+      node: identity.node,
+      log,
+    }));
+  } finally {
+    await opened.close();
+  }
+  const entries =
+    seriesId === identity.seriesId
+      ? validated.secretEntries
+      : rewriteTradingEnv(validated.secretEntries, seriesId);
+  await restoreSecrets({ entries, stateDir: deps.stateDir, log });
 }
 
 /**
@@ -255,26 +282,72 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
 }
 
 /**
- * Write the DB dump to a staging file and feed it to `pg_restore`. Exposed for R3 composition
- * (restore DB, skip secrets). Guards `db.dump` against `stagingDir` (defence in depth — the
- * name is a fixed literal, but a step must be safe called standalone) and writes it 0600 (whole-DB
- * plaintext). Returns the staged path so the caller can clean it; cleanup is the caller's job — a
- * restore READS the dump and WRITES the live DB, so there is no half-written artifact to fan out
- * (`pg-restore.ts`).
+ * Put the artifact's database where `venue.db` goes. Exposed for R3 composition (restore DB, skip
+ * secrets). Returns the path it wrote.
+ *
+ * The archive entry's bytes ARE a SQLite venue database (`archiveTo`, `packages/store/src/archive.ts`),
+ * so there is no subprocess and nothing to feed one: the operation is a file placement. What it
+ * amounts to is the ORDER of the filesystem calls below, and the `rm` loop is in that order because
+ * overwriting in place is silently wrong. Both readings were measured on Node v26.7.0 against
+ * `node:sqlite`, each
+ * with a control in the other direction; the scripts and the tables are in
+ * `docs/handoffs/2026-09-21-f1-the-flip.md` → "The restore-and-backup surgery", and the two cases
+ * in `restore.test.ts` fail if the `rm` loop below is deleted.
+ *
+ * 1. **The sidecars go with the main file.** A writer killed mid-service (a box losing power) leaves
+ *    `venue.db-wal` and `venue.db-shm` behind, and a committed row can live in the `-wal` alone.
+ *    Replacing `venue.db` and leaving those, the reopened database answers with the CRASHED
+ *    database's own tail and the archive's rows are absent — with no error in either direction.
+ *    Removing both first, the same reopen answers with the archive.
+ * 2. **The target is UNLINKED, never renamed over.** If anything still holds `venue.db` open, a
+ *    rename onto that path leaves the stale connection writing through to it: a fresh open
+ *    afterwards reads the OLD database plus whatever that connection wrote AFTER the restore — the
+ *    restore silently and completely undone, on the cold-recovery path CLAUDE.md §5 says has to
+ *    work. Unlinking first leaves the stale connection on an orphaned inode, and the fresh open
+ *    reads the archive. (It does not stop a live writer from carrying on, so refusing to restore
+ *    under a running server is still worth having; what this buys is that the restored DATA is
+ *    correct either way.)
+ *
+ * The incoming bytes are written BEFORE anything is removed, so a failed or short write leaves the
+ * existing database where it was rather than nothing at all; the stale incoming file is dropped
+ * first so `writeFile` CREATES it and `mode` is actually applied, the reason `fs-atomic.ts` gives
+ * for the same call. `rename` within one directory is atomic on POSIX, so `venue.db` is never
+ * observed half-written.
+ *
+ * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
+ * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db` and
+ * its two sidecars only, so a restored box keeps whatever `node.db` it already had. That is harmless
+ * TODAY because the file is empty: `applyMigrations` sends every set to the venue handle
+ * (`packages/migrations/src/apply.ts`), and a migrate of every manifest set into an empty directory
+ * measurably leaves `node.db` with zero rows in `sqlite_master`. What changes when the
+ * class-to-file split lands and `local` tables move into `node.db`: a restore would then be putting
+ * an archive's venue data beside the OLD box's membership, sessions and pairing codes, which is a
+ * decision — carry them, clear them, or restore them too — and not something this function should
+ * fall into by leaving a file untouched. Whoever lands that split has to come back here.
  */
 export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;
-  stagingDir: string;
-  databaseUrl: string;
-  runRestore: PgRestoreRunner;
+  venueDir: string;
   log: Logger;
-  signal?: AbortSignal;
 }): Promise<string> {
-  const inFile = await assertSafeEntryName(DB_DUMP_NAME, args.stagingDir);
-  await writeFileAtomic(inFile, args.dumpBytes, STAGED_DUMP_MODE);
-  args.log("info", "restore.db.staged", { bytes: args.dumpBytes.byteLength });
-  await args.runRestore({ databaseUrl: args.databaseUrl, inFile, signal: args.signal });
-  return inFile;
+  // The restore may be the first thing that ever writes here. An existing directory's permissions
+  // belong to the operator and are not changed by mkdir.
+  await mkdir(args.venueDir, { recursive: true, mode: 0o700 });
+  const target = join(args.venueDir, VENUE_FILE);
+  const incoming = `${target}${INCOMING_SUFFIX}`;
+  await rm(incoming, { force: true });
+  try {
+    await writeFile(incoming, args.dumpBytes, { mode: VENUE_FILE_MODE, flag: "w" });
+    for (const suffix of ["", ...VENUE_SIDECARS]) {
+      await rm(`${target}${suffix}`, { force: true });
+    }
+    await rename(incoming, target);
+  } catch (error) {
+    await rm(incoming, { force: true });
+    throw error;
+  }
+  args.log("info", "restore.db.placed", { bytes: args.dumpBytes.byteLength });
+  return target;
 }
 
 /**
@@ -436,7 +509,13 @@ export async function runRestoreHooks(args: {
   });
 }
 
-async function openPostgres(url: string): Promise<{ db: Database; close(): Promise<void> }> {
-  const db = await createPostgresDb(url);
-  return { db, close: () => db.close() };
+/**
+ * The hook transaction's handle: the VENUE file of the directory just restored into.
+ *
+ * `close` closes BOTH files, not just the venue one — `openVenueDatabase` opens `node.db` beside it
+ * and a handle left open would hold the restored directory for the life of the process.
+ */
+async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
+  const store = await openVenueDatabase(directory);
+  return { db: store.venue, close: () => store.close() };
 }

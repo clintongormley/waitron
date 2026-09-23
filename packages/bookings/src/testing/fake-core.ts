@@ -1,9 +1,24 @@
 // A test-scoped stand-in for boot's real `core.openTab` (apps/server/src/working-order.ts), which a
 // module cannot import. It reproduces openTab's OBSERVABLE behaviour so the moved seat suites keep
-// their assertions: the `SELECT … FOR UPDATE` on the table (so bookings-cas.test.ts's two-backend
-// race stages on the real lock), the `table.not_found`/`table.inactive`/`tab.already_open` guards,
-// the `working_orders` insert whose id IS the tab id, and the `dining_tables.tab_id` back-pointer.
+// their assertions: the read of the dining table, the
+// `table.not_found`/`table.inactive`/`tab.already_open` guards, the `working_orders` insert whose id
+// IS the tab id, and the `dining_tables.tab_id` back-pointer.
 // It does NOT allocate a real per-node order number — the verbs ignore it — so a counter suffices.
+//
+// The table read was a `SELECT … FOR UPDATE`, and the one thing that clause was FOR in a double is
+// named in this header's old text: it was what `bookings-cas.test.ts` parked its second backend on
+// to stage a genuine read-then-concurrent-cancel interleave. The clause is deleted, not translated
+// — SQLite has no row locks and drizzle's SQLite query builder has no `.for()`, so it is a compile
+// error here (`error TS2339: Property 'for' does not exist`, run
+// `pnpm --filter @waitron/bookings typecheck` on this branch). What the real `openTab` relies on
+// instead is that one write transaction runs on the venue file at a time; the pattern is stated
+// once, with its measurement and its control, on `assertExtraListForWrite`
+// (`packages/catalogue/src/extras.ts`).
+//
+// This double is now a WEAKER stand-in than it was, and the loss is `bookings-cas.test.ts`'s, not
+// this file's: that suite's whole staging mechanism went with the clause. Its banner records what
+// it no longer demonstrates. Nothing here can give it back — there is no interleave to stage on an
+// engine that admits one writer.
 //
 // `table.inactive`/`tab.already_open` are apps/server-owned codes this double borrows to mimic
 // openTab; declared here (a testing file, excluded from coverage) rather than in the package's prod
@@ -40,8 +55,7 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
       const [table] = await tx
         .select({ active: diningTables.active, tabId: diningTables.tabId })
         .from(diningTables)
-        .where(eq(diningTables.id, req.tableId))
-        .for("update");
+        .where(eq(diningTables.id, req.tableId));
       if (table === undefined) throw new AppError("table.not_found", { tableId: req.tableId });
       if (!table.active) throw new AppError("table.inactive", { tableId: req.tableId });
       if (table.tabId !== null) {

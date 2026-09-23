@@ -24,13 +24,11 @@ import { describe, expect, it } from "vitest";
  * replacing it. That still matters — it doubles the failure count, and when several suites time out
  * together the real cause is what gets scrolled past.
  *
- * **This guard is a backstop, not the primary defence.** `@waitron/db/testing/lifecycle.js` owns the
+ * **This guard is a backstop, not the primary defence.** `@waitron/db/testing/venue-db.js` owns the
  * hooks for the suites that use it, so they cannot write a teardown at all, guarded or otherwise.
- * What remains in scope here is the residue that legitimately builds its own resources — among them,
- * `client.test.ts` and `migrate.test.ts` construct containers because they are the unit tests OF the
- * constructor and the migrator, `testing/postgres.test.ts` tests the very surface the helper is
- * built on, and `migrate-upgrade.pg.test.ts` needs many databases each at a DIFFERENT migration
- * point, which a template of the finished schema cannot provide.
+ * What remains in scope here is the residue that legitimately builds its own resource —
+ * `packages/db/src/client.test.ts`, for one, which opens venue directories in the test body because
+ * it is the unit test OF the constructor, and closes them in its own `afterEach`.
  *
  * ## Three limits, stated because none is obvious
  *

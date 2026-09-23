@@ -19,18 +19,6 @@ export const JOIN_TTL_MS = 15 * 60 * 1000;
  * runs at once, and it bounds both the admin's attention and the numbers the decoy rule must avoid. */
 export const PENDING_CAP = 10;
 
-/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for join
- * allocation. A fixed small integer, distinct from every other advisory-lock namespace in the repo
- * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space). */
-const JOIN_ALLOC_LOCK_NAMESPACE = 4_915_071;
-
-/** The second arg of the two-int lock, and a CONSTANT on purpose: every read this lock protects —
- * the cap count and `pendingNumbers` — spans the whole `join_requests` table with no location or
- * kind predicate, so ONE key per database is the key that matches them. Keying it to anything
- * narrower (a location, say) lets two creators at different keys run concurrently while still
- * reading each other's table, which is the exact race the lock exists to stop. */
-const JOIN_ALLOC_LOCK_KEY = 1;
-
 /** Delete every lapsed request in the database. Called at the head of every verb that reads or counts
  * them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
  * pending list. Swept opportunistically at read, not by a background job. */
@@ -69,19 +57,19 @@ function twoDigits(n: number): string {
  * (design §1.2 rule 3) and the per-kind cap.
  *
  * INVARIANT: number allocation and the cap are serialised across the WHOLE DATABASE (both kinds,
- * every location). One transaction-scoped advisory lock, on a constant key, is taken FIRST, so the
- * whole sweep → count → pendingNumbers → pick → insert sequence is atomic against every other
- * creator. WHY: two concurrent creators otherwise cannot see each other's uncommitted rows, so both
- * pick off a stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the
- * one-in-three guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the
- * cap and the decoy budget).
+ * every location), so the whole sweep → count → pendingNumbers → pick → insert sequence is atomic
+ * against every other creator. WHY: two concurrent creators otherwise cannot see each other's
+ * uncommitted rows, so both pick off a stale reserved-set — one's real can collide with the other's
+ * (rule 3, the guarantee the one-in-three guess rate rests on), and both can pass a count of 9 and
+ * insert to 11 (bypassing the cap and the decoy budget).
  *
- * The key is a CONSTANT, not a hash of anything on the config, because the two reads it protects are
- * database-wide: the count below filters on `kind` alone, and `pendingNumbers` reads every row. A
- * narrower key would let two creators take different locks and still read the same table — the guard
- * would stop guarding, silently, with no error anywhere. `pg_advisory_xact_lock` releases at
- * commit/rollback and blocks until acquired, so the second creator waits for the first to commit,
- * then reads its row. It is PUBLIC-executable, so `app_user` (the route's role) may call it.
+ * WHAT ARRANGES IT is the venue file's write queue, not a lock this function takes. On PostgreSQL
+ * this opened with a transaction-scoped advisory lock on a constant key, because two creators in
+ * two transactions could interleave. `withTransaction` (`packages/db/src/tenancy.ts`) now runs its
+ * body inside that queue, and the queue admits ONE write transaction on the file at a time — the
+ * mechanism, and the receipt, are written out on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`). The scope the constant key bought — the whole database,
+ * never a location or a kind — is what the queue gives by construction, since it is per FILE.
  */
 export async function createJoinRequest(
   tx: Transaction,
@@ -94,13 +82,10 @@ export async function createJoinRequest(
     numbers?: () => number;
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, ${JOIN_ALLOC_LOCK_KEY})`,
-  );
   await sweepLapsed(tx, cfg);
 
   const [{ count }] = await tx
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: sql<number>`count(*)` })
     .from(joinRequests)
     .where(eq(joinRequests.kind, input.kind));
   if (count >= PENDING_CAP) throw new AppError("device.join_full", {});
@@ -303,16 +288,17 @@ export type AcceptResult =
 /**
  * Approve a device's ask-to-join.
  *
- * SINGLE-USE IS STRUCTURAL, NOT ACCIDENTAL: the very first thing this does is a locking
+ * SINGLE-USE IS STRUCTURAL, NOT ACCIDENTAL: the very first thing this does is a
  * `DELETE … RETURNING`, the `consumeChallenge` shape (`passkey.ts`) — CONSUME before deciding anything.
- * Postgres serialises two concurrent deletes of
- * the SAME row: the loser's DELETE blocks behind the winner's, and once the winner commits the row is
- * gone, so the loser's DELETE matches zero rows and this throws `join_request.not_found` — which is
- * also the semantically right answer, because by the time the loser got the lock the request really
- * had already been decided. Without this, two racing callers can both pass a plain SELECT and both
- * reach the device INSERT, which reuses the request's id as the device id — the loser would then fail
- * on a raw `devices_pkey` 23505 instead of a clean domain code (a Critical review finding: two admins
- * double-clicking Accept, or one admin with two tabs, must not reach a 500).
+ * Two concurrent accepts of the SAME request cannot interleave, and what arranges that is no longer a
+ * lock this statement takes: `packages/store/src/write-queue.ts` admits one write transaction on the
+ * venue file at a time, so the loser's DELETE runs after the winner has committed, matches zero rows,
+ * and this throws `join_request.not_found` — which is also the semantically right answer, because by
+ * the time the loser ran the request really had already been decided. That queue is this process's,
+ * so a SECOND process on the same file is outside it; one node runs one server. Without the consume-first shape, two callers could both pass a plain SELECT and both
+ * reach the device INSERT, which reuses the request's id as the device id — the loser would then
+ * fail on a raw primary-key collision instead of a clean domain code (a Critical review finding: two
+ * admins double-clicking Accept, or one admin with two tabs, must not reach a 500).
  *
  * The kind predicate rides the SAME delete, not a separate check: a `print_agent` row (or none, or
  * one already decided) all return zero rows and fold into the one
@@ -506,7 +492,7 @@ export async function selfEnrolNodeAgent(
 
   // First enrol for this node. No advisory lock (unlike createJoinRequest): exactly one agent process
   // runs per box, so two concurrent first-time enrols for the SAME node are not a real shape. If they
-  // ever raced, the loser hits the `(node_id)` unique index as a 23505 and its agent simply
+  // ever raced, the loser is refused by the `(node_id)` unique index and its agent simply
   // re-asks next tick, finding the row and refreshing — no wrong row, no duplicate. That backstop, not
   // a lock, is what keeps the invariant.
   const agentId = randomUUID();

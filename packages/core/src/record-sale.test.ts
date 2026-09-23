@@ -25,13 +25,15 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  constraintTarget,
+  isUniqueViolation,
   invoiceSeries,
-  pgErrorCode,
   saleLines,
   saleSettlements,
   sales,
   tenders,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
@@ -44,7 +46,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 // `timeoutMs` restates the 60s the helper applies by default and passes to its own `beforeAll`
-// (`packages/db/src/testing/lifecycle.ts:22`, used at :146), so dropping it would change no bound.
+// (`packages/db/src/testing/venue-db.ts:12`, used at :196), so dropping it would change no bound.
 // An argument to a hook replaces `vitest.config.ts`'s `hookTimeout` rather than narrowing it
 // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`), so this line is what governs the boot.
 //
@@ -146,8 +148,9 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /**
- * Runs the write path exactly as the application will: as `app_user`, in one transaction, on a
- * node already registered with the injected backend.
+ * Runs the write path exactly as the application will: in one transaction, on a node already
+ * registered with the injected backend. (The `asAppUser` call inside is inert on this engine —
+ * `packages/db/src/testing/roles.ts` — so it is the transaction, not a role, that this mirrors.)
  *
  * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
  * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node
@@ -167,11 +170,12 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
   });
 }
 
-/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
- * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
+/** Counts every row in `table`. The suite helper empties every data table between tests
+ * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
+ * test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)}`,
+    sql`select count(*) as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -838,9 +842,9 @@ describe("recordSale — numbering", () => {
     // The property that actually matters. Gaps are permitted; reuse is not.
     //
     // `.rejects.toThrow`/`.rejects.toMatchObject` do not see through Drizzle's own
-    // `DrizzleQueryError` wrapper (its `.code` is undefined; the real SQLSTATE lives on
-    // `.cause.code`), so the SQLSTATE is read via `captureError`/`pgErrorCode` instead, per this
-    // task's own governing context.
+    // `DrizzleQueryError` wrapper (its `.code` is undefined; the real driver error lives on
+    // `.cause`), so the refusal is read via `captureError` instead, per this task's own governing
+    // context.
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
@@ -865,7 +869,15 @@ describe("recordSale — numbering", () => {
         });
       }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    // The class, and then WHICH key — stronger than the SQLSTATE this used to assert, which said
+    // only that something unique was violated. This engine reports one code for a primary key, a
+    // unique index, a NOT NULL and a CHECK alike, and names the table and columns for a unique
+    // index over plain columns (`packages/db/src/constraint-target.ts`).
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(constraintTarget(error)).toEqual({
+      table: "sales",
+      columns: ["series_id", "invoice_number"],
+    });
   });
 
   it("returns the number to the pool when the transaction rolls back", async () => {
@@ -943,15 +955,20 @@ describe("recordSale — working order linkage", () => {
   // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
   // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
   // NULL for a walk-up sale rung with no draft. The FK
-  // `(working_order_id) → working_orders(id)` is enforced even on PGlite (its
-  // default connection is a superuser, but constraints still hold), so the "supplied" case needs a
-  // REAL working_orders row as the FK target — a fabricated id would FK-violate, which is why the
-  // seed fixtures no longer mint one.
+  // `(working_order_id) → working_orders(id)` is enforced here, because the venue store opens
+  // every connection with `pragma foreign_keys = on` (`packages/store/src/index.ts`) — SQLite
+  // checks no foreign key without it. So the "supplied" case needs a REAL working_orders row as
+  // the FK target; a fabricated id would FK-violate, which is why the seed fixtures no longer mint
+  // one.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
-    const { rows } = await suite.db.execute<{ id: string }>(
-      sql`insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`,
-    );
-    return brandWorkingOrderId(rows[0]!.id);
+    // Through the table definition: `working_orders.id` is a `$defaultFn` generator only the
+    // insert BUILDER runs, so a raw INSERT omitting it is refused
+    // `NOT NULL constraint failed: working_orders.id`.
+    const [row] = await suite.db
+      .insert(workingOrders)
+      .values({ tillId, orderNumber: 1 })
+      .returning({ id: workingOrders.id });
+    return brandWorkingOrderId(row!.id);
   }
 
   it("writes working_order_id onto the sale when supplied", async () => {

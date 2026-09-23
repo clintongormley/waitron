@@ -1,8 +1,13 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { invoiceSeries, locations, nodes, tenants, tills } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { NodeId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
@@ -56,26 +61,40 @@ function nextNif(): string {
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
-  await suite.db.execute<{ id: string }>(sql`
-    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Deli SL')
-    on conflict (id) do nothing`);
+  // Every row goes in through its TABLE DEFINITION rather than as raw SQL, the same change
+  // `packages/db/src/testing/seed.ts` and `testing/fiscal-fixtures.ts` took. Two separate reasons,
+  // both measured against this fixture: the raw insert reached no `$defaultFn` generator, so it
+  // stopped at `NOT NULL constraint failed: tenants.created_at` and every id came back null; and
+  // `array['es-ES']` is PostgreSQL array syntax this engine refuses at prepare. `invoice_series`
+  // keeps naming only `node_id` and `code` — `next_number` is a SQL DEFAULT of 1 on both engines,
+  // so the series still opens at invoice number 1 (CLAUDE.md §5).
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: nif, legalName: "Deli SL" })
+    .onConflictDoNothing({ target: tenants.id });
 
-  const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
+  const [location] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Mostrador",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
 
-  const till = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
-  const tillId = brandTillId(till.rows[0]!.id);
+  const [till] = await suite.db
+    .insert(tills)
+    .values({ locationId: brandLocationId(location!.id), name: "Caja 1" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
 
-  const node = await suite.db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name)
-    values (${location.rows[0]!.id}, 'Node 1') returning id`);
-  const nodeId = brandNodeId(node.rows[0]!.id);
+  const [node] = await suite.db
+    .insert(nodes)
+    .values({ locationId: brandLocationId(location!.id), name: "Node 1" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
 
-  await suite.db.execute(sql`
-    insert into invoice_series (node_id, code) values (${nodeId}, 'A')`);
+  await suite.db.insert(invoiceSeries).values({ nodeId, code: "A" });
 
   return { tillId, nodeId, nif };
 }

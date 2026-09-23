@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, asAppUser, withTransaction } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, asAppUser, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { bookings } from "@waitron/bookings";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   locationId as brandLocationId,
@@ -36,10 +36,21 @@ const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TillConfig> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description, time_zone)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento', ${DEFAULT_TIME_ZONE}) returning id`);
-  const locationId = loc.rows[0]!.id;
+  // Inserted through the table definition: `locations.id` is a `$defaultFn` generator on this engine
+  // and a raw insert reaches none of them (the column is NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2`), and `invoice_locales` is a JSON array in a text
+  // column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+      timeZone: DEFAULT_TIME_ZONE,
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     tillId: brandTillId(randomUUID()),
@@ -62,12 +73,20 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 async function insertBooking(cfg: TillConfig, tableId: string, time: string): Promise<void> {
+  // Through the table definition for the same reason as the venue row above: `bookings.id` and
+  // `bookings.created_at` are `$defaultFn` generators and both columns are NOT NULL
+  // (`packages/bookings/drizzle/0000_baseline.sql:2` and `:14`).
   await asApp(cfg, (tx) =>
-    tx.execute(sql`
-      insert into bookings
-        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
-      values
-        (${cfg.locationId}, ${tableId}, '2026-09-15', ${time}, 2, 'Ana', ${randomUUID()}, 'booked')`),
+    tx.insert(bookings).values({
+      locationId: cfg.locationId,
+      tableId,
+      bookingDate: "2026-09-15",
+      bookingTime: time,
+      partySize: 2,
+      contactName: "Ana",
+      createdBy: randomUUID(),
+      status: "booked",
+    }),
   );
 }
 

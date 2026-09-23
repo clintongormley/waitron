@@ -1,68 +1,39 @@
-// The break-glass verifier column on the deployment singleton: an owner-role write, app-role read.
-import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { type Database } from "./client.js";
+// The break-glass verifier column on the deployment singleton.
+//
+// LOSS, from the storage swap: a fourth case ran on real PostgreSQL only and proved that `app_user`
+// may SELECT this column but is refused an UPDATE of it with `42501` — the spec §9.3 rule that the
+// verifier is an owner-role write. SQLite has no roles and no grants
+// (`packages/db/src/testing/roles.ts`), so that question has no counterpart here and the case is
+// deleted rather than kept in a form that asserts nothing. Nothing in this package now states that
+// the application must not write this column.
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "./migrations.js";
 import { readBreakGlassVerifier, setBreakGlassVerifierTx, stampDeployment } from "./deployment.js";
-import { captureError, pgErrorCode } from "./testing/errors.js";
-import { describeEachTarget } from "./testing/harness.js";
+import { withTransaction } from "./tenancy.js";
+import { useVenueDb } from "./testing/venue-db.js";
 
-describeEachTarget("the deployment break-glass verifier", (target) => {
-  let db: Database;
-
-  beforeEach(async () => {
-    db = await target.create();
-  });
-
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
-  });
+describe("the deployment break-glass verifier", () => {
+  // One migrated database, emptied between tests by the helper's default reset — the per-test
+  // isolation `target.create()` used to buy with a fresh database each time.
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before anything is written", async () => {
-    await stampDeployment(db, "preproduction"); // creates the id=1 row, verifier still unset
-    expect(await readBreakGlassVerifier(db)).toBeNull();
+    await stampDeployment(suite.db, "preproduction"); // creates the id=1 row, verifier still unset
+    expect(await readBreakGlassVerifier(suite.db)).toBeNull();
   });
 
   it("reads null on a migrated database nothing has stamped", async () => {
     // No stampDeployment here, so the singleton row does not exist at all. This reader takes a
-    // plain select rather than the to_regclass probe its neighbours use, and its doc comment says
-    // the missing row is what answers null; without this case the reader could stop tolerating a
-    // missing row and every test would still pass, because every other one stamps first.
-    expect(await readBreakGlassVerifier(db)).toBeNull();
+    // plain select rather than the table-presence probe its neighbours use, and its doc comment
+    // says the missing row is what answers null; without this case the reader could stop tolerating
+    // a missing row and every test would still pass, because every other one stamps first.
+    expect(await readBreakGlassVerifier(suite.db)).toBeNull();
   });
 
   it("round-trips the break-glass verifier written on a caller transaction", async () => {
-    await stampDeployment(db, "preproduction");
-    expect(await readBreakGlassVerifier(db)).toBeNull();
-    await db.transaction((tx) => setBreakGlassVerifierTx(tx, "scrypt$aa$bb"));
-    expect(await readBreakGlassVerifier(db)).toBe("scrypt$aa$bb");
+    await stampDeployment(suite.db, "preproduction");
+    expect(await readBreakGlassVerifier(suite.db)).toBeNull();
+    await withTransaction(suite.db, (tx) => setBreakGlassVerifierTx(tx, "scrypt$aa$bb"));
+    expect(await readBreakGlassVerifier(suite.db)).toBe("scrypt$aa$bb");
   });
-
-  // Real Postgres only: PGlite connects as a superuser, so grants are never enforced there — the
-  // 42501 the app role must hit on a write never fires and a pass would prove nothing (CLAUDE.md §4).
-  it.runIf(target.name === "postgres")(
-    "app_user may SELECT the column but an app-role UPDATE of it is refused 42501 (spec §9.3)",
-    async () => {
-      // Owner writes the verifier first, so there is a value for the app role to read back.
-      await stampDeployment(db, "preproduction");
-      await db.transaction((tx) => setBreakGlassVerifierTx(tx, "scrypt$cc$dd"));
-
-      // As app_user: the SELECT of the new column succeeds (table-level SELECT covers it) …
-      const read = await db.transaction(async (tx) => {
-        await tx.execute(sql`set local role app_user`);
-        return tx.execute<{ v: string | null }>(
-          sql`select break_glass_verifier as v from deployment where id = 1`,
-        );
-      });
-      expect(read.rows[0]?.v).toBe("scrypt$cc$dd");
-
-      // … but the WRITE the owner performs above is refused for app_user: no UPDATE grant → 42501.
-      const error = await captureError(() =>
-        db.transaction(async (tx) => {
-          await tx.execute(sql`set local role app_user`);
-          await tx.execute(sql`update deployment set break_glass_verifier = 'forged' where id = 1`);
-        }),
-      );
-      expect(pgErrorCode(error)).toBe("42501");
-    },
-  );
 });

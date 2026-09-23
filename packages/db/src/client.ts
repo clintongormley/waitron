@@ -1,132 +1,58 @@
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
-import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
-import type { ExtractTablesWithRelations } from "drizzle-orm";
-import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import type { Assume } from "drizzle-orm/utils";
-import pg from "pg";
+import { openVenueStore, type NodeSqliteDatabase, type StoreHandle } from "@waitron/store";
 import * as schema from "./schema/index.js";
-
-const { Pool } = pg;
 
 export type Schema = typeof schema;
 
-/** Which driver is underneath. The one thing `Database` may not erase. */
-export type Driver = "pglite" | "postgres";
-
-type RowsOf<TRow> = { rows: TRow[] };
+/**
+ * The handle every write-path function takes.
+ *
+ * Drizzle over one SQLite file, and nothing else: no `close`, and no `withWriteLock`. A function
+ * given one of these can read and write, and cannot decide when the transaction around it ends —
+ * which is the convention `CLAUDE.md` §3 states, that a write-path function takes a `tx` and never
+ * opens its own.
+ *
+ * It is a naming convention rather than a compiler guarantee, exactly as it was on PostgreSQL:
+ * {@link Database} is assignable to this type, because a `Database` is a `Transaction` with two
+ * more properties. What has changed is the direction the leak runs. Before the storage switch the
+ * handle a transaction callback received was a genuinely different object, so passing a
+ * `Transaction` where a `Database` was wanted failed to compile. Now `withTransaction` hands the
+ * caller's body the SAME handle it was given — SQLite has one connection per file and the
+ * transaction is a `begin` on it, not a second session — so a body that kept its `tx` could call
+ * `withWriteLock` on it at runtime. Nothing does; the type is what says it must not.
+ */
+export type Transaction = NodeSqliteDatabase<Schema>;
 
 /**
- * The query-result shape shared by both drivers' `execute()`.
+ * One open database file: a {@link Transaction} plus the two things that belong to the FILE rather
+ * than to a query — the write lock every transaction goes through, and closing it.
  *
- * `drizzle-orm/pg-core`'s own `PgQueryResultHKT` is an abstract placeholder —
- * its `type` field is unconditionally `unknown`, present only so
- * `NodePgQueryResultHKT` and `PgliteQueryResultHKT` each have something to
- * extend. Passing the bare interface as `PgDatabase`'s `TQueryResult` (which
- * typechecks, since every concrete HKT structurally satisfies the abstract
- * one) leaves `type` unresolved, so `execute()` returns `unknown` and
- * `result.rows` fails to typecheck for every caller — caught by
- * `client.test.ts`, whose first assertion reads `result.rows[0]`.
- *
- * The fix is not `NodePgQueryResultHKT` or `PgliteQueryResultHKT`: choosing
- * either would type every `execute()` call as if it always ran under that one
- * driver — `QueryResult`'s `command`/`rowCount`/`oid` fields on a PGlite
- * result that never has them, or the reverse — which is the exact
- * one-driver-only blind spot the shared `Database` type exists to prevent.
- * `{ rows: TRow[] }` is the genuine structural intersection of pg's
- * `QueryResult` and PGlite's `Results`: both drivers' concrete result types
- * are assignable to it, so no cast is needed at either construction site, and
- * neither driver's result is typed as having fields the other cannot produce.
+ * `driver` is gone. It existed so `runMigrations` could pick between two PostgreSQL migrators;
+ * there is one engine now, and the tag would only be a name for it.
  */
-interface SharedQueryResultHKT extends PgQueryResultHKT {
-  type: RowsOf<Assume<this["row"], Record<string, unknown>>>;
-}
+export type Database = StoreHandle<Schema>;
 
-/**
- * The single database type both deployment modes speak.
- *
- * `PgDatabase` is the real supertype of drizzle's `PgliteDatabase` and
- * `NodePgDatabase` — one dialect, two drivers — which is exactly the property
- * spec §3 bought by dropping SQLite. It must be shared, and the alternative
- * (a `PgliteDatabase | NodePgDatabase` union) must be rejected, because every
- * consumer of this type takes either a `Database` or, inside a callback, a
- * `Transaction`, as a parameter: `recordSale(tx, ...)`, `appendToChain(tx,
- * ...)`, `allocateInvoiceNumber(tx, ...)`. A `PgliteDatabase | NodePgDatabase`
- * union would force each of them to narrow on the driver before touching the
- * handle, and the natural way to stop narrowing is a cast — at which point
- * the two targets can diverge, one test suite runs against a type the other
- * never exercises, and the divergence surfaces in a deployment rather than in
- * CI.
- *
- * `Database` and `Transaction` are, deliberately, two distinct types, not one
- * interchangeable with the other: `Transaction` is NOT assignable to
- * `Database`, because it lacks `driver` and `close` — those are attached by
- * `Object.assign` only in `createPgliteDb`/`createPostgresDb`, never on the
- * handle a transaction callback receives. A function that must accept
- * whatever handle it is given, whether that is a top-level connection or an
- * open transaction, wants the explicit union `Database | Transaction`; a
- * later task adding one should reach for that rather than widening either
- * type to cover the other.
- *
- * `close` is added on top of `Database` so teardown is uniform: PGlite
- * closes, a pg Pool ends, and no caller should have to know which.
- */
-export type Database = PgDatabase<
-  SharedQueryResultHKT,
-  Schema,
-  ExtractTablesWithRelations<Schema>
-> & {
-  readonly driver: Driver;
+/** This node's two open files. */
+export interface VenueDatabase {
+  /** Every table classified `ledger` or `state`: what the venue did, and how it is configured. */
+  venue: Database;
+  /** Every table classified `local`: this node's identity, sessions, pairing codes, keys. */
+  node: Database;
+  /** Closes both files. */
   close(): Promise<void>;
-};
-
-/** The handle every write-path function takes. Derived, never hand-written. */
-export type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-/**
- * Embedded PostgreSQL for the standalone deployment. With no `dataDir` the
- * database is in-memory, which is what every test uses; with one it persists,
- * and that directory is the whole of the backup story in spec §3.
- */
-export async function createPgliteDb(dataDir?: string): Promise<Database> {
-  const client = dataDir === undefined ? new PGlite() : new PGlite(dataDir);
-  await client.waitReady;
-  const db = drizzlePglite(client, { schema });
-  return Object.assign(db, {
-    driver: "pglite" as const,
-    close: () => client.close(),
-  });
 }
 
-/** Pooled real PostgreSQL for the cloud deployment and the Testcontainers suite. `poolOptions` merges
- * into the pool config (spread over `connectionString`) so a caller can cap a small, seldom-used
- * owner pool — e.g. `{ max: 2 }` for a connection that only runs occasional owner DDL — rather than
- * hold the default ten idle connections. Omitted, the pool keeps node-postgres's defaults. */
-export async function createPostgresDb(
-  connectionString: string,
-  poolOptions: pg.PoolConfig = {},
-): Promise<Database> {
-  const pool = new Pool({ connectionString, ...poolOptions });
-  // node-postgres requires a pool 'error' listener. An error on an IDLE client —
-  // a server shutdown, a failover, or a network drop terminating a checked-in
-  // connection (SQLSTATE 57P01) — is emitted on the pool, and with no listener
-  // Node escalates it to an uncaught exception that crashes the process. The
-  // query path surfaces its own errors to the awaiting caller; this handler only
-  // concerns idle clients, which the pool discards and replaces on next use.
-  // Swallowed rather than logged: the dominant trigger in this repo is a
-  // Testcontainers container stopping at test teardown, expected noise rather
-  // than a fault — surfacing genuine connection instability belongs to
-  // app-level monitoring, not this constructor.
-  /* v8 ignore start */
-  pool.on("error", () => {});
-  /* v8 ignore stop */
-  // Fail here rather than at the first query: a bad connection string that
-  // surfaces inside a transaction looks like a schema fault, not a config one.
-  const probe = await pool.connect();
-  probe.release();
-  const db = drizzlePg(pool, { schema });
-  return Object.assign(db, {
-    driver: "postgres" as const,
-    close: () => pool.end(),
-  });
+/**
+ * Opens this node's two database files under `directory`.
+ *
+ * **Both handles are typed on the whole schema barrel, and that is deliberate.** The barrel is one
+ * flat namespace, and splitting it in two would rewrite every import in the tree for a type-level
+ * distinction. What actually keeps a table on one side of the split is the migration set that
+ * created it, so a query naming a venue table on the node handle finds no such table and is
+ * refused by the engine rather than by the compiler. The FILE is the boundary; the schema object
+ * is the relational-query map. A later task that wants the compiler to hold this line too would
+ * split the barrel, not this function.
+ */
+export async function openVenueDatabase(directory: string): Promise<VenueDatabase> {
+  const store = await openVenueStore({ directory, venueSchema: schema, nodeSchema: schema });
+  return { venue: store.venue, node: store.node, close: store.close };
 }

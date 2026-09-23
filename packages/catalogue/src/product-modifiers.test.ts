@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  asAppUser,
   captureError,
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
-  pgErrorCode,
+  FOREIGN_KEY_VIOLATION,
+  isPgError,
+  newId,
   pgErrorMessage,
+  refusalOn,
+  UNIQUE_VIOLATION,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -18,12 +22,16 @@ import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
-// Every case in THIS file is one writer at a time, so PGlite is the lighter target that still runs
-// the real migrations (CLAUDE.md §4). Two writers racing is a different matter and has its own
-// container twin, product-modifiers.pg.test.ts: PGlite serialises every query onto its one backend,
-// so a save overlapping a delete of one of the lists it names cannot even be staged here. The one
-// part of this file that turns on a ROLE is the grants walkthrough at the foot, and PGlite enforces
-// grants once `asAppUser` makes the session assume the role, so that needs no container either.
+// One SQLite file with the real migrations applied. There is one writer on this engine and there
+// are no roles, so neither the container twin this file used to name nor the grants walkthrough it
+// used to end with has anything left to run — both are gone, and the commit message says what each
+// proved.
+//
+// Every raw `insert into product_modifiers` below supplies its own `id`. The column's value comes
+// from the table's `$defaultFn`, which drizzle runs per insert and a raw statement never reaches,
+// so without it the row is refused `NOT NULL constraint failed: product_modifiers.id` — the wrong
+// refusal for every case here. Raw rather than through the table because what these cases prove is
+// what the DATABASE refuses, for a write that goes through no write path at all.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -80,108 +88,136 @@ beforeEach(async () => {
 describe("what the attachment table refuses", () => {
   it("refuses a row naming both an extras list and an options list", async () => {
     const error = await captureError(() =>
-      fx.db.execute(
-        sql`insert into product_modifiers (product_id, extra_list_id, option_list_id)
-            values (${dishes.burger}, ${extras.breads}, ${options.doneness})`,
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into product_modifiers (id, product_id, extra_list_id, option_list_id)
+            values (${newId()}, ${dishes.burger}, ${extras.breads}, ${options.doneness})`,
+        ),
       ),
     );
 
-    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    // A CHECK is the one refusal class SQLite names, so this half is unchanged.
     expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
   });
 
   it("refuses a row naming neither list", async () => {
     const error = await captureError(() =>
-      fx.db.execute(sql`insert into product_modifiers (product_id) values (${dishes.burger})`),
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into product_modifiers (id, product_id) values (${newId()}, ${dishes.burger})`,
+        ),
+      ),
     );
 
-    expect(pgErrorCode(error)).toBe("23514");
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
     expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
   });
 
   it("refuses an attachment naming a product, extras list or options list that does not exist", async () => {
-    const missing = async (statement: ReturnType<typeof sql>, constraint: string) => {
-      const error = await captureError(() => fx.db.transaction((tx) => tx.execute(statement)));
-      expect(pgErrorCode(error), constraint).toBe("23503"); // foreign_key_violation
-      expect(pgErrorMessage(error), constraint).toContain(constraint);
+    // `key` is the assertion's LABEL only. SQLite reports a foreign-key refusal as the six words
+    // `FOREIGN KEY constraint failed` and names neither the constraint nor the column, so the
+    // `toContain(<constraint name>)` half of this helper has no replacement the engine can supply
+    // (`constraintTarget`, packages/db/src/constraint-target.ts). Each statement below carries
+    // exactly one unknown id, so the class plus the statement say which key fired.
+    const missing = async (statement: ReturnType<typeof sql>, key: string) => {
+      const error = await captureError(() => Promise.resolve(fx.db.execute(statement)));
+      expect(isPgError(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
     };
 
     await missing(
-      sql`insert into product_modifiers (product_id, extra_list_id)
-          values (${UNKNOWN_ID}, ${extras.breads})`,
+      sql`insert into product_modifiers (id, product_id, extra_list_id)
+          values (${newId()}, ${UNKNOWN_ID}, ${extras.breads})`,
       "product_modifiers_product_fk",
     );
     await missing(
-      sql`insert into product_modifiers (product_id, extra_list_id)
-          values (${dishes.burger}, ${UNKNOWN_ID})`,
+      sql`insert into product_modifiers (id, product_id, extra_list_id)
+          values (${newId()}, ${dishes.burger}, ${UNKNOWN_ID})`,
       "product_modifiers_extra_list_fk",
     );
     await missing(
-      sql`insert into product_modifiers (product_id, option_list_id)
-          values (${dishes.burger}, ${UNKNOWN_ID})`,
+      sql`insert into product_modifiers (id, product_id, option_list_id)
+          values (${newId()}, ${dishes.burger}, ${UNKNOWN_ID})`,
       "product_modifiers_option_list_fk",
     );
   });
 
   /**
-   * The receipt for the claim the two unique indexes rest on: in PostgreSQL a unique index treats
-   * two NULLs as DIFFERENT values, so `product_modifiers_product_option_uq` constrains only the
-   * rows that carry an options list, and leaves every extras-only row of the same product alone.
-   * Run rather than read off the documentation.
+   * The receipt for the claim the two unique indexes rest on: a unique index treats two NULLs as
+   * DIFFERENT values, so `product_modifiers_product_option_uq` constrains only the rows that carry
+   * an options list, and leaves every extras-only row of the same product alone. Run rather than
+   * read off the documentation — and re-run on this engine, since it is SQLite answering now.
    */
   it("lets one product carry many extras-only rows under the options-list unique index", async () => {
-    await fx.db.execute(
-      sql`insert into product_modifiers (product_id, extra_list_id, sort)
-          values (${dishes.burger}, ${extras.breads}, 0), (${dishes.burger}, ${extras.sauces}, 1)`,
+    fx.db.execute(
+      sql`insert into product_modifiers (id, product_id, extra_list_id, sort)
+          values (${newId()}, ${dishes.burger}, ${extras.breads}, 0),
+                 (${newId()}, ${dishes.burger}, ${extras.sauces}, 1)`,
     );
 
-    const rows = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from product_modifiers
+    const rows = fx.db.execute<{ count: number }>(
+      sql`select count(*) as count from product_modifiers
           where product_id = ${dishes.burger} and option_list_id is null`,
     );
     expect(rows.rows).toEqual([{ count: 2 }]);
   });
 
   it("refuses the same extras list attached to one product twice", async () => {
-    await fx.db.execute(
-      sql`insert into product_modifiers (product_id, extra_list_id) values (${dishes.burger}, ${extras.breads})`,
+    fx.db.execute(
+      sql`insert into product_modifiers (id, product_id, extra_list_id) values (${newId()}, ${dishes.burger}, ${extras.breads})`,
     );
 
     // `writeProductModifiers` already refuses a duplicate ref in one body; this index is what
     // enforces the same rule for a write that goes through no write path at all.
     const error = await captureError(() =>
-      fx.db.execute(
-        sql`insert into product_modifiers (product_id, extra_list_id) values (${dishes.burger}, ${extras.breads})`,
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into product_modifiers (id, product_id, extra_list_id) values (${newId()}, ${dishes.burger}, ${extras.breads})`,
+        ),
       ),
     );
 
-    expect(pgErrorCode(error)).toBe("23505"); // unique_violation
-    expect(pgErrorMessage(error)).toContain("product_modifiers_product_extra_uq");
+    // SQLite names the KEY that collided rather than the index, so `refusalOn` asks the question
+    // the index name used to answer: which table and columns was this refused on
+    // (packages/db/src/constraint-target.ts).
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "product_modifiers",
+        columns: ["product_id", "extra_list_id"],
+      }),
+    ).toBe(true);
   });
 
   it("refuses the same options list attached to one product twice", async () => {
-    await fx.db.execute(
-      sql`insert into product_modifiers (product_id, option_list_id) values (${dishes.burger}, ${options.doneness})`,
+    fx.db.execute(
+      sql`insert into product_modifiers (id, product_id, option_list_id) values (${newId()}, ${dishes.burger}, ${options.doneness})`,
     );
 
     const error = await captureError(() =>
-      fx.db.execute(
-        sql`insert into product_modifiers (product_id, option_list_id) values (${dishes.burger}, ${options.doneness})`,
+      Promise.resolve(
+        fx.db.execute(
+          sql`insert into product_modifiers (id, product_id, option_list_id) values (${newId()}, ${dishes.burger}, ${options.doneness})`,
+        ),
       ),
     );
 
-    expect(pgErrorCode(error)).toBe("23505");
-    expect(pgErrorMessage(error)).toContain("product_modifiers_product_option_uq");
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "product_modifiers",
+        columns: ["product_id", "option_list_id"],
+      }),
+    ).toBe(true);
   });
 
   it("lets two different products each carry the same list", async () => {
-    await fx.db.execute(
-      sql`insert into product_modifiers (product_id, extra_list_id)
-          values (${dishes.burger}, ${extras.breads}), (${dishes.salad}, ${extras.breads})`,
+    fx.db.execute(
+      sql`insert into product_modifiers (id, product_id, extra_list_id)
+          values (${newId()}, ${dishes.burger}, ${extras.breads}),
+                 (${newId()}, ${dishes.salad}, ${extras.breads})`,
     );
 
-    const rows = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from product_modifiers where extra_list_id = ${extras.breads}`,
+    const rows = fx.db.execute<{ count: number }>(
+      sql`select count(*) as count from product_modifiers where extra_list_id = ${extras.breads}`,
     );
     expect(rows.rows).toEqual([{ count: 2 }]);
   });
@@ -189,8 +225,8 @@ describe("what the attachment table refuses", () => {
 
 describe("what deleting a parent row takes with it", () => {
   const attachmentCount = async () => {
-    const rows = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from product_modifiers`,
+    const rows = fx.db.execute<{ count: number }>(
+      sql`select count(*) as count from product_modifiers`,
     );
     return rows.rows[0]!.count;
   };
@@ -351,12 +387,21 @@ describe("reading and writing a product's attachment list", () => {
   });
 
   /**
-   * This one measures the uuid COLUMN, not the code: a product id may arrive in either case and the
+   * This one measures the id COLUMN, not the code: a product id may arrive in either case and the
    * column settles it, so the row a write in upper case leaves behind is found by a read in lower
    * case, a second write in the other case REPLACES it rather than landing beside it (which
    * `product_modifiers_product_extra_uq` would refuse), and the map comes back keyed lower-case
-   * either way. That is why `writeProductModifiers` lower-cases the LIST ids and not the product
-   * id — the list ids are the ones it compares in JavaScript.
+   * either way.
+   *
+   * WHO settles it changed with the engine. It was the column: a PostgreSQL `uuid` normalises its
+   * input, so the file lower-cased only the LIST ids, which it also compares in JavaScript. An id
+   * is a plain `text` column here (`packages/db/src/schema/columns.ts`) and text compares byte for
+   * byte, so the product id went unnormalised by anything — an upper-cased one reached
+   * `product_modifiers.product_id` as a foreign key naming no product and came back as a raw
+   * `FOREIGN KEY constraint failed` rather than a domain refusal. `writeProductModifiers` now
+   * normalises the product id at the same boundary it normalises the list ids, which is what this
+   * case is the RED for: put the id back unnormalised and the first write here fails with that
+   * message.
    */
   it("settles a product id sent in upper case in the database, and keys the map lower-case", async () => {
     await run((tx) =>
@@ -532,69 +577,5 @@ describe("a product's attachment list in the catalogue's configuration transfer"
     expect(transferred.indexOf("option_lists")).toBeLessThan(
       transferred.indexOf("product_modifiers"),
     );
-  });
-});
-
-/**
- * The walkthrough that answers to the grants migration for this table. Every test above runs on
- * PGlite's superuser connection, which holds every privilege and so exercises no grant at all;
- * `asAppUser` makes the session assume the application role and PGlite enforces the table's grants
- * from there — a container adds nothing (CLAUDE.md §4).
- *
- * Seen red rather than assumed, three times, each with `42501 permission denied for table
- * product_modifiers`: with `DELETE` dropped from this table's grant, with the grant removed
- * altogether, and with `UPDATE` alone dropped from it. Those three were run against the standalone
- * `0011_product_modifiers_grants.sql` that shipped them; the same two statements now sit among the
- * rest in `drizzle/0001_catalogue_baseline_sql.sql`, where the set was regenerated, so the SECOND
- * of them today means deleting those two lines rather than a whole file.
- *
- * The first two stopped at the same statement —
- * `delete from "product_modifiers" where "product_modifiers"."product_id" = $1` — because a write
- * clears the product's rows first; the third stopped at this file's own
- * `update product_modifiers set sort = 1`. So the DELETE and UPDATE grants each have a control of
- * their own; the SELECT and INSERT grants are exercised here but no control has isolated them.
- */
-describe("attachment CRUD as the non-superuser application role", () => {
-  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
-    withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
-
-  it("writes, replaces, reads and clears a product's list under the role's grants", async () => {
-    await app(async (tx) => {
-      const role = await tx.execute<{ role: string; superuser: boolean }>(
-        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
-      );
-      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-
-      // INSERT and SELECT.
-      await writeProductModifiers(tx, dishes.burger, [{ kind: "extras", id: extras.breads }]);
-      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
-        new Map([[dishes.burger, [{ kind: "extras", id: extras.breads }]]]),
-      );
-
-      // DELETE, which every write reaches: the list is replaced wholesale.
-      await writeProductModifiers(tx, dishes.burger, [{ kind: "options", id: options.dressing }]);
-      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(
-        new Map([[dishes.burger, [{ kind: "options", id: options.dressing }]]]),
-      );
-
-      // UPDATE is granted by drizzle/0001_catalogue_baseline_sql.sql and no write path reaches
-      // it: `writeProductModifiers` deletes the product's rows and inserts fresh ones rather than
-      // editing one in place. It is walked by statement for that reason, the way
-      // extra-projection.test.ts walks `menu_item_extra_lists`' unreached UPDATE — a granted
-      // privilege nothing exercises is a privilege nothing has established the role holds.
-      await tx.execute(
-        sql`update product_modifiers set sort = 1 where product_id = ${dishes.burger}`,
-      );
-      const sorts = await tx.execute<{ sort: number }>(
-        sql`select sort from product_modifiers where product_id = ${dishes.burger}`,
-      );
-      expect(sorts.rows).toEqual([{ sort: 1 }]);
-
-      await writeProductModifiers(tx, dishes.burger, []);
-      expect(await readProductModifiers(tx, [dishes.burger])).toEqual(new Map());
-    });
   });
 });

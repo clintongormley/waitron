@@ -1,26 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1789497912246,
-      "tag": "0000_workforce_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789497912858,
-      "tag": "0001_workforce_baseline_sql",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1789930581452,
-      "tag": "0002_money_in_cents",
+      "version": "6",
+      "when": 1789995579994,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToLocation,
@@ -31,8 +31,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: `transferLines`' own WRITE behaviour (split arithmetic, guards, price-lock,
-// the FOR UPDATE lock ordering) is proven in `transfer-lines.test.ts`/`transfer-lines.pg.test.ts`; this
+// PGlite, not real Postgres: `transferLines`' own WRITE behaviour (split arithmetic, guards,
+// price-lock, and the concurrency properties the venue file's write queue now carries) is proven in
+// `transfer-lines.test.ts`/`transfer-lines.filing.test.ts`; this
 // suite proves only the HTTP surface — the session guard, the malformed-`:id`/`toTabId` screens, and the
 // STATUS mapping for the two new transfer codes — the same shape `till-api.move-merge.test.ts` proves for
 // move/join/merge, PGlite-adequate for the same reason (CLAUDE.md §4). Harness ported from
@@ -50,21 +51,30 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
     // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
-    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
     // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
     // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
@@ -79,7 +89,7 @@ const suite = useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+      await assignCatalogueToLocation(tx, loc!.id, cat.id);
       return p;
     });
     cafeId = product.id;
@@ -231,7 +241,7 @@ describe("POST /api/tabs/:id/transfer", () => {
 
     // Owner read: source lost the line entirely, destination gained it with the locked price kept.
     const a = await suite.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from working_order_lines where working_order_id = ${tabA}`,
+      sql`select cast(count(*) as int) as count from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(a.rows[0]!.count).toBe(0);
     const b = await suite.db.execute<{
@@ -242,9 +252,10 @@ describe("POST /api/tabs/:id/transfer", () => {
     }>(
       // Both columns are whole numbers at their own scales: `unit_price_gross` counts cents, so 150
       // is the locked 1.50, and `quantity` counts thousandths, so "2000" is two units. The
-      // assertion is on those COUNTS, not on an amount or a quantity; `::int` and `::text` only
-      // normalise each for the assertion.
-      sql`select line_no, product_id, quantity::text as quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+      // assertion is on those COUNTS, not on an amount or a quantity; the two casts only normalise
+      // each for the assertion. `cast(x as …)` is the spelling because this engine has no cast
+      // operator — `::` starts a bind parameter to its parser.
+      sql`select line_no, product_id, cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([
       { line_no: 1, product_id: cafeId, quantity: "2000", unit_price_gross: 150 },
@@ -262,11 +273,11 @@ describe("POST /api/tabs/:id/transfer", () => {
     expect(await res.text()).toBe("");
 
     const a = await suite.db.execute<{ quantity: string }>(
-      sql`select quantity::text as quantity from working_order_lines where working_order_id = ${tabA}`,
+      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${tabA}`,
     );
     expect(a.rows).toEqual([{ quantity: "2000" }]); // 3 − 1 = 2 units remain on the source
     const b = await suite.db.execute<{ quantity: string; unit_price_gross: number }>(
-      sql`select quantity::text as quantity, unit_price_gross::int as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
+      sql`select cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     // one unit carved off, at the same locked 1.50
     expect(b.rows).toEqual([{ quantity: "1000", unit_price_gross: 150 }]);

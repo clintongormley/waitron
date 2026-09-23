@@ -1,5 +1,5 @@
-import { unique } from "drizzle-orm/pg-core";
-import { flag, id, label, table, tsString } from "./columns.js";
+import { unique } from "drizzle-orm/sqlite-core";
+import { flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -10,7 +10,7 @@ import { locations } from "./tenants.js";
 export const printAgents = table(
   "print_agents",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // The venue the agent lives in — a required scope. A DIRECT location_id →
     // locations.id FK with onDelete restrict, the `shifts`/`devices` shape (§2a).
     locationId: id("location_id")
@@ -34,7 +34,7 @@ export const printAgents = table(
     active: flag("active").notNull().default(true),
     // Touched by requireAgent on each authenticated pull/report. NULL until the agent is first seen.
     lastSeenAt: tsString("last_seen_at"),
-    enrolledAt: tsString("enrolled_at").notNull().defaultNow(),
+    enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // Target of the print_jobs.claimed_by foreign key.

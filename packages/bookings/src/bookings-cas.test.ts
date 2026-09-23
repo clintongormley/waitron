@@ -1,202 +1,92 @@
-import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, diningTables, withTransaction } from "@waitron/db";
+/**
+ * `seatBooking`'s compare-and-swap: its terminal UPDATE carries `and status = 'booked'`, so a
+ * booking that has left `booked` matches no row and the verb throws `booking.invalid_transition`.
+ *
+ * ## The case that was DELETED with the PostgreSQL harness, and why it is not restated
+ *
+ * This file used to open with a genuine two-backend race: one connection held the booking's dining
+ * table `FOR UPDATE`, the real `seatBooking` ran on a second connection and parked on that lock
+ * inside `openTab` — precisely between its lock-free `getBooking` read of `booked` and the CAS
+ * write — the first connection then cancelled and COMMITTED, and the CAS caught it. That case is
+ * gone, and nothing here replaces it. Staging it needs two transactions interleaved mid-flight,
+ * and one write transaction runs on the venue file at a time
+ * (`packages/store/src/write-queue.ts`): the second `withTransaction` does not begin until the
+ * first has committed, so a cancel cannot land between the read and the write of one seat. The
+ * `.for("update")` both halves rested on is gone too, in both places it lived — this file's own,
+ * and `fakeCore`'s `SELECT … FOR UPDATE` on the dining table (`./testing/fake-core.js`) — because
+ * drizzle's SQLite query builder has no `.for()` and each was a compile error
+ * (`error TS2339: Property 'for' does not exist`). Recover the deleted case with
+ * `git show origin/main:packages/bookings/src/bookings-cas.test.ts`.
+ *
+ * Rewriting it into something that passes is what CLAUDE.md §4's "treat 'there is a test' as an
+ * unfinished sentence" refuses, so it was not rewritten. What the requirement behind it — a
+ * concurrent cancel must not be seated — now rests on is the CAS predicate itself, which is the
+ * case below.
+ *
+ * ## What the surviving case is, unchanged
+ *
+ * A timing-free, direct isolation of that predicate, with its own control in the other direction.
+ * It was written as insurance against the race regressing to a false pass, and it is now the only
+ * thing asserting the predicate at all.
+ */
+import { and, eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { diningTables, locations, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { CoreServices } from "@waitron/module";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
-import { fakeCore } from "./testing/fake-core.js";
-import {
-  cancelBooking,
-  createBooking,
-  getBooking,
-  seatBooking,
-  type BookingConfig,
-} from "./bookings.js";
+import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
+import { cancelBooking, createBooking, type BookingConfig } from "./bookings.js";
 import "./errors.js";
 
-/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
- * tills, working_orders) still carry. */
-type VenueCfg = BookingConfig;
-
-// Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
-// write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
-// `booking.invalid_transition` on an empty match — the concurrency backstop for the window between its
-// lock-free `getBooking` read (which sees `booked`) and this write. PGlite serialises every query onto
-// ONE backend (CLAUDE.md §4), so it CANNOT stage the read-then-concurrent-cancel interleave that window
-// exists for: the committed PGlite regression in `bookings.test.ts` reaches this UPDATE only because the
-// PRE-`openTab` `booked` check has already been shadowed, never through a genuine race. This suite
-// isolates the CAS branch against the real cluster, as the non-superuser `app_user`, on two
-// DISTINCT backends. The shared-container globalSetup THROWS `dockerRequired` rather than skipping, so a
-// vanished suite fails loudly instead of reporting a green that proves nothing.
+const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
-let db: Database;
-beforeAll(() => {
-  db = suite.admin;
-});
 
-function asApp<T>(d: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(d, async (tx) => {
-    await asAppUser(tx);
-    return fn(tx);
-  });
-}
-
-/** A tenant + location + till + node. `seatBooking` opens a real TS-1 tab via `core.openTab`, so the
- * seat cfg is a plain `BookingConfig` and the till + node the tab row needs are captured by `fakeCore`
- * (its `SELECT … FOR UPDATE` on the table is what makes the two-backend race below stage). */
-async function setupVenue(): Promise<{
-  cfg: VenueCfg;
-  core: CoreServices;
-  createdBy: string;
-}> {
+/** A tenant + location + till + node. Written through the table definitions, not raw SQL: each
+ * `id` comes from a `$defaultFn` in JavaScript rather than a column DEFAULT, so a raw insert
+ * naming none is refused `NOT NULL constraint failed`, and `invoiceLocales` reaches its column's
+ * JSON mapping where `array['es-ES']` used to be SQL this engine does not have. */
+async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy: string }> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, brandLocationId(locationId));
-  return {
-    cfg: { locationId: brandLocationId(locationId) },
-    core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
-    createdBy: randomUUID(),
-  };
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  await db.insert(tills).values({ locationId, name: "Caja 1" });
+  await seedNode(db, brandLocationId(locationId));
+  return { cfg: { locationId: brandLocationId(locationId) }, createdBy: crypto.randomUUID() };
 }
 
-/** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
- * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
-  const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
-  return row.rows[0]!.id;
+/** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in
+ * apps/server, which a module cannot import). */
+async function seedTable(db: Database, cfg: BookingConfig, label: string): Promise<string> {
+  const [row] = await db
+    .insert(diningTables)
+    .values({ locationId: cfg.locationId, label, active: true })
+    .returning({ id: diningTables.id });
+  return row!.id;
 }
 
-/** The backend pid a connection is running on — used to poll for it becoming lock-blocked. */
-async function backendPid(d: Database): Promise<number> {
-  const { rows } = await d.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-  return rows[0]!.pid;
-}
-
-/**
- * Block (via condition polling, NOT a fixed sleep) until `pid` is waiting on a heavyweight lock held by
- * another backend — `pg_blocking_pids(pid)` becomes non-empty. This is the deterministic barrier that
- * makes the race below reproducible: it returns exactly when the seating backend has parked on the
- * table's `FOR UPDATE`, i.e. AFTER its `getBooking` read of `booked` and BEFORE its CAS write.
- */
-async function waitUntilLockBlocked(pid: number): Promise<void> {
-  for (let i = 0; i < 400; i++) {
-    const { rows } = await db.execute<{ blocked: boolean }>(
-      sql`select cardinality(pg_blocking_pids(${pid})) > 0 as blocked`,
-    );
-    if (rows[0]!.blocked) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`backend ${pid} never became lock-blocked (the race never staged)`);
-}
-
-/** Count of `working_orders`, read as the owner. */
-async function workingOrderCount(): Promise<number> {
-  const { rows } = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from working_orders`,
-  );
-  return rows[0]!.n;
-}
-
-describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () => {
-  it("a GENUINE concurrent cancel between the read and the CAS write is caught → invalid_transition, no orphan tab", async () => {
-    // The interleave the CAS exists for, staged deterministically:
-    //  1. connB opens a tx and takes the booking's table `FOR UPDATE`, then holds it.
-    //  2. connA runs the REAL `seatBooking`: its `getBooking` reads `booked` (passing the pre-check),
-    //     then `openTab`'s `SELECT … FOR UPDATE` on that same table BLOCKS on connB's lock — parked
-    //     precisely in the window between the read and the CAS.
-    //  3. connB waits until connA is lock-blocked, then cancels the booking and COMMITS (releasing the
-    //     table lock). The booking is now `cancelled`, committed, while connA is still parked.
-    //  4. connA unblocks, `openTab` opens the tab, and the CAS `… where status = 'booked'` matches NO
-    //     row → throws `booking.invalid_transition` → connA's whole tx rolls back, undoing the tab.
-    // Proven by deletion: dropping `eq(bookings.status, "booked")` from seatBooking's terminal UPDATE
-    // makes the CAS match the now-`cancelled` row, so connA SEATS it and this test's rejection fails
-    // (and a tab survives). Verified 2026-08-31.
-    const { cfg, core, createdBy } = await setupVenue();
-    const tableId = await seedTable(cfg, "CAS-1");
-    const { id: bookingId } = await asApp(db, (tx) =>
-      createBooking(tx, cfg, {
-        bookingDate: "2026-08-20",
-        bookingTime: "20:00",
-        partySize: 2,
-        contactName: "Núñez",
-        tableId,
-        createdBy,
-      }),
-    );
-
-    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
-    try {
-      const [pidA, pidB] = await Promise.all([backendPid(connA), backendPid(connB)]);
-      expect(new Set([pidA, pidB]).size).toBe(2); // distinct backends — on PGlite these collapse.
-
-      // The lock is acquired BEFORE seatBooking is launched, so connA is guaranteed to block on it and
-      // cannot win the table first. `lockHeld` fires once connB holds the `FOR UPDATE`.
-      let resolveLockHeld!: () => void;
-      const lockHeld = new Promise<void>((resolve) => {
-        resolveLockHeld = resolve;
-      });
-      let cancelCommitted = false;
-
-      const connBWork = asApp(connB, async (tx) => {
-        await tx
-          .select({ id: diningTables.id })
-          .from(diningTables)
-          .where(eq(diningTables.id, tableId))
-          .for("update");
-        resolveLockHeld();
-        await waitUntilLockBlocked(pidA); // connA is now parked at openTab, past its `booked` read
-        await cancelBooking(tx, cfg, bookingId);
-        cancelCommitted = true;
-        // returning here COMMITs connB's tx → releases the table lock → connA proceeds to its CAS
-      });
-
-      await lockHeld;
-      const seatA = asApp(connA, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
-
-      const [seatRes] = await Promise.allSettled([seatA, connBWork]);
-      await connBWork; // surface any connB failure
-
-      expect(cancelCommitted).toBe(true);
-      expect(seatRes.status).toBe("rejected");
-      expect((seatRes as PromiseRejectedResult).reason).toMatchObject({
-        code: "booking.invalid_transition",
-        params: { bookingId },
-      });
-
-      // The booking stayed `cancelled`, never linked a tab, and seatBooking's rolled-back tx left NO
-      // working order behind — the CAS's throw rolls the whole caller tx back, so no orphan tab survives.
-      const after = await asApp(db, (tx) => getBooking(tx, cfg, bookingId));
-      expect(after).toMatchObject({ status: "cancelled", tabId: null });
-      expect(await workingOrderCount()).toBe(0);
-    } finally {
-      await Promise.all([connA.close(), connB.close()]);
-    }
-  });
-
+describe("seatBooking compare-and-swap guard", () => {
   it("guard proof by deletion: the CAS's `status = 'booked'` predicate rejects a non-booked row (0 rows)", async () => {
-    // A timing-free, direct isolation of the same guard the race above exercises — insurance against the
-    // race regressing to a false pass. It runs seatBooking's EXACT terminal WHERE against a booking that
-    // is already `cancelled` and asserts it matches 0 rows; then it removes ONLY the `status = 'booked'`
-    // predicate and asserts the SAME statement now matches 1 row. That is the compare-and-swap's whole
-    // job: without the status predicate the write would seat a booking that had left `booked`.
+    // It runs seatBooking's EXACT terminal WHERE against a booking that is already `cancelled` and
+    // asserts it matches 0 rows; then it removes ONLY the `status = 'booked'` predicate and asserts
+    // the SAME statement now matches 1 row. That is the compare-and-swap's whole job: without the
+    // status predicate the write would seat a booking that had left `booked`.
     //
-    // This proves the WHERE clause's SEMANTICS, not the wiring inside `seatBooking` — the genuine-race
-    // test above covers that the real verb reaches this WHERE with a stale read. Kept as a second,
-    // deterministic witness because a two-backend race, however carefully barriered, is the more fragile
-    // of the two.
-    const { cfg, createdBy } = await setupVenue();
-    const tableId = await seedTable(cfg, "CAS-2");
-    const { id: bookingId } = await asApp(db, (tx) =>
+    // This proves the WHERE clause's SEMANTICS, not the wiring inside `seatBooking` — the
+    // genuine-race case that covered the verb reaching this WHERE with a stale read is deleted, and
+    // this file's header says why.
+    const { cfg, createdBy } = await setupVenue(suite.db);
+    const tableId = await seedTable(suite.db, cfg, "CAS-2");
+    const { id: bookingId } = await withTransaction(suite.db, (tx: Transaction) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -206,11 +96,11 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
         createdBy,
       }),
     );
-    await asApp(db, (tx) => cancelBooking(tx, cfg, bookingId));
+    await withTransaction(suite.db, (tx: Transaction) => cancelBooking(tx, cfg, bookingId));
 
-    await asApp(db, async (tx) => {
-      // seatBooking's terminal WHERE verbatim: id AND status = 'booked'. The booking is `cancelled`, so
-      // the guarded update matches nothing — the throw path.
+    await withTransaction(suite.db, async (tx: Transaction) => {
+      // seatBooking's terminal WHERE verbatim: id AND status = 'booked'. The booking is `cancelled`,
+      // so the guarded update matches nothing — the throw path.
       const guarded = await tx
         .update(bookings)
         .set({ status: "seated" })
@@ -219,7 +109,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       expect(guarded).toHaveLength(0);
 
       // The SAME update with the `status = 'booked'` predicate DELETED — the mutation that the guard
-      // defends against — matches the cancelled row: 1 row, the wrong write. Rolled back below.
+      // defends against — matches the cancelled row: 1 row, the wrong write. Undone below.
       const unguarded = await tx
         .update(bookings)
         .set({ status: "seated" })
@@ -227,8 +117,8 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
         .returning({ id: bookings.id });
       expect(unguarded).toHaveLength(1);
 
-      // Undo the unguarded write so the fixture is not left `seated` (belt-and-braces; each test seeds
-      // its own tenant anyway). (`tab_id` was never touched, so no FK to reset.)
+      // Undo the unguarded write so the fixture is not left `seated` (belt-and-braces; the helper
+      // empties every table after each test anyway). (`tab_id` was never touched, so no FK to reset.)
       await tx.update(bookings).set({ status: "cancelled" }).where(eq(bookings.id, bookingId));
     });
   });

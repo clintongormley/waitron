@@ -1,5 +1,5 @@
 import type { ResourceChange } from "@waitron/shared";
-import { id, json, table } from "./columns.js";
+import { id, json, newId, table } from "./columns.js";
 
 /**
  * What changed, written by the change trigger and taken out again by the transaction that caused
@@ -17,10 +17,10 @@ import { id, json, table } from "./columns.js";
  *
  * `local`: this node's own signal to its own dashboard, never venue data, and the INTENTION is that
  * it travels in neither a backup nor a replication stream — a standby inheriting a half-drained log
- * would deliver changes for work it did not do. Nothing holds the backup half today:
- * `apps/server/src/pg-dump.ts` runs `pg_dump --format=custom` over the whole database and excludes
- * no table, so a dump carries whatever was in this one. The replication half is a property of
- * whatever publication a stream declares, and no product code replicates yet (CLAUDE.md §3).
+ * would deliver changes for work it did not do. Nothing holds the backup half today: a backup is
+ * `VACUUM INTO` over the whole venue file (`packages/store/src/archive.ts`), which excludes no
+ * table, so an archive carries whatever was in this one. The replication half is a property of
+ * whatever stream is declared, and no product code replicates yet (CLAUDE.md §3).
  *
  * OPEN for the storage switch, and NOT settled here: after the flip the class also picks the
  * database FILE, and `local` would put this table on the far side of the split from the triggers
@@ -36,6 +36,6 @@ export const changeLog = table("change_log", {
   // `grep -rn change_log --include='*.ts' --include='*.sql' --include='*.mjs' packages apps scripts`
   // returns hits that name `payload` and never `id`. Kept so the table carries an identity of its
   // own, the way most of this schema's tables do; no behaviour depends on its value.
-  id: id("id").primaryKey().defaultRandom(),
+  id: id("id").primaryKey().$defaultFn(newId),
   payload: json<ResourceChange>("payload").notNull(),
 });

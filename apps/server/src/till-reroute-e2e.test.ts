@@ -4,31 +4,45 @@ import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  deviceProfiles,
+  devices,
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
   setDeploymentMode,
   setSingletonRole,
   stampDeployment,
+  tenants,
+  tills,
+  workingOrders,
   writeMirrorConfig,
   type Database,
+  type VenueDatabase,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPin, hashSecret } from "@waitron/identity";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { hashPin, hashSecret, persons } from "@waitron/identity";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
-import { roleUrl } from "./testing/postgres.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // The till-reroute HEADLINE proof (S6, till-reroute design §6): TWO booted `apps/server` instances
-// (two `startServer` boots on two databases, in ONE test process — not two OS processes) on REAL
-// Postgres. Real PG, not PGlite, because the venue-wide read runs under `app_user` (super=false) and a
-// PGlite superuser holds every privilege, so a missing grant would pass there (CLAUDE.md §4); the second
-// node also genuinely needs its own database. One venue, two nodes: A (primary, box) and B (mirror,
-// cloud), each its own database with the SAME identity seeded directly, because nothing copies rows
-// between the two nodes: the PostgreSQL replication that used to is deleted and its replacement has
-// not landed. The arc:
+// (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
+// DIRECTORY of SQLite files. One venue, two nodes: A (primary, box) and B (mirror, cloud), with the
+// SAME identity seeded directly into each directory, because nothing copies rows between the two
+// nodes: the PostgreSQL replication that used to is deleted and its replacement has not landed.
+//
+// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED. The suite used to justify a real container by the
+// venue-wide read running under `app_user` (`super = false`) rather than a PGlite superuser, so that
+// a missing GRANT failed here. There is no role on this engine: `pg.connectAs` has no counterpart and
+// `asAppUser` is an inert function (`packages/db/src/testing/roles.ts`), and every call below runs on
+// the one connection each directory has. Nothing now checks that the deployment role may take the
+// venue-wide read. What the case still proves is the reroute itself — the three `/api/node` bodies,
+// the standby's refusals, and a promoted node inheriting the dead node's tab.
+//
+// The arc:
 //
 //   1. A answers `acceptingSales:true`, B `:false` — the truth a till's `ServerRouter` routes on, taken
 //      from the REAL boot posture, not a stub.
@@ -103,39 +117,85 @@ const KEY_ENV = {
   WAITRON_ENV: "preproduction",
 };
 
-const a = useTemplateDb({ template: "manifest" });
-const b = useTemplateDb({ template: "manifest" });
+// One venue directory per node, migrated through the product's own `applyMigrations` — the same
+// entry point boot calls, so each directory carries the append-only triggers a box carries. The
+// long-lived handle beside it is this suite's seeding and promotion connection; it stays open
+// alongside the booted server's own open of the same directory, which write-ahead mode and the
+// store's `busy_timeout` allow (`packages/store/src/index.ts`).
+let venueDirA: string;
+let venueDirB: string;
+let storeA: VenueDatabase;
+let storeB: VenueDatabase;
+let a: Database;
+let b: Database;
 
 let migrationsRoot: string;
 
 /** Seed the venue's identity (tenant, location, both nodes, till, both series) plus a staff person on
- * PIN 5555 and the till device — all as the container superuser, on one clone. The device's `token_hash`
+ * PIN 5555 and the till device, on one venue directory. The device's `token_hash`
  * is the scrypt hash of `DEVICE_TOKEN` (`hashSecret`, the same function `acceptDeviceJoinRequest`
  * stores), so the `waitron_device=<id>.<token>` cookie built above authenticates against this row on
  * whichever node holds it. Seeded identically on A and B — the "same device rows seeded directly" the
  * design names. */
-async function seedVenue(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90444444A', 'Reroute E2E SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${LOCATION}, 'Loc', array['en']::text[], 'Hospitality') on conflict do nothing`);
+async function seedVenue(db: Database): Promise<void> {
+  // Through the table definitions, not raw SQL. Every id here is supplied explicitly (the two nodes
+  // and both series must match the constants the reroute is asserted against), so this is not about
+  // generated ids — it is the `array['en']::text[]` constructor and the `'[]'::jsonb` cast, both of
+  // which this engine refuses, plus the `created_at`/`enrolled_at` stamps that are JavaScript
+  // generators a raw insert never reaches. The untargeted `on conflict do nothing` becomes a
+  // primary-key-targeted one at each call: every row here is keyed by the id it supplies, and an
+  // untargeted form absorbs EVERY unique conflict rather than the one the caller means
+  // (CLAUDE.md §3).
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90444444A", legalName: "Reroute E2E SL" })
+    .onConflictDoNothing({ target: tenants.id });
+  await db
+    .insert(locations)
+    .values({
+      id: LOCATION,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing({ target: locations.id });
   for (const node of [NODE_A, NODE_B]) {
-    await admin.execute(sql`insert into nodes (id, location_id, name)
-      values (${node}, ${LOCATION}, 'Node') on conflict do nothing`);
+    await db
+      .insert(nodes)
+      .values({ id: node, locationId: LOCATION, name: "Node" })
+      .onConflictDoNothing({ target: nodes.id });
   }
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL}, ${LOCATION}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${SERIES_A}, ${NODE_A}, 'A') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${SERIES_B}, ${NODE_B}, 'B') on conflict do nothing`);
-  await admin.execute(sql`insert into persons (id, display_name, pin_hash, role)
-    values (${PERSON}, 'Cajera', ${hashPin("5555")}, 'staff') on conflict do nothing`);
-  await admin.execute(sql`insert into device_profiles (id, name, form_factor, capabilities)
-    values (${DEVICE_PROFILE}, 'Counter', 'till', '[]'::jsonb) on conflict do nothing`);
-  await admin.execute(sql`insert into devices (id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${LOCATION}, ${DEVICE_PROFILE}, ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
-    on conflict do nothing`);
+  await db
+    .insert(tills)
+    .values({ id: TILL, locationId: LOCATION, name: "Till" })
+    .onConflictDoNothing({ target: tills.id });
+  await db
+    .insert(invoiceSeries)
+    .values({ id: SERIES_A, nodeId: NODE_A, code: "A" })
+    .onConflictDoNothing({ target: invoiceSeries.id });
+  await db
+    .insert(invoiceSeries)
+    .values({ id: SERIES_B, nodeId: NODE_B, code: "B" })
+    .onConflictDoNothing({ target: invoiceSeries.id });
+  await db
+    .insert(persons)
+    .values({ id: PERSON, displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+    .onConflictDoNothing({ target: persons.id });
+  await db
+    .insert(deviceProfiles)
+    .values({ id: DEVICE_PROFILE, name: "Counter", formFactor: "till", capabilities: [] })
+    .onConflictDoNothing({ target: deviceProfiles.id });
+  await db
+    .insert(devices)
+    .values({
+      id: DEVICE_ID,
+      locationId: LOCATION,
+      deviceProfileId: DEVICE_PROFILE,
+      tillId: TILL,
+      label: "Counter till",
+      tokenHash: hashSecret(DEVICE_TOKEN),
+    })
+    .onConflictDoNothing({ target: devices.id });
 }
 
 /** An OS-assigned free port, released before use — WAITRON_HTTP_PORT rejects "0", so the host cannot
@@ -151,10 +211,9 @@ async function freePort(): Promise<number> {
   });
 }
 
-/** The env for a PRIMARY (selling) boot of `nodeId`/`seriesId` on `clone` at `port`: an unreachable
- * push peer + a retention connection, so the source-side workers mount and back off. */
+/** The env for a PRIMARY (selling) boot of `nodeId`/`seriesId` on `venueDir` at `port`. */
 function primaryEnv(
-  clone: { pg: { uri: string } },
+  venueDir: string,
   port: number,
   nodeId: string,
   seriesId: string,
@@ -165,8 +224,7 @@ function primaryEnv(
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: seriesId,
     WAITRON_TILL_LOCATION_ID: LOCATION,
-    DATABASE_URL: roleUrl(clone.pg.uri, "app_login", "app_pw"),
-    WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
+    WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
   };
@@ -175,15 +233,14 @@ function primaryEnv(
 /** The env for B's MIRROR boot: no mirror config rides in env. A mirror boot REQUIRES a `mirror_config`
  * row (seeded in beforeAll) and reads its DATA SCOPE from it — `origin_node_id`, the primary whose rows
  * its node-scoped reads display; an absent row is a loud `server.config_invalid` (boot.ts). */
-function mirrorEnv(clone: { pg: { uri: string } }, port: number): Record<string, string> {
+function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
     WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: NODE_B,
     WAITRON_TILL_SERIES_ID: SERIES_B,
     WAITRON_TILL_LOCATION_ID: LOCATION,
-    DATABASE_URL: roleUrl(clone.pg.uri, "app_login", "app_pw"),
-    WAITRON_MIGRATIONS_DATABASE_URL: clone.pg.uri,
+    WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
   };
@@ -221,16 +278,28 @@ beforeAll(async () => {
     });
   }
 
-  await seedVenue(a.admin);
-  await seedVenue(b.admin);
+  // Each directory is migrated through `applyMigrations` — the product's own entry point, which
+  // installs each set's append-only triggers as well as its tables — before either handle is
+  // opened. Boot re-runs it over the same directory, which drizzle makes a no-op.
+  venueDirA = await mkdtemp(join(tmpdir(), "waitron-reroute-e2e-venue-a-"));
+  venueDirB = await mkdtemp(join(tmpdir(), "waitron-reroute-e2e-venue-b-"));
+  await applyMigrations(venueDirA, fromSource);
+  await applyMigrations(venueDirB, fromSource);
+  storeA = await openVenueDatabase(venueDirA);
+  storeB = await openVenueDatabase(venueDirB);
+  a = storeA.venue;
+  b = storeB.venue;
+
+  await seedVenue(a);
+  await seedVenue(b);
 
   // B is the mirror: stamp it, flip mode='mirror' (co-sets singleton_role='secondary'), and seed the
   // `mirror_config` row a mirror boot requires. A keeps the 'primary'/'primary' column defaults; a
   // stamp is all it needs.
-  await stampDeployment(a.admin, "preproduction");
-  await stampDeployment(b.admin, "preproduction");
-  await setDeploymentMode(b.admin, "mirror");
-  await writeMirrorConfig(b.admin, {
+  await stampDeployment(a, "preproduction");
+  await stampDeployment(b, "preproduction");
+  await setDeploymentMode(b, "mirror");
+  await writeMirrorConfig(b, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
     boxCaPem: mintSelfSignedServerCert({
@@ -242,24 +311,33 @@ beforeAll(async () => {
   });
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
-  await b.admin.execute(sql`insert into working_orders (id, till_id, node_id, order_number, status)
-    values (${TAB_ID}, ${TILL}, ${NODE_A}, 1, 'open') on conflict do nothing`);
+  // `working_orders.opened_at` is a JavaScript generator on this engine, so this goes through the
+  // table definition like the rest of the fixture; the conflict target is the id this row supplies.
+  await b
+    .insert(workingOrders)
+    .values({ id: TAB_ID, tillId: TILL, nodeId: NODE_A, orderNumber: 1, status: "open" })
+    .onConflictDoNothing({ target: workingOrders.id });
 }, 180_000);
 
 afterAll(async () => {
-  if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
+  // Closed before their directories are removed, and each guarded on its own so a store that never
+  // opened does not stop the rest of the teardown.
+  if (storeA !== undefined) await storeA.close();
+  if (storeB !== undefined) await storeB.close();
+  for (const dir of [venueDirA, venueDirB, migrationsRoot])
+    if (dir !== undefined) await rm(dir, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-describe("till reroute — two instances, one venue (real Postgres)", () => {
+describe("till reroute — two instances, one venue", () => {
   it("A primary, B standby; A goes down; B promoted+restarted; the device cookie follows and the venue's tab is inherited", async () => {
     const portA = await freePort();
     const portB = await freePort();
-    const serverA = await startServer(primaryEnv(a, portA, NODE_A, SERIES_A));
+    const serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A, SERIES_A));
     // B's boot is inside the try so a rejection there still closes A in the finally (no leaked listener).
     let serverB: StartedServer | undefined;
     try {
-      serverB = await startServer(mirrorEnv(b, portB));
+      serverB = await startServer(mirrorEnv(venueDirB, portB));
       // 1. The probes the router routes on, from the REAL boot posture — pinned to the shared contract
       // fixture. FAILING CASE: a wire-shape drift (a renamed field, a missing one) fails this `toEqual`
       // before the router contract test ever runs.
@@ -293,8 +371,8 @@ describe("till reroute — two instances, one venue (real Postgres)", () => {
 
       // 5. Promote B at the DB level — the deployment flip a human's promote performs (Track B item 3
       // builds the endpoint).
-      await setDeploymentMode(b.admin, "primary");
-      await setSingletonRole(b.admin, "primary");
+      await setDeploymentMode(b, "primary");
+      await setSingletonRole(b, "primary");
 
       // The boot-captured control (node-api.ts, §3.1) — the measurement where a live read and the
       // captured one genuinely differ (CLAUDE.md §1): the STILL-RUNNING mirror keeps answering
@@ -305,7 +383,7 @@ describe("till reroute — two instances, one venue (real Postgres)", () => {
       await serverB.close();
       serverB = undefined;
 
-      const serverB2 = await startServer(primaryEnv(b, portB, NODE_B, SERIES_B));
+      const serverB2 = await startServer(primaryEnv(venueDirB, portB, NODE_B, SERIES_B));
       try {
         // The promoted, restarted B now accepts sales — pinned to the fixture's `bPrimary` body.
         expect(await probe(portB)).toEqual(FIXTURE.bPrimary);

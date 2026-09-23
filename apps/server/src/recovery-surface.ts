@@ -138,23 +138,16 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.database_unreachable": {
-    // Three causes wear this one code: the bounded connection wait timing out, and the SQLSTATEs
-    // `28P01` (wrong password) and `3D000` (no such database) — `boot-failure.ts`. Hence "could not
-    // connect" rather than "is not responding" (a refusal IS a response), and an escalation the
-    // operator can walk down: the retry fixes the first cause, and only a person can fix the other
-    // two, which is why the action says a restart cannot.
-    title: "Waitron could not connect to the box's database.",
+    // ONE cause wears this code now: the engine could not open the box's database file
+    // (`boot-failure.ts`, SQLITE_CANTOPEN). The three that used to — a connection wait timing out, a
+    // wrong password, a missing database — all belonged to the cluster this box no longer runs, and
+    // the wording went with them: there is no password to be wrong and nothing to still be starting
+    // up, so telling the operator to wait a minute would send them to wait for nothing. What is left
+    // is a file the software cannot read, which a restart can genuinely fix (a volume that did not
+    // mount) and otherwise cannot.
+    title: "Waitron could not open the box's database.",
     action:
-      "Wait a minute and press Retry — the database may still be starting up. If that does not help, restart the box. If it still fails, ask whoever installed this box to check its database settings: a restart cannot fix a wrong password or a missing database.",
-  },
-  "provisioning.database_not_owned": {
-    title: "The box's database belongs to another program.",
-    action:
-      "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
-  },
-  "provisioning.admin_uri_not_a_url": {
-    title: "The box's database address is not a valid address.",
-    action: "Ask whoever installed this box to check its settings.",
+      "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, ask whoever installed this box for help: the box's database is a file on its disk, and the software cannot read it.",
   },
   "migrations.incomplete": {
     // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations

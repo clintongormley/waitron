@@ -1,12 +1,20 @@
-// Real PostgreSQL: exercises setup through PostgreSQL URLs and a reader denied inspection privileges.
+// A real venue DIRECTORY under `os.tmpdir()`: exercises setup through the two SQLite files the
+// product opens, not a fake. There is no container and no role here — the engine has neither.
 import { sql } from "drizzle-orm";
-import { idempotentRoleStatement } from "@waitron/db/testing/shared-container.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres, useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { roleUrl, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import {
+  CORE_MIGRATIONS,
+  deviceProfiles,
+  locations,
+  openVenueDatabase,
+  runMigrations,
+  tenants,
+  tills,
+} from "@waitron/db";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -15,20 +23,18 @@ import { ALL_MODULES } from "../src/modules.js";
 import {
   ADMIN_PIN,
   buildDevEnv,
-  devMigrationsUrl,
   devSetup,
   inspectVenues,
   parseEnvFile,
   renderEnvFile,
+  resetVenueDir,
   resolveSeedLocale,
   type DevEnv,
   type DevSetupResult,
 } from "./dev-setup.js";
 
 const sampleEnv: DevEnv = {
-  DATABASE_URL: "postgres://postgres:pg@localhost:5432/postgres",
-  WAITRON_MIGRATIONS_DATABASE_URL:
-    "postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
+  WAITRON_VENUE_DIR: "/var/lib/waitron/venue",
   WAITRON_ENV: "dev",
   WAITRON_ONBOARDING_INTENT: "demo",
   WAITRON_HTTP_PORT: "8080",
@@ -47,8 +53,7 @@ describe("renderEnvFile", () => {
       .split("\n")
       .filter((line) => line.trim() !== "" && !line.startsWith("#"));
     expect(lines).toEqual([
-      "DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres",
-      "WAITRON_MIGRATIONS_DATABASE_URL=postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
+      "WAITRON_VENUE_DIR=/var/lib/waitron/venue",
       "WAITRON_ENV=dev",
       "WAITRON_ONBOARDING_INTENT=demo",
       "WAITRON_HTTP_PORT=8080",
@@ -105,12 +110,12 @@ describe("the demo login PIN + seed locale", () => {
 });
 
 // The env-building step `devSetup` runs to assemble its `.env`. Proving BOTH locales here (pure, no
-// container) closes the gap the review flagged: the real-PG `devSetup` suite only ever exercises the
-// default English path, so nothing else proves the Spanish `seedLocale` reaches `WAITRON_TILL_LOCALE` in
-// the written `.env`. `devSetup` builds its env via exactly this function (dev-setup.ts), and the
-// container suite proves that env is what reaches disk — so English end-to-end there plus both locales
-// here covers the mapping for real (CLAUDE.md §1: the value must reach `.env` through the flow). The
-// mapping is bare content locale → full display tag: `WAITRON_TILL_LOCALE` is a `SUPPORTED_LOCALES` code.
+// database) closes the gap the review flagged: the venue-directory `devSetup` suite only ever
+// exercises the default English path, so nothing else proves the Spanish `seedLocale` reaches
+// `WAITRON_TILL_LOCALE` in the written `.env`. `devSetup` builds its env via exactly this function
+// (dev-setup.ts), and the directory-backed suite proves that env is what reaches disk (CLAUDE.md
+// §1: the value must reach `.env` through the flow). The mapping is bare content locale → full
+// display tag: `WAITRON_TILL_LOCALE` is a `SUPPORTED_LOCALES` code.
 describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
   const ids = {
     tillId: "22222222-2222-2222-2222-222222222222",
@@ -122,9 +127,9 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
   it("sets WAITRON_ENV=dev so the switcher is on under pnpm dev", () => {
     // deploymentEnvironment("dev") maps to "preproduction" (config.ts) — this is a DEV-only input
     // that turns the switcher on and never touches the fiscal stamp (see devSetup's own
-    // "against real Postgres" suite, which pins config.environment to "preproduction" separately).
+    // venue-directory suite, which pins config.environment to "preproduction" separately).
     const env = buildDevEnv({
-      databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+      venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
       seedLocale: "en",
@@ -133,18 +138,17 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     expect(env.WAITRON_ONBOARDING_INTENT).toBe("demo");
   });
 
-  it("derives the migrator connection", () => {
-    // The migrations url is the app url with a `role=waitron_migrator` session option, so a dev boot
-    // migrates AS the table owner.
+  it("names the venue directory the server opens", () => {
+    // The one storage setting left: `config.ts` resolves `WAITRON_VENUE_DIR` to the directory
+    // `openVenueStore` creates `venue.db` and `node.db` in, so the written `.env` points `pnpm dev`
+    // at the very directory this run provisioned.
     const env = buildDevEnv({
-      databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+      venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
       seedLocale: "en",
     });
-    expect(env.WAITRON_MIGRATIONS_DATABASE_URL).toBe(
-      "postgres://postgres:pg@localhost:5432/postgres?options=-c+role%3Dwaitron_migrator",
-    );
+    expect(env.WAITRON_VENUE_DIR).toBe("/var/lib/waitron/venue");
   });
 
   it.each([
@@ -154,7 +158,7 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
     "maps bare seed locale %s into full-tag WAITRON_TILL_LOCALE and renders it into the .env text",
     (seedLocale, expectedTillLocale) => {
       const env = buildDevEnv({
-        databaseUrl: "postgres://postgres:pg@localhost:5432/postgres",
+        venueDir: "/var/lib/waitron/venue",
         credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
         ids,
         seedLocale,
@@ -168,47 +172,48 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
   );
 });
 
-// Real Postgres exercises dev-setup's actual migration, provisioning and reuse connections.
-// The separate inspectVenues suite below checks SELECT privileges.
-// TESTCONTAINERS_RYUK_DISABLED=true is required locally (CLAUDE.md §4).
-describe("devSetup against real Postgres", () => {
-  // A BARE container (no-op migrate): devSetup runs the migrations itself, exactly as a fresh dev DB.
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "dev-setup requires Postgres for its provisioning and venue-reuse integration test.",
-        migrate: async () => {
-          /* devSetup applies the full manifest itself — a bare container is the fresh-DB shape. */
-        },
-      }),
-    timeoutMs: 180_000,
-  });
-
-  let envDir: string;
+// A real venue directory exercises dev-setup's actual migration, provisioning and reuse. The
+// directory is the product's own (`openVenueDatabase`), so what this suite proves about migrating
+// and provisioning is what a laptop gets.
+describe("devSetup against a real venue directory", () => {
+  let workDir: string;
+  let venueDir: string;
   let envPath: string;
   let first: DevSetupResult;
 
   beforeAll(async () => {
-    envDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-"));
-    envPath = join(envDir, ".env");
-    // The FIRST run: a fresh database with no `.env` — provisions.
-    first = await devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} });
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-"));
+    venueDir = join(workDir, "venue");
+    envPath = join(workDir, ".env");
+    // The FIRST run: a virgin directory with no `.env` — provisions.
+    first = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
   }, 180_000);
 
   afterAll(async () => {
-    if (envDir !== undefined) await rm(envDir, { recursive: true, force: true });
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
   });
 
-  async function tillsCount(): Promise<number> {
-    // Count every till through the container owner connection.
-    const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from tills`,
-    );
-    return rows[0]!.n;
+  /** Read the provisioned venue through the product's own opener, then close both files: the suite
+   * calls `devSetup` again between assertions, and a handle left open would be a second writer. */
+  async function readVenue<T>(
+    body: (db: Awaited<ReturnType<typeof openVenueDatabase>>["venue"]) => Promise<T>,
+  ): Promise<T> {
+    const store = await openVenueDatabase(venueDir);
+    try {
+      return await body(store.venue);
+    } finally {
+      await store.close();
+    }
   }
 
-  it("provisions a fresh database, writing a .env and two tills rows", async () => {
+  async function tillsCount(): Promise<number> {
+    return readVenue(async (db) => {
+      const { rows } = await db.execute<{ n: number }>(sql`select count(*) as n from tills`);
+      return rows[0]!.n;
+    });
+  }
+
+  it("provisions a virgin directory, writing a .env and two tills rows", async () => {
     expect(first.reused).toBe(false);
     // Two registers: provisioning's "Caja 1" plus the "Mostrador" register the seeded till DEVICE
     // auto-creates when it enrols (seedDemoDevices). The handheld shares "Mostrador" and adds none.
@@ -225,7 +230,7 @@ describe("devSetup against real Postgres", () => {
     ] as const) {
       expect(first.env[key]).toMatch(/^[0-9a-f-]{36}$/);
     }
-    expect(first.env.DATABASE_URL).toBe(suite.pg.uri);
+    expect(first.env.WAITRON_VENUE_DIR).toBe(venueDir);
     // dev-setup boots pnpm dev with the switcher on (WAITRON_ENV=dev) while the venue still behaves as
     // preproduction — proven by the `config.environment` toBe("preproduction") assertion in the
     // loadConfig `it()` block below (dev-setup writes no deployment stamp at all).
@@ -235,17 +240,19 @@ describe("devSetup against real Postgres", () => {
     expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
-  it("produces the migrator-owned shape a dev boot needs", async () => {
-    // The migrate ran AS `waitron_migrator` (the `role=` session option), so EVERY public table is
-    // migrator-owned, exactly as `waitron-provision instance` produces in production. A
-    // superuser-owned table here (the pre-fix shape) would not carry the migrations' own grants.
-    const owners = await suite.admin.execute<{ tableowner: string }>(
-      sql`select distinct tableowner from pg_tables where schemaname = 'public' order by tableowner`,
-    );
-    expect(owners.rows.map((r) => r.tableowner)).toEqual(["waitron_migrator"]);
-
-    // The written `.env` names the migrator connection, so `pnpm dev` migrates as the owner.
-    expect(first.env.WAITRON_MIGRATIONS_DATABASE_URL).toBe(devMigrationsUrl(suite.pg.uri));
+  it("migrates into the venue file the server opens, not somewhere else", async () => {
+    // The regression this catches is a `devSetup` that migrates one directory and writes another
+    // into `.env`: the server would then open a virgin database and refuse at boot. Read the venue
+    // FILE the written `WAITRON_VENUE_DIR` names and find the provisioned rows in it.
+    const store = await openVenueDatabase(first.env.WAITRON_VENUE_DIR);
+    try {
+      const { rows } = await store.venue.execute<{ n: number }>(
+        sql`select count(*) as n from tenants`,
+      );
+      expect(rows[0]!.n).toBe(1);
+    } finally {
+      await store.close();
+    }
   });
 
   it("writes a modules.json that resolves the fiscal slot to exactly one member (verifactu)", () => {
@@ -253,8 +260,8 @@ describe("devSetup against real Postgres", () => {
     // modules.json is all-enabled and boot refuses `module.fiscal_slot_ambiguous`. dev-setup now writes
     // one selecting the ES-common venue's regime, so `pnpm dev` boots. Read the file back through the
     // SAME parser boot uses and prove the enabled set resolves to a single member — the boot-time
-    // `fiscalSlot` call, minus the container/compose a full boot needs.
-    const raw: unknown = JSON.parse(readFileSync(join(envDir, "modules.json"), "utf8"));
+    // `fiscalSlot` call, minus the processes a full boot needs.
+    const raw: unknown = JSON.parse(readFileSync(join(workDir, "modules.json"), "utf8"));
     const config = parseModuleConfig(raw, ALL_MODULES);
     // fiscal-none is explicitly disabled; verifactu stays enabled (default-on).
     expect((raw as { modules: Record<string, boolean> }).modules["fiscal-none"]).toBe(false);
@@ -270,6 +277,8 @@ describe("devSetup against real Postgres", () => {
     const config = loadConfig(written, "/dev/null/migrations", "/dev/null/state");
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
+    // The venue directory the `.env` names is the one the server will open.
+    expect(config.venueDir).toBe(venueDir);
     // dev-setup ALWAYS provisions a venue, so `loadConfig` resolves the four ids into `config.till`
     // (never setup mode's `undefined` — which is exactly the state dev-setup exists to make
     // impossible). Assert it is present, then read the fiscal ids off it — the `?.` keeps each
@@ -287,9 +296,9 @@ describe("devSetup against real Postgres", () => {
 
   it("reuses an already-provisioned venue rather than minting a second chain", async () => {
     const second = await devSetup({
-      databaseUrl: suite.pg.uri,
+      venueDir,
       envPath,
-      stateDir: envDir,
+      stateDir: workDir,
       log: () => {},
     });
 
@@ -306,37 +315,27 @@ describe("devSetup against real Postgres", () => {
 
   it("provisioning seeds the starter profiles", async () => {
     // The en-GB demo gets localized starter profiles, with default capabilities and no canvas binding.
-    const { rows: profiles } = await suite.admin.execute<{
-      name: string;
-      canvas_id: string | null;
-      capabilities: string[];
-    }>(
-      sql`select name, canvas_id, capabilities from device_profiles
-           order by name`,
+    // Read through the table definition, so the JSON capability list is decoded the way every
+    // product reader gets it rather than as the text the column stores.
+    const profiles = await readVenue(async (db) =>
+      db
+        .select({
+          name: deviceProfiles.name,
+          canvasId: deviceProfiles.canvasId,
+          capabilities: deviceProfiles.capabilities,
+        })
+        .from(deviceProfiles)
+        .orderBy(deviceProfiles.name),
     );
     expect(profiles).toEqual([
       {
         name: "Counter",
-        canvas_id: null,
+        canvasId: null,
         capabilities: ["integrated-card-payment", "open-cash-drawer", "print-receipt"],
       },
-      { name: "Handheld", canvas_id: null, capabilities: [] },
-      { name: "Kitchen", canvas_id: null, capabilities: ["act-as-kds"] },
+      { name: "Handheld", canvasId: null, capabilities: [] },
+      { name: "Kitchen", canvasId: null, capabilities: ["act-as-kds"] },
     ]);
-  });
-
-  it("refuses to provision a second venue when the .env no longer names the DB's venue", async () => {
-    // The dangerous case: a `.env` lost/deleted (or its ids gone stale) against a live volume that
-    // still holds a venue. Provisioning fresh here would mint a SECOND SIF and a second hash chain
-    // (CLAUDE.md §5), so devSetup must REFUSE rather than provision — the volume wipe (dev:reset) is
-    // the only sanctioned way to start over.
-    rmSync(envPath);
-    await expect(
-      devSetup({ databaseUrl: suite.pg.uri, envPath, stateDir: envDir, log: () => {} }),
-    ).rejects.toThrow(/already holds a venue/i);
-    // The fiscal assertion: still exactly one till, no second chain.
-    // The fiscal assertion: still the two registers from the first run, no second chain.
-    expect(await tillsCount()).toBe(2);
   });
 
   it("enrols a till, handheld and kitchen display via the real enrol path", async () => {
@@ -345,19 +344,22 @@ describe("devSetup against real Postgres", () => {
     // register, the handheld rings into that SAME register (no third till), and the kds is bound to
     // the venue's default preparation station, after the demo has renamed it to "Kitchen".
     // toEqual, not toMatchObject (CLAUDE.md §4).
-    const { rows } = await suite.admin.execute<{
-      label: string;
-      form_factor: string;
-      register_name: string | null;
-      station_name: string | null;
-    }>(
-      sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name
-          from devices d
-          join device_profiles dp on dp.id = d.device_profile_id
-          left join tills t on t.id = d.till_id
-          left join kitchen_stations ks on ks.id = d.station_id
-          order by d.label`,
-    );
+    const rows = await readVenue(async (db) => {
+      const result = await db.execute<{
+        label: string;
+        form_factor: string;
+        register_name: string | null;
+        station_name: string | null;
+      }>(
+        sql`select d.label, dp.form_factor, t.name as register_name, ks.name as station_name
+            from devices d
+            join device_profiles dp on dp.id = d.device_profile_id
+            left join tills t on t.id = d.till_id
+            left join kitchen_stations ks on ks.id = d.station_id
+            order by d.label`,
+      );
+      return result.rows;
+    });
     expect(rows).toEqual([
       {
         label: "Camarero 1",
@@ -374,39 +376,120 @@ describe("devSetup against real Postgres", () => {
       },
     ]);
   });
+
+  it("refuses to provision a second venue when the .env no longer names the directory's venue", async () => {
+    // The dangerous case: a `.env` lost/deleted (or its ids gone stale) against a directory that
+    // still holds a venue. Provisioning fresh here would mint a SECOND SIF and a second hash chain
+    // (CLAUDE.md §5), so devSetup must REFUSE rather than provision — removing the venue directory
+    // (`pnpm dev:reset`) is the only sanctioned way to start over.
+    rmSync(envPath);
+    await expect(devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} })).rejects.toThrow(
+      /already holds a venue/i,
+    );
+    // The fiscal assertion: still the two registers from the first run, no second chain.
+    expect(await tillsCount()).toBe(2);
+  });
 });
 
-// Real Postgres enforces SELECT privileges; PGlite's superuser cannot test refusal.
-describe("inspectVenues reads existing venues with ordinary SELECT rights", () => {
-  const suite = useTemplateDb({ template: "manifest" });
+describe("resetVenueDir", () => {
+  it("removes the venue directory and both write-ahead sidecars with it", async () => {
+    // What `pnpm dev:reset` now does instead of wiping a Docker volume. The whole directory goes,
+    // not just `venue.db`: a venue file removed while its `-wal` stays behind is the shape the
+    // restore surgery measured as a silent wrong answer.
+    const dir = await mkdtemp(join(tmpdir(), "waitron-reset-"));
+    const store = await openVenueDatabase(dir);
+    await store.venue.execute(sql`create table marker (id integer primary key)`);
+    await store.close();
+    expect(existsSync(join(dir, "venue.db"))).toBe(true);
+
+    resetVenueDir(dir);
+
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it("is a no-op on a directory that is not there yet", () => {
+    // The first-ever `pnpm dev:reset` on a fresh checkout: there is no venue directory, and that is
+    // not a failure.
+    const missing = join(tmpdir(), `waitron-reset-absent-${String(process.pid)}`);
+    expect(existsSync(missing)).toBe(false);
+    expect(() => resetVenueDir(missing)).not.toThrow();
+  });
+});
+
+// `inspectVenues` decides whether devSetup provisions or refuses, so what it does with a directory
+// whose migrations have NOT run is the interesting half — that is the fresh-laptop case.
+describe("inspectVenues reads a migrated venue directory", () => {
+  const tillId = "11111111-2222-3333-4444-555555555555";
+  let migrated: string;
+
+  beforeAll(async () => {
+    migrated = await mkdtemp(join(tmpdir(), "waitron-inspect-"));
+    const store = await openVenueDatabase(migrated);
+    try {
+      await runMigrations(store.venue, CORE_MIGRATIONS);
+      await store.venue
+        .insert(tenants)
+        .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
+      const [location] = await store.venue
+        .insert(locations)
+        .values({
+          name: "Inspection",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Hospitality",
+        })
+        .returning({ id: locations.id });
+      await store.venue
+        .insert(tills)
+        .values({ id: tillId, locationId: location!.id, name: "Caja" });
+    } finally {
+      await store.close();
+    }
+  }, 60_000);
+
+  afterAll(async () => {
+    if (migrated !== undefined) await rm(migrated, { recursive: true, force: true });
+  });
+
+  it("reads an unmigrated directory as holding no venue at all", async () => {
+    // A virgin directory OPENS (`openVenueStore` creates it), so "no venue" cannot be an open
+    // failure — it is the absence of the tables, and that is what lets a fresh laptop fall through
+    // to migrate rather than refuse.
+    const virgin = await mkdtemp(join(tmpdir(), "waitron-inspect-virgin-"));
+    try {
+      await expect(inspectVenues(virgin, null)).resolves.toEqual({
+        hasExpected: false,
+        hasAny: false,
+      });
+    } finally {
+      await rm(virgin, { recursive: true, force: true });
+    }
+  });
 
   it("finds the expected till and refuses to overlook a different existing venue", async () => {
-    const tillId = "11111111-2222-3333-4444-555555555555";
-    await suite.admin.execute(sql`
-      insert into tenants (id, country, tax_id, legal_name)
-      values (1, 'ES', '00000000T', 'Inspection SL')`);
-    const location = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Inspection', array['es-ES'], 'Hospitality') returning id`);
-    await suite.admin.execute(sql`
-      insert into tills (id, location_id, name) values (${tillId}, ${location.rows[0]!.id}, 'Caja')`);
-    const readerUri = roleUrl(suite.pg.uri, "app_login", "app_pw");
-    await expect(inspectVenues(readerUri, tillId)).resolves.toEqual({
+    await expect(inspectVenues(migrated, tillId)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });
-    await expect(inspectVenues(readerUri, null)).resolves.toEqual({
+    await expect(inspectVenues(migrated, null)).resolves.toEqual({
       hasExpected: false,
       hasAny: true,
     });
   });
 
-  it("propagates permission denied instead of reporting an empty database", async () => {
-    // Roles are cluster-global, so fixture setup must tolerate a reused test container.
-    await suite.admin.execute(
-      sql.raw(idempotentRoleStatement({ name: "venue_inspection_denied", password: "denied" })),
-    );
-    const uri = roleUrl(suite.pg.uri, "venue_inspection_denied", "denied");
-    await expect(inspectVenues(uri, null)).rejects.toMatchObject({ code: "42501" });
+  it("propagates a failed read instead of reporting an empty directory", async () => {
+    // The rule this holds: only an ABSENT table means "no venue". A directory whose `tills` table
+    // exists but cannot answer the question must THROW, because reporting it empty would let
+    // devSetup provision a second venue over a live one (CLAUDE.md §5). Staged by creating the two
+    // tables with the wrong shape, which is the cheapest failure that is not an absent table.
+    const broken = await mkdtemp(join(tmpdir(), "waitron-inspect-broken-"));
+    try {
+      const file = new DatabaseSync(join(broken, "venue.db"));
+      file.exec("create table tills (not_id text)");
+      file.exec("create table tenants (id integer)");
+      file.close();
+      await expect(inspectVenues(broken, null)).rejects.toThrow(/no such column/i);
+    } finally {
+      await rm(broken, { recursive: true, force: true });
+    }
   });
 });

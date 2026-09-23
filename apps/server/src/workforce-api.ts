@@ -51,8 +51,8 @@ const SWAP_APPROVE_PERMISSION: Permission = "swap.approve";
 const ABSENCE_DECIDE_PERMISSION: Permission = "absence.decide";
 
 // ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
-// (`packages/workforce/src/schema/shifts.ts`); an offset outside it is a 23514 at the DB, screened
-// here to a 400 instead.
+// (`packages/workforce/src/schema/shifts.ts`); an offset outside it is refused by that CHECK at the
+// database, screened here to a 400 instead.
 const MAX_OFFSET_MINUTES = 840;
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -80,16 +80,18 @@ const backend = new WorkforceBackend();
 
 /** Screen a body `startsAt`/`endsAt` as a parseable instant. A non-parseable string is still a
  * `string`, so a bare type check would admit it — and `addShift`'s `Date.parse(x) >= Date.parse(y)`
- * interval guard then passes it too (`NaN >= NaN` is `false`) — so it lands in the `::timestamptz`
- * column as a 22007 → 500; screened here to a 400 `management.request_invalid` naming the field. */
+ * interval guard then passes it too (`NaN >= NaN` is `false`). Nothing below catches it: `starts_at`
+ * and `ends_at` are `text`, so the unparseable string is simply STORED, and `shifts_interval_ck`
+ * compares the two as text rather than as instants. This screen is the only refusal — a 400
+ * `management.request_invalid` naming the field. */
 function requireTimestamp(v: unknown, field: string): string {
   if (typeof v !== "string" || Number.isNaN(Date.parse(v)))
     throw new AppError("management.request_invalid", { field });
   return v;
 }
 /** Screen a body offset as an integer inside the `±MAX_OFFSET_MINUTES` wall-offset domain. A bare
- * integer check admits an out-of-domain value, which then violates `shifts_*_offset_ck` as a 23514 →
- * 500; range-checked here to a 400 `management.request_invalid` naming the field. */
+ * integer check admits an out-of-domain value, which then violates `shifts_*_offset_ck` and surfaces
+ * as a 500; range-checked here to a 400 `management.request_invalid` naming the field. */
 function requireOffsetMinutes(v: unknown, field: string): number {
   if (
     typeof v !== "number" ||

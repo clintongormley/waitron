@@ -75,11 +75,16 @@ A product POST or PATCH carries one ordered `modifiers` list, each entry
 same shape in the same order. A body that sends the retired `modifierIds` or `optionGroupIds` is
 refused, naming that field.
 
-`writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) is what writes it. It takes
-no advisory lock: it takes a `for key share` ROW lock on each list the body names, before it touches
-an attachment row rather than after. That is the same lock the insert's own foreign-key check would
-take anyway, so it adds no conflict — it only moves when the lock is acquired, which is what stops a
-concurrent list delete deadlocking the save. The measurement is in that file.
+`writeProductModifiers` (`packages/catalogue/src/product-modifiers.ts`) is what writes it, and it
+takes no lock at all. On PostgreSQL it took a `for key share` ROW lock on each list the body names,
+moved ahead of the attachment insert rather than left to the insert's own foreign-key check, so that
+a concurrent delete of one of those lists could not slip between the two. There is no concurrent
+delete to slip in. `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside the venue
+file's write queue, and that queue admits one write transaction on the file at a time
+(`packages/store/src/write-queue.ts`), so the existence read `listExists` makes is still true when
+the insert a few statements later runs. The file says so at `listExists` and again at
+`assertRefsExist`, and both point at `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`),
+which carries the mechanism and the receipt for the whole package.
 
 ### Publishing an extras list on a menu
 
@@ -371,35 +376,52 @@ set that hold what an order froze.
 | `sale_lines.option_snapshots` | core | a filed line's frozen options answers |
 
 All seven catalogue tables are classified `state` in `CATALOGUE_CLASSIFICATION`
-(`packages/catalogue/src/classification.ts`); none is append-only, so none carries a
-`reject_mutation()` trigger. The app role reads, writes and removes rows and never owns or truncates
-a table — the grants are in `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql`, and
-`packages/fiscal-verifactu/src/privileges.expected.ts` pins them against the live catalog.
+(`packages/catalogue/src/classification.ts`); none is declared `appendOnly()`, so none carries the
+`RAISE(ABORT)` trigger pair `applyMigrations` installs after each set migrates
+(`installAppendOnlyTriggers`, `packages/store/src/append-only.ts`).
+
+**Nothing in the database refuses a write to any of these tables.** The sentence that stood here
+named a grant matrix and the migration file carrying the grants; both premises are gone. The
+migration is gone outright — the thirteen PostgreSQL chains became one SQLite baseline per set, and
+`packages/catalogue/drizzle/` holds `0000_baseline.sql` and nothing else — and no `GRANT` statement
+survives anywhere in the migrations: `grep -rln GRANT packages/*/drizzle/*.sql` matched no file on
+2026-09-23. `packages/fiscal-verifactu/src/privileges.expected.ts` does still exist, but its own
+header now describes itself as a frozen record of what `app_user` was granted BEFORE the storage
+switch, unverified, with nothing checking those letters against anything — there is no role left to
+read them back from, and its single live consumer is `scripts/write-path-tables.test.ts`, which uses
+only the four tables marked read-only and none of the catalogue's.
 
 An extras pick's child line is the record on both sides: on an OPEN order it names the product it
 is, and on a FILED sale it carries the frozen names with no `product_id` at all, because `sale_lines`
 has no such column. That difference is deliberate and is what _On the filed sale_ above describes.
 
-This feature takes no advisory lock OF ITS OWN and asks no JSON containment question, but it does
-reach an advisory lock through a shared helper, and that lock is what the SQLite storage switch has
-to deal with here. `createOptionList` and `updateOptionList` (`packages/catalogue/src/options.ts`)
-and `createExtraList` and `updateExtraList` (`packages/catalogue/src/extras.ts`) each call their own
-file's `validateNames`, which calls `findContentTranslationGap`
-(`packages/catalogue/src/content-languages.ts`), whose first statement is `lockContentLanguages` —
-`select pg_advisory_xact_lock(hashtextextended('content-languages', 0))`. Both `validateNames`
-return before touching the database when the body carries no customer-facing name map at all (an
-options list has one map of its own plus one per label; an extras list has only its own), so a save
-carrying none of them reaches no lock. The lock is not this feature's to remove:
-`writeContentLanguages` in the same file takes it, and so does every save that goes through that
-file's `validateContentTranslations` — categories, units, variants, product names and image names
-among them.
+This feature takes no lock of any kind, and asks no JSON containment question. That is a change: on
+PostgreSQL it reached an advisory lock through a shared helper, and it took row locks of its own,
+and the storage switch removed both — so what follows is the shape to expect when you open these
+files, not something still to deal with.
 
-The serialisation these files DO take of their own is a row lock, and `extras.ts` takes two:
-`lockExtraList` is a `select … for update` on the list row, and `setMenuItemExtraLists` opens with
-a `select … for update` on the menu OFFER's `menu_items` row before it locks any list — the first
-of the three locks whose deliberate order that file's own comment sets out. `lockList`
-(`product-modifiers.ts`) takes a `select … for key share` on each list a product attaches, and
-`options.ts` takes no lock of its own at all.
+The advisory lock was reached, not taken. `createOptionList` and `updateOptionList`
+(`packages/catalogue/src/options.ts`) and `createExtraList` and `updateExtraList`
+(`packages/catalogue/src/extras.ts`) each call their own file's `validateNames`, which calls
+`findContentTranslationGap` (`packages/catalogue/src/content-languages.ts`). That function used to
+open with `select pg_advisory_xact_lock(...)`; today its first database statement is the plain
+configuration read, and its header says what the lock used to arrange and what arranges it instead —
+`withTransaction` opening the body inside the venue file's write queue, which admits one write
+transaction at a time. `grep -rn pg_advisory packages/catalogue` on 2026-09-23 matched three lines,
+all of them comments in test files saying what was dropped. Both `validateNames` still return before
+touching the database when the body carries no customer-facing name map at all (an options list has
+one map of its own plus one per label; an extras list has only its own).
+
+The row locks are gone the same way, and `packages/catalogue` now contains no `for update` or
+`for key share` in code — `grep -rn 'for key share\|for update\|\.for('` over
+`packages/catalogue/src` and `packages/catalogue/test` on 2026-09-23 matched comments only, each one
+saying what the clause used to do. The two functions this paragraph used to name no longer exist
+under those names: `lockExtraList` is now `assertExtraListForWrite`, which does the 404 it always
+also did and nothing more, and `lockList` in `product-modifiers.ts` is now `listExists`.
+`setMenuItemExtraLists` no longer opens by locking the menu offer's `menu_items` row; its header
+records that the offer's `for update` arranged two saves of the same offer running one after the
+other, and that the write queue arranges that now. `options.ts` took no lock of its own before and
+takes none now.
 
 `scripts/catalogue-engine-neutral.test.ts` guards the narrow half of this: the feature's own files
 carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among them carry no
@@ -407,4 +429,12 @@ carry none of `pg_advisory_*_lock` or `@>` / `<@`, and the catalogue files among
 sale-path files declare three enums that predate this feature by two months, and the guard's header
 is the receipt for leaving them alone. It is weaker than that sounds. It reads the files as TEXT, so
 it cannot tell code from a comment; it covers only the files it names; and `content-languages.ts` is
-not one of them, which is how the lock traced above sits outside it.
+not one of them, which is how the helper traced above sat outside it while it still took the lock.
+
+**Nothing at all guards the row locks staying gone here.** The clause is banned by
+`scripts/postgres-sql-residue.test.ts`, whose `ROOTS` are `apps/server/src`,
+`packages/reporting/src`, `packages/reporting/test`, `packages/workforce/src` and
+`packages/scheduler/src` — `packages/catalogue` is not one of them, a gap that guard's own pattern
+comment and `catalogue-engine-neutral`'s header both state. So a `for update` written back into
+these files is caught by review, or by the engine when the statement is prepared, and by no guard
+in between.

@@ -1,19 +1,12 @@
 {
   "version": "7",
-  "dialect": "postgresql",
+  "dialect": "sqlite",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1789497916265,
-      "tag": "0000_venue-service_baseline",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1789497916789,
-      "tag": "0001_venue-service_baseline_sql",
+      "version": "6",
+      "when": 1790008017000,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

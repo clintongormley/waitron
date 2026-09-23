@@ -9,11 +9,22 @@ import {
   createProduct,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import { asAppUser, CORE_MIGRATIONS, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  asAppUser,
+  CORE_MIGRATIONS,
+  floorZones,
+  kitchenStations,
+  locations,
+  tills,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
+import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId, tillId as brandTillId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   copyOrderServiceContext,
@@ -55,14 +66,70 @@ async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * The venue's fixture rows, through the insert BUILDER rather than raw SQL.
+ *
+ * Two things the raw statements relied on PostgreSQL for are gone. `array['en-GB']` is refused at
+ * prepare — `near "['en-GB']": syntax error` — because SQLite has no array literal and
+ * `invoice_locales` is now a JSON array in a TEXT column that `labelList` encodes. And each table's
+ * `id` and `created_at` are JavaScript `$defaultFn` generators rather than SQL DEFAULTs, which only
+ * the builder runs; measured, a raw insert is refused with `NOT NULL constraint failed: <table>.id`.
+ * Same shape as every converted fixture in the tree (`packages/identity/test/fixtures.ts`). Each
+ * returns the new row's id, which is the one thing every call site read off the raw result.
+ */
+async function seedLocation(name: string): Promise<string> {
+  const [row] = await db
+    .insert(locations)
+    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+    .returning({ id: locations.id });
+  return row!.id;
+}
+
+async function seedZone(locationId: LocationId, name: string): Promise<string> {
+  const [row] = await db
+    .insert(floorZones)
+    .values({ locationId, name })
+    .returning({ id: floorZones.id });
+  return row!.id;
+}
+
+async function seedStation(locationId: LocationId, name: string, active = true): Promise<string> {
+  const [row] = await db
+    .insert(kitchenStations)
+    .values({ locationId, name, active })
+    .returning({ id: kitchenStations.id });
+  return row!.id;
+}
+
+async function seedTill(locationId: LocationId, name: string): Promise<string> {
+  const [row] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
+  return row!.id;
+}
+
+/**
+ * The drizzle session the two query-count cases below spy on.
+ *
+ * `tx.session`, not `tx._.session`. Drizzle's PostgreSQL database put the session on `_` beside the
+ * schema; its SQLite database assigns `this.session` and puts only
+ * `{ schema, fullSchema, tableNamesMap }` on `_` (`drizzle-orm/sqlite-core/db.js`, read against
+ * 0.45.2). Measured, the old path handed `vi.spyOn` `undefined`: "The vi.spyOn() function could not
+ * find an object to spy upon". The cast is because `session` is a constructor parameter marked
+ * `@internal`, so it is on the object at runtime and off the published type.
+ */
+const sessionOf = (tx: Transaction) =>
+  (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
+
 async function seedUnitTenant(): Promise<{
   eachUnitId: string;
   kgUnitId: string;
 }> {
+  // Raw SQL still, but with `id` named and the `::jsonb` casts gone: `units.name` and
+  // `abbreviation` are TEXT columns holding JSON here, and the cast is refused at prepare with
+  // `unrecognized token: ":"`. `units.id` has no SQL DEFAULT, for the reason the helpers above give.
   const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
-      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
+    insert into units (id, seed_key, name, abbreviation, precision, hardware_unit) values
+      (${randomUUID()}, 'each', '{"en":"each"}', '{"en":"ea"}', 0, null),
+      (${randomUUID()}, 'kg', '{"en":"kg"}', '{"en":"kg"}', 3, 'kg')
     returning id, seed_key`);
   return {
     eachUnitId: seeded.rows.find((unit) => unit.seed_key === "each")!.id,
@@ -73,11 +140,9 @@ async function seedUnitTenant(): Promise<{
 describe("venue service routing", () => {
   it("reports incomplete active zones and refuses to deactivate their department", async () => {
     await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -86,29 +151,29 @@ describe("venue service routing", () => {
         { name: "Restaurant", defaultServiceMode: "table_tab" },
       );
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
-        { code: "zone.department_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
+        { code: "zone.department_missing", zoneId: zone, zoneName: "Terrace" },
       ]);
 
       await configureZone(
         tx,
         { locationId },
         {
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           departmentId: department.id,
         },
       );
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
-        { code: "zone.menu_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
+        { code: "zone.menu_missing", zoneId: zone, zoneName: "Terrace" },
       ]);
 
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
-      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.menu_empty",
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           zoneName: "Terrace",
           menuId: menu.id,
           menuName: "Terrace menu",
@@ -138,7 +203,7 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           zoneName: "Terrace",
           productId: product.id,
           productName: "Sparkling water",
@@ -153,7 +218,7 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           zoneName: "Terrace",
           productId: product.id,
           productName: "Sparkling water",
@@ -166,7 +231,7 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           zoneName: "Terrace",
           productId: product.id,
           productName: product.id,
@@ -184,10 +249,10 @@ describe("venue service routing", () => {
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([]);
       await expect(deactivateDepartment(tx, { locationId }, department.id)).rejects.toMatchObject({
         code: "department.has_active_zones",
-        params: { departmentId: department.id, zoneId: zone.rows[0]!.id },
+        params: { departmentId: department.id, zoneId: zone },
       });
 
-      await tx.execute(sql`update floor_zones set active = false where id = ${zone.rows[0]!.id}`);
+      await tx.execute(sql`update floor_zones set active = false where id = ${zone}`);
       await expect(
         deactivateDepartment(tx, { locationId }, department.id),
       ).resolves.toBeUndefined();
@@ -199,17 +264,12 @@ describe("venue service routing", () => {
 
   it("routes one cocktail to the bar serving its service zone", async () => {
     await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const upstairsZone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Upstairs') returning id`);
-    const downstairsZone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Downstairs') returning id`);
-    const upstairsBar = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name) values (${locationId}, 'Upstairs bar') returning id`);
-    const downstairsBar = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name) values (${locationId}, 'Downstairs bar') returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const upstairsZone = await seedZone(locationId, "Upstairs");
+    const downstairsZone = await seedZone(locationId, "Downstairs");
+    const upstairsBar = await seedStation(locationId, "Upstairs bar");
+    const downstairsBar = await seedStation(locationId, "Downstairs bar");
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -224,7 +284,7 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: upstairsZone.rows[0]!.id,
+          zoneId: upstairsZone,
           departmentId: department.id,
         },
       );
@@ -232,14 +292,14 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: downstairsZone.rows[0]!.id,
+          zoneId: downstairsZone,
           departmentId: department.id,
           serviceMode: "prepay",
         },
       );
       await expect(listServiceZones(tx, { locationId })).resolves.toEqual([
         {
-          id: downstairsZone.rows[0]!.id,
+          id: downstairsZone,
           name: "Downstairs",
           departmentId: department.id,
           departmentName: "Restaurant and bar",
@@ -247,7 +307,7 @@ describe("venue service routing", () => {
           serviceModeOverride: "prepay",
         },
         {
-          id: upstairsZone.rows[0]!.id,
+          id: upstairsZone,
           name: "Upstairs",
           departmentId: department.id,
           departmentName: "Restaurant and bar",
@@ -269,43 +329,36 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: upstairsZone.rows[0]!.id,
+          zoneId: upstairsZone,
           categoryId: category.id,
-          target: { kind: "station", stationId: upstairsBar.rows[0]!.id },
+          target: { kind: "station", stationId: upstairsBar },
         },
       );
       await createPreparationRoute(
         tx,
         { locationId },
         {
-          zoneId: downstairsZone.rows[0]!.id,
+          zoneId: downstairsZone,
           categoryId: category.id,
-          target: { kind: "station", stationId: downstairsBar.rows[0]!.id },
+          target: { kind: "station", stationId: downstairsBar },
         },
       );
 
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, upstairsZone.rows[0]!.id, [negroni.id]),
-      ).resolves.toEqual(
-        new Map([[negroni.id, { kind: "station", stationId: upstairsBar.rows[0]!.id }]]),
-      );
+        resolvePreparationRoutes(tx, { locationId }, upstairsZone, [negroni.id]),
+      ).resolves.toEqual(new Map([[negroni.id, { kind: "station", stationId: upstairsBar }]]));
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, downstairsZone.rows[0]!.id, [negroni.id]),
-      ).resolves.toEqual(
-        new Map([[negroni.id, { kind: "station", stationId: downstairsBar.rows[0]!.id }]]),
-      );
+        resolvePreparationRoutes(tx, { locationId }, downstairsZone, [negroni.id]),
+      ).resolves.toEqual(new Map([[negroni.id, { kind: "station", stationId: downstairsBar }]]));
     });
   });
 
   it("inherits service mode, lists zone offers, and freezes the order context", async () => {
     const { kgUnitId } = await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Deli counter') returning id`);
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name) values (${locationId}, 'Deli till') returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const zone = await seedZone(locationId, "Deli counter");
+    const till = await seedTill(locationId, "Deli till");
     const nodeId = await seedNode(db, locationId);
 
     await scoped(async (tx) => {
@@ -321,7 +374,7 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           departmentId: department.id,
         },
       );
@@ -356,20 +409,20 @@ describe("venue service routing", () => {
         sectionId: hiddenSection.id,
         grossPrice: "1.00",
       });
-      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
-        where zone_id = ${zone.rows[0]!.id}`);
+        where zone_id = ${zone}`);
 
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number) values ('00000000-0000-4000-8000-000000000001', ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
+        insert into working_orders (id, till_id, node_id, order_number, opened_at) values ('00000000-0000-4000-8000-000000000001', ${brandTillId(till)}, ${nodeId}, 1, ${new Date().toISOString()})`);
       await recordOrderServiceContext(
         tx,
         { locationId },
         "00000000-0000-4000-8000-000000000001",
-        zone.rows[0]!.id,
+        zone,
       );
       const workingLineId = "00000000-0000-4000-8000-000000000002";
       await tx.insert(workingOrderLines).values({
@@ -394,29 +447,27 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           departmentId: department.id,
           serviceMode: "invoice_first",
         },
       );
 
-      await expect(resolveZoneContext(tx, { locationId }, zone.rows[0]!.id)).resolves.toMatchObject(
-        {
-          serviceMode: "invoice_first",
-        },
-      );
+      await expect(resolveZoneContext(tx, { locationId }, zone)).resolves.toMatchObject({
+        serviceMode: "invoice_first",
+      });
       await expect(
         getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
       ).resolves.toEqual({
-        zoneId: zone.rows[0]!.id,
+        zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      const visible = await listZoneOffers(tx, { locationId }, zone.rows[0]!.id);
+      const visible = await listZoneOffers(tx, { locationId }, zone);
       expect(visible.defaultMenuId).toBe(menu.id);
       expect(visible.menus).toEqual([{ id: menu.id, name: "Deli takeaway", isDefault: true }]);
       await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
-        zoneId: zone.rows[0]!.id,
+        zoneId: zone,
         departmentId: department.id,
         serviceMode: "invoice_first",
       });
@@ -426,11 +477,13 @@ describe("venue service routing", () => {
         productId: ham.id,
         grossPrice: "24.90",
       });
+      await expect(resolveZoneOffer(tx, { locationId }, zone, offer.id)).resolves.toMatchObject({
+        id: offer.id,
+        productId: ham.id,
+        grossPrice: "24.90",
+      });
       await expect(
-        resolveZoneOffer(tx, { locationId }, zone.rows[0]!.id, offer.id),
-      ).resolves.toMatchObject({ id: offer.id, productId: ham.id, grossPrice: "24.90" });
-      await expect(
-        resolveZoneOffer(tx, { locationId }, zone.rows[0]!.id, hiddenOffer.id),
+        resolveZoneOffer(tx, { locationId }, zone, hiddenOffer.id),
       ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
       await tx.execute(sql`
         update catalogues set name = 'Renamed menu'
@@ -472,7 +525,7 @@ describe("venue service routing", () => {
       const copiedOrderId = "00000000-0000-4000-8000-000000000003";
       const copiedLineId = "00000000-0000-4000-8000-000000000004";
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number) values (${copiedOrderId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 2)`);
+        insert into working_orders (id, till_id, node_id, order_number, opened_at) values (${copiedOrderId}, ${brandTillId(till)}, ${nodeId}, 2, ${new Date().toISOString()})`);
       await tx.insert(workingOrderLines).values({
         id: copiedLineId,
         workingOrderId: copiedOrderId,
@@ -496,7 +549,7 @@ describe("venue service routing", () => {
       );
       await copyWorkingLineContext(tx, { locationId }, workingLineId, copiedLineId);
       await expect(getOrderServiceContext(tx, { locationId }, copiedOrderId)).resolves.toEqual({
-        zoneId: zone.rows[0]!.id,
+        zoneId: zone,
         departmentId: department.id,
         serviceMode: "prepay",
       });
@@ -515,16 +568,10 @@ describe("venue service routing", () => {
     // NULL`. This proves the cross-package sentinel decision: an empty-string id would be rejected by
     // the uuid column on the first sale of a no-unit product.
     await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${locationId}, 'Deli counter') returning id`);
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Deli till') returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const zone = await seedZone(locationId, "Deli counter");
+    const till = await seedTill(locationId, "Deli till");
     const nodeId = await seedNode(db, locationId);
 
     await scoped(async (tx) => {
@@ -533,11 +580,7 @@ describe("venue service routing", () => {
         { locationId },
         { name: "Deli", defaultServiceMode: "prepay" },
       );
-      await configureZone(
-        tx,
-        { locationId },
-        { zoneId: zone.rows[0]!.id, departmentId: department.id },
-      );
+      await configureZone(tx, { locationId }, { zoneId: zone, departmentId: department.id });
       const menu = await createCatalogue(tx, { name: "Deli takeaway" });
       // A product with NO stored unit: create it, then delete its product_units row so the offer read
       // resolves it to the synthetic Each unit (the sentinel-id path).
@@ -560,19 +603,19 @@ describe("venue service routing", () => {
         sectionId: section.id,
         grossPrice: "1.20",
       });
-      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone, menu.id, {
         makeDefault: true,
       });
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
-        where zone_id = ${zone.rows[0]!.id}`);
+        where zone_id = ${zone}`);
 
       const orderId = "00000000-0000-4000-8000-000000000101";
       const workingLineId = "00000000-0000-4000-8000-000000000102";
       await tx.execute(sql`
-        insert into working_orders (id, till_id, node_id, order_number)
-        values (${orderId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
-      await recordOrderServiceContext(tx, { locationId }, orderId, zone.rows[0]!.id);
+        insert into working_orders (id, till_id, node_id, order_number, opened_at)
+        values (${orderId}, ${brandTillId(till)}, ${nodeId}, 1, ${new Date().toISOString()})`);
+      await recordOrderServiceContext(tx, { locationId }, orderId, zone);
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
         workingOrderId: orderId,
@@ -604,11 +647,9 @@ describe("venue service routing", () => {
 
   it("refuses missing configuration and supports explicit no-preparation", async () => {
     await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const zone = await seedZone(locationId, "Terrace");
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -635,35 +676,30 @@ describe("venue service routing", () => {
           tx,
           { locationId },
           {
-            zoneId: zone.rows[0]!.id,
+            zoneId: zone,
             departmentId: "00000000-0000-4000-8000-000000000099",
           },
         ),
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
-        allowMenuInZone(
-          tx,
-          { locationId },
-          zone.rows[0]!.id,
-          "00000000-0000-4000-8000-000000000099",
-        ),
+        allowMenuInZone(tx, { locationId }, zone, "00000000-0000-4000-8000-000000000099"),
       ).rejects.toMatchObject({ code: "catalogue.not_found" });
 
       const menu = await createCatalogue(tx, { name: "Terrace" });
-      await expect(
-        allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id),
-      ).rejects.toMatchObject({ code: "service_zone.not_found" });
+      await expect(allowMenuInZone(tx, { locationId }, zone, menu.id)).rejects.toMatchObject({
+        code: "service_zone.not_found",
+      });
       await configureZone(
         tx,
         { locationId },
         {
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           departmentId: department.id,
           serviceMode: "ticket_then_pay",
         },
       );
-      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id);
-      await expect(listZoneOffers(tx, { locationId }, zone.rows[0]!.id)).resolves.toEqual({
+      await allowMenuInZone(tx, { locationId }, zone, menu.id);
+      await expect(listZoneOffers(tx, { locationId }, zone)).resolves.toEqual({
         defaultMenuId: null,
         menus: [{ id: menu.id, name: "Terrace", isDefault: false }],
         offers: [],
@@ -690,17 +726,17 @@ describe("venue service routing", () => {
         },
       );
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone, [product.id]),
       ).resolves.toEqual(new Map([[product.id, { kind: "no_preparation" }]]));
       await deletePreparationRoute(tx, { locationId }, routeId);
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone, [product.id]),
       ).rejects.toMatchObject({
         code: "route.missing",
-        params: { zoneId: zone.rows[0]!.id, productId: product.id },
+        params: { zoneId: zone, productId: product.id },
       });
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [
+        resolvePreparationRoutes(tx, { locationId }, zone, [
           "00000000-0000-4000-8000-000000000099",
         ]),
       ).rejects.toMatchObject({
@@ -712,13 +748,10 @@ describe("venue service routing", () => {
 
   it("refuses a missing route and a route to an inactive station", async () => {
     await seedUnitTenant();
-    const location = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-    const locationId = brandLocationId(location.rows[0]!.id);
-    const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name) values (${locationId}, 'Interior') returning id`);
-    const station = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (location_id, name, active) values (${locationId}, 'Closed bar', false) returning id`);
+    const location = await seedLocation("Venue");
+    const locationId = brandLocationId(location);
+    const zone = await seedZone(locationId, "Interior");
+    const station = await seedStation(locationId, "Closed bar", false);
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -733,7 +766,7 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         {
-          zoneId: zone.rows[0]!.id,
+          zoneId: zone,
           departmentId: department.id,
         },
       );
@@ -748,10 +781,10 @@ describe("venue service routing", () => {
         vatClass: "general",
       });
       await expect(
-        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone, [product.id]),
       ).rejects.toMatchObject({
         code: "route.missing",
-        params: { zoneId: zone.rows[0]!.id, productId: product.id },
+        params: { zoneId: zone, productId: product.id },
       });
       await expect(
         createPreparationRoute(
@@ -759,7 +792,7 @@ describe("venue service routing", () => {
           { locationId },
           {
             categoryId: category.id,
-            target: { kind: "station", stationId: station.rows[0]!.id },
+            target: { kind: "station", stationId: station },
           },
         ),
       ).rejects.toMatchObject({ code: "route.station_inactive" });
@@ -769,36 +802,34 @@ describe("venue service routing", () => {
 
 async function seedRoutingVenue() {
   await seedUnitTenant();
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
-  const otherLocation = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Second venue', array['en-GB'], 'Hospitality') returning id`);
-  const locationId = brandLocationId(location.rows[0]!.id);
-  const zone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (location_id, name) values (${locationId}, 'Dining room') returning id`);
-  const otherZone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
+  const location = await seedLocation("Venue");
+  const otherLocation = await seedLocation("Second venue");
+  const locationId = brandLocationId(location);
+  const zone = await seedZone(locationId, "Dining room");
+  const otherZone = await seedZone(locationId, "Terrace");
   const cfg = { locationId };
   await scoped(async (tx) => {
     const department = await createDepartment(tx, cfg, {
       name: "Restaurant",
       defaultServiceMode: "table_tab",
     });
-    await configureZone(tx, cfg, { zoneId: zone.rows[0]!.id, departmentId: department.id });
-    await configureZone(tx, cfg, { zoneId: otherZone.rows[0]!.id, departmentId: department.id });
+    await configureZone(tx, cfg, { zoneId: zone, departmentId: department.id });
+    await configureZone(tx, cfg, { zoneId: otherZone, departmentId: department.id });
   });
   return {
     cfg,
-    otherLocationId: otherLocation.rows[0]!.id,
-    zoneId: zone.rows[0]!.id,
-    otherZoneId: otherZone.rows[0]!.id,
+    otherLocationId: otherLocation,
+    zoneId: zone,
+    otherZoneId: otherZone,
   };
 }
 
 async function insertStation(tx: Transaction, locationId: string, name: string): Promise<string> {
-  const row = await tx.execute<{ id: string }>(sql`
-    insert into kitchen_stations (location_id, name) values (${locationId}, ${name}) returning id`);
-  return row.rows[0]!.id;
+  const [row] = await tx
+    .insert(kitchenStations)
+    .values({ locationId: brandLocationId(locationId), name })
+    .returning({ id: kitchenStations.id });
+  return row!.id;
 }
 
 async function productWithCategory(
@@ -905,7 +936,22 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  it("matches a product id however the caller spells it, keyed by the caller's spelling", async () => {
+  /**
+   * WHAT THIS CASE LOST. It used to pass a THIRD spelling, `{` + the 32 digits with no hyphens +
+   * `}`, and expect it to resolve to the same product and be folded into the first spelling. That
+   * spelling was accepted because PostgreSQL's uuid INPUT PARSER accepted it, and no parser accepts
+   * it now — the id column is plain `text` and the bytes are compared as they arrive. So the
+   * braced form is no longer a spelling of this id at all, and the case pins what it does instead:
+   * `shared.invalid_id`, refused by `normaliseUuid` before any query runs.
+   *
+   * Nothing was weakened to get there. The surviving half is CASE, which is the half that was
+   * actually broken: before `storedUuid` was taken through to SQL, the upper-cased id below was
+   * refused `route.subject_not_found` because the bind value never matched the stored row. Both
+   * halves of the old case's subject are still checked — an id still resolves however it is cased,
+   * and two spellings of one product still collapse to the first — with two cased spellings
+   * standing where the cased and braced pair stood.
+   */
+  it("matches a product id however the caller CASES it, keyed by the caller's spelling", async () => {
     const { cfg, zoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const grill = await insertStation(tx, cfg.locationId, "Grill");
@@ -915,12 +961,23 @@ describe("resolvePreparationRoutes", () => {
       await createPreparationRoute(tx, cfg, { productId: routed.id, target: station(grill) });
       const upper = routed.id.toUpperCase();
       const braced = `{${routed.id.replaceAll("-", "")}}`;
+      expect(upper).not.toBe(routed.id);
 
       await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper])).resolves.toEqual(
         new Map([[upper, station(grill)]]),
       );
-      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, braced])).resolves.toEqual(
+      // Two spellings of one product: the map carries the FIRST one the caller used, once.
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, routed.id])).resolves.toEqual(
         new Map([[upper, station(grill)]]),
+      );
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [routed.id, upper])).resolves.toEqual(
+        new Map([[routed.id, station(grill)]]),
+      );
+      await expect(rejection(resolvePreparationRoutes(tx, cfg, zoneId, [braced]))).resolves.toEqual(
+        {
+          code: "shared.invalid_id",
+          params: { kind: "ProductId", value: braced },
+        },
       );
       await expect(
         rejection(resolvePreparationRoutes(tx, cfg, zoneId, [unrouted.id.toUpperCase()])),
@@ -984,8 +1041,8 @@ describe("resolvePreparationRoutes", () => {
       );
       // createPreparationRoute refuses a route to another location's station, so it is written directly.
       await tx.execute(sql`
-        insert into preparation_routes (location_id, product_id, station_id)
-        values (${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
+        insert into preparation_routes (id, location_id, product_id, station_id)
+        values (${randomUUID()}, ${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
 
       await expect(
         rejection(resolvePreparationRoutes(tx, cfg, zoneId, [routedElsewhere.id])),
@@ -1014,7 +1071,7 @@ describe("resolvePreparationRoutes", () => {
         expected.set(product.id, station(stationId));
       }
       const productIds = [...expected.keys()];
-      const prepared = vi.spyOn(tx._.session, "prepareQuery");
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await expect(resolvePreparationRoutes(tx, cfg, zoneId, [productIds[0]!])).resolves.toEqual(
         new Map([[productIds[0]!, expected.get(productIds[0]!)]]),
@@ -1032,7 +1089,7 @@ describe("resolvePreparationRoutes", () => {
   it("returns an empty map without querying when there are no products", async () => {
     const { cfg } = await seedRoutingVenue();
     await scoped(async (tx) => {
-      const prepared = vi.spyOn(tx._.session, "prepareQuery");
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       await expect(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [])).resolves.toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
 

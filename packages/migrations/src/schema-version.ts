@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { type Database, pgErrorCode } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { type MigrationSet, resolveExistingMigrationsFolder } from "./manifest.js";
+import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
 import "./errors.js";
 
 /**
@@ -25,7 +25,7 @@ const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
  * Read synchronously: it is called from planning code, not a hot path, and a journal that cannot be
  * read is a packaging fault that should fail loudly and immediately, not resolve to a wrong number.
  */
-export function expectedSchemaVersion(set: MigrationSet, root: string | null): number {
+export function expectedSchemaVersion(set: MigrationSetSource, root: string | null): number {
   // Shared with `migrationOptionsFor`: the same journal-existence guard and the same classified
   // `migrations.set_missing`, so a set whose journal is absent fails LOUD here rather than throwing
   // a bare `ENOENT` out of `readFileSync`. (A journal that is PRESENT but unparseable still escapes
@@ -41,26 +41,35 @@ export function expectedSchemaVersion(set: MigrationSet, root: string | null): n
 /**
  * The schema version a node's DATABASE has — the row count of the module's drizzle journal table
  * (`set.table`), since drizzle writes exactly one row per applied migration. Returns 0 when the
- * table does not exist yet (SQLSTATE 42P01, `undefined_table`): an unmigrated module is at version
- * 0, not an error.
+ * table does not exist yet: an unmigrated module is at version 0, not an error.
  *
- * Any OTHER driver error is rethrown, never swallowed as 0 — a connection failure reported as "zero
- * migrations applied" would let a caller conclude a fully-migrated database needs re-migrating.
+ * **The catalogue is asked, rather than a refusal being caught.** On PostgreSQL the absent table
+ * arrived as SQLSTATE `42P01` and nothing else did. `node:sqlite` carries no such value: measured
+ * on Node v26.7.0 through this tree's own handle, `no such table: __drizzle_migrations_absent`
+ * arrives as `code: "ERR_SQLITE_ERROR"`, `errcode: 1`, `errstr: "SQL logic error"` — the SAME three
+ * values as `unrecognized token: ":"` and as `no such column: "nope"`, taken as controls in the
+ * same run. Only the message text separates them, so a catch would have to match prose. Asking
+ * `sqlite_master` answers the question directly, and leaves every error from the count itself to
+ * propagate.
+ *
+ * Any driver error is therefore rethrown, never swallowed as 0 — a closed connection reported as
+ * "zero migrations applied" would let a caller conclude a fully-migrated database needs
+ * re-migrating.
  */
 export async function appliedSchemaVersion(
   db: Pick<Database, "execute">,
-  set: MigrationSet,
+  set: MigrationSetSource,
 ): Promise<number> {
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }
-  try {
-    const result = await db.execute<{ n: number }>(
-      sql.raw(`select count(*)::int as n from "${set.table}"`),
-    );
-    return result.rows[0]!.n;
-  } catch (error) {
-    if (pgErrorCode(error) === "42P01") return 0;
-    throw error;
-  }
+  // The table name is a VALUE here, so it binds; it is the `from "<table>"` below that cannot.
+  const present = await db.execute<{ n: number }>(
+    sql`select cast(count(*) as int) as n from sqlite_master where type = 'table' and name = ${set.table}`,
+  );
+  if (present.rows[0]!.n === 0) return 0;
+  const result = await db.execute<{ n: number }>(
+    sql.raw(`select cast(count(*) as int) as n from "${set.table}"`),
+  );
+  return result.rows[0]!.n;
 }

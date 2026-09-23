@@ -13,7 +13,14 @@ import { StripeHostedProvider } from "./hosted-provider.js";
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await pg.db.execute(sql`truncate payment_refunds, payments cascade`);
+  // One `delete from` per table in place of `truncate payment_refunds, payments cascade`: SQLite
+  // has neither TRUNCATE nor CASCADE, and `node:sqlite` prepares one statement at a time. Child
+  // before parent, because `payment_refunds.payment_id` references `payments(id)` ON DELETE
+  // restrict (`packages/payments/drizzle/0000_baseline.sql`), so deleting `payments` first is
+  // refused with `FOREIGN KEY constraint failed`. Nothing else references either table, so the
+  // CASCADE this replaces reached no third table. Same repair as `packages/payments/src/store.test.ts`.
+  await pg.db.execute(sql`delete from payment_refunds`);
+  await pg.db.execute(sql`delete from payments`);
 });
 
 async function seed(): Promise<Seeded> {

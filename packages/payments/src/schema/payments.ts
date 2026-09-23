@@ -1,6 +1,19 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, pgEnum, unique } from "drizzle-orm/pg-core";
-import { id, label, money, nodes, sales, table, tsString, workingOrders } from "@waitron/db";
+import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  enumCheck,
+  enumType,
+  id,
+  label,
+  money,
+  newId,
+  nodes,
+  nowIso,
+  sales,
+  table,
+  tsString,
+  workingOrders,
+} from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
 
 /**
@@ -11,17 +24,18 @@ import { cardReaders } from "./card-readers.js";
  * and resolves after (T1/T2) — neutral across every such adapter, never adapter-specific
  * vocabulary. `accepted_offline`/`settled`/`declined` are Cycle A's offline values, added here with
  * this cycle's later tasks giving them real behavior. `initiated` is Mode 3 (async / hosted): the
- * minted-but-unpaid hosted payment. The two-phase `authorized` state is still a later plan, to be
- * added via ALTER TYPE when it lands. Mirrors `PaymentState` in ../provider.ts.
+ * minted-but-unpaid hosted payment. The two-phase `authorized` state is still a later plan; it
+ * lands by adding the value to the list below, which re-derives `payments_state_ck`. Mirrors
+ * `PaymentState` in ../provider.ts.
  */
-export const paymentState = pgEnum("payment_state", [
+export const paymentState = enumType([
   "attempting",
   "captured",
   "voided",
   "refunded",
   "partially_refunded",
   "failed",
-  // Cycle A offline lifecycle — appended (DB value-order is cosmetic; the lifecycle order is
+  // Cycle A offline lifecycle — appended (list order is cosmetic; the lifecycle order is
   // documented in the design). accepted_offline -> (forward) -> settled | declined.
   "accepted_offline",
   "settled",
@@ -41,7 +55,7 @@ export const paymentState = pgEnum("payment_state", [
 export const payments = table(
   "payments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
     // Nullable: the payment row exists before the sale does (the money moves first). Set to the
     // committed sale in the associate-back step.
@@ -55,12 +69,13 @@ export const payments = table(
     paymentRef: label("payment_ref").notNull(),
     /** Optional human acquirer reference — e.g. the operation number a merchant keys off a
      * standalone bank card terminal for an unintegrated (manual) tender. Nullable: only manual
-     * mode, and some integrated adapters, populate it. A reconciliation hook, never validated. */
+     * mode, and some integrated adapters, populate it. A reconciliation hook: its FORMAT is never
+     * validated, and the partial unique below is the one thing constraining it. */
     externalRef: label("external_ref"),
     /** Card-present facts for the separate payment slip — written once at capture by the
-     * provider that supplies them (SumUp), null for cash/manual/offline/failed. Plain text + CHECK,
-     * not a pgEnum: adding an entry-mode value later must not hit the one-transaction ALTER TYPE
-     * trap (CLAUDE.md §2). */
+     * provider that supplies them (SumUp), null for cash/manual/offline/failed. Plain text: only
+     * `card_entry_mode` carries a vocabulary constraint, and the note on that column says why it
+     * is hand-written rather than the enumText/enumCheck pair. */
     cardScheme: label("card_scheme"),
     cardLast4: label("card_last4"),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:
@@ -79,12 +94,19 @@ export const payments = table(
      * retry storm on every sweep — exactly as `envios.reconciled_resubmit_at` bounds the fiscal
      * self-heal. Null means reconcile has not remediated this payment. */
     reconcileRemediatedAt: tsString("reconcile_remediated_at"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // Idempotency: a retried collect cannot double-insert the same provider reference.
     unique("payments_provider_ref_key").on(t.provider, t.paymentRef),
+    // The acquirer reference is a second idempotency anchor, but only where a provider supplies
+    // it: the predicate holds the rows OUT of the index where the column is null, and where the
+    // provider is `manual` — an operation number keyed by hand off a standalone terminal is a
+    // human's transcription, so two manual tenders may legitimately carry the same one.
+    uniqueIndex("payments_provider_external_ref_key")
+      .on(t.provider, t.externalRef)
+      .where(sql`${t.externalRef} is not null and ${t.provider} <> 'manual'`),
     foreignKey({
       columns: [t.workingOrderId],
       foreignColumns: [workingOrders.id],
@@ -117,5 +139,6 @@ export const payments = table(
       "payments_card_entry_mode_ck",
       sql`${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
     ),
+    check("payments_state_ck", enumCheck(t.state)),
   ],
 );

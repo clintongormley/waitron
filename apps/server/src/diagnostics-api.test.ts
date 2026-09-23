@@ -1,10 +1,15 @@
-// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  hashPassword,
+  hashPin,
+  persons,
+  startManagementSession,
+  type PersonRoleValue,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { LogEvent, LogReader } from "./log-file.js";
@@ -17,13 +22,18 @@ import "./errors.js";
 // Exercise diagnostics permission gates, verbosity and limit clamping through the real route.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
+// This counter was here because tenants accumulated for the life of the shared PostgreSQL
+// container. They do not now: the suite gets its own database file and the per-test reset empties
+// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
+// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -73,18 +83,20 @@ async function setupVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.admin, async (tx) => {
+  const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const seedPerson = async (role: string): Promise<string> => {
-      const p = await tx.execute<{ id: string }>(sql`
-          insert into persons (display_name, pin_hash, role)
-          values (${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
-      const session = await startManagementSession(tx, {
-        personId: p.rows[0]!.id,
-      });
+    // Seeded through the table definition rather than raw SQL: `persons.id` and `created_at` are
+    // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns
+    // are NOT NULL — the change `apps/server/src/alerts-api.test.ts:103` took.
+    const seedPerson = async (role: PersonRoleValue): Promise<string> => {
+      const [p] = await tx
+        .insert(persons)
+        .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
+        .returning({ id: persons.id });
+      const session = await startManagementSession(tx, { personId: p!.id });
       return session.id;
     };
     return {
@@ -128,7 +140,7 @@ function mountApp(reader: LogReader): { app: Hono } {
   mountDiagnosticsApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       reader,
       verbosity: createVerbosityController({
         defaultLevel: "info",
@@ -155,7 +167,7 @@ async function post(app: Hono, path: string, cookie: string, body: unknown): Pro
   });
 }
 
-describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Postgres", () => {
+describe("mountDiagnosticsApi — diagnostics.view gate + verbosity", () => {
   it("rejects an unauthenticated caller with 401", async () => {
     const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/recent");

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { id, label, table, tsString } from "@waitron/db";
+import { check } from "drizzle-orm/sqlite-core";
+import { id, label, newId, table, tsString } from "@waitron/db";
 
 /** One short-lived, single-use Google authorization-code ceremony. These rows stay local because
  * the browser must return to the node that issued the state and PKCE verifier. */
@@ -10,7 +10,7 @@ import { id, label, table, tsString } from "@waitron/db";
 export const googleOidcStates = table(
   "google_oidc_states",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Names a row in the VENUE's `persons` and carries no foreign key: `local` -> `state` would
     // cross the two database files (guard: `scripts/two-file-foreign-keys.test.ts`). It is null for
     // a login ceremony, and for a link it is the person `verifyOwnCredentials` returned.

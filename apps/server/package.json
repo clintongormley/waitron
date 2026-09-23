@@ -17,7 +17,9 @@
     "build": "node scripts/copy-migrations.mjs && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/server.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild scripts/record-one-sale.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/record-one-sale.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild scripts/register-till.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/register-till.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild scripts/settle-invoice-first.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/settle-invoice-first.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/bin-recovery.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/bin-recovery.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/bin-break-glass.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/bin-break-glass.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/bin-restore.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/bin-restore.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/bin-rejoin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/bin-rejoin.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild src/node-entry.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/node-entry.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "dev": "node scripts/dev-server.mjs",
     "dev:setup": "tsx scripts/dev-setup.ts",
+    "dev:reset": "tsx scripts/dev-setup.ts --reset",
     "dev:onboard": "tsx scripts/dev-onboard.ts",
+    "dev:reset:onboard": "tsx scripts/dev-onboard.ts --reset",
     "test": "vitest run",
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
     "test:watch": "vitest",
@@ -28,13 +30,9 @@
     "lint": "eslint .",
     "demo:daily-close": "tsx scripts/daily-close-demo.ts",
     "demo:daily-close-z": "tsx scripts/daily-close-z-demo.ts",
-    "demo:catalogue": "tsx scripts/catalogue-demo.ts",
     "demo:modelo-303": "tsx scripts/modelo-303-demo.ts",
     "demo:allergens": "tsx scripts/allergens-demo.ts",
-    "demo:recipes": "tsx scripts/recipes-demo.ts",
-    "demo:till": "tsx scripts/till-demo.ts",
-    "demo:park-retrieve": "tsx scripts/park-retrieve-demo.ts",
-    "demo:card": "tsx scripts/integrated-card-demo.ts"
+    "demo:recipes": "tsx scripts/recipes-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
@@ -66,6 +64,7 @@
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "@waitron/tunnel": "workspace:*",
+    "@waitron/venue-service": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
     "drizzle-orm": "^0.45.2",

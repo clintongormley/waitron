@@ -182,11 +182,27 @@ declarations. It has its own name (all three of them), price, availability and i
 
 The image library refuses to delete a photo a variant still uses, and lists the variant among the
 uses it shows you — `listImageUsages` and `deleteImage` in `packages/media/src/images.ts` both cover
-`product_variants.image`. **That protection is application-level only.** Unlike `products.image`,
-which carries a real foreign key to `media_images` (declared in the media set's baseline,
-`packages/media/drizzle/0001_media_baseline_sql.sql`), `product_variants.image` has none: it is a
-plain `text` column, declared in `packages/catalogue/drizzle/0000_catalogue_baseline.sql`. So a delete that does not go through
-`deleteImage` is not stopped by the database.
+`product_variants.image`. **That protection is application-level only**, and the contrast with
+`products.image` is narrower than it used to be.
+
+`products.image` is protected by the database and `product_variants.image` is not. But
+`products.image` no longer carries a real foreign key: on PostgreSQL it was
+`products_media_image_fk`, `REFERENCES media_images (filename) ON DELETE RESTRICT`, written by hand
+into the media set's baseline; regenerating every migration set for the storage switch dropped it,
+and `packages/media/drizzle/0001_image_references.sql` brings it back as **four triggers** instead —
+one on insert, one on an update of `image`, one on deleting the parent image, one on renaming it.
+That file's own header states what a trigger is not, and two of its points matter to anyone reading
+this page: `pragma foreign_key_list('products')` does not list the rule, so nothing that enumerates
+keys from the engine sees it; and the refusal arrives as errcode 1811
+(`SQLITE_CONSTRAINT_TRIGGER`), not 787 (`SQLITE_CONSTRAINT_FOREIGNKEY`). Guard:
+`packages/media/src/image-references.test.ts`.
+
+`product_variants.image` has no rule at all — neither a key nor a trigger. It is a plain label
+column declared in the TypeScript schema (`packages/catalogue/src/schema/variants.ts`), which says
+so at the column, and the image-references migration says in as many words that leaving it
+unguarded is deliberate: it carried no key on PostgreSQL either, so guarding it now would be a new
+rule rather than a restoration. So a delete that does not go through `deleteImage` is not stopped by
+the database.
 
 ## The editor form
 

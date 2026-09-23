@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { asAppUser, captureError, locations, nodes, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
@@ -21,57 +22,72 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 const WRITERS = 20;
 
 /**
- * Exercise node-keyed chain and series allocation using independent PostgreSQL connections.
- * PGlite serialises queries onto one backend and cannot exercise contention.
- * The shared global setup requires Docker before any worker starts.
+ * Node-keyed chain and series allocation, with the appends started together rather than awaited in
+ * turn.
+ *
+ * TWO THINGS LOST when this file moved off PostgreSQL:
+ *
+ * - **Twenty independent connections.** There is one connection per venue file, so the twenty
+ *   appends below are twenty transactions started together and serialised by the file's write
+ *   queue (`packages/store/src/write-queue.ts`). What they still prove is the chain's own
+ *   guarantee — twenty distinct, contiguous positions, each linked to its predecessor — which a
+ *   queue that failed to serialise would break. The serialisation itself is observed, with its
+ *   control, in `chain.concurrency.test.ts` ("holds a second appender on the same chain until the
+ *   first commits"); it is not re-observed here.
+ * - **`lets the app role append` is DELETED.** Its subject was the deployment ROLE: it ran
+ *   `appendToChain` under `asAppUser` to show the app role held the grants for a node-keyed
+ *   insert. `asAppUser` is an inert function on this engine
+ *   (`packages/db/src/testing/roles.ts`) and SQLite has no roles, so the case would have asserted
+ *   only that an append returns `secuencia: 1` — which the first case here and
+ *   `chain.concurrency.test.ts` both already assert. The ROLE half is covered by nothing; see the
+ *   note on the deleted `privileges.test.ts`.
  */
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-// No truncate-and-reseed: registros_facturacion's append-only trigger blocks even a CASCADEd
-// TRUNCATE from `tenants`. `seedTill` mints a FRESH node (and nif) per call, so each
-// test's rows are new and independent of whatever a previous test committed.
+// `useVenueDb` empties every data table between tests (`packages/db/src/testing/venue-db.ts`), so
+// the reseed-without-truncate reasoning this file used to carry no longer applies. `seedTill`
+// still mints a FRESH node and nif per call, which keeps `registro_sif`'s identity unique across
+// a file's many `beforeEach`es.
 let node: SeededTill;
 
 beforeEach(async () => {
-  node = await seedTill(suite.admin, "A");
+  node = await seedTill(suite.db, "A");
 });
 
-describe("appendToChain under real contention, keyed by node", () => {
-  // The per-node chain-head lock serialises writers before each reads the next position.
-  // The unique index rejects duplicate positions; this case checks concurrent allocation.
-  it("assigns 20 concurrent appends distinct positions with no gaps, each chained to its predecessor", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, node, i + 1)));
-      const results = await Promise.all(
-        dbs.map((db, i) =>
-          db.transaction((tx) =>
-            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
-          ),
+describe("appendToChain from many callers started together, keyed by node", () => {
+  // The unique index on (node_id, secuencia) rejects duplicate positions; this case checks the
+  // allocation twenty simultaneously-started callers arrive at.
+  it("assigns 20 simultaneously-started appends distinct positions with no gaps, each chained to its predecessor", async () => {
+    const sales = await Promise.all(
+      Array.from({ length: WRITERS }, (_, i) => seedSale(suite.db, node, i + 1)),
+    );
+    // Started together and NOT awaited in turn.
+    const results = await Promise.all(
+      sales.map((saleId, i) =>
+        withTransaction(suite.db, (tx) =>
+          appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, i + 1, i)),
         ),
-      );
-      // Naive read-then-write committed 3 of 20 on this hardware; anything below 20 is that failure.
-      expect(results).toHaveLength(WRITERS);
+      ),
+    );
+    // Naive read-then-write committed 3 of 20 on this hardware; anything below 20 is that failure.
+    expect(results).toHaveLength(WRITERS);
 
-      const { rows } = await suite.admin.execute<{
-        secuencia: number;
-        huella: string;
-        anterior_huella: string | null;
-        primer_registro: boolean;
-      }>(sql`
-        select secuencia, huella, anterior_huella, primer_registro
-        from registros_facturacion where node_id = ${node.nodeId} order by secuencia
-      `);
-      expect(rows.map((r) => r.secuencia)).toEqual(
-        Array.from({ length: WRITERS }, (_, i) => i + 1),
-      );
-      expect(rows[0]?.primer_registro).toBe(true);
-      // Walk the WHOLE chain — a single crossed pair in the middle is exactly what a lost race makes.
-      for (let i = 1; i < rows.length; i++) {
-        expect(rows[i]?.anterior_huella).toBe(rows[i - 1]?.huella);
-      }
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
+    // `primer_registro` comes back as `0`/`1` from a raw select — it skips drizzle's read mapping —
+    // so the first row is checked against `1`. What is asserted is unchanged.
+    const { rows } = await suite.db.execute<{
+      secuencia: number;
+      huella: string;
+      anterior_huella: string | null;
+      primer_registro: number;
+    }>(sql`
+      select secuencia, huella, anterior_huella, primer_registro
+      from registros_facturacion where node_id = ${node.nodeId} order by secuencia
+    `);
+    expect(rows.map((r) => r.secuencia)).toEqual(Array.from({ length: WRITERS }, (_, i) => i + 1));
+    expect(rows[0]?.primer_registro).toBe(1);
+    // Walk the WHOLE chain — a single crossed pair in the middle is exactly what a lost race makes.
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i]?.anterior_huella).toBe(rows[i - 1]?.huella);
     }
   });
 
@@ -79,20 +95,20 @@ describe("appendToChain under real contention, keyed by node", () => {
   // Before the rekey, each till had its own chain; now the chain is the node's, so sales rung at
   // EITHER till take the next secuencia on the same per-node chain. This did not exist before.
   it("continues one node chain across sales rung at two different tills of that node", async () => {
-    const tillB = await addTillToNode(suite.admin, node, "B");
+    const tillB = await addTillToNode(suite.db, node, "B");
 
     // Alternate the ringing till: A, B, A, B, ... All append to node.nodeId's one chain.
     const rung: SeededTill[] = Array.from({ length: 6 }, (_, i) => (i % 2 === 0 ? node : tillB));
     let sec = 0;
     for (const till of rung) {
       sec += 1;
-      const saleId = await seedSale(suite.admin, till, sec);
-      await suite.admin.transaction((tx) =>
+      const saleId = await seedSale(suite.db, till, sec);
+      await suite.db.transaction((tx) =>
         appendToChain(tx, node.nodeId, altaFor(till.tillId, saleId, sec, sec)),
       );
     }
 
-    const { rows } = await suite.admin.execute<{ secuencia: number; till_id: string }>(sql`
+    const { rows } = await suite.db.execute<{ secuencia: number; till_id: string }>(sql`
       select secuencia, till_id from registros_facturacion
       where node_id = ${node.nodeId} order by secuencia
     `);
@@ -110,7 +126,7 @@ describe("currentSif resolves per node", () => {
     // A second node under nodeA's OWN location and NIF, so the two genuinely share one obligado.
     const sibling = await addSiblingNode();
 
-    const [sifA, sifB] = await suite.admin.transaction(async (tx) => [
+    const [sifA, sifB] = await suite.db.transaction(async (tx) => [
       await currentSif(tx, nodeA.nodeId),
       await currentSif(tx, sibling),
     ]);
@@ -121,12 +137,12 @@ describe("currentSif resolves per node", () => {
     expect(sifA.numeroInstalacion).not.toBe(sifB.numeroInstalacion);
 
     // And distinct chains: an append on nodeA leaves the sibling's chain untouched.
-    const saleId = await seedSale(suite.admin, nodeA, 1);
-    await suite.admin.transaction((tx) =>
+    const saleId = await seedSale(suite.db, nodeA, 1);
+    await suite.db.transaction((tx) =>
       appendToChain(tx, nodeA.nodeId, altaFor(nodeA.tillId, saleId, 1, 1)),
     );
-    const counts = await suite.admin.execute<{ node_id: string; count: number }>(sql`
-      select node_id, count(*)::int as count from registros_facturacion group by node_id
+    const counts = await suite.db.execute<{ node_id: string; count: number }>(sql`
+      select node_id, cast(count(*) as int) as count from registros_facturacion group by node_id
     `);
     const byNode = new Map(counts.rows.map((r) => [r.node_id, r.count]));
     expect(byNode.get(nodeA.nodeId)).toBe(1);
@@ -136,14 +152,24 @@ describe("currentSif resolves per node", () => {
   // Registers a second node beside an existing fixture's and gives it a live SIF, returning
   // its node id. Its own fresh location keeps it a distinct node under the same obligado.
   async function addSiblingNode(): Promise<NodeId> {
-    return suite.admin.transaction(async (tx) => {
-      const loc = await tx.execute<{ id: string }>(sql`
-        insert into locations (name, invoice_locales, operation_description) values ('Sala sib', array['es'], 'Venta en establecimiento') returning id
-      `);
-      const nodeRow = await tx.execute<{ id: string }>(sql`
-        insert into nodes (location_id, name) values (${loc.rows[0]!.id}, 'Node sib') returning id
-      `);
-      const sibling = brandNodeId(nodeRow.rows[0]!.id);
+    return suite.db.transaction(async (tx) => {
+      // Through the tables, not the raw inserts this replaces: `id` and `created_at` are
+      // builder-side `$defaultFn` generators a raw insert never reaches (refused NOT NULL at run
+      // time), and `invoice_locales` is a JSON column here, so the `array['es']` literal is a
+      // syntax error on this engine.
+      const [loc] = await tx
+        .insert(locations)
+        .values({
+          name: "Sala sib",
+          invoiceLocales: ["es"],
+          operationDescription: "Venta en establecimiento",
+        })
+        .returning({ id: locations.id });
+      const [nodeRow] = await tx
+        .insert(nodes)
+        .values({ locationId: loc!.id, name: "Node sib" })
+        .returning({ id: nodes.id });
+      const sibling = brandNodeId(nodeRow!.id);
       // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)
       // via registerSif, so the installation number is minted from the real (NIF, IdSIF) counter
       // rather than hand-picked, and the sibling's cadenas head is seeded the way production does it.
@@ -168,16 +194,16 @@ describe("the series↔node guard (record-sale)", () => {
     return new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
-      db: suite.admin,
+      db: suite.db,
       resolveClient: staticResolver(fakeClient),
     });
   }
 
   it("rejects a sale whose node does not own the series", async () => {
-    const other = await seedTill(suite.admin, "OTH"); // a DIFFERENT node
+    const other = await seedTill(suite.db, "OTH"); // a DIFFERENT node
     const backend = backendFor();
     const error = await captureError(() =>
-      withTransaction(suite.admin, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         // node.seriesId belongs to node.nodeId, but we claim to process on `other.nodeId`.
         return recordSale(
@@ -196,7 +222,7 @@ describe("the series↔node guard (record-sale)", () => {
 
   it("accepts a sale whose node owns the series", async () => {
     const backend = backendFor();
-    const result = await withTransaction(suite.admin, async (tx) => {
+    const result = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(
         tx,
@@ -209,22 +235,9 @@ describe("the series↔node guard (record-sale)", () => {
       );
     });
     expect(result.fiscal.state).toBe("pending");
-    const { rows } = await suite.admin.execute<{ count: number }>(sql`
-      select count(*)::int as count from registros_facturacion where node_id = ${node.nodeId}
+    const { rows } = await suite.db.execute<{ count: number }>(sql`
+      select cast(count(*) as int) as count from registros_facturacion where node_id = ${node.nodeId}
     `);
     expect(rows[0]?.count).toBe(1);
-  });
-});
-
-describe("node references and app-role appends", () => {
-  // Property 5 (design §9.3): the app role can append node-keyed rows under withTransaction; the
-  // (node_id) FK on `sales` blocks a node reference that names no node.
-  it("lets the app role append", async () => {
-    const saleId = await seedSale(suite.admin, node, 1);
-    const appended = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, 1, 1));
-    });
-    expect(appended.secuencia).toBe(1);
   });
 });

@@ -1,13 +1,15 @@
-// Real PostgreSQL checks competing order-number allocators on distinct backends.
-import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// LOSS, from the storage swap: every `asAppUser` wrapper here was the point of the case it sat in
+// — the allocator is the first writer of `working_order_counters`, so running it as the non-owner
+// role was what showed the INSERT and the ON CONFLICT UPDATE both passed that table's grants.
+// SQLite has no roles and no grants (`packages/db/src/testing/roles.ts`), so nothing here says
+// anything about privileges any more.
+import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 import { locations, tenants } from "./schema/tenants.js";
-import { describeEachTarget } from "./testing/harness.js";
-import { useTemplateDb } from "./testing/lifecycle.js";
-import { asAppUser } from "./testing/roles.js";
+import { useVenueDb } from "./testing/venue-db.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -35,31 +37,18 @@ async function seed(db: Database): Promise<void> {
   nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
 }
 
-describeEachTarget("allocateOrderNumber", (target) => {
+describe("allocateOrderNumber", () => {
+  // One migrated database, emptied between tests by the helper's default reset.
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
 
   beforeEach(async () => {
-    // target.create() (testing/harness.ts) returns a freshly migrated, empty
-    // database per test, so no truncate is needed — the same reasoning
-    // allocate-number.test.ts records for dropping its own no-op truncate.
-    db = await target.create();
+    db = suite.db;
     await seed(db);
   });
 
-  // Guarded, per the package convention: without it the pg Pool a postgres
-  // target opens per test is left open when the container stops at
-  // describe-level teardown, surfacing as an unhandled FATAL 57P01 rejection
-  // rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
-  });
-
   it("allocates 1, then 2, for a node", async () => {
-    // Run under the non-owner app role so the INSERT and the ON CONFLICT UPDATE
-    // both pass the counter's WITH CHECK and its SELECT/INSERT/UPDATE grants —
-    // the allocator is the first writer of this table (Task 1's deferred Minor).
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       expect(await allocateOrderNumber(tx, nodeA1)).toBe(1);
       expect(await allocateOrderNumber(tx, nodeA1)).toBe(2);
     });
@@ -74,35 +63,43 @@ describeEachTarget("allocateOrderNumber", (target) => {
   });
 
   it("returns the allocated number as a JS number, not a string", async () => {
-    // next_number is integer, which node-postgres renders as a number. A widening
-    // to bigint, or a RETURNING expression producing numeric, would render as a
-    // string that compares == 1 but not toBe(1) and would reach order_number as
-    // text — the same trap allocate-number.test.ts guards for invoice numbers.
+    // A RETURNING expression that produced a decimal would render as a string that compares == 1
+    // but not toBe(1), and would reach order_number as text — the same trap
+    // allocate-number.test.ts guards for invoice numbers.
     const n = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     expect(typeof n).toBe("number");
   });
 });
 
-// The number of concurrent allocators. Distinct backends (see the pid assertion below), so this is
-// also the connection count.
+// The number of allocators started together.
 const WRITERS = 20;
 
-// Real PostgreSQL only, in its own describe: `describeEachTarget` above would also run this on
-// PGlite, which serialises every query onto ONE backend, so the race never happens and the pass is
-// theatre (CLAUDE.md §4). A clone of the shared container's `core` template; Docker is required —
-// the package globalSetup fails loudly without it, never a silent skip.
-describe("allocateOrderNumber under concurrency", () => {
-  const suite = useTemplateDb({ template: "core" });
+/**
+ * WHAT THIS BLOCK NOW SHOWS, AND WHAT IT NO LONGER DOES.
+ *
+ * On PostgreSQL it opened `WRITERS` separate connections, asserted they were distinct backend
+ * PROCESSES (`pg_backend_pid`), and raced them at one node's counter — a read-then-write allocator
+ * handed the same number out twice there. That whole shape is gone: SQLite has one connection per
+ * file and no backend to have a pid, so `suite.pg.connect()` has no counterpart and the
+ * distinct-pid guard cannot be written at all.
+ *
+ * What the overlapping calls below test instead is that the venue file's WRITE QUEUE serialises
+ * them: `withTransaction` runs each body inside `db.withWriteLock`, and
+ * `packages/store/src/write-queue.ts` issues `begin immediate` and `commit` around it, so the next
+ * caller's transaction does not begin until the previous one has committed. Twenty distinct,
+ * contiguous numbers is what that produces. The receipt for the queue itself, with a control in the
+ * other direction, is `racePair` in `packages/catalogue/test/fixtures.ts`.
+ */
+describe("allocateOrderNumber under overlapping callers", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // The suite shares ONE cloned database (useTemplateDb does not reset between tests) and
-  // working_order_counters cannot be truncated back — its FK chain to `tenants` cascades into
-  // append-only fiscal tables whose BEFORE TRUNCATE trigger blocks the wipe. So mint a FRESH
-  // location + node, leaving the rows independent of any other test's — the same approach
-  // chain.concurrency.test.ts takes for the same reason. The taxpayer row is a singleton, so
-  // `seedTenant` only makes sure it is there.
-  async function freshTenantNode(admin: Database): Promise<{ nodeId: string }> {
-    await seedTenant(admin);
-    const [location] = await admin
+  // A FRESH location + node per case, leaving the rows independent of any other test's.
+  // `working_order_counters` reaches append-only fiscal tables by foreign key, so the PostgreSQL
+  // version could not wipe it between tests; the same shape is kept here. The taxpayer row is a
+  // singleton, so `seedTenant` only makes sure it is there.
+  async function freshTenantNode(db: Database): Promise<{ nodeId: string }> {
+    await seedTenant(db);
+    const [location] = await db
       .insert(locations)
       .values({
         name: "Fixture Location",
@@ -110,40 +107,19 @@ describe("allocateOrderNumber under concurrency", () => {
         operationDescription: "Hostelería",
       })
       .returning({ id: locations.id });
-    const nodeId = await seedNode(admin, brandLocationId(location!.id));
+    const nodeId = await seedNode(db, brandLocationId(location!.id));
     return { nodeId };
   }
 
-  it("hands out distinct numbers to concurrent allocators on distinct backends", async () => {
-    const { nodeId } = await freshTenantNode(suite.admin);
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
-    try {
-      // Load-bearing: distinct backend PROCESSES. On PGlite these collapse onto one and every
-      // assertion below is theatre — this is the guard that the concurrency is real, mirroring
-      // chain.concurrency.test.ts's own distinct-pid check.
-      const pids = await Promise.all(
-        dbs.map(async (db) => {
-          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-          return rows[0]?.pid;
-        }),
-      );
-      expect(new Set(pids).size).toBe(WRITERS);
-
-      // All WRITERS allocate the same node's counter at once, each on its own backend, each as the
-      // app role. A read-then-write allocator would hand the same number out twice here.
-      const results = await Promise.all(
-        dbs.map((db) =>
-          withTransaction(db, async (tx) => {
-            await asAppUser(tx);
-            return allocateOrderNumber(tx, nodeId);
-          }),
-        ),
-      );
-      expect(new Set(results).size).toBe(WRITERS);
-      expect(Math.min(...results)).toBe(1);
-      expect(Math.max(...results)).toBe(WRITERS);
-    } finally {
-      await Promise.all(dbs.map((db) => db.close()));
-    }
+  it("hands out distinct numbers to allocators started together", async () => {
+    const { nodeId } = await freshTenantNode(suite.db);
+    const results = await Promise.all(
+      Array.from({ length: WRITERS }, () =>
+        withTransaction(suite.db, (tx) => allocateOrderNumber(tx, nodeId)),
+      ),
+    );
+    expect(new Set(results).size).toBe(WRITERS);
+    expect(Math.min(...results)).toBe(1);
+    expect(Math.max(...results)).toBe(WRITERS);
   });
 });

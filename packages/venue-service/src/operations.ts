@@ -12,7 +12,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
-import { AppError, type LocationId } from "@waitron/shared";
+import { AppError, type LocationId, normaliseUuid } from "@waitron/shared";
 import {
   departments,
   departmentHours,
@@ -59,6 +59,33 @@ export interface DepartmentHoursInterval {
   closesAt: string;
 }
 
+/**
+ * A venue-local wall-clock time in the one form these columns store: `HH:MM:SS`.
+ *
+ * `opens_at` and `closes_at` were PostgreSQL `time` columns, and the ENGINE turned `09:00` into
+ * `09:00:00` on the way in. `timeOfDay` is plain `text` on this engine
+ * (`packages/db/src/schema/columns.ts`), which stores the bytes it is handed and normalises
+ * nothing, so the normalising moves here, to the write path. Same fix and same reason as
+ * `storedTime` in `packages/bookings/src/bookings.ts`, which took it for `booking_time`.
+ *
+ * Two things rest on one stored form rather than on the seconds themselves.
+ * `department_hours_interval_key` is a unique key over `(department_id, weekday, opens_at,
+ * closes_at)`, and text compares byte for byte: two spellings of one interval would sit in that
+ * key as two different intervals. And every read of a STORED one of these values in
+ * `./dashboard/venue-operations-screen.ts` slices it to five characters, to fill an
+ * `<input type="time">` and to display — code written against `HH:MM:SS`, which would hand that
+ * input a four-character time if the seconds were absent. (The reads near that file's save handler
+ * are of the form's own fields, not of a stored row, and are `HH:MM` by the input type.)
+ *
+ * Only the seconds are supplied, because the shorter form is the only one that can arrive.
+ * `CLOCK_TIME` in `./routes.ts` refuses anything that is not two-digit `HH:MM`, and that route is
+ * the sole caller of {@link replaceDepartmentHours} in this repository; the barrel exports it, so a
+ * future consumer could hand it `HH:MM:SS`, which this passes through unchanged.
+ */
+function storedTime(value: string): string {
+  return value.length === 5 ? `${value}:00` : value;
+}
+
 export async function listDepartmentHours(
   tx: Transaction,
   cfg: VenueScope,
@@ -76,6 +103,20 @@ export async function listDepartmentHours(
     .orderBy(departmentHours.weekday, departmentHours.opensAt, departmentHours.id);
 }
 
+/**
+ * Replaces one department's whole opening-hours set.
+ *
+ * The existence read below took `for update` on the department row, and this is the site in this
+ * file where that mattered most: the delete-then-insert here REPLACES the set, which is the shape
+ * CLAUDE.md §3 records ("Rewriting rows one at a time inside a transaction can break a unique index
+ * the FINAL state satisfies") — the second of two overlapping saves deletes nothing it can see and
+ * then collides on `department_hours_interval_key`. I did not reproduce that on PostgreSQL; what is
+ * measured is the replacement: one write transaction runs on the venue file at a time, so there is
+ * no second save to overlap with. The pattern, with its measurement and its control, is stated once
+ * on
+ * `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`). The same clause went from
+ * {@link deactivateDepartment} and {@link allowMenuInZone}, where it only ordered two saves.
+ */
 export async function replaceDepartmentHours(
   tx: Transaction,
   cfg: VenueScope,
@@ -85,8 +126,7 @@ export async function replaceDepartmentHours(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
-    .for("update");
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
   await tx.delete(departmentHours).where(eq(departmentHours.departmentId, departmentId));
   if (hours.length > 0) {
@@ -94,8 +134,8 @@ export async function replaceDepartmentHours(
       hours.map((interval) => ({
         departmentId,
         weekday: interval.weekday,
-        opensAt: interval.opensAt,
-        closesAt: interval.closesAt,
+        opensAt: storedTime(interval.opensAt),
+        closesAt: storedTime(interval.closesAt),
       })),
     );
   }
@@ -195,8 +235,7 @@ export async function deactivateDepartment(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
-    .for("update");
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
 
   const [activeZone] = await tx
@@ -382,8 +421,7 @@ export async function allowMenuInZone(
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(zoneServicePolicies.zoneId, zoneId),
       ),
-    )
-    .for("update");
+    );
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
   await tx
     .insert(zoneMenus)
@@ -912,10 +950,25 @@ export async function deletePreparationRoute(
 
 type PreparationRouteOutcome = PreparationRoute | AppError;
 
-/** PostgreSQL's uuid input accepts upper case, braces, and hyphens after any group of four digits or
- *  none, so ids a caller passes are compared with the ids a query returns in this one spelling. */
-function canonicalUuid(id: string): string {
-  return id.toLowerCase().replace(/[{}-]/g, "");
+/**
+ * The spelling a product id is STORED in, for every id a caller hands this file.
+ *
+ * An id column is plain `text` now and text compares byte for byte, so the folding that used to be
+ * the column's job is the caller's. `normaliseUuid` is the one place a uuid's spelling is settled
+ * (`packages/shared/src/ids.ts`, owner decision 2026-09-21); this file uses it BOTH as the key it
+ * groups a caller's spellings under and as the value it binds into SQL, because those have to be
+ * the same string for a lookup to find a row.
+ *
+ * WHAT THIS LOST. The helper it replaces stripped braces and hyphens as well as folding case; its
+ * own comment gave the reason, that PostgreSQL's uuid input accepted `{...}` and an unhyphenated
+ * run of 32 digits, so this file had to compare a caller's spelling against what that parser handed
+ * back. That reason is inherited, not re-measured. What IS measured is the behaviour now: nothing
+ * parses an id on the way to a `text` column, and a braced id is refused here with
+ * `shared.invalid_id` rather than resolving — the case in `operations.test.ts` drives it. Case
+ * survives unchanged: `normaliseUuid` folds it, so an upper-cased id still finds its product.
+ */
+function storedUuid(id: string): string {
+  return normaliseUuid(id, "ProductId");
 }
 
 /** Most specific first: zone+product, zone+category, venue+product, venue+category. Within one
@@ -934,12 +987,15 @@ async function resolvePreparationRouteOutcomes(
   zoneId: string,
   productIds: readonly string[],
 ): Promise<Map<string, PreparationRouteOutcome>> {
+  // Keyed by the STORED spelling, valued by the caller's, in input order — the first spelling wins
+  // when two name one product. The keys are what reaches SQL and the values are what the returned
+  // map is keyed by, which is the contract on `resolvePreparationRoutes` below.
   const spellingByUuid = new Map<string, string>();
   for (const id of productIds) {
-    const uuid = canonicalUuid(id);
+    const uuid = storedUuid(id);
     if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
   }
-  const ids = [...spellingByUuid.values()];
+  const ids = [...spellingByUuid.keys()];
   const outcomes = new Map<string, PreparationRouteOutcome>();
   if (ids.length === 0) return outcomes;
   await resolveZoneContext(tx, cfg, zoneId);
@@ -947,7 +1003,7 @@ async function resolvePreparationRouteOutcomes(
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)
     .where(inArray(products.id, ids));
-  const categoryById = new Map(productRows.map((row) => [canonicalUuid(row.id), row.categoryId]));
+  const categoryById = new Map(productRows.map((row) => [storedUuid(row.id), row.categoryId]));
   const categoryIds = [
     ...new Set(productRows.flatMap((row) => (row.categoryId === null ? [] : [row.categoryId]))),
   ];
@@ -988,15 +1044,14 @@ async function resolvePreparationRouteOutcomes(
     // Exactly one of productId and categoryId is set on every route row.
     const [index, key] =
       route.productId !== null
-        ? [routesByProduct, canonicalUuid(route.productId)]
+        ? [routesByProduct, storedUuid(route.productId)]
         : [routesByCategory, route.categoryId!];
     const listed = index.get(key);
     if (listed === undefined) index.set(key, [route]);
     else listed.push(route);
   }
   const winners = new Map<string, RouteRow>();
-  for (const id of ids) {
-    const uuid = canonicalUuid(id);
+  for (const [uuid, id] of spellingByUuid) {
     if (!categoryById.has(uuid)) continue;
     const categoryId = categoryById.get(uuid) ?? null;
     const candidates = [
@@ -1010,9 +1065,9 @@ async function resolvePreparationRouteOutcomes(
     if (winner !== undefined) winners.set(id, winner);
   }
 
-  for (const id of ids) {
+  for (const [uuid, id] of spellingByUuid) {
     const winner = winners.get(id);
-    if (!categoryById.has(canonicalUuid(id))) {
+    if (!categoryById.has(uuid)) {
       outcomes.set(id, new AppError("route.subject_not_found", { subject: "product", id }));
     } else if (winner === undefined) {
       outcomes.set(id, new AppError("route.missing", { zoneId, productId: id }));

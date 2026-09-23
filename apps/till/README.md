@@ -34,9 +34,10 @@ leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite
    ["Provisioning a venue"](../server/README.md#provisioning-a-venue) in the server README.
 
 2. **Read its four ids.** The `venue` command prints the node id; read all four the till needs with
-   the query below. There is one taxpayer per database and no tenant column, so nothing here is
-   scoped by a tenant — the location is the only thing that narrows it, and a single-location venue
-   has just the one:
+   the query below, against `venue.db` inside the venue directory — any SQLite client will do,
+   since the venue is just a folder of files. There is one taxpayer per database and no tenant
+   column, so nothing here is scoped by a tenant — the location is the only thing that narrows it,
+   and a single-location venue has just the one:
 
    ```sql
    select l.id as location_id, ti.id as till_id, n.id as node_id, s.id as series_id
@@ -46,17 +47,20 @@ leaf-less demo or HTTPS for a server using its persisted self-signed leaf (`vite
    join invoice_series s on s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null;
    ```
 
-   Run against a database carrying the core migrations plus one seeded venue on 2026-09-16, it
-   returns exactly those four columns and one row.
+   Run on 2026-09-22 with `sqlite3` 3.51.0 against a fresh database built from
+   `packages/db/drizzle/0000_baseline.sql` and seeded with one location, one till, one node and two
+   series, it returns exactly those four columns and one row — the rectificative series is filtered
+   out by `purpose`. The control, a column the schema does not have, fails to prepare.
 
    A cold restore rewrites `trading.env` with your new live series id automatically.
 
 3. **Boot the server** with those ids as the `WAITRON_TILL_*` env. This is the normal server boot
-   ([server README](../server/README.md#running-it)) — the credential key ring, migrations database
-   and the rest apply unchanged; the variables below are the till-specific additions:
+   ([server README](../server/README.md#running-it)) — the credential key ring and the rest apply
+   unchanged, and the server must open the SAME venue directory you provisioned, or the till sells
+   into a database nobody serves. The variables below are the till-specific additions:
 
    ```bash
-   DATABASE_URL=postgres://app_user_role@127.0.0.1:5432/waitron \
+   WAITRON_VENUE_DIR=<the directory you provisioned> \
    WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
    WAITRON_TILL_LOCATION_ID=<location_id> \
    WAITRON_TILL_TILL_ID=<till_id> \
@@ -93,11 +97,12 @@ naming the variable, never echoing its value.
 
 ### A no-browser check
 
-`pnpm --filter @waitron/server demo:till` runs the entire login → menu → cash-sale path in-process
-against a **fresh** Postgres (`DATABASE_URL`), provisioning its own venue and printing the ticket. It
-is the fastest way to confirm the API path end to end without the browser — see
-`apps/server/scripts/till-demo.ts` (run it only against a throwaway database; it chains a real fiscal
-record).
+There is no longer a one-command in-process walk of the login → menu → cash-sale path: the script
+that did it (`demo:till`) was deleted on 2026-09-22 along with the three other demo scripts that
+opened a PostgreSQL connection string, and nothing replaced it. What covers that path now is
+`apps/server`'s own suites — `src/till-api.*.test.ts` and `src/till-sale*.test.ts` — and, for a
+by-hand check, the dev stack (`pnpm dev:setup`, then `wa-wt demo <worktree-name>`), which provisions
+a venue and serves the real till.
 
 ## What this slice does and does not do
 

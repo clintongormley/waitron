@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
-import { sql } from "drizzle-orm";
+import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -14,8 +13,15 @@ import {
 import { createCatalogue, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { createUnit } from "./units.js";
+import { optionLabels, optionLists } from "./schema/options.js";
+import { extraLists } from "./schema/extras.js";
+import { units } from "./schema/units.js";
 
-// These tests exercise configuration queries. Privileges and concurrent edits use real Postgres.
+// These tests exercise configuration queries, against one SQLite file with the real migrations
+// applied. Every row below is written through its drizzle table: an `id` comes from the table's own
+// `$defaultFn` rather than from a SQL default, and a `json()` column stores JSON TEXT, so a raw
+// insert with a `::jsonb` cast has neither an id nor a cast that means anything here. The
+// serialisation cases that used to live beside this file are in content-languages.concurrency.test.ts.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 describe("site content languages", () => {
@@ -147,45 +153,55 @@ describe("site content languages", () => {
 
   it("reports a missing option list or option label customer name as a gap", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const named = await tx.execute<{ id: string }>(sql`
-        insert into option_lists (name, customer_name)
-        values ('Cooked', '{"en":"How cooked?"}'::jsonb) returning id`);
-      const plain = await tx.execute<{ id: string }>(sql`
-        insert into option_lists (name) values ('Spice') returning id`);
-      const namedLabel = await tx.execute<{ id: string }>(sql`
-        insert into option_labels (list_id, name, customer_name)
-        values (${named.rows[0]!.id}, 'Rare', '{"en":"Rare"}'::jsonb) returning id`);
-      const plainLabel = await tx.execute<{ id: string }>(sql`
-        insert into option_labels (list_id, name, customer_name)
-        values (${plain.rows[0]!.id}, 'Mild', '{}'::jsonb) returning id`);
+      const list = async (name: string, customerName?: Record<string, string>) =>
+        (
+          await tx
+            .insert(optionLists)
+            .values({ name, ...(customerName === undefined ? {} : { customerName }) })
+            .returning({ id: optionLists.id })
+        )[0]!.id;
+      const label = async (listId: string, name: string, customerName: Record<string, string>) =>
+        (
+          await tx
+            .insert(optionLabels)
+            .values({ listId, name, customerName })
+            .returning({ id: optionLabels.id })
+        )[0]!.id;
+      const named = await list("Cooked", { en: "How cooked?" });
+      const plain = await list("Spice");
+      const namedLabel = await label(named, "Rare", { en: "Rare" });
+      const plainLabel = await label(plain, "Mild", {});
 
       const gaps = await listContentTranslationGaps(tx, "fr");
 
-      expect(gaps).toContainEqual({ kind: "option_list", id: named.rows[0]!.id });
-      expect(gaps).toContainEqual({ kind: "option_label", id: namedLabel.rows[0]!.id });
+      expect(gaps).toContainEqual({ kind: "option_list", id: named });
+      expect(gaps).toContainEqual({ kind: "option_label", id: namedLabel });
       // Both names are optional and fall back to the staff name, so a wholly-absent one is no gap.
-      expect(gaps).not.toContainEqual({ kind: "option_list", id: plain.rows[0]!.id });
-      expect(gaps).not.toContainEqual({ kind: "option_label", id: plainLabel.rows[0]!.id });
+      expect(gaps).not.toContainEqual({ kind: "option_list", id: plain });
+      expect(gaps).not.toContainEqual({ kind: "option_label", id: plainLabel });
     });
   });
 
   it("reports a missing extras list customer name as a gap", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const named = await tx.execute<{ id: string }>(sql`
-        insert into extra_lists (name, customer_name)
-        values ('Sides', '{"en":"Choose a side"}'::jsonb) returning id`);
-      const plain = await tx.execute<{ id: string }>(sql`
-        insert into extra_lists (name) values ('Sauces') returning id`);
-      const blank = await tx.execute<{ id: string }>(sql`
-        insert into extra_lists (name, customer_name) values ('Breads', '{}'::jsonb) returning id`);
+      const list = async (name: string, customerName?: Record<string, string>) =>
+        (
+          await tx
+            .insert(extraLists)
+            .values({ name, ...(customerName === undefined ? {} : { customerName }) })
+            .returning({ id: extraLists.id })
+        )[0]!.id;
+      const named = await list("Sides", { en: "Choose a side" });
+      const plain = await list("Sauces");
+      const blank = await list("Breads", {});
 
       const gaps = await listContentTranslationGaps(tx, "fr");
 
-      expect(gaps).toContainEqual({ kind: "extra_list", id: named.rows[0]!.id });
+      expect(gaps).toContainEqual({ kind: "extra_list", id: named });
       // The customer name is optional and falls back to the staff `name`, so a wholly-absent one —
       // null or an empty map — is no gap, the same split the option kinds above make.
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain.rows[0]!.id });
-      expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank.rows[0]!.id });
+      expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain });
+      expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank });
     });
   });
 
@@ -210,12 +226,18 @@ describe("site content languages", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (name) values ('Lunch') returning id`,
-      );
-      await tx.execute(
-        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', 200, 'general')`,
-      );
+      const [menu] = await tx
+        .insert(catalogues)
+        .values({ name: "Lunch" })
+        .returning({ id: catalogues.id });
+      await tx.insert(products).values({
+        catalogueId: menu!.id,
+        name: "Bread",
+        customerName: { en: "Bread", "fr-FR": "Pain" },
+        pricingUnit: "each",
+        unitPrice: 200,
+        vatClass: "general",
+      });
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
       ).resolves.toBeUndefined();
@@ -257,12 +279,18 @@ describe("site content languages", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (name) values ('Lunch') returning id`,
-      );
-      await tx.execute(
-        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', 200, 'general')`,
-      );
+      const [menu] = await tx
+        .insert(catalogues)
+        .values({ name: "Lunch" })
+        .returning({ id: catalogues.id });
+      await tx.insert(products).values({
+        catalogueId: menu!.id,
+        name: "Bread",
+        customerName: { en: "Bread" },
+        pricingUnit: "each",
+        unitPrice: 200,
+        vatClass: "general",
+      });
     });
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -274,27 +302,23 @@ describe("site content languages", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       expect((await readContentLanguages(tx, "es")).defaultLanguage).toBe("en");
-      await tx.execute(
-        sql`update products set customer_name = '{"en":"Bread","fr":"Pain"}'::jsonb`,
-      );
+      await tx.update(products).set({ customerName: { en: "Bread", fr: "Pain" } });
       await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
       expect(await readContentLanguages(tx, "es")).toEqual({
         defaultLanguage: "fr",
         languages: ["fr", "en"],
       });
       await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
-      const customerNames = await tx.execute<{ customer_name: Record<string, string> }>(
-        sql`select customer_name from products`,
-      );
-      expect(customerNames.rows[0]!.customer_name).toEqual({ en: "Bread", fr: "Pain" });
+      const customerNames = await tx.select({ customerName: products.customerName }).from(products);
+      expect(customerNames[0]!.customerName).toEqual({ en: "Bread", fr: "Pain" });
     });
   });
   it("refuses to change the default while a unit lacks its translation", async () => {
     await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      await tx.execute(sql`
-        insert into units (name, abbreviation, precision)
-        values ('{"en":"cup"}'::jsonb, '{"en":"c"}'::jsonb, 0)`);
+      await tx
+        .insert(units)
+        .values({ name: { en: "cup" }, abbreviation: { en: "c" }, precision: 0 });
     });
     await expect(
       withTransaction(suite.db, (tx) =>

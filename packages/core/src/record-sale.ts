@@ -23,65 +23,19 @@ import {
   percentOf,
   sumDecimals,
 } from "@waitron/shared";
-import type {
-  Decimal,
-  OptionSnapshot,
-  NodeId,
-  SaleId,
-  SeriesId,
-  TillId,
-  WorkingOrderId,
-} from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
   TrustedClock,
   VatBreakdownLine,
 } from "@waitron/fiscal";
+import type { RecordSaleLine } from "./sale-line.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
 
-export interface RecordSaleLine {
-  lineNo: number;
-  /** The staff-facing product name, frozen onto the line at add time. Never a catalogue reference. */
-  name: string;
-  /** locale -> text, snapshotted at line-add time. Never a catalogue reference. */
-  descriptions: Record<string, string>;
-  /** Unit label and accepted precision frozen when the item was selected. */
-  unitName?: Record<string, string> | null;
-  unitPrecision?: number | null;
-  quantity: string;
-  unitPrice: string;
-  /** A percentage literal, e.g. "21.00" meaning 21%. `sale_lines.vat_rate` stores the same rate
-   * as a count of basis points; `saleLineRows` is where the two forms meet. */
-  vatRate: string;
-  /** The line's tax-EXCLUSIVE base amount. `buildVatBreakdown` below groups lines by `vatRate`
-   * and derives each group's tax from this figure via `@waitron/shared`'s `percentOf` — plain
-   * multiplication, because this is already the base rather than a customer-facing gross price
-   * that would need reversing out of. */
-  lineTotal: string;
-  /** Snapshotted analytics label, copied onto `sale_lines.category` at insert; never a catalogue
-   * reference. Optional: when absent the line inserts `null`, exactly as before this field existed. */
-  category?: string | null;
-  /** The `lineNo` of this line's parent dish; `null` for a top-level line. Resolved to the parent's
-   * generated id at the `sale_lines` insert (Task 5); presentation metadata only, NEVER hashed. */
-  parentLineNo?: number | null;
-  /** The diner's answers to this dish's options lists, each frozen as the list's three names and
-   * the chosen label's three names. Copied onto `sale_lines.option_snapshots`; presentation only,
-   * never part of the fiscal hash. */
-  optionSnapshots?: OptionSnapshot[];
-  /** Selected product variant and its presentation facts, frozen with the line. */
-  variantId?: string | null;
-  /** The variant's staff-facing name (the mirror of `name`); `null` when the line names no variant. */
-  variantName?: string | null;
-  /** The variant's customer-facing text, locale -> text (the mirror of `descriptions`), snapshotted
-   * with the line; `null` when it names no variant. */
-  variantDescriptions?: Record<string, string> | null;
-  /** The variant's kitchen-facing name; `null` when the line names no variant. */
-  variantKitchenName?: string | null;
-  kitchenName?: string | null;
-}
+export type { RecordSaleLine };
 
 export interface RecordSaleTender {
   method: string;
@@ -200,10 +154,13 @@ export async function recordSale(
     }
   }
 
-  // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
-  // node's chain-head row lock as its own first statement and holds it until commit, so
-  // art. 7.i verification runs against exactly the state this transaction is about to extend
-  // rather than a snapshot another writer may already have moved past.
+  // Steps 1 and 2, one call and deliberately so. Art. 7.i verification must run against exactly
+  // the state this transaction is about to extend, not a snapshot another writer has already moved
+  // past. On PostgreSQL a real backend's `checkIntegrity` arranged that by taking the node's
+  // chain-head row lock as its first statement and holding it to commit; it takes no lock now
+  // (`packages/fiscal-verifactu/src/chain.ts`'s `selectHead`), and what arranges it is the
+  // transaction itself — one write transaction runs on the venue file at a time
+  // (`assertExtraListForWrite`, `packages/catalogue/src/extras.ts`).
   const verification = await backend.checkIntegrity(tx, input.nodeId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a

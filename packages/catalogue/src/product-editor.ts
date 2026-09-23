@@ -69,11 +69,13 @@ export async function saveProductEditor(
   if (value.customerName !== null)
     await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId !== null) {
+    // A plain existence read. It took `for update` on PostgreSQL, to serialise two saves of the
+    // same product; one write transaction runs on the venue file at a time, so there is no second
+    // save — the pattern is stated once on `assertExtraListForWrite` (extras.ts).
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.id, productId))
-      .for("update");
+      .where(eq(products.id, productId));
     if (!product) throw new AppError("product.not_found", { productId });
   } else {
     const [catalogue] = await tx

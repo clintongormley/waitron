@@ -1,5 +1,12 @@
+import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { isUniqueViolation, type Database, withTransaction } from "@waitron/db";
+import {
+  isUniqueViolation,
+  nowIso,
+  openVenueDatabase,
+  type Database,
+  withTransaction,
+} from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -8,8 +15,24 @@ import {
   hashPin,
   persons,
 } from "@waitron/identity";
+import { DEFAULT_STATE_ROOT } from "./boot.js";
+import { resolveConfigDir } from "./config.js";
 
 type Env = Record<string, string | undefined>;
+
+/**
+ * The handle the reset runs on: the VENUE file of this node's own venue directory.
+ *
+ * `persons` and the login-factor tables are venue-side — `applyMigrations` applies every set to the
+ * venue handle and leaves the node file empty (`packages/migrations/src/apply.ts`), the same fact
+ * `rejoin-command.ts`'s `openVenue` records. `close` closes BOTH files, because
+ * `openVenueDatabase` opens `node.db` beside `venue.db` and a CLI that exits holding either leaves
+ * them to process teardown.
+ */
+async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
+  const store = await openVenueDatabase(directory);
+  return { db: store.venue, close: () => store.close() };
+}
 
 /**
  * `waitron-break-glass` — the PHYSICAL break-glass admin reset. The first admin has no self-service
@@ -28,27 +51,30 @@ type Env = Record<string, string | undefined>;
  * opt-in via `WAITRON_BREAKGLASS_PIN`. `argv` carries only an optional `--person <id>` to
  * disambiguate when a tenant somehow has more than one admin.
  *
- * Exported so the flow is unit-tested without a subprocess; a thin `bin-break-glass.ts` wrapper (a
- * later task) supplies `process.argv.slice(2)`/`process.env`/`createPostgresDb` and exits on the
- * returned code. Returns a process exit code: 0 on success, 2 on a usage/config error (missing env,
- * too-short password), 1 on an operational error (no admin, ambiguous admins, `--person` names a
- * non-admin).
+ * WHICH database is no longer a connection string: the engine is a directory holding `venue.db` and
+ * `node.db`, and the two directory settings follow `config.ts`'s own resolution, where an unset OR
+ * EMPTY value takes the default rather than `resolve("")` — the working directory ("an empty value
+ * is a valid value", CLAUDE.md §3). This is the resolution `rejoin-command.ts` and
+ * `restore-command.ts` do, not a third one:
+ *  - `WAITRON_STATE_DIR` — the state root the venue directory defaults under. Unset or empty =
+ *    `DEFAULT_STATE_ROOT`.
+ *  - `WAITRON_VENUE_DIR` — the directory holding the two files. Unset or empty = `<stateDir>/venue`.
+ *
+ * Exported so the flow is unit-tested without a subprocess; the thin `bin-break-glass.ts` wrapper
+ * supplies `process.argv.slice(2)`/`process.env` and exits on the returned code. Returns a process
+ * exit code: 0 on success, 2 on a usage/config error (missing env, too-short password), 1 on an
+ * operational error (no admin, ambiguous admins, `--person` names a non-admin).
  */
 export async function runBreakGlassReset(deps: {
   argv: string[];
   env: Env;
   out: (line: string) => void;
-  connect: (url: string) => Promise<Database>;
+  /** DI for tests; defaults to {@link openVenue} over the resolved venue directory. */
+  openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
 }): Promise<number> {
   // Every required value is read from env only — never argv, which `ps` exposes. A blank value is
   // treated as unset (the empty-string trap, CLAUDE.md §3): `requireEnv` fails closed with a usage
   // message. The dashboard lockout IS the password, so a reset with no new password is meaningless.
-  const databaseUrl = requireEnv(
-    deps,
-    "DATABASE_URL",
-    "DATABASE_URL must be set to the box's database connection string",
-  );
-  if (databaseUrl === undefined) return 2;
   const newPassword = requireEnv(
     deps,
     "WAITRON_BREAKGLASS_PASSWORD",
@@ -94,10 +120,14 @@ export async function runBreakGlassReset(deps: {
   }
   const personArg = parsedPerson.id;
 
-  const db = await deps.connect(databaseUrl);
+  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  // The same resolution `config.ts` does for `venueDir`, against the state root that won above.
+  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+
+  const opened = await (deps.openDb ?? openVenue)(venueDir);
   try {
     try {
-      return await withTransaction(db, async (tx) => {
+      return await withTransaction(opened.db, async (tx) => {
         // The read is unfiltered: these are the box's admins.
         const admins = await tx
           .select({ id: persons.id })
@@ -146,14 +176,20 @@ export async function runBreakGlassReset(deps: {
         await tx.execute(sql`delete from webauthn_credentials where person_id=${targetId}`);
         await tx.execute(sql`delete from recovery_codes where person_id=${targetId}`);
         await tx.execute(sql`delete from totp_enrollments where person_id=${targetId}`);
+        // One clock reading for the three stamps, so the reset lands as one moment. `nowIso`
+        // rather than `now` because raw SQL never reaches a column's own write mapping, and all
+        // three of these columns are `tsString` — the spelling `@waitron/identity`'s own writers
+        // use, which is what makes a later `<` on them a correct time ordering
+        // (`packages/printing/src/runtime.ts` has the four-way measurement).
+        const revokedAt = nowIso();
         await tx.execute(
-          sql`update management_account_actions set used_at=now() where person_id=${targetId} and used_at is null`,
+          sql`update management_account_actions set used_at=${revokedAt} where person_id=${targetId} and used_at is null`,
         );
         await tx.execute(
-          sql`update management_sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
+          sql`update management_sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
         await tx.execute(
-          sql`update sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
+          sql`update sessions set ended_at=${revokedAt} where person_id=${targetId} and ended_at is null`,
         );
 
         const resets = resetPin ? "password, pin" : "password";
@@ -169,7 +205,7 @@ export async function runBreakGlassReset(deps: {
       throw error;
     }
   } finally {
-    await db.close();
+    await opened.close();
   }
 }
 

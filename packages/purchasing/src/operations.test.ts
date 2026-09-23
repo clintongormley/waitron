@@ -12,13 +12,14 @@ import {
   listPurchaseInvoices,
   updatePurchaseInvoice,
 } from "./operations.js";
-import type { CreatePurchaseInvoiceInput } from "./types.js";
+import type { CreatePurchaseInvoiceInput, PurchaseRegime } from "./types.js";
 
-// PGlite (a WASM PostgreSQL): hermetic and fast, and the RIGHT target for the pure CRUD/validation
-// logic here — nothing in these tests depends on running under the non-superuser deployment role or
-// on concurrency, which is what would force real Postgres (CLAUDE.md §4). What `app_user` may do on
-// the purchase-invoice tables is pinned by the privilege matrix
-// (`packages/fiscal-verifactu/src/privileges.expected.ts`) instead.
+// A real SQLite venue database in a temporary directory, opened by the product's own opener
+// (`packages/db/src/testing/venue-db.ts`) — not an in-memory one, so a suite gets the storage a box
+// gets. The note here used to weigh PGlite against real PostgreSQL on whether these cases needed
+// the non-superuser deployment role; that question is gone with the roles. `asAppUser` below is an
+// empty body kept so its call sites still compile (`packages/db/src/testing/roles.ts`), and what
+// these cases cover is the CRUD and validation logic.
 const fx = usePurchasingDb();
 
 const d = (s: string): Decimal => s as Decimal;
@@ -84,8 +85,8 @@ describe("purchase-invoice operations", () => {
   it("orders same-rate lines identically to the DB read-back (RETURNING sort ⇔ selectLines)", async () => {
     // Three lines at the SAME rate exercise the id tie-break in create's RETURNING sort. `created` is
     // built from RETURNING and sorted in JS; `fetched` is read back via selectLines' `orderBy(asc(rate),
-    // asc(id))`. They must be line-for-line identical — proving the JS id compare reproduces
-    // PostgreSQL's uuid ordering, which is the ordering the old insert-then-re-read guaranteed.
+    // asc(id))`. They must be line-for-line identical — which is what says the JS id compare
+    // reproduces the order the database returns, the ordering the old insert-then-re-read gave.
     const { created, fetched } = await asApp(async (tx) => {
       const created = await createPurchaseInvoice(tx, {
         header: { ...baseInput().header, supplierInvoiceNumber: "SAME-RATE" },
@@ -355,24 +356,28 @@ describe("purchase-invoice operations", () => {
   });
 
   it("propagates a non-unique DB error from the header insert (not swallowed as a duplicate)", async () => {
-    // The rethrow branch of create's 23505 translation: a database refusal that is not a duplicate
-    // must surface as itself, never as a spurious purchase.duplicate. The refusal used here is an
-    // out-of-range date, which `createPurchaseInvoice` does not validate — only the proportion and
-    // the lines are checked before the header insert — so it reaches the database and comes back as
-    // a driver error rather than an AppError.
+    // The rethrow branch of create's duplicate translation: a database refusal that is not a
+    // duplicate must surface as itself, never as a spurious purchase.duplicate. The refusal used
+    // here is a `regime` outside the column's vocabulary, which `createPurchaseInvoice` does not
+    // validate — only the proportion and the lines are checked before the header insert — so it
+    // reaches the database and comes back as a driver error rather than an AppError.
     //
-    // It used to be an overflow on `total`, and that mechanism is gone by design: money columns are
-    // eight bytes, so the widest amount `assertMoney` accepts (twelve integer digits) is far inside
-    // what the column holds. There is no longer any amount this system admits that the column
-    // refuses — which is the property the width was chosen for.
+    // It has been two other refusals before this one, and each was retired when the column stopped
+    // refusing: an overflow on `total`, then an out-of-range date (`2026-02-30`). A day is text on
+    // this engine and an amount is a 64-bit integer, so neither refuses anything the rest of the
+    // system admits. What refuses here is the `purchase_invoices_regime_ck` CHECK, which the schema
+    // carries because the engine has no enum type of its own
+    // (`packages/db/src/schema/purchase-invoices.ts`). Measured, this insert alone against a
+    // migrated file: `CHECK constraint failed: purchase_invoices_regime_ck`, extended result code
+    // 275 — with the same row under a legal `regime` inserting as the control, so the refusal is
+    // that one value's and not the row's shape.
     //
-    // Caught OUTSIDE the transaction. A statement PostgreSQL refuses aborts the transaction, so a
-    // capture INSIDE it would leave every later statement failing with 25P02 — `withTransaction`
-    // runs one of its own after the callback returns, draining the change log (CLAUDE.md §3).
+    // Caught OUTSIDE the transaction, so what is captured is the error `withTransaction` propagates
+    // rather than one read mid-flight.
     const error = await captureThrown(() =>
       asApp((tx) =>
         createPurchaseInvoice(tx, {
-          header: { ...baseInput().header, issuedOn: "2026-02-30" },
+          header: { ...baseInput().header, regime: "wombat" as PurchaseRegime },
           lines: baseInput().lines,
         }),
       ),
@@ -382,7 +387,7 @@ describe("purchase-invoice operations", () => {
 
   it("maps a duplicate supplier invoice to purchase.duplicate", async () => {
     // Two transactions, not one, and the refusal is caught outside the second: the duplicate is
-    // refused by the database, which aborts whatever transaction it is in (see the case above).
+    // refused by the database, and the capture belongs where the case above puts it.
     await asApp((tx) => createPurchaseInvoice(tx, baseInput()));
     const error = await captureAppError(() =>
       asApp((tx) => createPurchaseInvoice(tx, baseInput())),

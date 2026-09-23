@@ -1,15 +1,16 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
+import { toAeatDate } from "./registro-row.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -24,20 +25,14 @@ const PERIOD = { year: "2026", month: "07" };
 // `authorize`, which reads identity's persons/sessions. See ../test/migrations.ts.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-/**
- * Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention:
- * `envios`/`incidents` carry no append-only trigger (unlike `registros_facturacion`, which blocks
- * TRUNCATE — src/testing/seed.ts's own note), so truncating them before each test leaves the
- * drainer's own due-work sweep with nothing but THIS test's freshly-seeded rows to find, and every
- * incident-count assertion sees only this test's own incidents. The orphaned
- * `registros_facturacion` rows a prior test leaves behind are harmless: `reconcile` reaches a
- * record only through its `envios` join, so a registro with no `envios` row is never in scope.
- */
-beforeEach(async () => {
-  // `acks` joins this list now that reconcile corrects state and writes an ack in the same T2 tx;
-  // truncating it keeps each test's post-correction acks from leaking into the next.
-  await pg.db.execute(sql`truncate table acks, incidents, envios cascade`);
-});
+// Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention: the
+// drainer's due-work sweep must find nothing but THIS test's freshly-seeded rows, and every
+// incident-count assertion must see only this test's own incidents. `useVenueDb` empties every data
+// table between tests, dropping and recreating the append-only triggers around the delete
+// (`packages/db/src/testing/venue-db.ts`, `buildResetPlan`/`applyReset`), which is what supplies
+// that isolation now — the `truncate table acks, incidents, envios cascade` this file used to run
+// here reached the engine as `near "truncate": syntax error` (measured 2026-09-22, the failure
+// every case in this file opened with), because SQLite has no TRUNCATE at all.
 
 // The drainer/reconcile deps a `VerifactuBackend` used to assemble internally — built here directly
 // now that the runtime pass lives on the standalone `drain`/`reconcile` functions. `pg.db` is this
@@ -64,11 +59,15 @@ async function incidentsFor(): Promise<
   { code: string; severity: string; params: Record<string, unknown> }[]
 > {
   const { rows } = await withTransaction(pg.db, (tx) =>
-    tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
+    tx.execute<{ code: string; severity: string; params: string }>(
       sql`select code, severity, params from incidents`,
     ),
   );
-  return rows;
+  // `params` is a `json` column (`packages/db/src/schema/incidents.ts:40`). Drizzle decodes one
+  // read through the table definition; a raw read hands back the stored text, so the parse happens
+  // here rather than each `toMatchObject` below being loosened to compare against a string.
+  // `./reconcile.period.test.ts` and `packages/payments/src/reconcile.test.ts` do the same.
+  return rows.map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
 }
 
 /** The committed `envios.estado` per registro — used to prove reconcile now CORRECTS state toward
@@ -104,8 +103,10 @@ async function reconciledResubmitAtFor(registroId: string): Promise<string | nul
 }
 
 /** The alta registro's own id and its AEAT consulta key (`nif|numSerieFactura|DD-MM-YYYY`, the
- * same triple `@waitron/verifactu`'s fake `keyOf` builds — `to_char(..., 'DD-MM-YYYY')` renders
- * the date piece in AEAT's own form directly, so this never re-derives that formatting by hand).
+ * same triple `@waitron/verifactu`'s fake `keyOf` builds). The date piece goes through
+ * `toAeatDate` (src/registro-row.ts), the one place this package owns the `YYYY-MM-DD` →
+ * `DD-MM-YYYY` flip, so this never re-derives that formatting by hand; it used to read
+ * `to_char(..., 'DD-MM-YYYY')`, which SQLite refuses with `no such function: to_char`.
  * Looked up post-hoc by `sale_id` rather than threaded through the caller: unlike
  * `seedPendingEnvios`'s fixture, a `recordSale`-created alta's identity is assigned by the write
  * path itself (series/invoice-number allocation), not chosen by the test. */
@@ -114,7 +115,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
     tx.execute<{ id: string; id_emisor_factura: string; num_serie_factura: string; fecha: string }>(
       sql`
         select id, id_emisor_factura, num_serie_factura,
-          to_char(fecha_expedicion_factura, 'DD-MM-YYYY') as fecha
+          fecha_expedicion_factura as fecha
         from registros_facturacion
         where sale_id = ${saleId} and tipo_registro = 'alta'
       `,
@@ -124,7 +125,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
   if (row === undefined) throw new Error(`altaIdentityFor: no alta registro for sale ${saleId}`);
   return {
     id: row.id,
-    facturaKey: `${row.id_emisor_factura}|${row.num_serie_factura}|${row.fecha}`,
+    facturaKey: `${row.id_emisor_factura}|${row.num_serie_factura}|${toAeatDate(row.fecha)}`,
   };
 }
 
@@ -409,8 +410,14 @@ describe("reconcile — the three audit cases", () => {
     const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      sql`insert into persons (display_name, pin_hash, role)
-          values ('P', ${hashPin("1234")}, 'manager') returning id`,
+      // `id` and `created_at` are supplied here rather than left to the table: both come from a
+      // `$defaultFn` generator (packages/identity/src/schema/persons.ts:27,67), which drizzle runs
+      // for a builder insert and never for raw SQL, and the generated DDL declares neither with a
+      // SQL DEFAULT (packages/identity/drizzle/0000_baseline.sql:46,62) — omitting them is refused
+      // `NOT NULL constraint failed: persons.id`. Same idiom as
+      // packages/workforce/src/migrations.test.ts:43-50.
+      sql`insert into persons (id, created_at, display_name, pin_hash, role)
+          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
     const voidSession = await withTransaction(pg.db, (tx) =>
       loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
@@ -554,7 +561,10 @@ describe("reconcile — the three audit cases", () => {
     // `setConsultaState` needed, this is the drainer's own genuine happy-with-errors path.
 
     // Isolate reconcile's own incidents from the drainer's `fiscal.aceptado_con_errores` warning.
-    await pg.db.execute(sql`truncate table incidents`);
+    // `delete`, not TRUNCATE: SQLite has none (`near "truncate": syntax error`), and `incidents`
+    // carries no append-only trigger to refuse the delete (`packages/db/src/classification.ts`
+    // classifies it `state` via `classify`, not `appendOnly`).
+    await pg.db.execute(sql`delete from incidents`);
 
     const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
@@ -689,10 +699,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
 
 describe("reconcile — period normalization", () => {
   it("Copilot finding A: an unpadded month audits the SAME records as the zero-padded form", async () => {
-    // `to_char(fecha_expedicion_factura, 'MM')` always yields a zero-padded 2-digit month, so an
+    // The stored `fecha_expedicion_factura` always carries a zero-padded 2-digit month, so an
     // unpadded `period.month` like "7" must be normalized before it reaches the SQL comparison —
     // otherwise the query matches nothing and reconcile silently reports a false-clean `checked: 0`
-    // instead of auditing July.
+    // instead of auditing July. What makes the stored month two digits, and the measurement behind
+    // it, is in `reconcile.ts`'s `rowsForPeriod`.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(pg.db, { count: 3 });
     const resolveClient = staticResolver(aeat.client());

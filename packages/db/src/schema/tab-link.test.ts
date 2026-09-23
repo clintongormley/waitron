@@ -1,150 +1,177 @@
-// Real PostgreSQL: exercises reads/writes or triggers after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
-import type { Database, Transaction } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useTemplateDb } from "../testing/lifecycle.js";
-import { asAppUser } from "../testing/roles.js";
+import type { Transaction } from "../client.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { isPgError } from "../unique-violation.js";
+import { captureError } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
+import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { diningTables } from "./dining-tables.js";
+import { workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
+// LOSS, from the storage swap: the two columns' visibility to the non-owner `app_user` was half of
+// what this suite asserted, and SQLite has no roles and no grants
+// (`packages/db/src/testing/roles.ts`). What is left is the two mutual foreign keys.
+//
+// SECOND LOSS, at the two proofs-by-deletion. On PostgreSQL each dropped ITS OWN named constraint
+// (`dining_tables_tab_fk`, `working_orders_delivery_table_fk`) inside a rolled-back transaction, so
+// the proof was about that one key. SQLite has no `ALTER TABLE … DROP CONSTRAINT` and stores no
+// name for a foreign key at all, so the deletion available here is `pragma foreign_keys = off`,
+// which switches off EVERY foreign key at once. That still separates "a foreign key refused this"
+// from "a CHECK or a trigger did", which is the discrimination the proof was for; it no longer
+// separates one foreign key from another. `pragma foreign_key_list` is read alongside it to pin
+// WHICH key covers the column, which is the half the pragma cannot show.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-1111-4000-8000-000000000001";
 
-class RollbackSignal extends Error {}
-async function rollBackAfter(
-  admin: Database,
-  fn: (tx: Transaction) => Promise<void>,
+/** Runs `body` with every foreign key switched off, restoring enforcement afterwards. The pragma
+ * is refused inside a transaction, so this runs on the handle rather than through
+ * `withTransaction`. */
+async function withForeignKeysOff(
+  db: { run: (statement: ReturnType<typeof sql>) => unknown },
+  body: () => Promise<void>,
 ): Promise<void> {
-  await withTransaction(admin, async (tx) => {
-    await fn(tx);
-    throw new RollbackSignal();
-  }).catch((error: unknown) => {
-    if (!(error instanceof RollbackSignal)) throw error;
-  });
+  db.run(sql`pragma foreign_keys = off`);
+  try {
+    await body();
+  } finally {
+    db.run(sql`pragma foreign_keys = on`);
+  }
 }
 
 describe("table↔tab link columns (mutual FKs)", () => {
-  const suite = useTemplateDb({ template: "core", resetPerTest: false });
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   let nodeA = "";
   let orderSeq = 0;
 
-  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
+  function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTransaction(suite.db, fn);
   }
 
   beforeAll(async () => {
-    const admin = suite.admin;
-    await admin
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T A" });
-    await admin.insert(locations).values({
+    const db = suite.db;
+    await db.insert(tenants).values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T A" });
+    await db.insert(locations).values({
       id: LOCATION_A,
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await admin.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "A1" });
-    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    await db.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "A1" });
+    nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   });
 
-  /** Insert one active table as app_user; returns its id. */
+  /** One active table. The Drizzle builder, since `id` and `created_at` are `$defaultFn` columns. */
   async function openTable(label: string): Promise<string> {
-    return asApp(async (tx) =>
-      tx
-        .execute<{ id: string }>(
-          sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, ${label}) returning id`,
-        )
-        .then((r) => r.rows[0]!.id),
-    );
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(diningTables)
+        .values({ locationId: LOCATION_A, label })
+        .returning({ id: diningTables.id });
+      return row!.id;
+    });
   }
 
-  /** Insert one open working order as app_user; returns its id. */
+  /** One open working order. */
   async function openWo(): Promise<string> {
     orderSeq += 1;
-    return asApp(async (tx) =>
-      tx
-        .execute<{ id: string }>(
-          sql`
-          insert into working_orders (till_id, node_id, order_number, status) values (${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`,
-        )
-        .then((r) => r.rows[0]!.id),
-    );
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(workingOrders)
+        .values({ tillId: TILL_A, nodeId: nodeA, orderNumber: orderSeq, status: "open" })
+        .returning({ id: workingOrders.id });
+      return row!.id;
+    });
   }
 
-  it("the new columns are visible/writable to the non-owner app_user", async () => {
-    // Differential: setting the tab_id back-pointer AND a delivery_table_id as app_user both succeed and
-    // read back. Fails if the tables' existing grants did not already cover the added columns (they are
-    // table-wide, so they do — the confirmation §2b calls for). Also proves each FK RESOLVES a valid ref.
+  it("the two link columns round-trip and each FK resolves a valid reference", async () => {
     const tableId = await openTable("T-vis");
     const woId = await openWo();
-    await asApp((tx) =>
-      tx.execute(sql`update dining_tables set tab_id = ${woId} where id = ${tableId}`),
+    await inTx((tx) =>
+      tx.update(diningTables).set({ tabId: woId }).where(eq(diningTables.id, tableId)),
     );
-    await asApp((tx) =>
-      tx.execute(sql`update working_orders set delivery_table_id = ${tableId} where id = ${woId}`),
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ deliveryTableId: tableId }).where(eq(workingOrders.id, woId)),
     );
-    const back = await asApp((tx) =>
+    const [table] = await inTx((tx) =>
       tx
-        .execute<{ tab_id: string | null; delivery_table_id: string | null }>(
-          sql`
-          select dt.tab_id, wo.delivery_table_id
-          from dining_tables dt join working_orders wo on wo.id = ${woId}
-          where dt.id = ${tableId}`,
-        )
-        .then((r) => r.rows[0]!),
+        .select({ tabId: diningTables.tabId })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId)),
     );
-    expect(back.tab_id).toBe(woId);
-    expect(back.delivery_table_id).toBe(tableId);
+    const [order] = await inTx((tx) =>
+      tx
+        .select({ deliveryTableId: workingOrders.deliveryTableId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, woId)),
+    );
+    expect(table!.tabId).toBe(woId);
+    expect(order!.deliveryTableId).toBe(tableId);
   });
 
-  it("dining_tables_tab_fk rejects a tab_id that points at no working order — proven by deletion", async () => {
+  it("dining_tables.tab_id is covered by a foreign key at working_orders.id, and that key is what refuses a dangling pointer", async () => {
     const tableId = await openTable("T-tabfk");
+    const keys = suite.db.all<{ table: string; from: string; to: string }>(
+      sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('dining_tables')`),
+    );
+    expect(keys.filter((key) => key.from === "tab_id")).toEqual([
+      { table: "working_orders", from: "tab_id", to: "id" },
+    ]);
+
     const e = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`),
+      inTx((tx) =>
+        tx.update(diningTables).set({ tabId: randomUUID() }).where(eq(diningTables.id, tableId)),
       ),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
 
-    // Prove-by-deletion: drop the FK in a rolled-back tx, and the same dangling pointer is accepted.
-    await rollBackAfter(suite.admin, async (tx) => {
-      await tx.execute(sql`alter table dining_tables drop constraint dining_tables_tab_fk`);
-      await tx.execute(sql`set local role app_user`);
-      await tx.execute(
-        sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`,
+    // Proof by deletion: with foreign keys off, the same dangling pointer is accepted.
+    await withForeignKeysOff(suite.db, async () => {
+      await inTx((tx) =>
+        tx.update(diningTables).set({ tabId: randomUUID() }).where(eq(diningTables.id, tableId)),
       );
-      // no throw — the FK was the guard.
     });
+    // Put the row back to a value the restored key accepts, so it does not outlive this case.
+    await inTx((tx) =>
+      tx.update(diningTables).set({ tabId: null }).where(eq(diningTables.id, tableId)),
+    );
   });
 
-  it("working_orders_delivery_table_fk rejects a delivery_table_id that points at no table — proven by deletion", async () => {
+  it("working_orders.delivery_table_id is covered by a foreign key at dining_tables.id, and that key is what refuses a dangling pointer", async () => {
     const woId = await openWo();
+    const keys = suite.db.all<{ table: string; from: string; to: string }>(
+      sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('working_orders')`),
+    );
+    expect(keys.filter((key) => key.from === "delivery_table_id")).toEqual([
+      { table: "dining_tables", from: "delivery_table_id", to: "id" },
+    ]);
+
     const e = await captureError(() =>
-      asApp((tx) =>
-        tx.execute(
-          sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`,
-        ),
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ deliveryTableId: randomUUID() })
+          .where(eq(workingOrders.id, woId)),
       ),
     );
-    expect(pgErrorCode(e)).toBe("23503");
+    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
 
-    await rollBackAfter(suite.admin, async (tx) => {
-      await tx.execute(
-        sql`alter table working_orders drop constraint working_orders_delivery_table_fk`,
+    await withForeignKeysOff(suite.db, async () => {
+      await inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ deliveryTableId: randomUUID() })
+          .where(eq(workingOrders.id, woId)),
       );
-      await tx.execute(sql`set local role app_user`);
-      await tx.execute(
-        sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`,
-      );
-      // no throw — the FK was the guard.
     });
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ deliveryTableId: null }).where(eq(workingOrders.id, woId)),
+    );
   });
 });

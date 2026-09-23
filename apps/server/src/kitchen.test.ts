@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  catalogues,
+  categories,
+  locations,
+  products,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -44,15 +53,28 @@ beforeAll(() => {
 
 async function setupVenue(): Promise<TillConfig> {
   await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Inserted through the table definitions, not as raw SQL: `locations.id`, `tills.id` and
+  // `tills.created_at` are JavaScript generators on this engine (`$defaultFn`), which a raw insert
+  // never reaches — `id text PRIMARY KEY NOT NULL` and `created_at text NOT NULL` in
+  // `packages/db/drizzle/0000_baseline.sql:1` and `:39`. The locale list goes over as an array
+  // because the column's own write mapping encodes it; the `array[...]` constructor it replaces is
+  // a syntax error here (`near "[?]": syntax error`).
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -196,20 +218,27 @@ describe("kitchen-station config", () => {
   });
 
   it("createStation and updateStation rethrow a NON-unique DB error raw, not as station.name_taken", async () => {
-    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) — NOT
-    // the name unique. So `isUniqueViolation` is false and both verbs rethrow the raw driver error
-    // rather than mistranslating it (the false branch of each catch — the negative control tables.ts's
-    // create/update verbs each carry).
+    // Each half provokes a refusal that is NOT the name unique, so `isUniqueViolation` is false and
+    // the verb must rethrow the raw driver error rather than mistranslating it (the false branch of
+    // each catch — the negative control tables.ts's create/update verbs each carry). Both replaced
+    // an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer refuses.
+    //
+    // CREATE: a location id that names no row trips `kitchen_stations_location_fk`.
+    // UPDATE: `warmAfterMinutes` raised above the row's untouched `overdue_after_minutes` (5 → 99,
+    // default overdue 10) trips `kitchen_stations_thresholds_ordered`, the CHECK that keeps the
+    // three age bands strictly increasing. Nothing in `updateStation` validates the bands, so the
+    // constraint is the only thing that refuses it.
     const cfg = await setupVenue();
-    const createErr = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
+    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
+      (e: unknown) => e,
+    );
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
 
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Ord" }));
     const updateErr = await asApp(cfg, (tx) =>
-      updateStation(tx, cfg, id, { displayOrder: 10_000_000_000 }),
+      updateStation(tx, cfg, id, { warmAfterMinutes: 99 }),
     ).catch((e: unknown) => e);
     expect(updateErr).toBeInstanceOf(Error);
     expect(updateErr).not.toBeInstanceOf(AppError);
@@ -253,20 +282,33 @@ async function productCourse(productId: string): Promise<string | null> {
   return rows[0]!.course_id;
 }
 async function seedCategory(): Promise<string> {
-  const { rows } = await db.execute<{ id: string }>(
-    sql`insert into categories (name) values ('{"en":"Food"}'::jsonb) returning id`,
-  );
-  return rows[0]!.id;
+  // `categories.name` is a JSON column, so the object goes over as an object and the column's write
+  // mapping encodes it — the `'{"en":"Food"}'::jsonb` literal it replaces carries a cast this
+  // engine refuses. Same generated-id reason as `setupVenue` above.
+  const [row] = await db
+    .insert(categories)
+    .values({ name: { en: "Food" } })
+    .returning({ id: categories.id });
+  return row!.id;
 }
 async function seedProduct(): Promise<string> {
-  const cat = await db.execute<{ id: string }>(
-    sql`insert into catalogues (name) values ('Menu') returning id`,
-  );
-  const { rows } = await db.execute<{ id: string }>(sql`
-    insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${cat.rows[0]!.id}, 'Routed product', 'each', 100, 'general')
-    returning id`);
-  return rows[0]!.id;
+  const [cat] = await db
+    .insert(catalogues)
+    .values({ name: "Menu" })
+    .returning({ id: catalogues.id });
+  // `unitPrice` stays the whole number 100 the raw insert bound: `unit_price` is a money column and
+  // money is a count of whole cents (CLAUDE.md §3), so this is 1.00 EUR here exactly as before.
+  const [row] = await db
+    .insert(products)
+    .values({
+      catalogueId: cat!.id,
+      name: "Routed product",
+      pricingUnit: "each",
+      unitPrice: 100,
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  return row!.id;
 }
 
 describe("routing config", () => {
@@ -377,21 +419,26 @@ describe("kitchen-course config", () => {
     });
   });
 
-  it("createCourse and updateCourse rethrow a NON-unique DB error raw, not as course.name_taken", async () => {
-    // display_order overflow (22003) is not the name unique — the false branch of each catch, the
-    // negative control the station verbs carry.
+  it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {
+    // A location id that names no row trips `kitchen_courses_location_fk` — not the name unique, so
+    // `isUniqueViolation` is false and `createCourse` rethrows raw (the false branch of its catch).
+    // It replaced an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer
+    // refuses.
+    //
+    // HALF A LOSS, from the storage swap: the `updateCourse` half of this case is deleted. Its
+    // overflow is gone the same way, and unlike the sibling `updateStation` — which still has the
+    // `kitchen_stations_thresholds_ordered` CHECK to trip — `kitchen_courses` declares no CHECK at
+    // all, and none of `updateCourse`'s three inputs (`name`, `displayOrder`, `active`) can make
+    // the UPDATE refuse for any reason but the name unique. What is no longer checked: that a
+    // refusal which is NOT a unique violation comes back raw from `updateCourse` instead of being
+    // relabelled `course.name_taken`.
     const cfg = await setupVenue();
-    const createErr = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
+    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
+      (e: unknown) => e,
+    );
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
-    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Ord" }));
-    const updateErr = await asApp(cfg, (tx) =>
-      updateCourse(tx, cfg, id, { displayOrder: 10_000_000_000 }),
-    ).catch((e: unknown) => e);
-    expect(updateErr).toBeInstanceOf(Error);
-    expect(updateErr).not.toBeInstanceOf(AppError);
   });
 });
 

@@ -1,8 +1,6 @@
-// Real PostgreSQL: checks JSONB decoding through the node-postgres driver alongside PGlite logic tests.
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { SignedMembershipDocument } from "@waitron/membership";
-import { createPgliteDb } from "./client.js";
 import {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
@@ -12,14 +10,16 @@ import {
 } from "./node-membership.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
-import { useTemplateDb } from "./testing/lifecycle.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// PGlite for the accessor round-trip: it is pure SQL logic (upsert/read of a singleton), with no
-// privilege behaviour to observe. The one thing PGlite cannot answer is how the REAL `pg` driver
-// decodes the `document` jsonb column, so that single case runs against a container at the bottom of
-// this file. `app_user`'s grants on `node_membership` are pinned by the privilege matrix
-// (packages/fiscal-verifactu/src/privileges.expected.ts).
+// The accessors are pure SQL logic — upsert and read of a singleton.
+//
+// LOSS, from the storage swap: the last block in this file used to run on a real PostgreSQL
+// container, because the only thing PGlite could not answer was how the REAL `pg` driver decoded
+// the `document` jsonb column, and the two drivers had diverged before (CLAUDE.md §4's `name[]`
+// OID 1003 case). There is one driver now and one storage engine, so there is no second decoding
+// to compare against; the rich-document round-trip that block carried is kept below, against the
+// one engine there is.
 
 function doc(term: number): SignedMembershipDocument {
   return {
@@ -33,19 +33,23 @@ function doc(term: number): SignedMembershipDocument {
   };
 }
 
+// A database with NO migration set applied, so `node_membership` does not exist — the state of a
+// node before the set that creates the table has run. Its own `useVenueDb` rather than the migrated
+// one the accessors' round-trip uses: the helper applies its sets in `beforeAll`, so one handle
+// cannot be both migrated and unmigrated.
+describe("before any migration set has run", () => {
+  const bare = useVenueDb({ migrations: [] });
+
+  it("reads null when the table itself is absent", async () => {
+    expect(await readNodeMembership(bare.db)).toBeNull();
+  });
+});
+
 describe("node_membership accessors", () => {
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a node that has never adopted a document)", async () => {
     expect(await readNodeMembership(pg.db)).toBeNull();
-  });
-
-  it("reads null when the table itself is absent (a pre-migration handle)", async () => {
-    // A bare, unmigrated PGlite: node_membership does not exist yet, so the `to_regclass` probe must
-    // answer "absent" rather than throw — the exact state of a node that never ran 0096.
-    const bare = await createPgliteDb();
-    expect(await readNodeMembership(bare)).toBeNull();
-    await bare.close();
   });
 
   it("upserts the singleton and reads back the whole document", async () => {
@@ -66,7 +70,7 @@ describe("node_membership accessors", () => {
     await writeNodeMembership(pg.db, doc(1));
     await writeNodeMembership(pg.db, doc(2));
     const count = await pg.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from node_membership`,
+      sql`select count(*) as n from node_membership`,
     );
     expect(count.rows[0]?.n).toBe(1);
     expect((await readNodeMembership(pg.db))?.body.term).toBe(2);
@@ -82,9 +86,9 @@ describe("node_membership accessors", () => {
   });
 
   it("permits at most one row — the singleton CHECK rejects any id but 1", async () => {
-    const error = await captureError(() =>
-      pg.db.execute(sql`insert into node_membership (id, term, document) values (2, 1, '{}')`),
-    );
+    const error = await captureError(async () => {
+      pg.db.run(sql`insert into node_membership (id, term, document) values (2, 1, '{}')`);
+    });
     expect(error).toBeDefined();
   });
 
@@ -153,17 +157,15 @@ describe("persistNodeMembershipIfNewer (the term-guarded runtime-adoption write)
   });
 });
 
-// Real Postgres, not PGlite: the `document` column is `jsonb`, and CLAUDE.md §4 records that type
-// parsing can diverge between PGlite and a real pg driver (the `name[]` OID 1003 case) — so a real-pg
-// write→read `toEqual` is the receipt that the driver hands `readNodeMembership` a parsed object, not
-// a wire literal, exactly as PGlite does.
-describe("node_membership on real Postgres", () => {
-  const suite = useTemplateDb({ template: "core" });
+// The `document` column round-trip, with a document richer than `doc(term)` builds: two nodes, two
+// standings and a populated `endorsements` list. It used to live in a real-PostgreSQL block whose
+// reason was driver divergence (see this file's header); what it still shows is that the column's
+// read mapping hands back a parsed object equal to what was written, nested arrays included, rather
+// than the text the engine stores.
+describe("node_membership document round-trip", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-  it("round-trips the whole document through the jsonb column on real Postgres", async () => {
-    // Owner connection (suite.admin) — the owner/promote write path (app_user's INSERT/UPDATE is the
-    // runtime-adoption path, not this). Proves the jsonb read returns a parsed object equal to what
-    // was written, on the real pg driver as well as PGlite.
+  it("round-trips the whole document through the document column", async () => {
     const document: SignedMembershipDocument = {
       body: {
         term: 4,
@@ -178,10 +180,10 @@ describe("node_membership on real Postgres", () => {
         { nodeId: "server-2", publicKey: "pk-2", endorsedBy: "server-1", signature: "esig" },
       ],
     };
-    await writeNodeMembership(suite.admin, document);
-    expect(await readNodeMembership(suite.admin)).toEqual(document);
+    await writeNodeMembership(suite.db, document);
+    expect(await readNodeMembership(suite.db)).toEqual(document);
 
-    const term = await suite.admin.execute<{ term: string }>(
+    const term = await suite.db.execute<{ term: string }>(
       sql`select term from node_membership where id = 1`,
     );
     expect(Number(term.rows[0]?.term)).toBe(4);

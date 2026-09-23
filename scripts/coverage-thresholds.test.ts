@@ -44,6 +44,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/core",
   "@waitron/db",
   "@waitron/payments",
+  "@waitron/store",
 ];
 
 /** The `coverage.include` every package config declares. Read as text, like the thresholds below:

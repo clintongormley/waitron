@@ -23,11 +23,11 @@ export const ROTATION_STEP = 15;
 
 /**
  * The rendered shape of a placed table. Defined LOCALLY rather than imported from `@waitron/db`'s
- * `floorTableShape` enum on purpose: `@waitron/ui` ships to the browser, and importing `@waitron/db`
- * would drag its Drizzle/Node surface into the bundle (the same decoupling `apps/till`'s api client
- * keeps against `@waitron/catalogue`). These three members MUST stay in step with
- * `floorTableShape = pgEnum("floor_table_shape", ["round", "square", "rect"])`
- * (`packages/db/src/schema/dining-tables.ts`); a server round-trip re-validates against the real enum.
+ * `floorTableShape` vocabulary on purpose: `@waitron/ui` ships to the browser, and importing
+ * `@waitron/db` would drag its Drizzle/Node surface into the bundle (the same decoupling
+ * `apps/till`'s api client keeps against `@waitron/catalogue`). These three members MUST stay in
+ * step with `floorTableShape = enumType(["round", "square", "rect"])`
+ * (`packages/db/src/schema/dining-tables.ts`); a server round-trip re-validates against it.
  */
 export type TableShape = "round" | "square" | "rect";
 

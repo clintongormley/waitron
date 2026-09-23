@@ -1,44 +1,71 @@
-import { sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locationCatalogues,
+  locations,
+  tenants,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING } from "./provisioning.js";
+import { contentLanguages } from "./schema/menu.js";
+import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
 
 // This suite checks seeded values and idempotence; it makes no privilege or contention claim.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
+/**
+ * Every write and read below goes through its drizzle table.
+ *
+ * Two reasons, and both are engine facts rather than style. A row's `id` comes from the table's
+ * own `$defaultFn` and not from a SQL default, so a raw `insert` naming the other columns is
+ * refused `NOT NULL constraint failed: locations.id`. And a `json`/`labelList` column stores JSON
+ * TEXT: a raw `select` hands back the string, where the column's read mapping hands back the map
+ * or the list these assertions are written against. The expected values are untouched; what
+ * changed is the door the row goes through.
+ */
 async function venue(country: string, province: string, receipt: string) {
   await seedTenant(suite.db);
-  await suite.db.execute(sql`update tenants set country = ${country} where id = 1`);
-  const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, province, invoice_locales, operation_description) values ('Venue', ${province}, array[${receipt}], 'Hospitality') returning id`);
-  const locationId = brandLocationId(location.rows[0]!.id);
+  await suite.db.update(tenants).set({ country }).where(eq(tenants.id, 1));
+  const [location] = await suite.db
+    .insert(locations)
+    .values({
+      name: "Venue",
+      province,
+      invoiceLocales: [receipt],
+      operationDescription: "Hospitality",
+    })
+    .returning({ id: locations.id });
+  const locationId = brandLocationId(location!.id);
   const nodeId = await seedNode(suite.db, locationId);
   return { locationId, nodeId };
 }
 
 async function storedLanguages() {
-  return (
-    await suite.db.execute<{ default_language: string; languages: string[] }>(sql`
-    select default_language, languages from content_languages`)
-  ).rows;
+  return suite.db
+    .select({
+      default_language: contentLanguages.defaultLanguage,
+      languages: contentLanguages.languages,
+    })
+    .from(contentLanguages);
 }
 
 async function storedUnits() {
-  return (
-    await suite.db.execute<{
-      seed_key: string;
-      name: Record<string, string>;
-      abbreviation: Record<string, string>;
-      precision: number;
-      hardware_unit: string | null;
-    }>(sql`
-      select seed_key, name, abbreviation, precision, hardware_unit from units order by seed_key`)
-  ).rows;
+  return suite.db
+    .select({
+      seed_key: units.seedKey,
+      name: units.name,
+      abbreviation: units.abbreviation,
+      precision: units.precision,
+      hardware_unit: units.hardwareUnit,
+    })
+    .from(units)
+    .orderBy(asc(units.seedKey));
 }
 
 describe("catalogue provisioning", () => {
@@ -60,36 +87,33 @@ describe("catalogue provisioning", () => {
     "seeds %s/%s content independently of the %s receipt locale",
     async (country, province, receipt, language, languages) => {
       const node = await venue(country, province, receipt);
-      await suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+      await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
       expect(await storedLanguages()).toEqual([{ default_language: language, languages }]);
-      const location = await suite.db.execute<{ invoice_locales: string[] }>(sql`
-      select invoice_locales from locations where id = ${node.locationId}`);
-      expect(location.rows).toEqual([{ invoice_locales: [receipt] }]);
+      const location = await suite.db
+        .select({ invoice_locales: locations.invoiceLocales })
+        .from(locations)
+        .where(eq(locations.id, node.locationId));
+      expect(location).toEqual([{ invoice_locales: [receipt] }]);
     },
   );
 
   it("preserves authored languages and reuses the initial menu on another seed", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
-    const run = () => suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
+    const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     await expect(run()).resolves.toBe("initial menu ready");
-    await suite.db.execute(
-      sql`update content_languages set default_language = 'fr', languages = array['fr','de']`,
-    );
+    await suite.db.update(contentLanguages).set({ defaultLanguage: "fr", languages: ["fr", "de"] });
     await run();
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
-    const menus = await suite.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from location_catalogues`);
-    expect(menus.rows).toEqual([{ count: 1 }]);
+    const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(locationCatalogues);
+    expect(menus).toEqual([{ count: 1 }]);
   });
 
   it("seeds the five units once and preserves edits and intentional deletion on another node", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = (nodeId = node.nodeId) =>
-      suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
+      withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
     await run();
-    await suite.db.transaction(async (tx) => {
-      expect(await getSeededUnit(tx, "each")).toBeNull();
-    });
+    expect(await getSeededUnit(suite.db, "each")).toBeNull();
     expect(await storedUnits()).toEqual([
       {
         seed_key: "g",
@@ -145,11 +169,11 @@ describe("catalogue provisioning", () => {
         hardware_unit: null,
       },
     ]);
-    await suite.db.execute(sql`
-      update units set name = '{"en":"piece","es":"pieza"}'::jsonb
-      where seed_key = 'g'`);
-    await suite.db.execute(sql`
-      delete from units where seed_key = 'mg'`);
+    await suite.db
+      .update(units)
+      .set({ name: { en: "piece", es: "pieza" } })
+      .where(eq(units.seedKey, "g"));
+    await suite.db.delete(units).where(eq(units.seedKey, "mg"));
     const otherNode = await seedNode(suite.db, node.locationId);
     await run(otherNode);
     expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({

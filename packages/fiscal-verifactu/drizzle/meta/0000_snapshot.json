@@ -1,42 +1,46 @@
 {
-  "id": "f2535a34-0091-4392-8be5-367fb3863d56",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0bd5fa4b-d104-473e-9f18-9c712ed41d99",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.acks": {
+    "acks": {
       "name": "acks",
-      "schema": "",
       "columns": {
         "registro_id": {
           "name": "registro_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "submitted_at": {
           "name": "submitted_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "csv": {
           "name": "csv",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "state": {
           "name": "state",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "delivered_at": {
           "name": "delivered_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -57,50 +61,51 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "acks_state_ck": {
           "name": "acks_state_ck",
           "value": "\"acks\".\"state\" in ('accepted', 'accepted_with_errors', 'rejected', 'halted')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.cadenas": {
+    "cadenas": {
       "name": "cadenas",
-      "schema": "",
       "columns": {
         "node_id": {
           "name": "node_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "secuencia": {
           "name": "secuencia",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "ultimo_registro_id": {
           "name": "ultimo_registro_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "ultima_huella": {
           "name": "ultima_huella",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "actualizado_en": {
           "name": "actualizado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -132,45 +137,38 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "cadenas_node_id_pk": {
-          "name": "cadenas_node_id_pk",
-          "columns": [
-            "node_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "cadenas_puntero_ck": {
           "name": "cadenas_puntero_ck",
           "value": "(\"cadenas\".\"ultimo_registro_id\" is null) = (\"cadenas\".\"ultima_huella\" is null)"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.contadores_instalacion": {
+    "contadores_instalacion": {
       "name": "contadores_instalacion",
-      "schema": "",
       "columns": {
         "nif": {
           "name": "nif",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "id_sistema_informatico": {
           "name": "id_sistema_informatico",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "proximo_numero": {
           "name": "proximo_numero",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 1
         }
       },
@@ -178,70 +176,69 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "contadores_instalacion_nif_id_sistema_informatico_pk": {
-          "name": "contadores_instalacion_nif_id_sistema_informatico_pk",
           "columns": [
             "nif",
             "id_sistema_informatico"
-          ]
+          ],
+          "name": "contadores_instalacion_nif_id_sistema_informatico_pk"
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.envio_flujo": {
+    "envio_flujo": {
       "name": "envio_flujo",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
           "type": "integer",
           "primaryKey": true,
           "notNull": true,
+          "autoincrement": false,
           "default": 1
         },
         "proximo_envio_en": {
           "name": "proximo_envio_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "tiempo_espera_seg": {
           "name": "tiempo_espera_seg",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "envio_flujo_singleton_ck": {
           "name": "envio_flujo_singleton_ck",
           "value": "\"envio_flujo\".\"id\" = 1"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.envios": {
+    "envios": {
       "name": "envios",
-      "schema": "",
       "columns": {
         "registro_id": {
           "name": "registro_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "estado": {
           "name": "estado",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": "'pendiente'"
         },
         "intentos": {
@@ -249,80 +246,75 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": 0
         },
         "proximo_intento_en": {
           "name": "proximo_intento_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "incidencia": {
           "name": "incidencia",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": false
         },
         "csv": {
           "name": "csv",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "codigo_error": {
           "name": "codigo_error",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "mensaje_error": {
           "name": "mensaje_error",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "enviado_en": {
           "name": "enviado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "confirmado_en": {
           "name": "confirmado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "reconciled_resubmit_at": {
           "name": "reconciled_resubmit_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "envios_drenaje_idx": {
           "name": "envios_drenaje_idx",
           "columns": [
-            {
-              "expression": "estado",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "proximo_intento_en",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "estado",
+            "proximo_intento_en"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -342,107 +334,83 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "envios_estado_ck": {
           "name": "envios_estado_ck",
           "value": "\"envios\".\"estado\" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.registro_sif": {
+    "registro_sif": {
       "name": "registro_sif",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "node_id": {
           "name": "node_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "nif": {
           "name": "nif",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "id_sistema_informatico": {
           "name": "id_sistema_informatico",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "numero_instalacion": {
           "name": "numero_instalacion",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "registrado_en": {
           "name": "registrado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "revocado_en": {
           "name": "revocado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
         "registro_sif_instalacion_uq": {
           "name": "registro_sif_instalacion_uq",
           "columns": [
-            {
-              "expression": "nif",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id_sistema_informatico",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "numero_instalacion",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "nif",
+            "id_sistema_informatico",
+            "numero_instalacion"
           ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": true
         },
         "registro_sif_activo_uq": {
           "name": "registro_sif_activo_uq",
           "columns": [
-            {
-              "expression": "node_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "node_id"
           ],
           "isUnique": true,
-          "where": "\"registro_sif\".\"revocado_en\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "where": "\"registro_sif\".\"revocado_en\" is null"
         }
       },
       "foreignKeys": {
@@ -462,310 +430,281 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "registro_sif_numero_ck": {
           "name": "registro_sif_numero_ck",
           "value": "\"registro_sif\".\"numero_instalacion\" > 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.registros_facturacion": {
+    "registros_facturacion": {
       "name": "registros_facturacion",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "till_id": {
           "name": "till_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "node_id": {
           "name": "node_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "sif_id": {
           "name": "sif_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "sale_id": {
           "name": "sale_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "secuencia": {
           "name": "secuencia",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "tipo_registro": {
           "name": "tipo_registro",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "id_emisor_factura": {
           "name": "id_emisor_factura",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "num_serie_factura": {
           "name": "num_serie_factura",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "fecha_expedicion_factura": {
           "name": "fecha_expedicion_factura",
-          "type": "date",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "nombre_razon_emisor": {
           "name": "nombre_razon_emisor",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "tipo_factura": {
           "name": "tipo_factura",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "tipo_rectificativa": {
           "name": "tipo_rectificativa",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "facturas_rectificadas": {
           "name": "facturas_rectificadas",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "facturas_sustituidas": {
           "name": "facturas_sustituidas",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "importe_rectificacion": {
           "name": "importe_rectificacion",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "destinatarios": {
           "name": "destinatarios",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "descripcion_operacion": {
           "name": "descripcion_operacion",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "desglose": {
           "name": "desglose",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "cuota_total": {
           "name": "cuota_total",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "importe_total": {
           "name": "importe_total",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "primer_registro": {
           "name": "primer_registro",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "anterior_id_emisor_factura": {
           "name": "anterior_id_emisor_factura",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "anterior_num_serie_factura": {
           "name": "anterior_num_serie_factura",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "anterior_fecha_expedicion_factura": {
           "name": "anterior_fecha_expedicion_factura",
-          "type": "date",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "anterior_huella": {
           "name": "anterior_huella",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "sistema_informatico": {
           "name": "sistema_informatico",
-          "type": "jsonb",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "fecha_hora_huso_gen_registro": {
           "name": "fecha_hora_huso_gen_registro",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "offset_minutos": {
           "name": "offset_minutos",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "tipo_huella": {
           "name": "tipo_huella",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "huella": {
           "name": "huella",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "entorno": {
           "name": "entorno",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "creado_en": {
           "name": "creado_en",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
         "registros_tenant_node_secuencia_uq": {
           "name": "registros_tenant_node_secuencia_uq",
           "columns": [
-            {
-              "expression": "node_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "secuencia",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "node_id",
+            "secuencia"
           ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": true
         },
         "registros_identidad_uq": {
           "name": "registros_identidad_uq",
           "columns": [
-            {
-              "expression": "id_emisor_factura",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "num_serie_factura",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fecha_expedicion_factura",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "tipo_registro",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "id_emisor_factura",
+            "num_serie_factura",
+            "fecha_expedicion_factura",
+            "tipo_registro"
           ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": true
         },
         "registros_sale_idx": {
           "name": "registros_sale_idx",
           "columns": [
-            {
-              "expression": "sale_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "sale_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         },
         "registros_node_secuencia_idx": {
           "name": "registros_node_secuencia_idx",
           "columns": [
-            {
-              "expression": "node_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "secuencia",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "node_id",
+            "secuencia"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -824,7 +763,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "registros_tipo_registro_ck": {
           "name": "registros_tipo_registro_ck",
@@ -836,7 +774,7 @@
         },
         "registros_huella_ck": {
           "name": "registros_huella_ck",
-          "value": "\"registros_facturacion\".\"huella\" ~ '^[0-9A-F]{64}$'"
+          "value": "length(\"registros_facturacion\".\"huella\") = 64 and \"registros_facturacion\".\"huella\" not glob '*[^0-9A-F]*'"
         },
         "registros_secuencia_ck": {
           "name": "registros_secuencia_ck",
@@ -852,7 +790,7 @@
         },
         "registros_tipo_factura_rectificativa_ck": {
           "name": "registros_tipo_factura_rectificativa_ck",
-          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or (\"registros_facturacion\".\"tipo_factura\" is not null and \"registros_facturacion\".\"tipo_factura\" ~ '^R[1-5]$')"
+          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or (\"registros_facturacion\".\"tipo_factura\" is not null and \"registros_facturacion\".\"tipo_factura\" glob 'R[1-5]')"
         },
         "registros_facturas_sustituidas_f3_ck": {
           "name": "registros_facturas_sustituidas_f3_ck",
@@ -862,19 +800,17 @@
           "name": "registros_encadenamiento_ck",
           "value": "(\"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is null\n             and \"registros_facturacion\".\"anterior_huella\" is null)\n           or (not \"registros_facturacion\".\"primer_registro\"\n             and \"registros_facturacion\".\"anterior_id_emisor_factura\" is not null\n             and \"registros_facturacion\".\"anterior_num_serie_factura\" is not null\n             and \"registros_facturacion\".\"anterior_fecha_expedicion_factura\" is not null\n             and \"registros_facturacion\".\"anterior_huella\" is not null)"
         }
-      },
-      "isRLSEnabled": false
+      }
     }
   },
-  "enums": {},
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

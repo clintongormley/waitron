@@ -1,4 +1,4 @@
-import { foreignKey, primaryKey } from "drizzle-orm/pg-core";
+import { foreignKey, primaryKey } from "drizzle-orm/sqlite-core";
 import { count, id, table } from "./columns.js";
 import { nodes } from "./nodes.js";
 

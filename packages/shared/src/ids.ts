@@ -37,19 +37,43 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 /**
  * Anchored UUID shape check, sharing the same `UUID_PATTERN` the branded-id constructors validate
- * against. A value that is not a well-formed UUID, passed into a Postgres `uuid` column, raises
- * `22P02 invalid input syntax for type uuid`; callers screen a cookie or request id through this
- * first so a malformed value fails as a clean client fault before it reaches the database.
+ * against. Either case passes: every character of a UUID is a hex digit, so `A` and `a` are the
+ * same value. Callers screen a cookie or request id through this so a malformed one fails as a
+ * clean client fault rather than travelling into a query as a bind value.
+ *
+ * This says only whether the value is well-formed. It does not settle its SPELLING — see
+ * {@link normaliseUuid}, which is what a caller that goes on to STORE or COMPARE the value needs.
  */
 export function isUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
+/**
+ * The one place a UUID's spelling is settled: validated, then folded to lower case.
+ *
+ * An id column is plain `text` (`packages/db/src/schema/columns.ts`) and text compares byte for
+ * byte, so an id stored in one case is not found by a lookup in the other. Folding at the boundary
+ * that PARSES an id — here, and in the branded constructors below, which all route through this —
+ * is what makes every column hold one spelling, so no write path has to remember (owner decision,
+ * 2026-09-21).
+ *
+ * The fold is confined to UUID-shaped values ON PURPOSE, and the validation is what confines it.
+ * Case is meaningless inside a UUID and meaningful in plenty of ids this system also carries — a
+ * Stripe object id, a SumUp pairing code, an AEAT invoice number — none of which is UUID-shaped.
+ * A caller that hands one of those to this function gets a refusal, not a corrupted value.
+ *
+ * `kind` names the id for the refusal only; a rejected value is echoed back exactly as the caller
+ * spelled it, because the message exists to show them their own bytes.
+ */
+export function normaliseUuid(value: string, kind: string): string {
   if (!UUID_PATTERN.test(value)) {
     throw new AppError("shared.invalid_id", { kind, value });
   }
-  return value as Branded<string, B>;
+  return value.toLowerCase();
+}
+
+function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
+  return normaliseUuid(value, kind) as Branded<string, B>;
 }
 
 export const locationId = (value: string): LocationId => brandId(value, "LocationId");

@@ -4,7 +4,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import "./errors.js";
 
 /**
- * What BR-3's restore consumer knows about the binary about to run `pg_restore` — the environment
+ * What BR-3's restore consumer knows about the binary about to place the venue file — the environment
  * it is deployed as, and the schema version each module it composes currently EXPECTS (the version
  * its own migrations bring a fresh database to), never a hardcoded or aspirational number. The
  * caller builds this the same way `buildManifest` builds a manifest's `modules` map, just read off
@@ -17,8 +17,8 @@ export type RestoreCompat = {
 
 /**
  * Refuses to restore a {@link BackupManifest} onto a target this binary cannot safely read — pure
- * comparison, no fs/DB/crypto, so BR-3's restore command can call this FIRST, before `pg_restore`
- * touches the (already-decrypted) dump.
+ * comparison, no fs/DB/crypto, so BR-3's restore command can call this FIRST, before
+ * `restoreDatabase` unlinks anything in the venue directory.
  *
  * Two refusals, checked in this order:
  *

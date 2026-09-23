@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createPgliteDb } from "./client.js";
 import { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError } from "./testing/errors.js";
@@ -21,19 +20,23 @@ const SAMPLE: Parameters<typeof writeMirrorConfig>[1] = {
   originNodeId: PRIMARY_NODE,
 };
 
+// A database with NO migration set applied, so `mirror_config` does not exist — the state of a
+// primary that has never been adopted as a mirror. Its own `useVenueDb` rather than the migrated
+// one the accessors' round-trip uses: the helper applies its sets in `beforeAll`, so one handle
+// cannot be both migrated and unmigrated.
+describe("before any migration set has run", () => {
+  const bare = useVenueDb({ migrations: [] });
+
+  it("reads null when the table itself is absent", async () => {
+    expect(await readMirrorConfig(bare.db)).toBeNull();
+  });
+});
+
 describe("mirror_config accessors", () => {
   const pg = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads null before any write (a primary/unstamped database)", async () => {
     expect(await readMirrorConfig(pg.db)).toBeNull();
-  });
-
-  it("reads null when the table itself is absent (a pre-migration handle)", async () => {
-    // A bare, unmigrated PGlite: mirror_config does not exist yet, so the `to_regclass` probe must
-    // answer "absent" rather than throw — the exact state of a primary that never ran 0071.
-    const bare = await createPgliteDb();
-    expect(await readMirrorConfig(bare)).toBeNull();
-    await bare.close();
   });
 
   it("upserts the singleton and reads it back", async () => {
@@ -60,9 +63,7 @@ describe("mirror_config accessors", () => {
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
     });
-    const count = await pg.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from mirror_config`,
-    );
+    const count = await pg.db.execute<{ n: number }>(sql`select count(*) as n from mirror_config`);
     expect(count.rows[0]?.n).toBe(1);
     expect(await readMirrorConfig(pg.db)).toEqual({
       relayUrl: "https://relay-two.test:9000/",

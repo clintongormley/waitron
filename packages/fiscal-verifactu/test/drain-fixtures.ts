@@ -1,12 +1,38 @@
 import { sql } from "drizzle-orm";
-import type { Database } from "@waitron/db";
+import { invoiceSeries, locations, nodes, sales, tills, type Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, TillId } from "@waitron/shared";
+import { envios } from "../src/schema/envios.js";
+import { registrosFacturacion } from "../src/schema/registros.js";
+import { registroSif } from "../src/schema/sif.js";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
+
+/**
+ * Every row here is written through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
+ * header gives: the `$defaultFn` generators on `id`, `creado_en`, `registrado_en` and
+ * `proximo_intento_en` are drizzle-side on this engine and a raw statement reaches none of them —
+ * measured here as `NOT NULL constraint failed: invoice_series.id`.
+ */
+
+/** The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. */
+const ISSUED_AT = "2026-07-20T19:20:30+01:00";
+
+/**
+ * The `proximo_intento_en` every seeded envío carries: this task's fake AEAT's `serverNow`, so
+ * `drain` sees the batch as due. A `Date`, so the `ts` column's own encoder writes the canonical
+ * `2026-07-21T00:00:00.000Z` — `drain` compares this column against `now.toISOString()` as TEXT
+ * (`../src/drain.ts`'s `claimBatch`), and the bare `Z` spelling the raw statement used to store
+ * sorts AFTER a `.000Z` one of the same instant. Measured on node:sqlite:
+ * `select '2026-07-21T00:00:00Z' <= '2026-07-21T00:00:00.000Z'` is 0, and the same comparison with
+ * both sides canonical is 1 — so a drain at exactly this instant would not have seen the old
+ * spelling as due. Which consumers drain at exactly this instant was NOT enumerated; what was
+ * measured is that the change moved no case from passing to failing across this package.
+ */
+const DUE_AT = new Date("2026-07-21T00:00:00Z");
 
 /**
  * Every existing caller of `seedPendingEnvios` (before the deployment-environment plan's Task 6)
@@ -99,20 +125,27 @@ export async function insertPendingAlta(
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
-  const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (node_id, code) values (${params.nodeId}, ${"S" + String(params.secuencia)})
-    returning id
-  `);
-  const seriesId = series.rows[0]?.id;
-  const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
-      '2026-07-20T19:20:30+01:00', 60,
-      0, '[]'::jsonb,
-      'es', array['es'], 'verifactu', 'recorded'
-    )
-    returning id
-  `);
-  const saleId = sale.rows[0]?.id;
+  const [series] = await db
+    .insert(invoiceSeries)
+    .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
+    .returning({ id: invoiceSeries.id });
+  const [sale] = await db
+    .insert(sales)
+    .values({
+      tillId: params.tillId,
+      nodeId: params.nodeId,
+      seriesId: series!.id,
+      invoiceNumber: params.secuencia,
+      issuedAt: ISSUED_AT,
+      issuedOffsetMinutes: 60,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
   // Unlike `seedSoldRegistro` (whose only consumer, registro-sif.test.ts, never serialises the
   // row), a row seeded here is fed to the REAL `serializeEnvio` via `client.submit` — `drain.ts`
   // rebuilds it with `fromRegistroRow` and hands it to AEAT. `tipo_factura`/`descripcion_operacion`/
@@ -121,30 +154,42 @@ export async function insertPendingAlta(
   // `DescripcionOperacion`/`TipoFactura` as required strings and `.map`s over `Desglose`
   // unconditionally, so a NULL here throws inside `escapeXml`/crashes on `null.map` — confirmed
   // live while implementing this task.
-  const desglose = JSON.stringify([
+  const desglose = [
     {
       BaseImponibleOimporteNoSujeto: "10.00",
       TipoImpositivo: "21.00",
       CuotaRepercutida: "2.10",
       CalificacionOperacion: "S1",
     },
-  ]);
-  const registro = await db.execute<{ id: string }>(sql`
-    insert into registros_facturacion (
-      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
-      id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
-      tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
-      primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
-      ${params.nif}, ${numSerieFactura}, ${params.fecha}, 'Waitron SL',
-      'F2', 'Venta en establecimiento', ${desglose}::jsonb, '2.10', '12.10',
-      true, '{}'::jsonb,
-      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${params.entorno}
-    )
-    returning id
-  `);
-  const registroId = registro.rows[0]?.id;
+  ];
+  const [registro] = await db
+    .insert(registrosFacturacion)
+    .values({
+      tillId: params.tillId,
+      nodeId: params.nodeId,
+      sifId: params.sifId,
+      saleId: sale!.id,
+      secuencia: params.secuencia,
+      tipoRegistro: "alta",
+      idEmisorFactura: params.nif,
+      numSerieFactura,
+      fechaExpedicionFactura: params.fecha,
+      nombreRazonEmisor: "Waitron SL",
+      tipoFactura: "F2",
+      descripcionOperacion: "Venta en establecimiento",
+      desglose,
+      cuotaTotal: "2.10",
+      importeTotal: "12.10",
+      primerRegistro: true,
+      sistemaInformatico: {},
+      fechaHoraHusoGenRegistro: new Date(ISSUED_AT),
+      offsetMinutos: 60,
+      tipoHuella: "01",
+      huella: params.huella,
+      entorno: params.entorno,
+    })
+    .returning({ id: registrosFacturacion.id });
+  const registroId = registro?.id;
   /* v8 ignore start */
   if (registroId === undefined) {
     // Structurally unreachable: the insert above carries no WHERE clause, so it always inserts
@@ -221,10 +266,7 @@ export async function seedPendingEnvios(
     });
     registroIds.push(registroId);
     facturaKeys.push(`${sif.nif}|${numSerieFactura}|${toAeatDate(fecha)}`);
-    await db.execute(sql`
-      insert into envios (registro_id, proximo_intento_en)
-      values (${registroId}, '2026-07-21T00:00:00Z')
-    `);
+    await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   }
 
   return {
@@ -267,10 +309,7 @@ export async function appendPendingAlta(
     fecha: PAST_FECHA,
     entorno: DEFAULT_ENTORNO,
   });
-  await db.execute(sql`
-    insert into envios (registro_id, proximo_intento_en)
-    values (${registroId}, '2026-07-21T00:00:00Z')
-  `);
+  await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
 
@@ -293,23 +332,25 @@ export async function seedSecondChain(
   // Untransacted — matching `seedPendingEnvios`'s own convention (plain sequential `db.execute`
   // calls; only `currentSif`/`registerSif`, which are typed against `Transaction`, get their own
   // `db.transaction(...)` wrapper below).
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Sala B', array['es'], 'Venta en establecimiento')
-    returning id
-  `);
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till B')
-    returning id
-  `);
-  const tillId = brandTillId(till.rows[0]!.id);
-  const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node B')
-    returning id
-  `);
-  const nodeId = brandNodeId(node.rows[0]!.id);
-  await db.execute(sql`
-    insert into invoice_series (node_id, code) values (${nodeId}, 'B')
-  `);
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Sala B",
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Till B" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId: location!.id, name: "Node B" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
+  await db.insert(invoiceSeries).values({ nodeId, code: "B" });
   // Same `nif`, same `idSistemaInformatico` ("WT" — `seedTenantWithSif`'s own literal) as
   // `seeded`'s own chain: `registerSif` mints installation numbers per (nif,
   // idSistemaInformatico), so a NEW node under that pair gets its OWN `sif_id` — a second,
@@ -332,10 +373,7 @@ export async function seedSecondChain(
     fecha: PAST_FECHA,
     entorno: DEFAULT_ENTORNO,
   });
-  await db.execute(sql`
-    insert into envios (registro_id, proximo_intento_en)
-    values (${registroId}, '2026-07-21T00:00:00Z')
-  `);
+  await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
 
@@ -352,47 +390,60 @@ export async function seedSecondChain(
  * `registerSif`'s own `defaultRandom()` id gives no such control, and sif_id ordering is otherwise
  * unobservable and uncontrollable from a test. The all-`f` literal
  * (`ffffffff-ffff-ffff-ffff-ffffffffffff`) sorting after any `registerSif`-minted id is not merely
- * likely, it is STRUCTURALLY GUARANTEED: `registerSif`'s `defaultRandom()` is Postgres's
- * `gen_random_uuid()`, which always produces a version-4 UUID — byte 6's high nibble is fixed at
- * `0x4` by the UUID v4 spec, so that byte's value is always in `0x40..0x4F`. Postgres compares
- * `uuid` bytewise, most significant byte first: for any random v4 id, the comparison against our
- * all-`0xFF` literal either already resolves in bytes 0-5 (any byte strictly less than `0xFF`
- * decides it, regardless of what follows), or ties through byte 5 and then reaches byte 6, where
- * `0x4X < 0xFF` unconditionally. There is no path by which a real v4 UUID reaches or exceeds this
- * literal — the "does not starve..." test in drain.test.ts relies on this to put this chain's one
- * healthy row LAST, behind a large backlog of refused rows, with certainty rather than
- * probability.
+ * likely, it is STRUCTURALLY GUARANTEED. `registerSif`'s id comes from `newId`
+ * (`packages/db/src/schema/columns.ts`), which is `node:crypto`'s `randomUUID()` — a version-4
+ * UUID in the canonical LOWERCASE hex spelling, stored in a `text` column that SQLite compares
+ * with the BINARY collation, i.e. byte by byte. The hyphens line up, every hex position of the
+ * literal holds `f` (0x66, the largest character a lowercase hex digit can be), and position 14
+ * holds the version digit `4` on every v4 id. So the comparison either resolves before position 14
+ * at some digit strictly below `f`, or ties through it and then meets `4 < f`. There is no path by
+ * which a `randomUUID()` reaches or exceeds this literal.
+ *
+ * Measured on node:sqlite (Node v26.7.0): the LARGEST of 200,000 `randomUUID()` values was
+ * `ffffa92e-ecac-42a7-ac35-4b38bda798e0`, whose position-14 digit is `4`, and `order by id` put it
+ * BEFORE the literal; the control in the other direction — the same value against
+ * `00000000-0000-4000-8000-000000000000` — put it AFTER. (Until 2026-09-22 this paragraph argued
+ * the same conclusion from `gen_random_uuid()` and PostgreSQL's bytewise `uuid` comparison;
+ * neither exists on this engine.)
+ *
+ * The "does not starve..." test in drain.test.ts relies on this to put this chain's one healthy
+ * row LAST, behind a large backlog of refused rows, with certainty rather than probability.
  */
 export async function seedIndependentChain(
   db: Database,
   seeded: SeededDrain,
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
-  const location = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Sala Z', array['es'], 'Venta en establecimiento')
-    returning id
-  `);
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till Z')
-    returning id
-  `);
-  const tillId = brandTillId(till.rows[0]!.id);
-  const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node Z')
-    returning id
-  `);
-  const nodeId = brandNodeId(node.rows[0]!.id);
-  await db.execute(sql`
-    insert into invoice_series (node_id, code) values (${nodeId}, 'Z')
-  `);
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Sala Z",
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId: location!.id, name: "Till Z" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId: location!.id, name: "Node Z" })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
+  await db.insert(invoiceSeries).values({ nodeId, code: "Z" });
   // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
   // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this
   // chain's own NIF is never asserted on anywhere, only its sif_id ordering.
   const nif = `ZZ${String(seeded.nodeId).replace(/-/g, "").slice(0, 7)}`;
-  await db.execute(sql`
-    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${params.sifId}, ${nodeId}, ${nif}, 'INDEP', 1)
-  `);
+  await db.insert(registroSif).values({
+    id: params.sifId,
+    nodeId,
+    nif,
+    idSistemaInformatico: "INDEP",
+    numeroInstalacion: 1,
+  });
 
   const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
   // `registros_huella_ck` requires exactly 64 hex digits (`^[0-9A-F]{64}$`) — "E" (not "Z"), a
@@ -408,9 +459,6 @@ export async function seedIndependentChain(
     fecha: PAST_FECHA,
     entorno,
   });
-  await db.execute(sql`
-    insert into envios (registro_id, proximo_intento_en)
-    values (${registroId}, '2026-07-21T00:00:00Z')
-  `);
+  await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }

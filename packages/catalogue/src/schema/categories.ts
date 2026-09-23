@@ -1,4 +1,4 @@
-import { foreignKey, index, primaryKey } from "drizzle-orm/pg-core";
+import { foreignKey, index, primaryKey } from "drizzle-orm/sqlite-core";
 import { categories, id, label, products, table } from "@waitron/db";
 
 export const categoryDetails = table(

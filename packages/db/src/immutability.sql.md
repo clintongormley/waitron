@@ -1,49 +1,56 @@
 # The append-only recipe
 
-An immutable row must survive both application writes and an owner's accidental update. Restrict
-the application role's grants and attach `reject_mutation()` to both row changes and truncation.
-Core defines that shared function in `drizzle/0001_db_baseline_sql.sql`.
+An immutable row must still be the row that was written after anything the application does to it.
+There is no SQL to copy into a migration any more: a table becomes append-only by being **declared**,
+and the triggers are installed for it.
 
-For a new immutable table, apply the complete protection in the **same migration that creates
-the table — never a later one**. A separate later migration leaves a gap in which the table can be
-mutated, including if deployment stops between the two. Core's generated and custom baselines must
-both finish before an application is given access.
+## How a table becomes append-only
 
-Use this pattern for an append-only table, substituting its actual name:
+Declare it with `appendOnly()` in its own module's classification list, instead of the plain
+`classify()` beside it. The helper is `packages/sync-enrolment/src/classification.ts`; the list is
+the module's, for example `packages/fiscal-verifactu/src/classification.ts:25`:
 
-```sql
-REVOKE UPDATE, DELETE, TRUNCATE ON "<table>" FROM app_user;
-GRANT SELECT, INSERT ON "<table>" TO app_user;
-
-CREATE TRIGGER "<table>_immutable"
-  BEFORE UPDATE OR DELETE ON "<table>"
-  FOR EACH ROW EXECUTE FUNCTION reject_mutation();
-
-CREATE TRIGGER "<table>_no_truncate"
-  BEFORE TRUNCATE ON "<table>"
-  FOR EACH STATEMENT EXECUTE FUNCTION reject_mutation();
-
-ALTER TABLE "<table>" ENABLE ALWAYS TRIGGER "<table>_immutable";
-ALTER TABLE "<table>" ENABLE ALWAYS TRIGGER "<table>_no_truncate";
+```ts
+appendOnly("registros_facturacion", "ledger", LEDGER),
 ```
 
-The REVOKE is not redundant with withholding a GRANT: it removes an earlier blanket grant and
-states the intended boundary. A later `GRANT ALL ON ALL TABLES IN SCHEMA public TO app_user` would
-restore these mutation privileges, so provisioning must not issue it after the revocations.
+`appendOnlyTablesIn` collects those names onto the set's `MigrationSet.appendOnlyTables`, and
+`applyMigrations` (`packages/migrations/src/apply.ts:105`) calls `installAppendOnlyTriggers`
+(`packages/store/src/append-only.ts`) after each set migrates — the one place that knows the set's
+tables now exist. Every migrating path in the product goes through it, so there is no install step a
+new table can miss and no gap between creating a table and protecting it.
 
-The application role lacks UPDATE, DELETE and TRUNCATE privileges. The owner holds those
-privileges, so the triggers provide a separate refusal with SQLSTATE `WT001`.
-Truncation needs its own statement trigger because it does not fire row triggers. In the measured
-probe, owner TRUNCATE with only the row trigger succeeds and leaves zero rows; the statement
-trigger raises `WT001`. See `immutability.test.ts`'s owner-TRUNCATE case. `ENABLE ALWAYS` also keeps
-these triggers active when a session uses replica mode.
+Re-running it over a database that already carries the triggers is a no-op, which is why it sits on
+the boot path rather than in a one-shot install.
 
-Keep mutable delivery state in a separate table. Correcting a delivery attempt must not require
-editing the immutable fact it describes. Keep the application's connection separate from the
-owner's connection: an owner can alter or disable the triggers.
+Guard: `scripts/append-only-triggers.test.ts`.
 
-Each schema-owning module applies the recipe to its own tables. Core owns `reject_mutation()`;
-module migrations must not install protection on another module's tables, because that introduces
-migration-order dependencies. Mutable counters such as `invoice_series.next_number` do not use
-this recipe: `allocateInvoiceNumber` must UPDATE the counter in place, so `reject_mutation()`
-would prevent the operation the table exists to support.
+**Append-only is not the same as the `ledger` class**, in either direction. Several `ledger` tables
+are updated by ordinary product code — the payment store and the two chain heads among them — and
+`order_amendments` is classified `state` and must refuse both. `ClassifiedTable.appendOnly` carries
+the receipt per table.
+
+## What the triggers refuse, and what they cannot
+
+`installAppendOnlyTriggers` puts a `BEFORE UPDATE` and a `BEFORE DELETE` `RAISE(ABORT)` trigger on
+each declared table. Between them they cover a plain `UPDATE`, a plain `DELETE`, `INSERT OR REPLACE`
+and `INSERT … ON CONFLICT DO UPDATE`; a plain `INSERT` and `ON CONFLICT DO NOTHING` are untouched,
+which is what append-only means. The replace case depends on `PRAGMA recursive_triggers`, which
+`packages/store/src/index.ts` turns on — the measurements for all of that are on
+`installAppendOnlyTriggers`' own docstring and are not repeated here.
+
+**They cannot refuse DDL.** SQLite has no trigger event for `DROP TABLE` and no `TRUNCATE` statement
+at all, and it has no roles: one process opens one file, so every caller is the owner-equivalent.
+The PostgreSQL shape this replaces protected a table twice over — the trigger, plus a `REVOKE` that
+made the application role a non-owner — and only the trigger has an equivalent here. What that costs,
+measured one statement at a time against both engines, is recorded at the top of
+`packages/db/src/immutability.test.ts`.
+
+## Two things that did not change with the engine
+
+**Keep mutable delivery state in a separate table.** Correcting a delivery attempt must not require
+editing the immutable fact it describes.
+
+**A mutable counter is not declared append-only.** `invoice_series` is classified `state`
+(`packages/db/src/classification.ts:46`), because `allocateInvoiceNumber` has to UPDATE
+`next_number` in place — the operation the table exists to support.

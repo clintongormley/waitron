@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -146,5 +147,74 @@ describe("fiscal readiness submission runner", () => {
         },
       }),
     ).rejects.toThrow("local backend misconfigured");
+  });
+  /**
+   * The retained sample database holds a REAL preproduction sale on a REAL chain, so the tables the
+   * modules declare append-only have to refuse a rewrite here exactly as they do on the box
+   * (CLAUDE.md §5). This runner migrates with `runMigrations` set by set rather than through
+   * `applyMigrations`, which is where the product installs the triggers — so nothing else in the
+   * tree covers this path.
+   *
+   * Read through a raw `node:sqlite` connection rather than the runner's own handle, which it
+   * closes: the triggers belong to the FILE, so reopening it is what proves they were persisted and
+   * not merely installed on a session.
+   */
+  it("leaves the retained sample database refusing to rewrite the sale it recorded", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-append-only-"));
+    dirs.push(stateDir);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const modules = enabledModules(ALL_MODULES, selected.config);
+    const contribution = {
+      ...selected.contribution!,
+      activationReadiness: "accepted-test-submission" as const,
+      drain: vi.fn().mockResolvedValue({ ...emptyDrainResult(), recordsAccepted: 1 }),
+    };
+    const readinessInput: FiscalReadinessInput = {
+      requirement: "accepted-test-submission",
+      fiscalModule: contribution.id,
+      country: venue.country,
+      taxId: venue.taxId,
+      legalName: venue.legalName,
+      fiscalTerritory: venue.location.fiscalTerritory,
+      submissionTarget: null,
+      certificateFingerprint: null,
+      certificateKind: null,
+      moduleVersions: { core: 1 },
+      applicationVersion: "0.0.0",
+    };
+
+    await submitFiscalReadiness({
+      stateDir,
+      modules,
+      venue,
+      contribution,
+      secret: undefined,
+      ring: {} as never,
+      readinessInput,
+      now: () => new Date("2026-09-09T12:00:00.000Z"),
+    });
+
+    const connection = new DatabaseSync(
+      join(
+        stateDir,
+        `fiscal-readiness-db-${fiscalReadinessDatabaseKey(readinessInput)}`,
+        "venue.db",
+      ),
+    );
+    try {
+      // The row first: a `FOR EACH ROW` trigger on an EMPTY table refuses nothing, so without this
+      // the case would pass with no trigger installed at all.
+      expect(connection.prepare("select count(*) as n from sales").get()?.n).toBe(1);
+      // `locale` is written back as it stands, not changed: `sales_locale_member_ck` ties it to a
+      // member of `invoice_locales`, so any other value is refused by the CHECK before a trigger is
+      // reached (measured — `'xx-XX'` gives `CHECK constraint failed: sales_locale_member_ck`).
+      // `BEFORE UPDATE` fires on the statement whatever the value, which the control below says:
+      // with the install deleted this same statement succeeds and nothing throws.
+      expect(() => connection.exec("update sales set locale = 'en-GB'")).toThrow(
+        /sales is append-only/,
+      );
+    } finally {
+      connection.close();
+    }
   });
 });

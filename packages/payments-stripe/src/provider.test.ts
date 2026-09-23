@@ -22,7 +22,7 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 
 const pg = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
-// The provider's sync-origin node id. Value is irrelevant to these assertions (this container migrates
+// The provider's sync-origin node id. Value is irrelevant to these assertions (this suite migrates
 // core+payments only, no sync capture triggers), but the option is required — it is threaded into the
 // adapter's withTransaction so enrolled `payments` writes capture a real origin (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";

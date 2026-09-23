@@ -952,3 +952,45 @@ describe("the sharded packages' scripts", () => {
     expect(new Set(shardedPackages.map((pkg) => scripts.get(pkg)?.["test:merge"])).size).toBe(1);
   });
 });
+
+/**
+ * A workflow step must not capture the SERVER bundle's output in a `$(…)`.
+ *
+ * The bundle used to fail fast: with no database reachable it threw `server.config_missing` and
+ * exited, so capturing it and grepping the output was a fair way to smoke-test it. It does not fail
+ * any more — it opens a venue directory and SERVES — so a capture never returns. That is not a
+ * failing step, it is a step that runs until the job's own limit kills it, and it happened: 15m14s
+ * on this branch's first push, cancelled, with a `bash` and a `node-MainThread` named as orphans in
+ * the job log's closing lines.
+ *
+ * TWO steps had this shape and only one was found by reading. This check is why the second one is
+ * not the last. It reads the workflow as TEXT, so it sees a `node …server.js` written literally and
+ * nothing reached through a variable or a script.
+ *
+ * The credentials CLI is deliberately outside it: `packages/credentials/dist/bin.js` refuses and
+ * exits when `WAITRON_VENUE_DIR` is unset, so a capture of THAT one returns.
+ */
+describe("the server bundle's smoke steps", () => {
+  const serverBundle = /node\s+\S*(?:server\.js|node-entry\.js)/;
+
+  it("never capture a bundle that serves, because the capture would never return", () => {
+    const captured = lines.filter(
+      (line) => serverBundle.test(line) && /=\s*\$\(/.test(line) && !line.trim().startsWith("#"),
+    );
+    expect(
+      captured,
+      "a $(…) around the server bundle waits for a process that serves until it is killed; " +
+        "background it, poll its log for server.listening, then kill it",
+    ).toEqual([]);
+  });
+
+  it("bound every run of the bundle with a timeout", () => {
+    const runs = lines.filter(
+      (line) => serverBundle.test(line) && !line.trim().startsWith("#") && !/grep|echo/.test(line),
+    );
+    expect(runs.length, "expected the two bundle smoke steps to still be here").toBeGreaterThan(0);
+    for (const line of runs) {
+      expect(line, `this run of the bundle has no timeout: ${line.trim()}`).toMatch(/\btimeout\s/);
+    }
+  });
+});

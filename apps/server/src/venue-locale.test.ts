@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, locations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueLocale } from "./venue-locale.js";
@@ -24,10 +24,22 @@ const suite = useVenueDb({
     await seedTenant(db);
     // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
     // so locale resolution falls through to the country default.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, province, invoice_locales, operation_description)
-      values ('Counter', 'Barcelona', array['es-ES'], 'Retail') returning id`);
-    locationId = loc.rows[0]!.id;
+    //
+    // Inserted through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
+    // `locations.id` is a `$defaultFn(newId)` generator on this engine and a raw insert reaches
+    // none of them (the column is `text PRIMARY KEY NOT NULL`,
+    // `packages/db/drizzle/0000_baseline.sql:2`), and `invoice_locales` is a JSON array in a text
+    // column, so the `array[...]` constructor that used to fill it is syntax this engine refuses.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Counter",
+        province: "Barcelona",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Retail",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
   },
 });
 

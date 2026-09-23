@@ -1,7 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { refusalOn, triggerRaised } from "../constraint-target.js";
+import {
+  CHECK_VIOLATION,
+  FOREIGN_KEY_VIOLATION,
+  RESTRICT_VIOLATION,
+  UNIQUE_VIOLATION,
+} from "../sql-state.js";
+import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
+import { isPgError } from "../unique-violation.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -14,12 +24,37 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.transaction(async (tx) => {
-    // Fixture cleanup must remove lines whose parent is already terminal, which the origin-only
-    // `working_order_lines_require_open_parent` trigger would reject. `session_replication_role =
-    // 'replica'` skips origin-only ('O') triggers while leaving the ENABLE ALWAYS append-only guards
-    // intact (PGlite connections are superuser, so the SET is permitted); SET LOCAL
-    // restores the ordinary role before the next case exercises the real write path.
-    await tx.execute(sql`set local session_replication_role = 'replica'`);
+    // Fixture cleanup must remove lines whose parent is already terminal, which
+    // `working_order_lines_require_open_parent_delete` refuses — measured on this package's
+    // migrated database, that trigger really is BEFORE DELETE and really does raise
+    // `lines may only be written while the order is open`.
+    //
+    // This block used to read `set local session_replication_role = 'replica'`, which skipped
+    // PostgreSQL's origin-only triggers for the rest of the transaction. Run against this engine
+    // that statement is refused at prepare with `near "set": syntax error` (node v26.7.0,
+    // `node:sqlite`) and took the WHOLE FILE down with it: the cleanup threw, the fixture tables
+    // survived, and all twenty-nine cases failed — the later ones on
+    // `UNIQUE constraint failed: tenants.id` from the previous case's leftover row.
+    //
+    // There is no session-level trigger switch here, so the trigger is dropped and put back
+    // instead. Its own statement is read out of `sqlite_master` and replayed verbatim rather than
+    // written out again here, so a future edit to the migration cannot leave this fixture
+    // restoring a stale definition — the idiom `packages/fiscal-verifactu/src/verify.test.ts`
+    // uses. It is inside the transaction, so a cleanup that throws rolls the drop back too.
+    const [guard] = (
+      await tx.execute<{ sql: string }>(
+        sql`select sql from sqlite_master
+             where type = 'trigger' and name = 'working_order_lines_require_open_parent_delete'`,
+      )
+    ).rows;
+    if (guard === undefined) {
+      throw new Error(
+        "working_order_lines_require_open_parent_delete is missing — this cleanup drops and " +
+          "restores it, and restoring nothing would silently leave the guard off for every " +
+          "later case in this file",
+      );
+    }
+    await tx.execute(sql`drop trigger working_order_lines_require_open_parent_delete`);
     await tx.execute(sql`delete from working_order_lines`);
     await tx.execute(sql`delete from working_orders`);
     await tx.execute(sql`delete from products`);
@@ -28,6 +63,7 @@ afterEach(async () => {
     await tx.execute(sql`delete from tills`);
     await tx.execute(sql`delete from locations`);
     await tx.execute(sql`delete from tenants`);
+    await tx.execute(sql.raw(guard.sql));
   });
 });
 
@@ -123,13 +159,41 @@ describe("working_orders", () => {
     expect(row.settledAt).toBeNull();
   });
 
-  it("rejects a status outside the enum", async () => {
+  it("rejects a status outside the allowed set", async () => {
+    // The column was a PostgreSQL enum TYPE and is now TEXT under a named CHECK listing the four
+    // statuses (`working_orders_status_ck`, drizzle/0000_baseline.sql). The refusal survives the
+    // change of mechanism, so this pins the CHECK class and the constraint's name instead of the
+    // enum type's name — measured on this case: errcode 275,
+    // `CHECK constraint failed: working_orders_status_ck`.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into working_orders (till_id, status, opened_at) values (${TILL_A1}::uuid, 'paid', ${AT}::timestamptz)`,
+        // The two `::` casts this statement carried are gone: SQLite has no cast operator, and run
+        // as written the statement was refused at prepare with `unrecognized token: ":"` (node
+        // v26.7.0, `node:sqlite`) — so the refusal this case is about was never reached. Both
+        // columns are TEXT here, and the bound values are already the strings they hold. `id` and
+        // `order_number` are named explicitly too: both are NOT NULL and `id` is a `$defaultFn`
+        // generator, so with the cast removed but the columns still omitted this statement was
+        // refused `NOT NULL constraint failed: working_orders.order_number` and never reached the
+        // status CHECK this case is about (measured on this case).
+        sql`insert into working_orders (id, till_id, order_number, status, opened_at)
+             values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'paid', ${AT})`,
       ),
     );
-    expect(pgErrorMessage(error)).toMatch(/invalid input value for enum working_order_status/);
+    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toMatch(/working_orders_status_ck/);
+
+    // The control in the other direction. A CHECK that refused everything would satisfy the
+    // assertion above just as well; `placed` is a listed status and no other case in this file
+    // writes one, so it is the value that separates "this list is enforced" from "nothing gets in".
+    await db.execute(
+      sql`insert into working_orders (id, till_id, order_number, status, opened_at)
+           values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'placed', ${AT})`,
+    );
+    const placed = await rows<{ status: string }>(
+      db,
+      sql`select status from working_orders where status = 'placed'`,
+    );
+    expect(placed).toEqual([{ status: "placed" }]);
   });
 
   it("amends an open order", async () => {
@@ -186,6 +250,14 @@ describe("working_orders", () => {
     expect(pgErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
   });
 
+  // WHAT THE SIX TRANSITION CASES BELOW LOST. The PostgreSQL guard interpolated both states into
+  // its message (`cannot transition from settled to open`), so each case pinned the states the
+  // trigger had read as well as the refusal. `working_orders_enforce_transition` now raises ONE
+  // fixed sentence for every refused transition (`TRANSITION_REFUSAL`, ../trigger-refusals.ts), so
+  // the states are not in the error at all and no assertion here can reach them. Everything else
+  // each case pins is unchanged: the transition it drives is refused, and refused by THIS trigger
+  // — `triggerRaised` matches the class and the exact words, which excludes an `ON DELETE
+  // RESTRICT` refusal (same result code 1811, different message) and every other trigger's raise.
   it("rejects settled → open", async () => {
     const id = await openOrder(db);
     await db
@@ -198,7 +270,7 @@ describe("working_orders", () => {
         .set({ status: "open", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to open/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects settled → abandoned", async () => {
@@ -215,7 +287,7 @@ describe("working_orders", () => {
         .set({ status: "abandoned", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to abandoned/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects abandoned → open", async () => {
@@ -224,7 +296,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to open/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects abandoned → settled", async () => {
@@ -236,7 +308,7 @@ describe("working_orders", () => {
         .set({ status: "settled", settledAt: AT })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to settled/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects a no-op update of a settled order", async () => {
@@ -249,7 +321,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to settled/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("rejects a no-op update of an abandoned order", async () => {
@@ -262,19 +334,22 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to abandoned/);
+    expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
 
   it("carries a nullable node_id column referencing nodes", async () => {
     // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
     // working_orders stays nullable permanently in this slice — no writer yet (design §5).
     const node = await seedNode(db, brandLocationId(LOCATION_A));
-    const meta = await rows<{ is_nullable: string }>(
+    // `pragma_table_info` for `information_schema.columns`, which does not exist on this engine —
+    // run as written this statement died with `no such table: information_schema.columns`. Its
+    // `notnull` is 1 for a NOT NULL column and 0 otherwise, the exact counterpart of
+    // `is_nullable`'s 'NO'/'YES', so the assertion carries across unchanged.
+    const meta = await rows<{ notnull: number }>(
       db,
-      sql`select is_nullable from information_schema.columns
-           where table_name = 'working_orders' and column_name = 'node_id'`,
+      sql`select "notnull" from pragma_table_info('working_orders') where name = 'node_id'`,
     );
-    expect(meta).toEqual([{ is_nullable: "YES" }]);
+    expect(meta).toEqual([{ notnull: 0 }]);
     // Opens fine WITHOUT node_id (nullable) ...
     const plainId = await openOrder(db);
     const [plain] = await db.select().from(workingOrders).where(eq(workingOrders.id, plainId));
@@ -303,7 +378,11 @@ describe("working_orders", () => {
         nodeId: "99999999-9999-4999-8999-999999999999",
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
+    // The whole message is `FOREIGN KEY constraint failed` — SQLite names neither the constraint
+    // nor the column, so the CLASS is all there is to assert (measured on this case: errcode 787,
+    // `constraintTarget` undefined). That is what the PostgreSQL regex pinned too: it matched
+    // `violates foreign key constraint` and read no name out of it either.
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -329,7 +408,17 @@ describe("working_order_lines", () => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
-    expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
+    // The key itself, not just the class: SQLite names the table and the colliding columns in the
+    // message, so this pins `working_order_lines_line_no_key`'s (working_order_id, line_no) rather
+    // than accepting any uniqueness refusal on this table — `id`'s primary key would satisfy the
+    // class alone. Measured on this case: errcode 2067,
+    // `UNIQUE constraint failed: working_order_lines.working_order_id, working_order_lines.line_no`.
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "working_order_lines",
+        columns: ["working_order_id", "line_no"],
+      }),
+    ).toBe(true);
   });
 
   it("rejects a line added to a settled order", async () => {
@@ -415,57 +504,61 @@ describe("working_order_lines", () => {
     // neither identifier lets a catalogue edit change a completed record. The extras and options a
     // line answered point at nothing: `option_snapshots` holds names, and a pick becomes a child line
     // naming its product.
-    const cols = await rows<{ column_name: string }>(
+    // `pragma_table_info` for `information_schema.columns`; it reports the same column NAMES, and
+    // names are all this case reads, so nothing changes about what it catches.
+    const cols = await rows<{ name: string }>(
       db,
-      sql`select column_name from information_schema.columns
-           where table_name = 'working_order_lines'`,
+      sql`select name from pragma_table_info('working_order_lines')`,
     );
     const references = cols
-      .map((c) => c.column_name)
+      .map((c) => c.name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
       .sort();
     expect(references).toEqual(["product_id", "variant_id"]);
   });
 
   it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {
-    const meta = await rows<{
-      column_name: string;
-      is_nullable: string;
-      data_type: string;
-      udt_name: string;
-    }>(
+    // `pragma_table_info` for `information_schema.columns`. Three of the four values carry across:
+    // the name, the declared type, and `notnull` 0 for `is_nullable` 'YES'. The fourth, `udt_name`,
+    // was PostgreSQL's underlying TYPE name and has no counterpart in the pragma at all — for this
+    // column it said `text`, the same word as `data_type`, so nothing it separated is separated
+    // elsewhere in this case. `lower(type)` because the pragma answers `TEXT` in upper case while
+    // the `CREATE TABLE` statement `sqlite_master` holds spells it `text` (measured on this
+    // package's migrated database).
+    const meta = await rows<{ name: string; type: string; notnull: number }>(
       db,
-      sql`select column_name, is_nullable, data_type, udt_name
-            from information_schema.columns
-           where table_name = 'working_order_lines' and column_name = 'note'`,
+      sql`select name, lower(type) as type, "notnull" from pragma_table_info('working_order_lines')
+           where name = 'note'`,
     );
-    expect(meta).toEqual([
-      { column_name: "note", is_nullable: "YES", data_type: "text", udt_name: "text" },
-    ]);
+    expect(meta).toEqual([{ name: "note", type: "text", notnull: 0 }]);
   });
 
   it("stores every monetary column as integer, a whole count of cents", async () => {
-    const cols = await rows<{
-      column_name: string;
-      data_type: string;
-      numeric_precision: number;
-      numeric_scale: number;
-    }>(
+    // WHAT THIS CASE LOST. It read four values out of `information_schema.columns`, which does not
+    // exist on this engine — run as written the statement died with
+    // `no such table: information_schema.columns`. `pragma_table_info` is the replacement, and it
+    // reports a name, a declared type and `notnull`; there is no `numeric_precision` and no
+    // `numeric_scale`, so TWO of the three assertions below have no counterpart and are gone.
+    //
+    // The comment they carried named two faults: a column slipping back to `numeric(12, 2)`, and
+    // one narrowed to a four-byte integer. Neither is a shape this engine can take — SQLite has no
+    // fixed-point numeric type, and its INTEGER storage class is one thing rather than a family of
+    // widths. So what those two assertions watched for is not available to be watched, rather than
+    // being watched less carefully.
+    //
+    // What is still checked: that all three columns exist, and that each is INTEGER rather than
+    // TEXT — which is what a money column being a whole count of cents means here
+    // (`money()` in packages/db/src/schema/columns.ts). CLAUDE.md §3 states the hedge that goes
+    // with it: `money`, `quantity` and `bigCount` all emit the same SQL type, so this pins the
+    // storage class and NOT the unit.
+    const cols = await rows<{ name: string; type: string }>(
       db,
-      sql`select column_name, data_type, numeric_precision, numeric_scale
-            from information_schema.columns
-           where table_name = 'working_order_lines'
-             and column_name in ('unit_price', 'unit_price_gross', 'line_total')`,
+      sql`select name, lower(type) as type from pragma_table_info('working_order_lines')
+           where name in ('unit_price', 'unit_price_gross', 'line_total')`,
     );
     expect(cols).toHaveLength(3);
     for (const col of cols) {
-      // A money column counts whole cents (`money()` in packages/db/src/schema/columns.ts):
-      // PostgreSQL reports `bigint` as precision 64, scale 0, so a column that slipped back to
-      // numeric(12, 2) fails all three, and one narrowed to a four-byte integer fails the
-      // precision.
-      expect(col.data_type).toBe("bigint");
-      expect(col.numeric_precision).toBe(64);
-      expect(col.numeric_scale).toBe(0);
+      expect(col.type).toBe("integer");
     }
   });
 });
@@ -495,6 +588,14 @@ describe("working_order_lines — the draft line's links", () => {
 
   // Raw insert so a missing column fails here rather than as a TypeScript error against the drizzle
   // `workingOrderLines` type. product_id is passed explicitly (NULL for a line naming no product).
+  //
+  // Two changes the engine forced, neither of which touches what the cases below assert. The
+  // `${descriptions}::jsonb` cast is gone — SQLite has no cast operator and the statement was
+  // refused at prepare with `unrecognized token: ":"` (node v26.7.0, `node:sqlite`); the column is
+  // TEXT holding JSON, so the bound string is already what it stores. And `id` is now passed
+  // explicitly, because `working_order_lines.id` is `$defaultFn(newId)` — a JavaScript generator
+  // rather than a SQL DEFAULT, which a raw insert never reaches. Supplying it here keeps the
+  // insert raw, which is the whole point of this helper.
   async function insertLine(opts: {
     workingOrderId: string;
     lineNo: number;
@@ -505,8 +606,8 @@ describe("working_order_lines — the draft line's links", () => {
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
-             ${descriptions}::jsonb, 1000, 130, 143, 1000, 130,
+      sql`insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id) values (${randomUUID()}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+             ${descriptions}, 1000, 130, 143, 1000, 130,
              ${opts.parentLineId ?? null}
            ) returning id`,
     );
@@ -533,10 +634,14 @@ describe("working_order_lines — the draft line's links", () => {
       // `1` and `10` — the whole-unit spelling the decimal columns took — the insert succeeds and
       // stores a thousandth of a unit at a hundredth of a percent, refused by neither
       // `working_order_lines_quantity_ck` nor `working_order_lines_vat_rate_ck`. Measured by
-      // putting those two literals back and running this case. Cast to text so the assertion does
-      // not turn on how the driver renders each of the two integer widths.
-      sql`select parent_line_id, product_id, quantity::text as quantity, vat_rate::text as vat_rate
-            from working_order_lines where id = ${child.id}::uuid`,
+      // putting those two literals back and running this case. Rendered as text so the assertion
+      // does not turn on how the driver renders each of the two integer widths — `cast(x as text)`
+      // for the `x::text` this was written as, because SQLite has no cast OPERATOR but does have
+      // the standard cast EXPRESSION. The `${child.id}::uuid` cast is simply gone: the column is
+      // TEXT and the bound value is already the string it holds.
+      sql`select parent_line_id, product_id, cast(quantity as text) as quantity,
+                 cast(vat_rate as text) as vat_rate
+            from working_order_lines where id = ${child.id}`,
     );
     expect(row.parent_line_id).toBe(parent.id);
     expect(row.product_id).toBe(productA);
@@ -547,7 +652,7 @@ describe("working_order_lines — the draft line's links", () => {
   it("refuses to delete a product an open order's child line names, and allows one nothing names", async () => {
     const orderId = await openOrder(db);
     const [parent] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
-    await insertLine({
+    const [child] = await insertLine({
       workingOrderId: orderId,
       lineNo: 2,
       productId: productA,
@@ -556,7 +661,22 @@ describe("working_order_lines — the draft line's links", () => {
     const error = await captureError(() => db.delete(products).where(eq(products.id, productA)));
     // `ON DELETE restrict`, not SET NULL: a live basket line must keep naming what the kitchen is
     // cooking (spec §3.5).
-    expect(pgErrorMessage(error)).toContain("working_order_lines_product_fk");
+    //
+    // WHAT THIS LOST. It named the constraint — `working_order_lines_product_fk` — and SQLite
+    // reports no constraint name for a foreign key: the whole message is `FOREIGN KEY constraint
+    // failed` (measured on this case, errcode 1811). The name still exists in the drizzle schema
+    // (../orders.ts) and in the snapshots, but it is not in the refusal, so no assertion can read
+    // it. Two things stand in for it, and neither is the name:
+    //  - the result code separates a RESTRICT reference from the schema's other kind. SQLite
+    //    implements `ON DELETE RESTRICT` with an internal trigger, so it arrives as 1811
+    //    (`RESTRICT_VIOLATION`) while an `ON DELETE NO ACTION` parent-delete arrives as 787 —
+    //    `products` carries one reference of each (working_order_lines restrict, recipe_lines no
+    //    action). Measured with one real refusal of each against `node:sqlite` on node v26.7.0.
+    //  - the message, which excludes a trigger's own `RAISE(ABORT)`: those share code 1811 and
+    //    report their own words instead (../sql-state.ts's `TRIGGER_ABORT`).
+    // The last step of this case closes the gap behaviourally.
+    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(pgErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
 
     // The control, in the other direction: an unnamed product deletes, so the refusal above is the
     // reference and not the delete itself failing.
@@ -572,20 +692,33 @@ describe("working_order_lines — the draft line's links", () => {
       .returning({ id: products.id });
     await db.delete(products).where(eq(products.id, spare.id));
     expect(await db.select({ id: products.id }).from(products)).toHaveLength(1);
+
+    // Attribution, which is what the constraint name used to give and the refusal no longer can:
+    // the SAME product deletes once the two lines naming it are gone, so what refused above was
+    // those lines and not some other reference onto `products`. Child before parent — the
+    // self-link is `ON DELETE no action`, so removing the parent first would dangle the child.
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, child.id));
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, parent.id));
+    await db.delete(products).where(eq(products.id, productA));
+    expect(await db.select({ id: products.id }).from(products)).toHaveLength(0);
   });
 
   it("defaults option_snapshots to an empty list and refuses a null", async () => {
     const orderId = await openOrder(db);
     const [line] = await insertLine({ workingOrderId: orderId, lineNo: 1, productId: productA });
-    const [row] = await rows<{ option_snapshots: unknown }>(
-      db,
-      sql`select option_snapshots from working_order_lines where id = ${line.id}::uuid`,
-    );
-    expect(row.option_snapshots).toEqual([]);
+    // Drizzle for the READ, not raw SQL. `option_snapshots` is a `json(...)` column stored as
+    // TEXT, so a raw select hands back the string `[]` and `toEqual([])` fails on it; only
+    // drizzle's read mapping decodes it to the array this case is about. Measured on this case.
+    const [row] = await db
+      .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, line.id));
+    expect(row!.optionSnapshots).toEqual([]);
+    // The refusal stays on a raw statement — it is the NOT NULL the column carries that is under
+    // test, and drizzle would refuse a null at the type level before the engine saw it. The
+    // `::uuid` cast is gone for the reason the helper above records.
     const error = await captureError(() =>
-      db.execute(
-        sql`update working_order_lines set option_snapshots = null where id = ${line.id}::uuid`,
-      ),
+      db.execute(sql`update working_order_lines set option_snapshots = null where id = ${line.id}`),
     );
     expect(pgErrorMessage(error)).toContain("option_snapshots");
   });

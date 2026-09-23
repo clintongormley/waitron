@@ -1,6 +1,18 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/pg-core";
-import { catalogues, count, flag, id, json, label, money, products, table } from "@waitron/db";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  catalogues,
+  count,
+  flag,
+  id,
+  json,
+  label,
+  labelList,
+  money,
+  newId,
+  products,
+  table,
+} from "@waitron/db";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
  * `id` pinned to 1 (the `deployment` / `mirror_config` / `node_membership` singleton shape in
@@ -10,15 +22,31 @@ export const contentLanguages = table(
   {
     id: count("id").primaryKey().notNull().default(1),
     defaultLanguage: label("default_language").notNull(),
-    languages: label("languages").array().notNull(),
+    languages: labelList("languages").notNull(),
   },
   (t) => [
     check("content_languages_singleton_ck", sql`${t.id} = 1`),
-    check("content_languages_default_ck", sql`${t.defaultLanguage} = any(${t.languages})`),
+    // Membership in the list, matched on the QUOTED token so a code cannot match a prefix of a
+    // longer one. Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/arrays.mjs:
+    // `["es-ES"]` with default `es` is refused and with `es-ES` accepted, `["es","en"]` accepts
+    // `es` and refuses `fr`, and an empty list refuses every default. It replaces
+    // `default_language = any(languages)`, which SQLite refuses at CREATE TABLE time with
+    // `no such function: any`. The match is exact only while a language code carries no `"` and
+    // needs no JSON escape — true of BCP-47 tags, and nothing below this line enforces it.
     check(
-      "content_languages_list_ck",
-      sql`cardinality(${t.languages}) between 1 and 200 and array_position(${t.languages}, null) is null`,
+      "content_languages_default_ck",
+      sql`instr(${t.languages}, '"' || ${t.defaultLanguage} || '"') > 0`,
     ),
+    // The PostgreSQL check was `cardinality(languages) between 1 and 200 and
+    // array_position(languages, null) is null`. The count carries across to `json_array_length`,
+    // which also refuses text that is not JSON at all (`malformed JSON`, measured). **The second
+    // half does NOT carry**: a JSON array holding a null entry, `[null]`, is accepted here, and
+    // neither of the two shapes tried refuses it — SQLite answers
+    // `subqueries prohibited in CHECK constraints` to the `json_each` form, and `array_position`
+    // does not exist. Whether some third expression could is not established; nobody has looked
+    // further. What refuses a null entry today is the column's own `string[]` type and the writer
+    // above it; the database does not.
+    check("content_languages_list_ck", sql`json_array_length(${t.languages}) between 1 and 200`),
   ],
 );
 
@@ -26,7 +54,7 @@ export const contentLanguages = table(
 export const menuSections = table(
   "menu_sections",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     menuId: id("menu_id").notNull(),
     name: json<Record<string, string>>("name").notNull(),
     displayOrder: count("display_order").notNull().default(0),
@@ -48,7 +76,7 @@ export const menuSections = table(
 export const menuItems = table(
   "menu_items",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     menuId: id("menu_id").notNull(),
     productId: id("product_id").notNull(),
     sectionId: id("section_id").notNull(),

@@ -11,8 +11,8 @@ const FLOOR_EPOCH_MS = Date.UTC(2020, 0, 1);
 /**
  * Whole seconds since 2020-01-01T00:00:00Z, used to raise the restored counter's floor.
  * A restore in the same second, or on a clock behind the prior restore, can compute the same floor
- * (spec §3.5). `greatest` keeps a higher stored counter; `registro_sif_instalacion_uq` refuses reuse
- * of an installation number still in the database. Neither protects history absent from an older
+ * (spec §3.5). The upsert below keeps a higher stored counter; `registro_sif_instalacion_uq` refuses
+ * reuse of an installation number still in the database. Neither protects history absent from an older
  * dump when the clock has not advanced beyond it. Fits `integer` until 2088.
  */
 export function installationFloor(now: Date): number {
@@ -38,7 +38,13 @@ export async function raiseInstallationFloor(
     .onConflictDoUpdate({
       target: [contadoresInstalacion.nif, contadoresInstalacion.idSistemaInformatico],
       set: {
-        proximoNumero: sql`greatest(${contadoresInstalacion.proximoNumero}, ${params.floor})`,
+        // SQLite's two-argument `max` is PostgreSQL's `greatest`, which this engine refuses at
+        // PREPARE time — `no such function: greatest`, so the statement never read a row (measured
+        // on node v26.7.0, SQLite 3.53.4). The two disagree when an argument is NULL:
+        // `greatest(null, 5)` is 5 on PostgreSQL and `max(null, 5)` is null here. Neither side can
+        // be null at this call site — `proximo_numero` is NOT NULL (the engine refuses one,
+        // errcode 1299) and `floor` is a number.
+        proximoNumero: sql`max(${contadoresInstalacion.proximoNumero}, ${params.floor})`,
       },
     });
 }

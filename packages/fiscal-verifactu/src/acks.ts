@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { AckState } from "@waitron/fiscal";
 
@@ -55,6 +55,21 @@ export function ackStateOf(estado: string): AckState | null {
  * straight off the row (null for a reconcile correction — consulta can never return it). The
  * upsert resets `delivered_at` to null on conflict, so a corrected state re-delivers downstream.
  *
+ * The fallback binds `now.toISOString()` with NO cast. It used to carry `::timestamptz`, which
+ * SQLite refuses at prepare time — it reads the first colon as the start of a bind parameter and
+ * rejects the whole statement with `unrecognized token: ":"`. The cast has nothing left to do:
+ * both `envios.enviado_en` and `acks.submitted_at` are `ts` columns, which on this engine hold the
+ * exact output of `Date.prototype.toISOString` as text (`packages/db/src/schema/columns.ts`'s
+ * `isoTimestamp`), so the two `coalesce` arms are already the same type and the same encoding.
+ * Measured 2026-09-22 on Node v26.7.0 against `node:sqlite`, with the identical statement minus
+ * the cast as the control: the cast threw, and the control returned the row's own
+ * `2026-07-21T00:00:00.000Z` where `enviado_en` was set and the bound fallback where it was null.
+ * Guard: the `takes the envío's own enviado_en when it has one, and the passed instant when it
+ * does not` case in `acks.test.ts`, which reaches this function directly rather than through the
+ * drainer. Proven by deletion the same day, in both directions: putting the cast back left it red
+ * on `unrecognized token: ":"`, and dropping the `e.enviado_en` arm left it red on the claimed
+ * row's own instant.
+ *
  * The estado→state mapping is computed once in TypeScript (`ackStateOf`) and only the resulting
  * `state` is bound into SQL; every other column flows from the committed row, so the mapping is
  * never duplicated in raw SQL where the two could drift.
@@ -72,7 +87,7 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
     insert into acks (registro_id, submitted_at, csv, state, delivered_at)
     select
       e.registro_id,
-      coalesce(e.enviado_en, ${now.toISOString()}::timestamptz),
+      coalesce(e.enviado_en, ${now.toISOString()}),
       e.csv,
       ${state},
       null
@@ -117,10 +132,17 @@ export async function pendingAcks(db: Database): Promise<Ack[]> {
   });
 }
 
-/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`. */
+/**
+ * Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`.
+ *
+ * The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does not
+ * have, and the statement was refused at PREPARE with `no such function: now` before any row was
+ * touched. `nowIso` rather than `now` because raw SQL never reaches the column's own write mapping,
+ * which is what turns a `Date` into the ISO string a `ts` column stores.
+ */
 export async function markDelivered(db: Database, recordId: string): Promise<void> {
   await withTransaction(db, (tx) =>
-    tx.execute(sql`update acks set delivered_at = now() where registro_id = ${recordId}`),
+    tx.execute(sql`update acks set delivered_at = ${nowIso()} where registro_id = ${recordId}`),
   );
 }
 

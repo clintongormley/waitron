@@ -15,10 +15,9 @@ const TILL_ENV = {
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
-// `loadConfig` now resolves the till identity via `loadTillConfig`, so the till vars are required for
-// a successful load. Every happy-path case here spreads them; the `requires DATABASE_URL` case does
-// NOT, deliberately, because that guard fires before the till is ever read (see the test).
-const MIN_ENV = { DATABASE_URL: "postgres://u@h/d", ...TILL_ENV };
+// `loadConfig` resolves the till identity via `tryLoadTillConfig`, so a provisioned box's happy-path
+// cases spread these; a load with none of them set is SETUP MODE, not a failure (see the setup case).
+const MIN_ENV = { ...TILL_ENV };
 const ROOT = "/opt/waitron/drizzle";
 // A distinct protected state root exposes accidental migrations-root or cwd fallback.
 const STATE_ROOT = "/opt/waitron/state";
@@ -44,15 +43,6 @@ describe("loadConfig", () => {
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config).toEqual({
-      databaseUrl: "postgres://u@h/d",
-      // Defaults to DATABASE_URL — same variable, same role — so a deployment that never sets
-      // WAITRON_MIGRATIONS_DATABASE_URL keeps a single connection string for both jobs, matching
-      // this package's behaviour before the split.
-      migrationsDatabaseUrl: "postgres://u@h/d",
-      // No WAITRON_ADMIN_DATABASE_URL set — falls through the resolved migrations URL to DATABASE_URL,
-      // so the owner write hits the least-privileged role and fails CLOSED (42501) on a role-split
-      // appliance rather than silently no-op'ing. Same single-connection default as migrations above.
-      adminDatabaseUrl: "postgres://u@h/d",
       // Production numbering can never be reused, so the safe environment is the default and
       // production must be typed out. This assertion is the guard on that.
       environment: "preproduction",
@@ -77,6 +67,9 @@ describe("loadConfig", () => {
       migrationsRoot: ROOT,
       // Unset state storage uses the boot-provided default, not cwd.
       stateDir: STATE_ROOT,
+      // No WAITRON_VENUE_DIR set, so the venue's databases default to `join(stateDir, "venue")` —
+      // under whichever state root won above (here STATE_ROOT).
+      venueDir: resolve(STATE_ROOT, "venue"),
       // No WAITRON_LOG_DIR set, so logDir defaults to `join(stateDir, "logs")` — under whichever state
       // root won above (here STATE_ROOT). The rotation knobs take their bytes/files defaults.
       logDir: resolve(STATE_ROOT, "logs"),
@@ -135,11 +128,9 @@ describe("loadConfig", () => {
   // Setup mode (slice 1b): an unprovisioned box has no venue, so the four WAITRON_TILL_*_ID are
   // absent — `loadConfig` then leaves `config.till` UNDEFINED and does NOT throw (boot branches on
   // that in a later slice-1b task). A provisioned box sets all four and `config.till` carries the
-  // identity. DATABASE_URL stays required either way — its guard fires before the till is read, so a
-  // setup box with no DATABASE_URL still reports the DATABASE_URL fault (the `requires DATABASE_URL`
-  // case below covers that ordering).
+  // identity.
   it("leaves config.till undefined when the four WAITRON_TILL_*_ID are absent, else populates it", () => {
-    const setup = loadConfig({ DATABASE_URL: "postgres://u@h/d" }, ROOT, STATE_ROOT);
+    const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 
     const provisioned = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
@@ -212,17 +203,10 @@ describe("loadConfig", () => {
     });
   });
 
-  it("requires DATABASE_URL", async () => {
-    const error = await captureError(() => Promise.resolve(loadConfig({}, ROOT, STATE_ROOT)));
-    expect(codeOf(error)).toBe("server.config_missing");
-    expect(isAppError(error) && error.params).toMatchObject({ variable: "DATABASE_URL" });
-  });
-
   it("reads every override", () => {
     const config = loadConfig(
       {
         ...MIN_ENV,
-        WAITRON_MIGRATIONS_DATABASE_URL: "postgres://migrator@h/d",
         WAITRON_ENV: "production",
         WAITRON_HTTP_PORT: "9000",
         WAITRON_HTTP_HOST: "0.0.0.0",
@@ -242,7 +226,6 @@ describe("loadConfig", () => {
       ROOT,
       STATE_ROOT,
     );
-    expect(config.migrationsDatabaseUrl).toBe("postgres://migrator@h/d");
     expect(config.environment).toBe("production");
     expect(config.httpPort).toBe(9000);
     expect(config.httpHost).toBe("0.0.0.0");
@@ -330,9 +313,9 @@ describe("loadConfig", () => {
   // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
   // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
   // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a
-  // loud boot failure. `loadConfig` throws `server.config_missing` naming the unset variable — the
-  // same require-at-boot posture DATABASE_URL takes (the TLS pair is both-or-neither, a distinct shape
-  // that throws `config_invalid`, so it is not the analogy here).
+  // loud boot failure. `loadConfig` throws `server.config_missing` naming the unset variable (the TLS
+  // pair is both-or-neither, a distinct shape that throws `config_invalid`, so it is not the analogy
+  // here).
   it.each([
     // [missing var, the other var supplied]. RP ID omitted (origin supplied) -> the error names the
     // RP ID, the variable still to be set. `missing` is first so the `%s` title prints it, not the
@@ -355,7 +338,7 @@ describe("loadConfig", () => {
 
   // Empty string is unset (config.ts's `isUnset`), so `WAITRON_MANAGEMENT_RP_ID=` in a production env
   // file is missing, not a blank RP ID that silently reaches the ceremonies — the same
-  // `VAR=`-means-unset rule DATABASE_URL and the TLS pair follow.
+  // `VAR=`-means-unset rule the TLS pair and every directory variable here follow.
   it("treats an empty production WAITRON_MANAGEMENT_RP_ID as missing", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -530,47 +513,6 @@ describe("loadConfig", () => {
       variable: "WAITRON_MANAGEMENT_ORIGIN",
       reason: "not_an_origin",
     });
-  });
-
-  it("falls back to DATABASE_URL when WAITRON_MIGRATIONS_DATABASE_URL is set but empty", () => {
-    // Mirrors WAITRON_MIGRATIONS_DIR's own empty-string-means-unset treatment elsewhere in this
-    // file: an operator's deploy tooling that always sets the variable, empty when unused, must
-    // not be forced to omit it entirely to get the default.
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_MIGRATIONS_DATABASE_URL: "" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.migrationsDatabaseUrl).toBe(config.databaseUrl);
-  });
-
-  // WAITRON_ADMIN_DATABASE_URL is the owner-write (promote's fenced demote) table-owner connection.
-  // Its fallback chains admin → migrations → databaseUrl so a role-split appliance that misconfigures
-  // it opens the LEAST-privileged connection and fails CLOSED (42501), never a silent no-op against a
-  // superuser pool (the 42501 itself is proven in the Task 10 e2e).
-  it("adminDatabaseUrl defaults to the resolved migrations URL when unset", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_MIGRATIONS_DATABASE_URL: "postgres://migrator@h/d" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.adminDatabaseUrl).toBe("postgres://migrator@h/d");
-  });
-
-  it("adminDatabaseUrl uses WAITRON_ADMIN_DATABASE_URL when set", () => {
-    const config = loadConfig(
-      { ...MIN_ENV, WAITRON_ADMIN_DATABASE_URL: "postgres://owner@h/d" },
-      ROOT,
-      STATE_ROOT,
-    );
-    expect(config.adminDatabaseUrl).toBe("postgres://owner@h/d");
-  });
-
-  it("adminDatabaseUrl falls through migrations to databaseUrl when BOTH are unset", () => {
-    // Both env vars absent: the fallback must land on a concrete string (databaseUrl), never
-    // `undefined` — the resolved-migrations const, not the raw env var, is what admin chains through.
-    const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
-    expect(config.adminDatabaseUrl).toBe(config.databaseUrl);
   });
 
   it("accepts the highest real TCP port, 65535 — the boundary the rejection test just above it lives one past", () => {
@@ -778,6 +720,42 @@ describe("loadConfig", () => {
     expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
     expect(config.logDir).not.toBe(resolve(""));
     expect(config.logDir).not.toBe(process.cwd());
+  });
+
+  // The venue directory — where `openVenueStore` creates `venue.db` and `node.db`
+  // (`packages/store/src/index.ts:159`). Defaults under whichever state root actually won, so it
+  // tracks a WAITRON_STATE_DIR override rather than the boot default root, the same way logDir above
+  // does.
+  it("defaults venueDir to join(stateDir, 'venue')", () => {
+    const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
+    expect(config.venueDir).toBe(resolve(STATE_ROOT, "venue"));
+  });
+
+  it("derives the default venueDir from a WAITRON_STATE_DIR override, not the boot default root", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_STATE_DIR: "/var/lib/waitron" },
+      ROOT,
+      STATE_ROOT,
+    );
+    expect(config.venueDir).toBe(resolve("/var/lib/waitron", "venue"));
+  });
+
+  // An operator override is resolved to an absolute path, the way stateDir's is: the database files
+  // are opened by path, so a relative value must not shift with the process's cwd.
+  it("resolves a WAITRON_VENUE_DIR override to an absolute path", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_VENUE_DIR: "some/venue" }, ROOT, STATE_ROOT);
+    expect(config.venueDir).toBe(resolve("some/venue"));
+    expect(isAbsolute(config.venueDir)).toBe(true);
+  });
+
+  // The empty-value guard (CLAUDE.md §3): `WAITRON_VENUE_DIR=` (set but empty) falls back to the
+  // default exactly as an unset one does — NEVER `resolve("")` / cwd, which would put the venue's
+  // ledger files in whatever directory the process happened to start in.
+  it("treats an empty WAITRON_VENUE_DIR as unset, falling back to join(stateDir, 'venue')", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_VENUE_DIR: "" }, ROOT, STATE_ROOT);
+    expect(config.venueDir).toBe(resolve(STATE_ROOT, "venue"));
+    expect(config.venueDir).not.toBe(resolve(""));
+    expect(config.venueDir).not.toBe(process.cwd());
   });
 
   // The built front-end directories the box serves same-origin (slice 1a/2c). All OPTIONAL: dev leaves

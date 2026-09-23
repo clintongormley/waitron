@@ -2,22 +2,30 @@ import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { translateWriteError } from "./device-profile-store.js";
 
-// The device-profile write/delete error translations, proven end to end against the real DB in
-// device-profile-store.pg.test.ts. Here we pin the translator's branches directly with
-// crafted errors — no DB — so every branch (incl. the two re-throw paths and BOTH referencing
-// constraints) is covered deterministically. `translateWriteError` is exported from
-// device-profile-store.ts for exactly this, not from the package barrel. Mirrors canvas-store.test.ts.
+// The device-profile write/delete error translations, proven end to end against a real migrated
+// database in device-profile-store.db.test.ts. Here we pin the translator's branches directly
+// with crafted errors — no DB — so every branch is covered deterministically.
+// `translateWriteError` is exported from device-profile-store.ts for exactly this, not from the
+// package barrel. Mirrors canvas-store.test.ts.
 //
-// Each crafted error carries the `table` + `detail` pair `constraintTarget` reads, copied from what
-// PostgreSQL reported for the same refusal on 2026-09-21 (the real ones are driven in
-// device-profile-store.pg.test.ts).
+// Each crafted error carries the `errcode` + `message` pair the refusal readers in
+// `packages/db/src/constraint-target.ts` look at, copied from what node:sqlite reported for the
+// same refusal on Node v26.7.0, 2026-09-21. `code` is deliberately absent: node:sqlite sets it to
+// the constant "ERR_SQLITE_ERROR" for every failure alike, so nothing reads it.
 describe("translateWriteError", () => {
-  it("translates a 23505 that named no key to device_profile.name_taken", () => {
-    // The fallback branch: a 23505 whose target cannot be identified still translates, because the
-    // name key is the only unique an insert/update can trip on an author-supplied value.
+  it("translates a unique violation that named no key to device_profile.name_taken", () => {
+    // The fallback branch: a unique violation whose target cannot be identified still translates,
+    // because the name key is the only unique an insert/update can trip on an author-supplied
+    // value. The message is the shape SQLite uses when the index is over an EXPRESSION: it names
+    // the index and no columns, so `constraintTarget` returns undefined.
     let thrown: unknown;
     try {
-      translateWriteError({ cause: { code: "23505" } });
+      translateWriteError({
+        cause: {
+          errcode: 2067,
+          message: "UNIQUE constraint failed: index 'device_profiles_expr_uq'",
+        },
+      });
     } catch (e) {
       thrown = e;
     }
@@ -25,15 +33,11 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  it("translates a 23505 on device_profiles (name)", () => {
+  it("translates a unique violation on device_profiles (name)", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: {
-          code: "23505",
-          table: "device_profiles",
-          detail: "Key (name)=(Twin) already exists.",
-        },
+        cause: { errcode: 2067, message: "UNIQUE constraint failed: device_profiles.name" },
       });
     } catch (e) {
       thrown = e;
@@ -41,15 +45,12 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("device_profile.name_taken");
   });
 
-  // A 23505 on a DIFFERENT key (the primary key, or any unique added later) must NOT be
+  // A unique violation on a DIFFERENT key (the primary key, or any unique added later) must NOT be
   // mislabelled name_taken — it is re-thrown untouched. Proof-by-deletion: drop the target gate.
-  it("re-throws a 23505 on device_profiles whose key is not (name)", () => {
+  // The code is 1555 because SQLite reports a primary-key collision under its own result code.
+  it("re-throws a unique violation on device_profiles whose key is not (name)", () => {
     const original = {
-      cause: {
-        code: "23505",
-        table: "device_profiles",
-        detail: "Key (id)=(2053a761-bbc0-4007-a2f4-be0ff9f220a5) already exists.",
-      },
+      cause: { errcode: 1555, message: "UNIQUE constraint failed: device_profiles.id" },
     };
     let thrown: unknown;
     try {
@@ -60,16 +61,13 @@ describe("translateWriteError", () => {
     expect(thrown).toBe(original);
   });
 
-  it("translates a 23503 on device_profiles (canvas_id) to device_profile.invalid {bad_canvas_ref}", () => {
+  // A written value naming no parent row (787) — the `canvas_id` case, and the only foreign key
+  // `device_profiles` declares.
+  it("translates a foreign-key refusal to device_profile.invalid {bad_canvas_ref}", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: {
-          code: "23503",
-          table: "device_profiles",
-          detail:
-            'Key (canvas_id)=(00000000-0000-4000-8000-000000000000) is not present in table "canvases".',
-        },
+        cause: { errcode: 787, message: "FOREIGN KEY constraint failed" },
       });
     } catch (e) {
       thrown = e;
@@ -78,20 +76,14 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({ reason: "bad_canvas_ref" });
   });
 
-  // The ON DELETE RESTRICT FK a device holds on a profile → device_profile.in_use. The target is
-  // `{devices, [id]}`, which every RESTRICT key out of `devices` reports — a refused till or printer
-  // delete included — so what keeps those out of this branch is call scope, not this assertion. See
-  // `PROFILE_REFERENCED_BY_DEVICE` in the store.
-  it("translates a 23001 reported against devices (id) to device_profile.in_use", () => {
+  // A delete refused by an ON DELETE RESTRICT key (1811) — the device that still binds the profile.
+  // The two directions carry the same message and differ only in this code, which is what keeps
+  // this branch and the one above apart.
+  it("translates a restrict refusal to device_profile.in_use", () => {
     let thrown: unknown;
     try {
       translateWriteError({
-        cause: {
-          code: "23001",
-          table: "devices",
-          detail:
-            'Key (id)=(2053a761-bbc0-4007-a2f4-be0ff9f220a5) is referenced from table "devices".',
-        },
+        cause: { errcode: 1811, message: "FOREIGN KEY constraint failed" },
       });
     } catch (e) {
       thrown = e;
@@ -100,28 +92,28 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.params).toEqual({});
   });
 
-  // A 23001 from a foreign key that does not reference a profile must NOT be mislabelled in_use —
-  // re-thrown untouched. This one is the device_profiles → canvases RESTRICT.
-  it("re-throws a 23001 from a foreign key that does not reference device_profiles", () => {
-    const original = {
-      cause: {
-        code: "23001",
-        table: "device_profiles",
-        detail:
-          'Key (id)=(6a9cebbb-d0d5-4411-8209-71a202afcb47) is referenced from table "device_profiles".',
-      },
-    };
-    let thrown: unknown;
-    try {
-      translateWriteError(original);
-    } catch (e) {
-      thrown = e;
-    }
-    expect(thrown).toBe(original);
-  });
+  // ONE LOSS, from the storage swap. `re-throws a restrict refusal from a foreign key that does
+  // not reference device_profiles` stood here and is deleted. It built the SAME crafted error as
+  // the case above — SQLite reports every foreign-key refusal as the identical `FOREIGN KEY
+  // constraint failed`, with no table, no column and no constraint name
+  // (`packages/db/src/constraint-target.ts`) — and asked for the opposite outcome, so the pair was
+  // unsatisfiable by any implementation rather than failing against one. What is no longer
+  // checked: that a refusal from some OTHER key re-throws instead of being reported to a user as
+  // `device_profile.in_use` or `device_profile.invalid`.
+  //
+  // Where the guarantee went: the schema. Each writer's try wraps ONE statement on
+  // `device_profiles`, and `has ONE key out of device_profiles and ONE key into it`
+  // (device-profile-store.db.test.ts) reads the real migrated schema and fails if any other key
+  // could raise a 787 or an 1811 there. That is a weaker promise than the constraint-name match it
+  // replaces — it holds for the schema as it stands, where the old one held whatever was added —
+  // and it is the strongest one this engine's words support.
 
-  it("re-throws a non-translated error unchanged", () => {
-    const original = { code: "42501" };
+  // A refusal of another class on the SAME key the name branch matches: only the class tells a NOT
+  // NULL from a unique index apart, so this is the case that proves the class half of the gate.
+  it("re-throws a refusal of another class unchanged", () => {
+    const original = {
+      cause: { errcode: 1299, message: "NOT NULL constraint failed: device_profiles.name" },
+    };
     let thrown: unknown;
     try {
       translateWriteError(original);

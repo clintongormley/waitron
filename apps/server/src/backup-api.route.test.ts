@@ -1,18 +1,23 @@
-// Real PostgreSQL: the backup admin routes under the manager-login gate, plus the supervisor's real
-// enable/rotate lifecycle (a hermetic fake `pg_dump`, so no host binary is needed). The NON-superuser
-// owner probe is proven separately in `backup-supervisor.pg.test.ts`; here the supervisor's read
-// connection is the clone's own admin url because these tests exercise the ROUTES, not the probe.
+// The backup admin routes under the manager-login gate, plus the supervisor's real enable/rotate
+// lifecycle. The supervisor is pointed at a throwaway venue directory because these tests exercise
+// the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
+// `backup-supervisor.test.ts`.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template. The `asAppUser(tx)` call in `setupTenant` is now inert
+// (`packages/db/src/testing/roles.ts`) and is left for Task T1 to sweep; nothing here establishes
+// what the deployment role, which no longer exists, may read or write.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { SingletonRole } from "@waitron/db";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupConfig, type BackupConfig } from "./backup-config.js";
@@ -22,7 +27,6 @@ import { loadBoxEnv } from "./box-env.js";
 import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
-import type { PgDumpRunner } from "./pg-dump.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const LOCALE = "es-ES";
@@ -32,7 +36,6 @@ const MANAGER_EMAIL = "manager@x.com";
 const BACKUP_KEYS = [
   "WAITRON_BACKUP_DIR",
   "WAITRON_BACKUP_DESTINATIONS",
-  "WAITRON_BACKUP_DATABASE_URL",
   "WAITRON_BACKUP_RECOVERY_KEY",
   "WAITRON_BACKUP_SCHEDULE_DAYS",
   "WAITRON_BACKUP_AT",
@@ -44,7 +47,11 @@ const BACKUP_KEYS = [
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 let nifCounter = 0;
 function nextNif(): string {
@@ -52,11 +59,10 @@ function nextNif(): string {
   return `${String(76_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-// A hermetic pg_dump: writes a placeholder so the archive assembles + encrypts + fans out WITHOUT a
-// host `pg_dump` binary (same shape backup-supervisor.pg.test.ts uses).
-const fakeDump: PgDumpRunner = async ({ outFile }) => {
-  await writeFile(outFile, "PGDMP-fake-dump");
-};
+// The venue the supervisor opens. Unmigrated, so every module's applied schema version reads 0 and
+// the manifest is a valid one describing an empty box — enough for routes that never look inside an
+// archive.
+const venueDir = mkdtempSync(join(tmpdir(), "backup-api-venue-"));
 
 const cleanup: (() => Promise<void>)[] = [];
 
@@ -82,14 +88,13 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(sc.base, sc.stateDir)),
     isManagedByEnvironment: () => BACKUP_KEYS.some((k) => !isUnset(sc.base[k])),
     readSingletonRole: () => sc.role,
-    adminDatabaseUrl: suite.pg.uri,
+    venueDir,
     modules: ALL_MODULES,
     environment: "production",
     stateDir: sc.stateDir,
     jitterSeed: "seed",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
     log: () => {},
-    runDump: fakeDump,
   });
   cleanup.push(() => sup.stop());
   return sup;
@@ -100,7 +105,7 @@ function buildApp(sup: BackupSupervisor, stateDir: string): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -108,7 +113,7 @@ function buildApp(sup: BackupSupervisor, stateDir: string): Hono {
     },
     () => {},
   );
-  mountBackupApi(app, { supervisor: sup, db: suite.admin, stateDir }, () => {});
+  mountBackupApi(app, { supervisor: sup, db: suite.db, stateDir }, () => {});
   return app;
 }
 
@@ -144,13 +149,29 @@ async function setupTenant(): Promise<void> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await tx.execute(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+    // Through drizzle rather than the raw `insert into persons` this seeded on PostgreSQL, and not
+    // for tidiness: `persons.id` and `persons.created_at` used to be filled by the COLUMN and are
+    // now filled by drizzle's `$defaultFn` instead, so a statement that names neither is refused.
+    // Measured on this tree — `NOT NULL constraint failed: persons.id`, then, once an id is
+    // supplied, `NOT NULL constraint failed: persons.created_at`. The two sides, each read inside
+    // the `persons` block rather than grepped file-wide:
+    // `origin/main:packages/identity/drizzle/0000_identity_baseline.sql:44,:60` carried
+    // `DEFAULT gen_random_uuid()` and `DEFAULT now()`;
+    // `packages/identity/drizzle/0000_baseline.sql:46,:62` carry a bare `NOT NULL`, because the
+    // defaults moved to `packages/identity/src/schema/persons.ts:27,:67`. The insert the PRODUCT
+    // uses is this one, so the fixture now takes the same route — the shape the converted siblings
+    // use (`catalogue-api.test.ts:60`, `till-api.test.ts:146`).
+    await tx.insert(persons).values({
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
   });
 }
 
@@ -181,7 +202,7 @@ afterEach(async () => {
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
 });
 
-describe("backup admin routes (real postgres)", () => {
+describe("backup admin routes", () => {
   beforeAll(async () => {
     await setupTenant();
   }, 180_000);
@@ -429,7 +450,6 @@ describe("backup admin routes (real postgres)", () => {
     const mismatch: BackupConfig = {
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
       recoveryKey: "effective-key-differs-from-request",
-      databaseUrl: undefined,
       schedule: DAILY_AT_0330,
       retain: 7,
       retainDays: 30,
@@ -440,14 +460,13 @@ describe("backup admin routes (real postgres)", () => {
       buildConfig: async () => mismatch, // ignores the file the route writes
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
-      adminDatabaseUrl: suite.pg.uri,
+      venueDir,
       modules: ALL_MODULES,
       environment: "production",
       stateDir,
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: () => {},
-      runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
     const app = buildApp(sup, stateDir);
@@ -560,14 +579,13 @@ describe("backup admin routes (real postgres)", () => {
       },
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
-      adminDatabaseUrl: suite.pg.uri,
+      venueDir,
       modules: ALL_MODULES,
       environment: "production",
       stateDir,
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
       log: () => {},
-      runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
     const app = buildApp(sup, stateDir);

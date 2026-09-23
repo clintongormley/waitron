@@ -52,6 +52,23 @@ export interface UpdateBookingPatch {
 }
 
 /**
+ * A venue-local wall-clock time in the one form the column stores: `HH:MM:SS`.
+ *
+ * `booking_time` was a PostgreSQL `time`, and the ENGINE normalised `20:00` to `20:00:00` on the
+ * way in. `timeOfDay` is plain `text` on this engine (`packages/db/src/schema/columns.ts`), which
+ * stores whatever bytes it is handed — so `20:00` and `20:00:00` would become two different stored
+ * values for one wall-clock time, and `routes.ts`'s `TIME_HHMM` deliberately accepts both spellings.
+ * The normalising therefore moves here, to the write path, so every row this module writes carries
+ * one form and an equality read cannot miss a booking by its spelling.
+ *
+ * Only the seconds are supplied: `TIME_HHMM` has already refused anything that is not two-digit
+ * `HH:MM` optionally followed by `:SS`, and the direct callers below are the module's own API.
+ */
+function storedTime(value: string): string {
+  return value.length === 5 ? `${value}:00` : value;
+}
+
+/**
  * Require an active table in this location, otherwise table.not_found.
  * A reservation checks availability of the table definition without taking a row lock.
  */
@@ -96,7 +113,7 @@ export async function createBooking(
     .values({
       locationId: cfg.locationId,
       bookingDate: input.bookingDate,
-      bookingTime: input.bookingTime,
+      bookingTime: storedTime(input.bookingTime),
       partySize: input.partySize,
       contactName: input.contactName,
       contactPhone: input.contactPhone ?? null,
@@ -159,7 +176,9 @@ export async function updateBooking(
       // Only the keys the caller set are written; `undefined` is skipped by Drizzle, so an omitted
       // field is untouched while an explicit `null` clears a nullable one.
       bookingDate: patch.bookingDate,
-      bookingTime: patch.bookingTime,
+      // `undefined` must stay `undefined` so Drizzle skips the column; only a supplied time is
+      // normalised.
+      bookingTime: patch.bookingTime === undefined ? undefined : storedTime(patch.bookingTime),
       partySize: patch.partySize,
       contactName: patch.contactName,
       contactPhone: patch.contactPhone,

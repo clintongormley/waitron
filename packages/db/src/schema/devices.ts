@@ -1,5 +1,8 @@
-import { flag, id, label, table, tsString } from "./columns.js";
-import { locations } from "./tenants.js";
+import { flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import { deviceProfiles } from "./device-profiles.js";
+import { kitchenStations } from "./kitchen-stations.js";
+import { printers } from "./printers.js";
+import { locations, tills } from "./tenants.js";
 
 /**
  * An always-on trusted DEVICE (device-identity-1) — a physical screen that joins ONCE (it knocks, an
@@ -14,47 +17,55 @@ import { locations } from "./tenants.js";
  * `token_hash` is the scrypt hash of the device token (`hashSecret`, packages/identity secret-hash.ts,
  * §2c): the plaintext lives ONLY in the cookie, never at rest. Revoke by flipping `active = false`
  * (instant — `requireDevice` rejects it), NEVER a hard DELETE, because a device is a durable identity
- * and later tables may reference it — so `app_user` holds SELECT/INSERT/UPDATE and no DELETE, exactly
- * the `kitchen_stations` shape, granted in the paired --custom migration.
+ * and later tables may reference it. **Nothing in the database refuses the DELETE**: PostgreSQL
+ * withheld it from `app_user`, and this engine has no roles and no grants (`../testing/roles.ts`) —
+ * `delete from devices` on a real row succeeds, measured 2026-09-23 on Node v26.7.0 against the core
+ * migration set. The no-hard-delete rule now lives in the code alone, as it does for
+ * `kitchen_stations`.
  *
- * `station_id` is a BARE uuid: the (station_id) → kitchen_stations
- * (id) FK is hand-written in the --custom migration (the KDS-1 idiom — a
- * `kitchen_stations` table, so its FK cannot be a one-arg `.references()`), exactly as
- * `ticket_items.station_id` is. NULLABLE so a non-kds device carries no station; MATCH
- * SIMPLE (the FK default) skips the check on a NULL station_id.
+ * `station_id` references `kitchen_stations(id)` and is NULLABLE, so a non-kds device carries no
+ * station; a foreign key does not check a NULL.
  */
 export const devices = table("devices", {
-  id: id("id").primaryKey().defaultRandom(),
-  // The venue the device lives in — a required scope. A DIRECT location_id →
-  // locations.id FK with onDelete restrict, mirroring `shifts` (shifts_location_fk), the precedent
-  // the spec cites (§2a "the shifts shape") — NOT the hand-written (location_id) FK
-  // kitchen_stations uses. The station binding narrows it further to one display.
+  id: id("id").primaryKey().$defaultFn(newId),
+  // The venue the device lives in — a required scope. A location_id → locations.id FK with
+  // onDelete restrict, mirroring `shifts` (shifts_location_fk), the precedent the spec cites
+  // (§2a "the shifts shape"). The station binding narrows it further to one display.
   locationId: id("location_id")
     .notNull()
     /* v8 ignore start */
     .references(() => locations.id, { onDelete: "restrict" }),
   /* v8 ignore stop */
-  // The station binding, populated only for a kds-form-factor device. Bare column: the
-  // (station_id) → kitchen_stations(id) FK is hand-written
-  // in the --custom migration. NULLABLE — a non-kds device carries no station (MATCH SIMPLE skips
-  // the FK check on a NULL); the binding rule is enforced by device_binding_rule_insert / _update through the
-  // profile's form factor, not a per-column NOT NULL.
-  stationId: id("station_id"),
+  // The station binding, populated only for a kds-form-factor device. NULLABLE — a non-kds device
+  // carries no station, and a foreign key does not check a NULL; the binding rule is enforced by
+  // device_binding_rule_insert / _update through the profile's form factor, not a per-column
+  // NOT NULL.
+  /* v8 ignore start */
+  stationId: id("station_id").references(() => kitchenStations.id),
+  /* v8 ignore stop */
   // The `tills` row this sale-capable device rings against (SP-A.2 §16.4). Populated for a
-  // non-kds (register-bound) form factor, NULL for a kds device. Bare uuid: the
-  // (till_id) → tills(id) FK is hand-written in the --custom migration
-  // (a bare column carries no FK), the `station_id` idiom. MATCH SIMPLE skips the check on a NULL.
-  tillId: id("till_id"),
+  // non-kds (register-bound) form factor, NULL for a kds device; a foreign key does not check a
+  // NULL. `onDelete restrict` keeps a till a device rings against from being deleted.
+  /* v8 ignore start */
+  tillId: id("till_id").references(() => tills.id, { onDelete: "restrict" }),
+  /* v8 ignore stop */
   // The assigned reusable DEVICE PROFILE (device-profile design 2026-09-05 §5.1) — the binding bundle
   // (name + canvas reference + capabilities) this device resolves against, and the row's FORM FACTOR:
-  // a device is now DEFINED by its profile, so this is NOT NULL. Bare uuid: the
-  // (device_profile_id) → device_profiles(id) FK is hand-written in
-  // the --custom migration, the `station_id` idiom.
-  deviceProfileId: id("device_profile_id").notNull(),
+  // a device is now DEFINED by its profile, so this is NOT NULL. `onDelete restrict` keeps a
+  // profile a device points at from being deleted.
+  deviceProfileId: id("device_profile_id")
+    .notNull()
+    /* v8 ignore start */
+    .references(() => deviceProfiles.id, { onDelete: "restrict" }),
+  /* v8 ignore stop */
   // Static hardware binding (SP-A.2 §16.3) — the per-device receipt printer (and its cash-drawer kick).
-  // Bare uuid, NULLABLE: the (receipt_printer_id) → printers(id)
-  // FK is hand-written in the --custom migration. MATCH SIMPLE skips the check on a NULL.
-  receiptPrinterId: id("receipt_printer_id"),
+  // NULLABLE, and a foreign key does not check a NULL. `onDelete restrict` keeps a printer a
+  // device is bound to from being deleted.
+  /* v8 ignore start */
+  receiptPrinterId: id("receipt_printer_id").references(() => printers.id, {
+    onDelete: "restrict",
+  }),
+  /* v8 ignore stop */
   // Static hardware binding (SP-A.2 §16.3): whether this device has a cash drawer. DEFAULT false so an
   // existing device carries no drawer until configured.
   hasCashDrawer: flag("has_cash_drawer").notNull().default(false),
@@ -66,6 +77,6 @@ export const devices = table("devices", {
   active: flag("active").notNull().default(true),
   // Touched by requireDevice on each authenticated request. NULL until the device is first seen.
   lastSeenAt: tsString("last_seen_at"),
-  enrolledAt: tsString("enrolled_at").notNull().defaultNow(),
-  createdAt: tsString("created_at").notNull().defaultNow(),
+  enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
+  createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
 });

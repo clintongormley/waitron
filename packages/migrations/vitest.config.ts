@@ -4,9 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // The concurrency suite starts a real Postgres container and races two migrators against it.
-    testTimeout: 120_000,
-    hookTimeout: 180_000,
+    // The slowest case in the package is the concurrency suite's race, which spawns a peer
+    // process and waits out a deliberate 600ms hold; the whole file runs in under two seconds.
+    // The old 120s/180s bounds were sized for a Postgres container this package no longer starts.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers, and this
     // package is small enough that a handful of mis-merged branches sinks the ratio. Same finding

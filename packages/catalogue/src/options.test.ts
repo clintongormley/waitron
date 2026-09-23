@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { captureError, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,16 +19,13 @@ import {
   updateOptionList,
 } from "./options.js";
 
-// An options list references no product, catalogue or venue, and nothing here turns on who connected
-// or on two writers racing, so PGlite is the lighter target that still runs the real migrations —
-// including the grants walkthrough at the foot of this file, which assumes app_user with
-// `asAppUser` and is enforced from there (CLAUDE.md §4). What needs a container is the concurrent
-// save, and that lives in options.pg.test.ts.
+// One SQLite file with the real migrations applied. The grants walkthrough this file used to end
+// with is gone with the grants themselves.
 // Nothing is seeded at the suite level: with no `content_languages` row, `readContentLanguages`
 // falls back to the language passed in (packages/catalogue/src/content-languages.ts), and
 // `useVenueDb` empties every data table after each test on its own
-// (packages/db/src/testing/lifecycle.ts:132,148-151). One test seeds the taxpayer row for itself,
-// because it is the only one that creates products, and it says so where it does it.
+// (packages/db/src/testing/venue-db.ts). One test seeds the taxpayer row for itself, because it is
+// the only one that creates products, and it says so where it does it.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() => run(fn));
@@ -182,7 +179,7 @@ describe("option list CRUD", () => {
       "Charred",
     ]);
     const left = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from option_labels where id = ${dropped.id}`,
+      sql`select count(*) as count from option_labels where id = ${dropped.id}`,
     );
     expect(left.rows[0]!.count).toBe(0);
   });
@@ -287,14 +284,14 @@ describe("option list CRUD", () => {
   it("deletes the list's labels with it", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     const before = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from option_labels where list_id = ${created.id}`,
+      sql`select count(*) as count from option_labels where list_id = ${created.id}`,
     );
     expect(before.rows[0]!.count).toBe(3); // the delete below has something to clear
 
     await run((tx) => deleteOptionList(tx, created.id));
 
     const after = await fx.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from option_labels where list_id = ${created.id}`,
+      sql`select count(*) as count from option_labels where list_id = ${created.id}`,
     );
     expect(after.rows[0]!.count).toBe(0);
     expect(await run((tx) => listOptionLists(tx))).toEqual([]);
@@ -545,69 +542,6 @@ describe("reading the named option lists", () => {
     } as unknown as Transaction;
 
     expect(await readOptionListsByIds(refuses, [])).toEqual([]);
-  });
-});
-
-/**
- * The walkthrough that answers to the option_lists grants in drizzle/0001_catalogue_baseline_sql.sql.
- * Every test above runs on
- * PGlite's superuser connection, which is handed every privilege and so exercises no grant at all;
- * `asAppUser` makes the session assume the application role and PGlite enforces the two tables'
- * grants from there — a container adds nothing (CLAUDE.md §4).
- *
- * Proven rather than assumed: with `DELETE` removed from `option_labels` in that migration, the
- * create below failed with `42501 permission denied for table option_labels`.
- */
-describe("option list CRUD as the non-superuser application role", () => {
-  const app = <T>(fn: (tx: Transaction) => Promise<T>) =>
-    withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
-      return fn(tx);
-    });
-
-  it("creates, reads, edits and deletes a list under the application role's grants", async () => {
-    await app(async (tx) => {
-      const role = await tx.execute<{ role: string; superuser: boolean }>(
-        sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
-      );
-      expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-
-      const created = await createOptionList(tx, cookedList(), "en");
-      expect(created.name).toBe("Cooked");
-      expect(created.customerName).toEqual({ en: "How would you like it cooked?" });
-      expect(created.kitchenName).toBe("Cook");
-      expect(created.labels.map((label) => label.name)).toEqual([
-        "Medium rare",
-        "Well done",
-        "Blue",
-      ]);
-      expect(await getOptionList(tx, created.id)).toEqual(created);
-
-      // Deleting the LIST is the one step here that does NOT answer to `option_labels`' grants: its
-      // labels go through the foreign key's ON DELETE CASCADE, which PostgreSQL runs without
-      // consulting the role's privileges. Checked, because it reads like the opposite: with that
-      // table's DELETE grant removed, a list created as the owner still deleted BOTH its labels
-      // through `deleteOptionList` as app_user. Every save above reaches that grant instead —
-      // `writeLabels` clears the labels the body does not name on a create as well as an update.
-      const updated = await updateOptionList(
-        tx,
-        created.id,
-        {
-          name: "Doneness",
-          customerName: { en: "Choose a doneness" },
-          kitchenName: "DONE",
-          labels: [{ id: created.labels[0]!.id, name: "Medium rare", kitchenName: "MR" }],
-        },
-        "en",
-      );
-      expect(updated.name).toBe("Doneness");
-      expect(updated.customerName).toEqual({ en: "Choose a doneness" });
-      expect(updated.kitchenName).toBe("DONE");
-      expect(updated.labels.map((label) => label.name)).toEqual(["Medium rare"]);
-
-      await deleteOptionList(tx, created.id);
-      expect(await listOptionLists(tx)).toEqual([]);
-    });
   });
 });
 

@@ -28,7 +28,7 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * script's STRING and never observes what a build writes. A build that put the file there another
  * way — `--outdir=`, a wrapper script, a quoted value — is reported unbuilt, and a build script that
  * merely MENTIONS the path passes. Same shape, and same reason, as the disclosures in
- * scripts/dashboard-browser-purity.test.ts and scripts/enum-add-value-safety.test.ts.
+ * scripts/dashboard-browser-purity.test.ts and scripts/module-graph-honesty.test.ts.
  *
  * Lives in the ROOT project (CLAUDE.md §4): it reads every member's manifest, and a
  * package-resident guard only runs when its own package is in scope.

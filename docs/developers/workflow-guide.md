@@ -92,19 +92,39 @@ logging `mdns.responding`. Full probe record:
 
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
-never with a bare `pnpm dev*`. The dev Postgres is ONE compose service shared by every checkout, and
-`apps/server/.env` describes that DATABASE (venue ids, credentials key) — gitignored and absent from
-a fresh worktree. Compose names its project after the directory, so an unqualified
-`docker compose up` from a worktree starts a SECOND `db` with an empty volume on the same port.
-`wa-wt` brings the shared db up under `COMPOSE_PROJECT_NAME=waitron`, copies only the current target's
-`.env`, and follows the log. Changing target wipes the application volume while keeping the shared
-development CA. `wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected
-target and copy its new `.env` to every checkout. Cost: a
-round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
-`docs/ui-review.md` → _Running the stack from a worktree_.
+never with a bare `pnpm dev*`. **The dev database is shared by every checkout** — that part has not
+changed — but what shares it is a STATE DIRECTORY on the host, not a container. `wa-wt` runs every
+worktree's `pnpm dev` and `pnpm dev:setup` with `WAITRON_STATE_DIR` pointing at the same
+`$HOME/workspace/.waitron-dev/box`, and the venue directory, two SQLite files, is derived from that
+state directory by `defaultDevVenueDir` (`apps/server/scripts/dev-setup.ts`) — so every worktree
+opens the same files by construction rather than by two settings agreeing. `apps/server/.env`
+describes that venue (venue ids, credentials key); it is gitignored and absent from a fresh
+worktree, which is why `wa-wt` copies the newest copy any checkout holds.
 
-Writing to that database from outside the server, with `psql` or a seeding script, no longer puts
-your change on an open dashboard at the moment you write it. The change trigger writes a row into
+**The compose `db` service is not that database.** `docker-compose.yml`'s own header says so in as
+many words: `dev:setup` provisions into the host venue directory, `docker compose down -v` resets
+nothing any more, and nothing in this repository reads the service. It is still started, because
+`pnpm dev:setup` and `pnpm dev:reset` each begin `docker compose up -d --wait db mailpit` and
+mailpit is the part that is wanted; it is left there for the storage switch's tidy-up item to
+remove. Compose names its project after the directory, so an unqualified `docker compose up` from a
+worktree still starts a SECOND `db` on the same port, which is the reason the rule at the top of
+this paragraph exists — `wa-wt` brings the shared one up under `COMPOSE_PROJECT_NAME=waitron`,
+copies only the current target's `.env`, and follows the log.
+
+Changing target REMOVES THE VENUE DIRECTORY, keeping the shared development CA. Two steps do it:
+`wa-wt`'s `reset_target` clears everything under `$HOME/workspace/.waitron-dev/box` except `tls`,
+and the `dev:reset` it then runs calls `resetVenueDir` (`apps/server/scripts/dev-setup.ts`), an
+`rm -rf` of the venue directory whole. That comment says why the whole directory rather than
+`venue.db`: the engine keeps write-ahead sidecars beside each file, and a venue file removed while
+its `-wal` stays behind reopens on the OLD tail and answers wrongly without erroring.
+`wa-wt reset demo [name]` and `wa-wt reset onboarding [name]` rebuild the selected target and copy
+its new `.env` to every checkout. Cost: a round trip each on 2026-09-05 and 2026-09-06 while the
+two rules were manual. Detail: `docs/ui-review.md` → _Running the stack from a worktree_.
+
+Writing to that database from outside the server — a seeding script, or any other process that
+opens the venue directory — no longer puts your change on an open dashboard at the moment you write
+it. (`psql` is not one of the ways: it speaks the PostgreSQL wire protocol and cannot open a SQLite
+file.) The change trigger writes a row into
 `change_log`, and the transaction that caused the change takes that row out again and hands it to
 the dashboard once it has committed. What decides delivery is therefore `withTransaction` in the
 process serving the dashboard, not "the server": promotion and deployment stamping write in a bare
@@ -115,10 +135,10 @@ stream's session re-checks (`apps/server/src/live-api.test.ts`, "delivers a writ
 withTransaction"). A write through `withTransaction` in a DIFFERENT process is the one that is lost:
 it drains the rows into a process with no dashboard attached.
 
-What does NOT wipe that volume is the common case: switching between worktrees on the same target.
-A target change wipes it, and so does `wa-wt reset` (read the script before assuming that is the
-whole list — `ensure_env` has a third path). The volume is seeded, so between wipes it keeps demo
-rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
+What does NOT remove that directory is the common case: switching between worktrees on the same
+target. A target change removes it, and so does `wa-wt reset` (read the script before assuming that
+is the whole list — `ensure_env` has a third path). What `dev:setup` leaves behind is seeded, so
+between removals the directory keeps demo rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
 migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and
 recreate until Waitron is in production), so one that adds a column no existing row can fill stops
 the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads
@@ -128,16 +148,21 @@ the login screen without a banner. The failure only becomes words at sign-in, wh
 back and the dashboard falls back to `server.internal` — "Something went wrong, try again"
 (`apps/dashboard/src/screens/login-screen.ts`, `apps/dashboard/src/i18n/codes.ts`; the fallback is
 carried both by the request primitive and by `codeOf`).
-`packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
-`categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
-satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
+The core set's migration 0020_category_names did exactly this on 2026-09-13: it dropped the old text
+`categories.name` and recreated it as `jsonb NOT NULL`, which the seeded demo categories cannot
+satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database. (That file was deleted by
+the SQLite flip on 2026-09-21, which regenerated every set as one baseline; it is named here without a
+backticked path because `scripts/claude-md-pointers.test.ts` would read one as a live pointer. The
+trap it illustrates is unchanged — a migration a shared seeded database cannot satisfy.)
 
 Boot now says so rather than leaving a driver stack trace to read: `apps/server/src/dev-migration-hint.ts`
-logs `migrations.dev_constraint_violation` with the SQLSTATE and that command, then re-throws the
-original error untouched — including when the log sink itself throws. It fires only when
+logs `migrations.dev_constraint_violation` with the engine's result code and that command, then
+re-throws the original error untouched — including when the log sink itself throws. It fires only when
 `WAITRON_ENV=dev` (`isDevMode`, `apps/server/src/config.ts`), which both `dev-setup` and
 `dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
-of SQLSTATEs where a constraint met row data.
+of result codes where a constraint met row data. (It read a PostgreSQL SQLSTATE until the storage
+switch; `23502` in the example above is what the old engine reported, and this one reports
+`NOT NULL constraint failed: <table>.<column>`, errcode 1299.)
 
 **What that line may and may not claim.** A constraint violation says a rule was broken. It does not
 say whether the offending rows were already in the table or were inserted by the same migration —
@@ -168,8 +193,18 @@ and the original error still arrived intact.
 The compose `db` service still passes `wal_level=logical`, `track_commit_timestamp=on` and
 `max_slot_wal_keep_size=4GB` on its `command:`. Those are leftovers of the PostgreSQL replication
 removed on 2026-09-19 and nothing reads them now; they go with the storage switch rather than in a
-separate change. `dev-setup` bootstraps the migrator-owned shape (`waitron_migrator` owns every table)
-so a `wa-wt reset demo` boot migrates exactly as `waitron-provision instance` does in production.
+separate change.
+
+`dev-setup` bootstraps no ownership of any kind. There is no migrator role and no owner to be:
+`grep -niE "waitron_migrator|migrator|psql|postgres|role" apps/server/scripts/dev-setup.ts` returned
+nothing on 2026-09-23, and `packages/provisioning/README.md` records that the command this sentence
+used to compare against, `waitron-provision instance` — which created a database, created the
+`waitron_migrator` and `waitron_app` roles, migrated and stamped it — was deleted with the
+PostgreSQL deployment model. What `dev-setup` does instead is call the product's own
+`applyMigrations` and `openVenueDatabase` over the venue directory
+(`apps/server/scripts/dev-setup.ts`, the same two entry points `apps/server/src/boot.ts` uses), and
+then provision into it. So a `wa-wt reset demo` boot still migrates through the code a box migrates
+through; what has no counterpart any more is the ownership the old sentence was really about.
 
 The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
 and nests its own state under `print-agent/`, so worktree switches retain its token and target

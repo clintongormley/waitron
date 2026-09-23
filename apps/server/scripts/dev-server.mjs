@@ -1,8 +1,12 @@
 // Dev launcher for apps/server (`pnpm --filter @waitron/server dev`, and via the root `pnpm dev`).
-// A generated `.env` must exist first — either `pnpm dev:setup` (brings up the dev Postgres,
-// provisions a preproduction venue, and writes a TRADING `.env`) or `pnpm dev:onboard` (migrates but
-// provisions no venue, writing a venue-less SETUP-MODE `.env` so the box boots into the slice-1b/2b
-// setup surface). This launcher only checks the file EXISTS — either shape passes — then:
+// A generated `.env` must exist first — either `pnpm dev:setup` (migrates a local venue DIRECTORY,
+// provisions a preproduction venue into it, and writes a TRADING `.env`) or `pnpm dev:onboard`
+// (migrates the same directory but provisions no venue, writing a venue-less SETUP-MODE `.env` so
+// the box boots into the slice-1b/2b setup surface). A venue is SQLite files in that directory;
+// neither script needs a database server. Both root scripts still run
+// `docker compose up -d --wait db mailpit`, which is how Mailpit starts — the `db` Postgres service
+// comes up alongside it and nothing in this repository reads it (docker-compose.yml says so at its
+// own head, and its removal is the storage switch's tidy-up item T2). This launcher only checks the file EXISTS — either shape passes — then:
 //
 //   1. refuses to start without a generated `.env` — a clearer failure than letting boot surface
 //      a raw `server.config_missing`;
@@ -15,9 +19,9 @@
 //      `<stateDir>/trading.env` WHEN THEY EXIST (onboarding slice 2b). A setup-mode box persists
 //      `trading.env` on `POST /setup-api/provision` (`trading-config.ts`) and then restarts itself
 //      (`requestRestart` in `boot.ts`); `tsx watch` picks the restart straight back up (or the
-//      operator re-runs `pnpm dev`), and sourcing the newly-written file is what carries the five
-//      `WAITRON_TILL_*_ID` + `DATABASE_URL`/`WAITRON_MIGRATIONS_DATABASE_URL`/`WAITRON_ENV` into the
-//      next boot so `tryLoadTillConfig` sees all five ids and enters TRADING mode
+//      operator re-runs `pnpm dev`), and sourcing the newly-written file is what carries the four
+//      `WAITRON_TILL_*_ID` + `WAITRON_ENV` into the next boot so `tryLoadTillConfig` sees all four
+//      ids and enters TRADING mode
 //      (`config.ts`/`till-config.ts`). Node's `--env-file` is ADDITIVE — a later file's keys override
 //      an earlier file's — and each flag REQUIRES its file to exist (a missing path is a hard error),
 //      which is why the two extra files are only added when `existsSync` finds them. The appliance
@@ -36,7 +40,7 @@ if (!existsSync(join(pkgRoot, ".env"))) {
   console.error(
     "apps/server/.env is missing — run `pnpm dev:setup` (provisions a venue → trading mode) or " +
       "`pnpm dev:onboard` (no venue → setup mode) from the repo root first.\n" +
-      "Both bring up the dev Postgres (docker-compose.yml) and write the `.env` this reads.",
+      "Both write the `.env` this reads, and migrate the local venue directory it points at.",
   );
   process.exit(1);
 }

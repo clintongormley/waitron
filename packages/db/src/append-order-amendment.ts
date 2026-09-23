@@ -2,7 +2,6 @@ import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "./client.js";
 import { computeAmendmentHash } from "./order-amendment-hash.js";
 import { orderAmendments } from "./schema/order-amendments.js";
-import { workingOrders } from "./schema/orders.js";
 
 /**
  * Appends one entry to an order's tamper-evident amendment chain (design §4), in the caller's
@@ -11,12 +10,17 @@ import { workingOrders } from "./schema/orders.js";
  *
  * There is NO chain-head table and NO retry loop (Decision 2), unlike the workforce chain
  * (`packages/workforce/src/chain.ts`) whose head must be CREATED on first use and therefore raced
- * for. Here the parent `working_orders` row always exists before any amendment can be appended (an
- * order is placed before it is amended), so THAT row is the serialisation point: a `SELECT … FOR
- * UPDATE` on it blocks a concurrent appender until this transaction commits, after which the loser
- * reads the advanced max sequence. `order_amendments_chain_position_key`
- * (UNIQUE(working_order, sequence_no)) is the backstop if two writers ever reach the insert
- * with the same number, but under the row lock they cannot.
+ * for. What serialises two appenders is the write queue: SQLite admits one writer per file, so the
+ * second transaction does not begin until the first has committed and reads the advanced max
+ * sequence. `order_amendments_chain_position_key` (UNIQUE(working_order, sequence_no)) is the
+ * backstop if two writers ever reach the insert with the same number.
+ *
+ * It was a `SELECT … FOR UPDATE` on the parent `working_orders` row, which blocked a concurrent
+ * appender on PostgreSQL. That statement is deleted rather than replaced: its result was discarded
+ * and the lock was the whole of it, and SQLite has no such clause. **The caller's transaction is
+ * what the claim now rests on** — this function reads the chain's head and inserts the next entry,
+ * and those two statements are only one step if the caller has them inside one `withTransaction`.
+ * Its callers do.
  */
 export interface AppendAmendmentInput {
   /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
@@ -53,12 +57,6 @@ export async function appendOrderAmendment(
   tx: Transaction,
   input: AppendAmendmentInput,
 ): Promise<{ id: string; sequenceNo: number; entryHash: string }> {
-  await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, input.workingOrderId))
-    .for("update");
-
   const [prev] = await tx
     .select({ sequenceNo: orderAmendments.sequenceNo, entryHash: orderAmendments.entryHash })
     .from(orderAmendments)

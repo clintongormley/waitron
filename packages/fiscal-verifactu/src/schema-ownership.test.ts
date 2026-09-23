@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableName, is } from "drizzle-orm";
-import { PgTable } from "drizzle-orm/pg-core";
+import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
@@ -46,8 +46,13 @@ describe("the fiscal schema entrypoint owns exactly its own tables", () => {
     // entrypoint — so it fails for exactly the reason a duplicate CREATE TABLE would appear.
     // A textual grep for `export ... from "@waitron/db"` would miss `export const sales = ...`
     // and every aliased form.
+    //
+    // The class is `SQLiteTable`: the column vocabulary's `table` is `sqliteTable`
+    // (packages/db/src/schema/columns.ts:298). Measured by printing both filters over this
+    // entrypoint's exports — `is(v, PgTable)` selected 0 of them, `is(v, SQLiteTable)` selected
+    // all 7 — so a `PgTable` filter here would compare an empty list and assert nothing.
     const exported = Object.values(schema)
-      .filter((v) => is(v, PgTable))
+      .filter((v) => is(v, SQLiteTable))
       .map((t) => getTableName(t))
       .sort();
     expect(exported).toEqual([...OWNED].sort());
@@ -58,14 +63,17 @@ describe("the fiscal schema entrypoint owns exactly its own tables", () => {
     // empty string — the exact vacuous shape that let seven tests through in plan 1.
     const sqlText = generatedSql();
     for (const table of OWNED) {
-      expect(sqlText).toContain(`create table "${table}"`);
+      expect(sqlText).toContain(`create table \`${table}\``);
     }
   });
 
   it("emits no CREATE TABLE for any core table", () => {
+    // Spelled with the same backticks as the positive control above, and for the same reason: a
+    // double-quoted needle matches nothing in this DDL at all, so it would hold whether or not a
+    // core table were being created here.
     const sqlText = generatedSql();
     for (const table of CORE) {
-      expect(sqlText).not.toContain(`create table "${table}"`);
+      expect(sqlText).not.toContain(`create table \`${table}\``);
     }
   });
 
@@ -74,8 +82,13 @@ describe("the fiscal schema entrypoint owns exactly its own tables", () => {
     // actually produced something, so a future "fix" that deletes the imports to silence the
     // re-export test is caught. It is also what makes the ordering test in migrations.test.ts
     // non-vacuous: no cross-package FK, no ordering requirement to test.
+    //
+    // There is no `public.` qualifier to assert: the generated DDL spells a foreign key
+    // ``FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`)`` (drizzle/0000_baseline.sql:104), all in
+    // one file with no schema namespace. The referenced COLUMN is named here, which the
+    // `"public"."sales"` needle this replaced did not pin.
     const sqlText = generatedSql();
-    expect(sqlText).toContain(`references "public"."sales"`);
-    expect(sqlText).toContain(`references "public"."tills"`);
+    expect(sqlText).toContain("references `sales`(`id`)");
+    expect(sqlText).toContain("references `tills`(`id`)");
   });
 });

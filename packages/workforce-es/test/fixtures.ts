@@ -1,5 +1,5 @@
-import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
+import { convenioConfig } from "../src/schema/convenio-config.js";
 
 /**
  * Seed helpers for the workforce-es suites. `seedLocation`, `seedPerson` and `seedEmployment` are
@@ -28,17 +28,16 @@ export async function seedConvenioConfig(
     overtimeModel?: "daily_accrual" | "period_net";
   },
 ): Promise<void> {
-  const cols = [sql`location_id`];
-  const vals = [sql`${params.locationId}`];
-  if (params.workingDaysPerWeek !== undefined) {
-    cols.push(sql`working_days_per_week`);
-    vals.push(sql`${params.workingDaysPerWeek}`);
-  }
-  if (params.overtimeModel !== undefined) {
-    cols.push(sql`overtime_model`);
-    vals.push(sql`${params.overtimeModel}`);
-  }
-  await db.execute(sql`
-    insert into convenio_config (${sql.join(cols, sql`, `)})
-    values (${sql.join(vals, sql`, `)})`);
+  // Through drizzle rather than raw SQL: `id` and `created_at` take their value from the table's
+  // `$defaultFn`, which drizzle runs per insert. They are NOT SQL DEFAULTs, so a raw insert that
+  // named neither would be refused `NOT NULL constraint failed: convenio_config.id`. A rule column
+  // the caller did not override is still left out of the statement, so it takes the column DEFAULT
+  // the migration declares — which is what a "default row" means here.
+  await db.insert(convenioConfig).values({
+    locationId: params.locationId,
+    ...(params.workingDaysPerWeek === undefined
+      ? {}
+      : { workingDaysPerWeek: params.workingDaysPerWeek }),
+    ...(params.overtimeModel === undefined ? {} : { overtimeModel: params.overtimeModel }),
+  });
 }

@@ -3,7 +3,10 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
+  locations,
+  nowIso,
   ticketItems,
+  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -11,6 +14,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { departments, preparationRoutes } from "@waitron/venue-service";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
@@ -71,18 +75,31 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es-ES']": syntax error`).
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = location!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
   // superuser here, as the surrounding venue rows are (fixture setup).
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -143,7 +160,7 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -267,7 +284,7 @@ describe("openTab", () => {
     // Settle the first tab (owner write — fixture setup). tab_id STILL points at it (no
     // settle-time write, design §2b), but it is now stale.
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${firstTab}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${firstTab}`,
     );
     // A fresh tab is fine — the stale pointer reads free and is overwritten to the new order.
     const { tabId: secondTab } = await asApp(cfg, (tx) =>
@@ -295,9 +312,11 @@ describe("openTab", () => {
 
 /** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
 async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
-  await db.execute(sql`
-    insert into working_orders (id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
+  // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator on a NOT
+  // NULL column (`packages/db/drizzle/0000_baseline.sql:120`) and a raw insert never reaches it.
+  await db
+    .insert(workingOrders)
+    .values({ id, tillId: cfg.tillId, nodeId: cfg.nodeId, orderNumber: 999, status: "open" });
 }
 
 describe("addTabRound (append-only, no re-price)", () => {
@@ -383,7 +402,7 @@ describe("addTabRound (append-only, no re-price)", () => {
     );
     // Settled tab → not open.
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }])),
@@ -513,7 +532,7 @@ describe("voidTabLine", () => {
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -572,11 +591,12 @@ describe("markLineServed / unmarkLineServed", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    // Settled order → not open. lockOpenTab's STATUS check refuses it — but strip that check and the DB
+    // Settled order → not open. assertAnchoredTabOpen's STATUS check refuses it — but strip that
+    // check and the DB
     // `require_open_parent` trigger still rejects a served write on a non-open parent (a different wrong
     // shape, but a refusal). So this branch alone does NOT isolate the domain guard; the next test does.
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -584,14 +604,14 @@ describe("markLineServed / unmarkLineServed", () => {
     });
   });
 
-  it("refuses an open order no table points at, carrying a real line — lockOpenTab's back-pointer is the sole gate (tab.not_open)", async () => {
+  it("refuses an open order no table points at, carrying a real line — the back-pointer check is the sole gate (tab.not_open)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
     // Orphan the tab: clear the dining_tables back-pointer while the order stays OPEN and keeps line 1.
     // No DB trigger fires (the parent is still open) and the UPDATE would match a real row, so
-    // lockOpenTab's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
+    // assertAnchoredTabOpen's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
     // deletion-proof for it. Strip that check and the served write silently succeeds (verified: the
     // guard-removed run resolves instead of rejecting). The zero-line walk-up used elsewhere cannot
     // isolate it — a guard-removed UPDATE there matches 0 rows and errors tab.line_not_found regardless.
@@ -764,7 +784,7 @@ describe("readTabLines", () => {
     );
     // Settled → not open (owner write, fixture setup).
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -808,7 +828,7 @@ describe("listTablesWithState (occupancy)", () => {
 
     // Settle the tab (tab_id still points at it, now stale); the table frees.
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false });
@@ -829,9 +849,14 @@ describe("listTablesWithState (occupancy)", () => {
 
     // Collected → the Mode-T collect transition placed → settled sets `working_orders.collected_at` (the
     // §3e successor to order_prep's `collected` state); no lingering occupancy.
+    // ONE clock reading bound to both columns: PostgreSQL's `now()` returned transaction-start time,
+    // so the two columns this statement writes were equal, and two separate `nowIso()` calls need
+    // not be. Nothing below asserts on either value — the assertion is on `state`/`pendingDeliveries`
+    // — but the fixture still stages what the real collect path writes.
+    const settledAt = nowIso();
     await asApp(cfg, (tx) =>
       tx.execute(
-        sql`update working_orders set status = 'settled', settled_at = now(), collected_at = now() where id = ${orderId}`,
+        sql`update working_orders set status = 'settled', settled_at = ${settledAt}, collected_at = ${settledAt} where id = ${orderId}`,
       ),
     );
     const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
@@ -842,25 +867,47 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } = await setupVenue();
     const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
     await asApp(cfg, async (tx) => {
-      const department = await tx.execute<{ id: string }>(sql`
-        insert into departments
-          (location_id, name, trading_name, default_service_mode)
-        values (${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
-        returning id`);
+      // Through the table definition: `departments.id` and `.created_at` are `$defaultFn`
+      // generators on NOT NULL columns
+      // (`packages/venue-service/drizzle/0000_baseline.sql:13` and `:20`).
+      const [department] = await tx
+        .insert(departments)
+        .values({
+          locationId: cfg.locationId,
+          name: "Restaurant",
+          tradingName: "Restaurant",
+          defaultServiceMode: "table_tab",
+        })
+        .returning({ id: departments.id });
+      // Three statements where PostgreSQL took two. `zone_service_policies_default_allowed_fk`
+      // (zone_id, default_menu_id) → zone_menus was DEFERRABLE INITIALLY DEFERRED on PostgreSQL and
+      // sqlite-core has no deferrable option, so it is checked AT THE STATEMENT here — and
+      // `zone_menus.zone_id` points back at the policy row, so neither table can be filled first
+      // with `default_menu_id` already set. The comment above the key in
+      // `packages/venue-service/src/schema/service.ts` records the same order. The FINAL row is the
+      // one this fixture always wrote; only the number of statements changed. Without the split
+      // this statement is refused with `FOREIGN KEY constraint failed`, which is what it did before
+      // the split (run recorded in this task's report).
       await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, service_mode, default_menu_id)
         values (
-          ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
-          'table_tab', ${menuId}
+          ${cfg.locationId}, ${zone.id}, ${department!.id},
+          'table_tab', null
         )`);
       await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
         values (${zone.id}, ${menuId})`);
       await tx.execute(sql`
-        insert into preparation_routes
-          (location_id, category_id, station_id, no_preparation)
-        values (${cfg.locationId}, ${categoryId}, null, true)`);
+        update zone_service_policies set default_menu_id = ${menuId} where zone_id = ${zone.id}`);
+      // `preparation_routes.id` is a `$defaultFn` generator on a NOT NULL column
+      // (`packages/venue-service/drizzle/0000_baseline.sql:47`).
+      await tx.insert(preparationRoutes).values({
+        locationId: cfg.locationId,
+        categoryId,
+        stationId: null,
+        noPreparation: true,
+      });
     });
     // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));

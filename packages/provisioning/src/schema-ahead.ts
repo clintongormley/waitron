@@ -1,6 +1,6 @@
 import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { imageMigrationHashes, journalHashes, type MigrationSet } from "@waitron/migrations";
+import { imageMigrationHashes, journalHashes, type MigrationSetSource } from "@waitron/migrations";
 import "./errors.js";
 
 export interface AheadSet {
@@ -11,8 +11,10 @@ export interface AheadSet {
 
 /**
  * The database hashes this image has no file for. Set difference in ONE direction only: a database
- * BEHIND the image is an ordinary upgrade, which `ensureInstance` has already migrated forward by
- * the time this runs, and only the ahead direction is unrecoverable.
+ * BEHIND the image is an ordinary upgrade, and only the ahead direction is unrecoverable. That one
+ * direction is what lets the container entrypoint run this check BEFORE anything migrates, which is
+ * where it runs now (`apps/server/src/node-entry.ts`, pinned by "does not refuse a venue database
+ * BEHIND this image").
  */
 export function unknownHashes(inDatabase: readonly string[], inImage: readonly string[]): string[] {
   const shipped = new Set(inImage);
@@ -29,7 +31,7 @@ export function unknownHashes(inDatabase: readonly string[], inImage: readonly s
  */
 export async function findAheadSets(
   db: Pick<Database, "execute">,
-  sets: readonly MigrationSet[],
+  sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<AheadSet[]> {
   const ahead: AheadSet[] = [];
@@ -45,15 +47,16 @@ export async function findAheadSets(
 /**
  * Refuse to boot against a database a different image migrated.
  *
- * Runs AFTER `ensureInstance` so a legitimately behind database has already been brought forward,
- * and BEFORE `startServer` so the failure is named here rather than surfacing as an unclassified
- * driver error in whatever query first touches the changed schema. Reports the FIRST ahead set: one
+ * Runs BEFORE `startServer` so the failure is named here rather than surfacing as an unclassified
+ * driver error in whatever query first touches the changed schema — and before the migrate too,
+ * which `startServer` owns, since the comparison above is one-directional. Reports the FIRST ahead
+ * set: one
  * named set with its unknown hashes is what an installer acts on, and every set after it tells the
  * same story.
  */
 export async function assertNotAhead(
   db: Pick<Database, "execute">,
-  sets: readonly MigrationSet[],
+  sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<void> {
   const ahead = await findAheadSets(db, sets, root);

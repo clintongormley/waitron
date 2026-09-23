@@ -11,8 +11,8 @@ export type FormFactor = (typeof FORM_FACTORS)[number];
 
 /**
  * The device kinds a form factor collapses to (design §9). Re-homed here from the `device_kind`
- * pgEnum in @waitron/db so it survives that enum's deletion; the values still match the enum's
- * (`kds_station`/`handheld`/`till`) so nothing downstream re-maps.
+ * enum in @waitron/db so it survives that declaration's deletion; the values still match the
+ * column's (`kds_station`/`handheld`/`till`) so nothing downstream re-maps.
  */
 export type DeviceKind = "kds_station" | "handheld" | "till";
 

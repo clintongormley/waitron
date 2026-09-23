@@ -1,2 +1,0 @@
-ALTER TABLE "printers" ADD COLUMN "character_table" integer DEFAULT 16 NOT NULL;--> statement-breakpoint
-ALTER TABLE "printers" ADD CONSTRAINT "printers_character_table_ck" CHECK ("printers"."character_table" between 0 and 255);

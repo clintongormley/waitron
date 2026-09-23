@@ -201,9 +201,11 @@ declare module "@waitron/shared" {
      */
     "server.mirror_bind_exposed": { host: string };
     /**
-     * The cluster never accepted a connection within the entrypoint's bounded wait
-     * (`waitForPostgres`, `node-entry.ts`) — the container's database is down, still starting, or
-     * reachable at a different address.
+     * The cluster never accepted a connection within a bounded wait — the database is down, still
+     * starting, or reachable at a different address. NOTHING RAISES IT TODAY: the storage switch
+     * deleted both the connection retry this described (`waitForPostgres`) and the networked
+     * cluster it waited for. It survives as one of the two codes `classifyBootFailure`
+     * (`boot-failure.ts`) can still return, and the recovery page still has wording for it.
      *
      * `attempts` is the only param, and the driver's caught value is deliberately dropped: a `pg`
      * connection failure's `.message` can embed the host and the connection string it was built
@@ -217,17 +219,18 @@ declare module "@waitron/shared" {
      */
     "provisioning.database_unreachable": { attempts: number };
     /**
-     * A driver failure whose SQLSTATE says the database does not carry the schema this image
-     * expects — an undefined table, column or object, or an enum label the image does not have.
+     * A driver failure whose message says the database does not carry the schema this image expects
+     * — a table or a column the software asked for and the file does not have.
      *
      * `classifyBootFailure` (`boot-failure.ts`) returns this and `provisioning.database_unreachable`
      * above from the same function, so the two live in the same registry. Nothing constructs it with
      * params today: it is a CLASSIFICATION of an already-thrown driver error, and the page renders
-     * fixed text keyed on the code alone. `sqlState` is declared because it is the one fact a future
-     * thrower would carry and a shipped code's params cannot be widened later.
+     * fixed text keyed on the code alone. `errcode` is declared because it is the one fact a future
+     * thrower would carry and a shipped code's params cannot be widened later; it replaced
+     * `sqlState` when the engine stopped producing SQLSTATEs at all, which nothing had to migrate
+     * because nothing ever constructed this code with params.
      * `provisioning.database_unreachable`, the other code `classifyBootFailure` returns, carries no
-     * `sqlState` field at all — it reports `attempts` — so it is not a precedent for this shape: one
-     * of its two paths is a socket failure, which has no SQLSTATE to carry.
+     * such field at all — it reports `attempts` — so it is not a precedent for this shape.
      *
      * `provisioning.*`, not `server.*`, for the reason those two siblings record: the domain concept
      * is the deployment's database, and `server.*` is reserved for facts about the process itself
@@ -235,7 +238,7 @@ declare module "@waitron/shared" {
      * spec's §4.1 put it — because this host is its only producer; §9's addendum records the
      * deviation. Never renamed once shipped.
      */
-    "provisioning.schema_mismatch": { sqlState: string | null };
+    "provisioning.schema_mismatch": { errcode: number | null };
     /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
@@ -545,9 +548,11 @@ declare module "@waitron/shared" {
      * A move/join TARGET dining table already has an OPEN tab, so a party may not be relocated or
      * extended onto it — use `mergeTabs` to combine the two bills instead (design §3). A table is "free"
      * when its `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b);
-     * `table.occupied` fires only when it points at a STILL-OPEN order. `moveTab`/`joinTable` take the
-     * target `dining_tables` row `FOR UPDATE`, so two concurrent moves onto one free table serialise and
-     * the loser surfaces THIS code (the lock is the guard — there is no partial-unique). `tableId` — the
+     * `table.occupied` fires only when it points at a STILL-OPEN order. There is no partial-unique
+     * index behind the rule, so what makes two concurrent moves onto one free table serialise — the
+     * loser reading the winner's `tab_id` and surfacing THIS code — is that they cannot overlap: one
+     * write transaction runs on the venue file at a time (`assertAnchoredTabOpen` in
+     * `apps/server/src/working-order.ts` carries the chain and the receipt). `tableId` — the
      * occupied target — is caller-supplied, not a secret. `table.*` names the DOMAIN CONCEPT (the dining
      * table), never the throwing package (the rule `tenant.not_found`'s note gives). Mapped to 409 (the
      * table's state forbids the move), the sibling of TS-1's `tab.already_open`.
@@ -583,9 +588,11 @@ declare module "@waitron/shared" {
     "table.not_shared": { tableId: string; tabId: string };
     /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
-     * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
-     * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
-     * guard, so two concurrent openTabs serialise and the second surfaces THIS code. A stale `tab_id`
+     * most one open tab per table, design §2b). `openTab` reads the `dining_tables` row and checks its
+     * `tab_id`; there is NO partial-unique index, so what makes two concurrent openTabs serialise —
+     * the second surfacing THIS code — is that they cannot overlap: one write transaction runs on the
+     * venue file at a time (`openTab` in `apps/server/src/working-order.ts` carries the chain and the
+     * receipt). A stale `tab_id`
      * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
      * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
      * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
@@ -629,8 +636,8 @@ declare module "@waitron/shared" {
     "tab.merge_self": { tabId: string };
     /**
      * A transfer named the SAME tab as source and destination (`fromTabId === toTabId`). Refused
-     * before any lock or line read — moving items from a tab to itself is a no-op the caller did not
-     * mean, and letting it through would take the same tab's row `FOR UPDATE` twice. `tabId` is the
+     * before any check or line read — moving items from a tab to itself is a no-op the caller did not
+     * mean, and letting it through would check the same tab's row twice. `tabId` is the
      * caller-supplied uuid (both ids are equal here), echoed because it is not a secret. A CLIENT
      * request-shape fault (400), distinct from the state conflict `tab.not_open` (409): the ids are
      * well-formed, they are just equal. `tab.*` names the DOMAIN CONCEPT, not the throwing package
@@ -669,8 +676,8 @@ declare module "@waitron/shared" {
      *  - a transfer entry names a CHILD modifier line directly (its `line_no` carries a
      *    `parent_line_id`) — a modifier is part of its dish, so it moves only WITH the dish: naming the
      *    parent whole-line move cascades its children automatically, and naming the child on its own is
-     *    refused here rather than orphaning it (the source child would reference a deleted parent →
-     *    23503, an opaque 500; the destination child would land ungrouped);
+     *    refused here rather than orphaning it (the source child would reference a deleted parent,
+     *    which the foreign key refuses as an opaque 500; the destination child would land ungrouped);
      *  - a PARTIAL split (`quantity` < the line's quantity) names a PARENT dish that carries modifier
      *    children — there is no per-option quantity this slice, so splitting the dish would desync its
      *    modifiers' quantity from the dish; refused rather than filing an inconsistent draft.
@@ -808,7 +815,7 @@ declare module "@waitron/shared" {
      * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
      * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
      * line; a second fire of a line already sent collides on `ticket_items`' per-line
-     * `(working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * `(working_order_line_id)` unique. `fireLines` catches that violation
      * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
      * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
      * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
@@ -1035,7 +1042,8 @@ declare module "@waitron/shared" {
      * on the sale routes (the guard lives in `device-session.ts`) and the roster-login guard in
      * `till-api.ts`; both are `till-api.ts` routes. What actually trips it is a NON-sale-capable binding
      * on a till-only path, in practice a `kds_station`: every sale-capable form factor holds a non-null
-     * `till_id` by the `device_binding_rule` trigger (migration 0004, whose non-kds arm RAISEs on a null
+     * `till_id` by the `device_binding_rule_insert` / `_update` triggers
+     * (`packages/db/drizzle/0001_behavioural_triggers.sql`, whose non-kds arm refuses a null
      * `till_id`), so the sale-capable case the code's NAME suggests is unrepresentable. A SETUP
      * precondition surfaced before any fiscal write, not a per-sale block (CLAUDE.md §5).
      *
@@ -1071,8 +1079,8 @@ declare module "@waitron/shared" {
      * already used by another register at the same venue. `resolveDeviceBinding` names the register after
      * the device and reject-not-suffixes the clash (the admin renames the device), so two
      * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
-     * unique index (migration 0006) is the guard, and this is its 23505 translated to a clean domain
-     * code rather than a raw 500.
+     * unique index (`packages/db/drizzle/0000_baseline.sql:49`) is the guard, and this is its refusal
+     * translated to a clean domain code rather than a raw 500.
      *
      * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
      * colliding name is the operator's own input), the same no-param shape `device.station_required`
@@ -1083,12 +1091,18 @@ declare module "@waitron/shared" {
     "device.register_name_taken": Record<string, never>;
     /**
      * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
-     * that matches no row in this database. Surfaced by translating the `23503` an FK on `devices` raises
-     * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the TABLE AND COLUMN the refusal
-     * names (`devices.device_profile_id` / `devices.receipt_printer_id`) — the `isZoneFkViolation` idiom
-     * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the
-     * venue a FK cannot. A NULL binding (MATCH SIMPLE skips its FK)
-     * never reaches this, and a 23503 naming any OTHER key is rethrown raw rather than mislabelled.
+     * that matches no row in this database. Every raise is a READ taken BEFORE the write, and all
+     * three live in `device.ts`: `requireDeviceBinding` for the assign-device-profile UPDATE and the
+     * hardware PATCH, and `requireLiveRegister` for the accept path's register, which also checks
+     * the venue a foreign key cannot. A `null` target clears the binding, names no row, and is
+     * accepted without a read.
+     *
+     * NOTHING translates a database refusal into this code, and nothing could: this engine reports a
+     * foreign-key refusal as `errcode 787` with the whole message `FOREIGN KEY constraint failed` —
+     * no table, no column, no constraint name (measured on Node v26.7.0 against `node:sqlite`; the
+     * predicate that reads it is `packages/db/src/constraint-target.ts`). `devices` carries several
+     * foreign keys, so one refusal cannot be told from another, which is exactly why the check moved
+     * in front of the write. `device.ts` states that reasoning where the read is taken.
      *
      * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
      * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape
@@ -1503,13 +1517,10 @@ declare module "@waitron/shared" {
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };
-    /** The boot probe found missing schema access or SELECT on a user table or sequence the
-     * dump needs, including migration journals. Ownership or effective read grants suffice.
-     * Refused at boot so a recurring backup failure has one clear cause. No params. */
-    "backup.role_rls_fenced": Record<string, never>;
     /** A `BackupSupervisor.reload()` was called while another reload was still in flight. The
-     * lifecycle is latched (stop→close→re-read→probe→start), so two concurrent reloads would race two
-     * teardowns of the same pool; the second is refused rather than allowed to interleave. No params. */
+     * lifecycle is latched (stop→close→re-read→open→start), so two concurrent reloads would race two
+     * teardowns of the same open venue; the second is refused rather than allowed to interleave.
+     * No params. */
     "backup.reload_in_progress": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
@@ -1632,8 +1643,8 @@ declare module "@waitron/shared" {
     /**
      * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
      * `environment` differs from the restoring binary's own target environment. Refusing this here,
-     * before `pg_restore` touches anything, is what stops a preproduction dump landing on a
-     * production database (or the reverse) — CLAUDE.md §5's "one database per environment": a
+     * before the venue file is replaced, is what stops a preproduction archive landing on a
+     * production venue (or the reverse) — CLAUDE.md §5's "one database per environment": a
      * cross-environment restore would leave `invoice_series.next_number` inherited from the wrong
      * series, a permanent hole once real sales resume. `backup`/`target` are both a
      * `DeploymentEnvironment` string (`"production"`/`"preproduction"`), never a secret, so echoing
@@ -1664,7 +1675,8 @@ declare module "@waitron/shared" {
      * outside `destRoot`, where `realpath` reveals the escape the string comparison alone would miss.
      * GCM/tar integrity proves the archive's BYTES are authentic, never that its entry NAMES are the
      * well-behaved `db.dump`/`media/*`/`secrets/*` set BR-3 expects, so a crafted-but-authentic
-     * archive still has to be refused here before `pg_restore` or any file write touches disk.
+     * archive still has to be refused here before the venue file is replaced or any other file
+     * write touches disk.
      *
      * `name` is the archive's own entry name — attacker-influenced, but not a secret, so echoing it
      * is what makes the refusal actionable, the same as `backup.source_kind_unsupported`'s `kind`.
@@ -1676,7 +1688,8 @@ declare module "@waitron/shared" {
     /**
      * BR-3's restore orchestrator (`restore.ts`) refused: the decrypted archive is missing a
      * structurally-required entry — the `manifest.json` index it must read to run the compatibility
-     * gate, or the `db.dump` it must feed to `pg_restore`. A backup without either is not a partial
+     * gate, or the `db.dump` entry it must put in place as the venue file — that name is kept from
+     * the PostgreSQL era and now holds a whole SQLite database. A backup without either is not a partial
      * backup to salvage, it is an archive this binary cannot restore from at all, so it fails LOUD
      * and names the absent entry rather than proceeding to a half-restore. `missing` is the fixed
      * entry name (`"manifest.json"` or `"db.dump"`), never attacker input or a secret. `restore.*`,

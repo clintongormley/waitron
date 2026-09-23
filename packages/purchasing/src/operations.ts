@@ -1,6 +1,6 @@
-import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
+import { isUniqueViolation, now, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -167,15 +167,17 @@ async function insertLines(
 /**
  * Order RETURNING'd line rows exactly as `selectLines`' `orderBy(asc(rate), asc(id))` would: by rate
  * ascending — a stored rate is a count of basis points, so subtracting the two counts is the same
- * ordering the column's own `asc` gives — ties broken by `id`, the canonical lowercase UUID string
- * comparing the same way PostgreSQL orders the `uuid` type. Sorts in place.
+ * ordering the column's own `asc` gives — ties broken by `id`. Sorts in place.
+ *
+ * That the two orderings agree on the tie-break is checked rather than asserted: the same-rate
+ * case in `operations.test.ts` builds three lines at one rate and compares this sort, line for
+ * line, with the order the database hands back.
  */
 function sortLineRows(rows: LineRowWithId[]): LineRowWithId[] {
   return rows.sort((a, b) => {
     const byRate = a.rate - b.rate;
     if (byRate !== 0) return byRate;
-    // Branchless id compare (no dependence on random-UUID ordering for coverage): the canonical
-    // lowercase UUID string compares the same way PostgreSQL orders the `uuid` type.
+    // Branchless id compare (no dependence on random-UUID ordering for coverage).
     return Number(a.id > b.id) - Number(a.id < b.id);
   });
 }
@@ -232,9 +234,9 @@ export async function createPurchaseInvoice(
     header = mapHeader(row!);
   } catch (error) {
     if (isUniqueViolation(error)) {
-      // A translation, not a recovery: Postgres has already aborted the transaction (the same note
-      // record-void.ts's duplicate translation carries). The caller gets a structured code instead
-      // of a raw driver string.
+      // A translation, not a recovery: the row was refused and nothing here retries it. The
+      // AppError leaves the caller's transaction, which rolls back with it; what this buys is a
+      // structured code rather than a raw driver string.
       throw new AppError("purchase.duplicate", {
         supplierTaxId: input.header.supplierTaxId,
         supplierInvoiceNumber: input.header.supplierInvoiceNumber,
@@ -322,7 +324,7 @@ export async function updatePurchaseInvoice(
       ...(deductibleProportion === undefined
         ? {}
         : { deductibleProportion: decimalToBasisPoints(deductibleProportion) }),
-      updatedAt: sql`now()`,
+      updatedAt: now(),
     })
     .where(eq(purchaseInvoices.id, id))
     .returning({ id: purchaseInvoices.id });

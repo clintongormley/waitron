@@ -1,21 +1,30 @@
-// Real-Postgres proof of `seedDemoRestaurant` (Phase 2, Task 11): the orchestrator that wires the
-// Task 6-10 sub-seeds together — catalogues → floor → staff → media (inside ONE
-// `withTransaction`/`asAppUser` tx), then the historical sales (its own per-sale tx, OUTSIDE that tx). This
-// asserts every sub-seed actually ran: both menus present, the full floor, the staff, ≥1 back-dated
-// sale, and a product's `image` rewritten to the content-addressed served name.
-//
-// Real Postgres (not PGlite): the sub-seeds run as `app_user` and `seedSales` writes real
-// hash-chained preproduction `registros_facturacion` rows through `recordSale` — PGlite's
-// superuser connection cannot check those grants; its triggers still fire (CLAUDE.md §4). Uses
-// the shared `manifest` template, cloned per file via `useTemplateDb`.
-//
-// Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
-// `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
+/**
+ * `seedDemoRestaurant`, the orchestrator that wires the sub-seeds together — catalogues → floor →
+ * staff → media inside ONE transaction, then the historical sales in their own per-sale ones. It
+ * asserts every sub-seed actually ran: both menus, the full floor, the staff, at least one
+ * back-dated sale, and a product's `image` rewritten to the content-addressed served name.
+ *
+ * Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
+ * `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
+ *
+ * **What went with PostgreSQL.** The sub-seeds used to run as `app_user` on a real server, so a
+ * grant they do not hold would have failed this file. SQLite has no roles, `asAppUser` is an inert
+ * function (`packages/db/src/testing/roles.ts`), and every call below runs on the one connection.
+ * Nothing now checks who may write any of the seeded tables.
+ *
+ * Three read-back shapes moved with the engine, none of them changing what is asserted:
+ * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
+ * `json_group_array(x order by y)`, which hands back JSON TEXT the mapping parses (the same
+ * substitution `packages/catalogue/src/categories.ts:40` makes in product code); and a boolean
+ * column arrives as 0 or 1, so `is_counter_default` is compared to 1 in the mapping rather than
+ * reaching the assertion as a number.
+ */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -26,11 +35,13 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 const LOCALE: SeedLocale = "en";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF. A distinct base (90_000_000) keeps this suite's NIFs
-// from colliding with seed-catalogue's 50M and seed-sales' 80M ranges on the shared container.
+// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
+// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -77,7 +88,7 @@ async function provisionVenue(): Promise<Venue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
   return {
     tillId: venue.tillId,
@@ -93,23 +104,23 @@ describe("seedDemoRestaurant", () => {
 
     // A horizon long enough that the deterministic sales LCG (seeded fixed, not by `days`) is all but
     // certain to draw the coffee/steak at least once each — see the modifier assertions below.
-    await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 7 });
+    await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
 
-    const read = await withTransaction(suite.admin, async (tx) => {
+    const read = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from dining_tables`,
+        sql`select cast(count(*) as integer) as n from dining_tables`,
       );
       const { rows: staffRows } = await tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from persons`,
+        sql`select cast(count(*) as integer) as n from persons`,
       );
       const { rows: saleRows } = await tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from sales`,
+        sql`select cast(count(*) as integer) as n from sales`,
       );
       const { rows: modifierLineRows } = await tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from sale_lines where parent_line_id is not null`,
+        sql`select cast(count(*) as integer) as n from sale_lines where parent_line_id is not null`,
       );
       const { rows: departmentRows } = await tx.execute<{
         name: string;
@@ -119,17 +130,17 @@ describe("seedDemoRestaurant", () => {
         select name, trading_name, default_service_mode
         from departments
         order by name`);
-      const { rows: serviceZoneRows } = await tx.execute<{
+      const { rows: serviceZoneRaw } = await tx.execute<{
         zone_name: string;
         department_name: string;
         service_mode: string;
-        is_counter_default: boolean;
-        menus: string[];
+        is_counter_default: number;
+        menus: string;
       }>(sql`
         select z.name as zone_name, d.name as department_name,
                coalesce(p.service_mode, d.default_service_mode) as service_mode,
                p.is_counter_default,
-               array_agg(c.name order by zm.display_order) as menus
+               json_group_array(c.name order by zm.display_order) as menus
         from zone_service_policies p
         join floor_zones z on z.id = p.zone_id
         join departments d on d.id = p.department_id
@@ -137,8 +148,13 @@ describe("seedDemoRestaurant", () => {
         join catalogues c on c.id = zm.menu_id
         group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
+      const serviceZoneRows = serviceZoneRaw.map((row) => ({
+        ...row,
+        is_counter_default: row.is_counter_default === 1,
+        menus: JSON.parse(row.menus) as string[],
+      }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
-        select d.name as department_name, count(distinct h.weekday)::int as days
+        select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
         from department_hours h
         join departments d on d.id = h.department_id
         group by d.name
@@ -151,21 +167,21 @@ describe("seedDemoRestaurant", () => {
         gross_price: number;
       }>(sql`
         -- gross_price counts whole cents, and the assertion below is on that COUNT, not on an
-        -- amount: ::int only normalises it to a number, and raises 22003 rather than answering wrong.
-        select mi.product_id, c.name as menu_name, mi.gross_price::int as gross_price
+        -- amount, so it is read as an integer rather than through rawCentsToDecimal.
+        select mi.product_id, c.name as menu_name, cast(mi.gross_price as integer) as gross_price
         from menu_items mi
         join products p on p.id = mi.product_id
         join catalogues c on c.id = mi.menu_id
         where p.name = 'Negroni'
         order by mi.gross_price`);
-      const { rows: optionListRows } = await tx.execute<{
+      const { rows: optionListRaw } = await tx.execute<{
         product_name: string;
         list_name: string;
         default_label: string | null;
-        labels: string[];
+        labels: string;
       }>(sql`
         select p.name as product_name, ol.name as list_name, dflt.name as default_label,
-               array_agg(lab.name order by lab.sort) as labels
+               json_group_array(lab.name order by lab.sort) as labels
         from product_modifiers pm
         join products p on p.id = pm.product_id
         join option_lists ol on ol.id = pm.option_list_id
@@ -173,6 +189,10 @@ describe("seedDemoRestaurant", () => {
         left join option_labels dflt on dflt.id = ol.default_label_id
         group by p.name, ol.name, dflt.name
         order by p.name, ol.name`);
+      const optionListRows = optionListRaw.map((row) => ({
+        ...row,
+        labels: JSON.parse(row.labels) as string[],
+      }));
       const { rows: cocktailRouteRows } = await tx.execute<{
         zone_name: string;
         station_name: string;
@@ -310,7 +330,7 @@ describe("seedDemoRestaurant", () => {
 
     // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
-    const { rows: imageRows } = await withTransaction(suite.admin, async (tx) => {
+    const { rows: imageRows } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,

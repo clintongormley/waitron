@@ -1,10 +1,13 @@
 import { parseArgs } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import {
+  deploymentTableExists,
   isUniqueViolation,
   readDeploymentEnvironment,
+  stampDeployment,
   type Database,
   type DeploymentEnvironment,
+  type VenueDatabase,
 } from "@waitron/db";
 import {
   assertPasswordLength,
@@ -14,21 +17,10 @@ import {
   normalizeAndValidateEmail,
 } from "@waitron/identity";
 import { enabledModules, type ModuleConfig, type WaitronModule } from "@waitron/module";
+import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
-import { assertIdentifier, withRole } from "./identifiers.js";
-import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
-import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
-import {
-  INSTANCE_MIGRATOR_ROLE,
-  INSTANCE_ROLES,
-  readInstanceState,
-  type InstanceRole,
-  type InstanceState,
-} from "./instance-state.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
-import { sqlStateOf } from "./sql-state.js";
-import { formatStatus } from "./status-command.js";
 import { applyVenue } from "./venue-apply.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
@@ -38,27 +30,23 @@ import "./errors.js";
  * Everything this CLI does to the outside world, injected — so the whole wizard is testable with no
  * process, no tty and no container, and nothing here can print a secret behind the suite's back.
  *
- * `readState` and `apply` are injected for the same reason `random` is injected into
- * `generateKeyRing`: their real implementations need a live cluster, and what THIS file decides —
- * what it asks for, what it prints, what it refuses, whether it writes at all — is none of that.
- * `planInstance` is deliberately NOT injected: it is pure, so the tests run the real one and a
- * summary is rendered from a real plan rather than from a fixture that could drift from it.
+ * `applyVenue` is injected for the same reason `random` is injected into `generateKeyRing`: its
+ * real implementation needs a live target database, and what THIS file decides — what it asks for,
+ * what it prints, what it refuses, whether it writes at all — is none of that. `planVenue` is
+ * deliberately NOT injected: it is pure, so the tests run the real one and a summary is rendered
+ * from a real plan rather than from a fixture that could drift from it.
  */
 export interface CliDeps {
   io: ProvisioningIo;
   env: Record<string, string | undefined>;
-  /** Opens a connection to a connection string. The caller of each connection closes it. */
-  connect(uri: string): Promise<Database>;
-  /** `null` means "running from source"; otherwise the folder `scripts/copy-migrations.mjs`
-   * produced beside the bundle. `bin.ts` decides which. */
-  migrationsRoot: string | null;
-  readState: typeof readInstanceState;
-  apply: typeof applyInstance;
-  /** The venue apply, injected for the same reason as `apply`: it runs the whole location flow as
-   * one transaction against a live target database, and what `venue` decides — what it prompts,
-   * prints and refuses — is testable without one. `planVenue`/`describeVenueAction` are pure, so
-   * they are NOT injected: the tests run the real ones and the summary is rendered from a real plan
-   * rather than a fixture that could drift from it, exactly as `planInstance` is treated. */
+  /** Opens this node's venue directory — the two SQLite files it stores everything in. The caller
+   * closes the store, which owns both. */
+  openVenue(directory: string): Promise<VenueDatabase>;
+  /** The venue apply: it runs the whole location flow as one transaction against a live target
+   * database, and what `venue` decides — what it prompts, prints and refuses — is testable without
+   * one. `planVenue`/`describeVenueAction` are pure, so they are NOT injected: the tests run the
+   * real ones and the summary is rendered from a real plan rather than a fixture that could drift
+   * from it. */
   applyVenue: typeof applyVenue;
   /** The composition list (`@waitron/composition`'s `ALL_MODULES`), injected like `applyVenue`. `venue`
    * resolves the fiscal slot from the territory (`selectFiscalModule`) and threads only the ENABLED set
@@ -69,26 +57,37 @@ export interface CliDeps {
    * it to write `<WAITRON_STATE_DIR>/modules.json` when that env var is set): absent, `venue` still
    * selects the fiscal module for the plan/apply but writes no file. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
-  /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
-   * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
+  /** Reads a target database's deployment stamp. Injected so the stamping paths are reachable
+   * without a live directory; the real one (`@waitron/db`) needs the target connection. */
   readEnvironment: typeof readDeploymentEnvironment;
+  /** Whether the target's `deployment` table exists at all — what tells a MIGRATED directory
+   * carrying no stamp (which `venue` stamps) from one nothing has migrated (which it refuses),
+   * since `readEnvironment` answers `null` for both. Injected for the same reason. */
+  readDeploymentTable: typeof deploymentTableExists;
+  /** Writes the target's deployment stamp. The SAME primitive the browser setup wizard's handler
+   * calls in the same position (`provisionVenue`, `apps/server/src/provision.ts`), so the two
+   * stamping paths agree by construction rather than by two people typing the same rule: it is
+   * idempotent for the value already there, refuses a DIFFERENT one with
+   * `deployment.already_stamped`, and writes only when there is none. Injected for the same reason
+   * as the reads. */
+  stampEnvironment: typeof stampDeployment;
   /** Reads the fiscal identity of every tenant already in the target database. Injected like
    * `readEnvironment` so the foreign-tenant refusal is reachable without a container; the real one
    * (`readTenantIdentities`, `./tenant-guard.js`) needs the target connection. */
   readTenants: typeof readTenantIdentities;
 }
 
-const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
-
-/** The one environment variable this tool reads a secret from. Named once so the guard that
- * refuses an empty one and the error that reports it cannot drift apart. */
-const ADMIN_URI_VARIABLE = "WAITRON_ADMIN_DATABASE_URL";
+/** The environment variable `apps/server` reads the venue directory from (`config.ts`'s `venueDir`).
+ * `venue` reads the same one, so a box's own setting is what stands its venue up: an operator asked
+ * to type the path instead could provision a directory the server never opens. Named once so the
+ * fallback and the error that reports nothing supplied it cannot drift apart. */
+const VENUE_DIR_VARIABLE = "WAITRON_VENUE_DIR";
 
 /** The env var the admin PIN is read from. A login PIN is a secret, so — exactly like the admin
  * connection string above — it is NEVER an argv flag (`argv` is world-readable in `ps` and lands in
  * shell history): it comes from this variable or an echo-off prompt, and from nowhere else. `parse`
  * declares no `--admin-pin`, so `strict: true` turns one into a parse error rather than a silent
- * acceptance, the same defence `ADMIN_URI_VARIABLE` relies on. */
+ * acceptance. */
 const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN";
 
 /** The env var the admin dashboard PASSWORD is read from. Like the PIN and the admin connection
@@ -101,9 +100,7 @@ const USAGE = [
   "usage: waitron-provision <command> [options]",
   "",
   "  keyring                                            generate the credential key ring",
-  "  instance [--database <name>] [--environment <env>] [--yes]",
-  "  status   [--database <name>]",
-  "  venue    [--database <name>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
+  "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
@@ -111,17 +108,19 @@ const USAGE = [
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
   "",
-  `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
-  "",
   "Every option is prompted for when omitted, except --admin-first-names and",
   "--admin-last-names: the admin's real name is left unset when neither is given, so a",
   "script driving this command is never stopped by a question it did not expect.",
   "",
-  "The admin connection string is NOT an option. It carries a password, and argv is",
-  "world-readable in `ps` and lands in shell history, so it is read from",
-  "WAITRON_ADMIN_DATABASE_URL or from an echo-off prompt — and from nowhere else.",
-  "It must be a URL: postgres://user:pass@host:port/database. A libpq keyword/value",
-  "string or a bare socket path is refused — see README.md, 'Secrets'.",
+  "--venue-dir is the directory holding this node's two SQLite files. Omitted, it is",
+  "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
+  "asked for. There is no connection string and no database name: one directory is the",
+  "database.",
+  "",
+  "A directory that carries no environment stamp is STAMPED from WAITRON_ENV — unset",
+  "means preproduction, and production has to be typed out in full. A directory already",
+  "stamped for the OTHER environment is refused, never re-stamped. Nothing here migrates:",
+  "a directory nothing has migrated is refused too.",
   "",
   "The admin PIN and dashboard password (venue) are NOT options either, for the same reason: a",
   "login secret must not reach argv, so each is read from WAITRON_ADMIN_PIN /",
@@ -145,10 +144,6 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   switch (command) {
     case "keyring":
       return keyring(rest, deps);
-    case "instance":
-      return instance(rest, deps);
-    case "status":
-      return status(rest, deps);
     case "venue":
       return venue(rest, deps);
     default:
@@ -197,172 +192,29 @@ async function keyring(argv: string[], deps: CliDeps): Promise<number> {
   return runKeyring(deps.io);
 }
 
-async function instance(argv: string[], deps: CliDeps): Promise<number> {
-  let values;
-  try {
-    ({ values } = parse(argv, {
-      database: { type: "string" },
-      environment: { type: "string" },
-      yes: { type: "boolean" },
-    }));
-  } catch {
-    deps.io.stderr(USAGE);
-    return 2;
-  }
-
-  try {
-    // Both resolved and VALIDATED before the admin connection string is even asked for: a mistyped
-    // database name should not cost the operator a paste of a privileged credential first.
-    const database = await resolveOption(values.database, "database name: ", deps);
-    assertIdentifier("database", database);
-    const environment = assertEnvironment(
-      await resolveOption(
-        values.environment,
-        `deployment environment (${ENVIRONMENTS.join(" | ")}): `,
-        deps,
-      ),
-    );
-    const adminUri = await resolveAdminUri(deps);
-
-    return await withState(adminUri, database, deps, async (state, admin, openTarget) => {
-      const actions = planInstance(state, { database, environment });
-
-      // Never empty in practice, and deliberately not special-cased: `planInstance` re-issues every
-      // grant on every run (instance-plan.ts's "Grants are re-issued on every run rather than
-      // diffed"), so even a fully-provisioned database yields the two grant actions. A "nothing to
-      // do" branch here would be unreachable code claiming to handle a state that cannot arise.
-      deps.io.stdout(`Plan for ${database} (${environment}):`);
-      // Which cluster, so the operator confirming this can see the mistake the summary otherwise
-      // hides — see `describeAdmin`. Never the password.
-      deps.io.stdout(`Cluster: ${describeAdmin(adminUri)}`);
-      deps.io.stdout("");
-      for (const action of actions) deps.io.stdout(`  ${describeAction(action)}`);
-      deps.io.stdout("");
-
-      const created = actions.filter((action) => action.kind === "create-role");
-      if (created.length === 0) {
-        // Disclosed HERE, above the prompt, rather than in `reportRoles` where the same fact used to
-        // surface first. `reportRoles` runs after create, migrate and stamp, so an operator who
-        // would have declined on learning this learnt it too late to decline. The plan is pure and
-        // `created` falls straight out of it, so nothing has to be reached to know it.
-        //
-        // The case is a second database on a cluster that already carries the two roles — the
-        // roles are cluster-global while the database is not — and the reason no string can be
-        // printed is the one `reportRoles` gives: this tool did not generate those passwords and
-        // cannot read one back out of `pg_authid`.
-        deps.io.stdout("No connection strings will be printed: every role this needs already");
-        deps.io.stdout("exists, and this tool cannot recover a password it did not generate.");
-        deps.io.stdout("");
-      }
-
-      if (values.yes !== true) {
-        const answer = (await deps.io.prompt("Apply this plan? [y/N] ")).trim().toLowerCase();
-        if (answer !== "y" && answer !== "yes") {
-          deps.io.stderr("Nothing was applied.");
-          return 1;
-        }
-      }
-
-      try {
-        await deps.apply(actions, {
-          admin,
-          database,
-          adminUri,
-          migrationsRoot: deps.migrationsRoot,
-          // `withState`'s accessor, NOT a second dial of the same database. On every re-run
-          // `withState` already holds a connection to the target — it opened one to read the
-          // deployment's state — and the migrator's schema grant is re-issued unconditionally, so
-          // `applyInstance` wants one on every run too. Passing `() => deps.connect(...)` here
-          // opened a second identical connection each time; `createPostgresDb` connects and
-          // releases up front, so that was a real TCP connect and auth handshake, not a cheap
-          // object. See `withState` for why it is safe to lend, and `TargetConnection` for who
-          // closes it.
-          openTarget,
-        });
-      } catch (error) {
-        if (created.length > 0) {
-          // The unrecoverable half of a partial apply, said plainly rather than left for the
-          // operator to discover: `applyInstance` is not one transaction (PostgreSQL refuses CREATE
-          // DATABASE inside one), so a role may exist carrying a password this run generated in
-          // memory and is now about to lose. A re-run will not recreate it — the planner sees it
-          // and leaves it alone — so the only way back is to drop it.
-          //
-          // The roles are NAMED. `created` is right here and holds exactly the roles this run
-          // minted; the previous wording sent the operator to run `status` and work out for
-          // themselves which `waitron_*` roles they had no connection string for, which is
-          // re-deriving something already in scope, at the one moment the tool has just failed.
-          // Only `created`, never `INSTANCE_ROLES`: a role that already existed has an owner and a
-          // password this tool never generated, and telling anyone to drop it would be worse advice
-          // than the vague version.
-          deps.io.stderr("");
-          deps.io.stderr(
-            "The plan failed part-way through. Any role it created before failing now",
-          );
-          deps.io.stderr("exists with a password that was NOT printed and cannot be recovered.");
-          deps.io.stderr("");
-          deps.io.stderr("This run creates these roles, so drop whichever of them now exist:");
-          for (const action of created) deps.io.stderr(`  DROP ROLE ${action.role};`);
-          deps.io.stderr("");
-          deps.io.stderr("`waitron-provision status` says which are present. Then run this again.");
-        }
-        throw error;
-      }
-
-      await reportRoles(created, adminUri, database, deps);
-      return 0;
-    });
-  } catch (error) {
-    return reportFailure(error, deps);
-  }
-}
-
-async function status(argv: string[], deps: CliDeps): Promise<number> {
-  let values;
-  try {
-    ({ values } = parse(argv, { database: { type: "string" } }));
-  } catch {
-    deps.io.stderr(USAGE);
-    return 2;
-  }
-
-  try {
-    const database = await resolveOption(values.database, "database name: ", deps);
-    assertIdentifier("database", database);
-    const adminUri = await resolveAdminUri(deps);
-    return await withState(adminUri, database, deps, async (state) => {
-      for (const line of formatStatus(state)) deps.io.stdout(line);
-      return 0;
-    });
-  } catch (error) {
-    return reportFailure(error, deps);
-  }
-}
-
 /**
  * Stands a venue up: a tenant, a location, a till, a node, its two invoice series, and every
  * injected module's own seed for that node (the fiscal seed is what registers it as a SIF) — the
  * whole slice `planVenue`/`applyVenue` compose.
  *
- * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
- * done first — the fiscal regime's own venue-field seat, which refuses a legal name or operation
- * description carrying a character XML forbids, an operation description over 500 characters, and
- * either series code outside AEAT's character set or longer than the 38-character base
- * (`setup.request_invalid`, naming the offending field), and then the pure `planVenue`, which
- * refuses an unimplemented territory, a bad locale count and duplicate series codes — so a
- * malformed request costs the operator neither a pasted admin credential nor an opened connection
- * (venue-plan.ts's "no admin connection is spent on a malformed request"). Only then is the admin
- * URI asked for and the target opened.
+ * The ORDER: everything that can be resolved and validated WITHOUT a database is done first — the
+ * fiscal regime's own venue-field seat, which refuses a legal name or operation description
+ * carrying a character XML forbids, an operation description over 500 characters, and either series
+ * code outside AEAT's character set or longer than the 38-character base (`setup.request_invalid`,
+ * naming the offending field), and then the pure `planVenue`, which refuses an unimplemented
+ * territory, a bad locale count and duplicate series codes — so a malformed request opens nothing
+ * (venue-plan.ts's "no admin connection is spent on a malformed request", which is now "no venue
+ * directory is opened"). Only then is the directory opened.
  *
- * Unlike `instance`, the connection is to the TARGET database as the OWNER-admin, not to the cluster
- * admin: `applyVenue` inserts as the role that owns the tables, so there is no
- * second role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a
- * partial venue must never be.
+ * It opens the venue directory and writes through its venue file; there is no cluster, no second
+ * role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a partial
+ * venue must never be.
  */
 async function venue(argv: string[], deps: CliDeps): Promise<number> {
   let values;
   try {
     ({ values } = parse(argv, {
-      database: { type: "string" },
+      "venue-dir": { type: "string" },
       country: { type: "string" },
       "tax-id": { type: "string" },
       "legal-name": { type: "string" },
@@ -392,13 +244,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   try {
-    // Resolved and VALIDATED before the admin connection string is even asked for — a mistyped
-    // country or database name should not cost the operator a paste of a privileged credential. Only
-    // the database name uses `assertIdentifier`; the rest are free text (a legal name has spaces, a
-    // territory has hyphens) and are checked only where a check has meaning — the country's shape
-    // here, the deeper request shape in `planVenue` below.
-    const database = await resolveOption(values.database, "database name: ", deps);
-    assertIdentifier("database", database);
+    // Resolved and VALIDATED before anything is opened — a mistyped country or a directory nothing
+    // supplied should cost no open at all. The directory is checked only for being SUPPLIED: a path
+    // has no grammar this tool can hold it to, and the engine's own refusal to open it is the check
+    // (`withVenueState`). The rest are free text (a legal name has spaces, a territory has hyphens)
+    // and are checked only where a check has meaning — the country's shape here, the deeper request
+    // shape in `planVenue` below.
+    const venueDir = await resolveVenueDir(values["venue-dir"], deps);
     const country = assertCountry(
       await resolveOption(values.country, "country (ISO-3166 alpha-2, e.g. ES): ", deps),
     );
@@ -510,9 +362,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const fiscalConfig = selection.config;
     // The regime's own rules on the four fields the operator just typed, reached through the same
     // contract seat the setup wizard uses (`FiscalContribution.venueFields`) — this file names no
-    // regime package. Run HERE, before `resolveAdminUri` asks for an admin credential and long
-    // before `applyVenue` mints the tenant, node, SIF and hash chain, so a refusal costs no
-    // connection and leaves nothing behind (CLAUDE.md §5). Without it this command could provision a
+    // regime package. Run HERE, long before `applyVenue` mints the tenant, node, SIF and hash
+    // chain, so a refusal opens nothing and leaves nothing behind (CLAUDE.md §5). Without it this command could provision a
     // venue whose series code the tax agency rejects, and every sale it ever took would be refused
     // at the chain seam with no way back — `create-series` is ON CONFLICT DO NOTHING, so re-running
     // reuses the tenant. A regime that files nothing offers no seat; the optional call is how its
@@ -527,28 +378,35 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
-    // codes. Kept BEFORE `resolveAdminUri` on purpose — see this function's header.
+    // codes. Kept BEFORE the venue directory is opened on purpose — see this function's header.
     const actions = planVenue(request, modules);
+    // The environment this run would stamp an UNSTAMPED directory for, derived from `WAITRON_ENV`
+    // (`environment.ts`, CLAUDE.md §5: unset means preproduction, production is typed out in full).
+    // Pure, so it is resolved here with the rest of the validation: a misspelled variable costs no
+    // open and writes nothing.
+    const requested = resolveEnvironment(deps.env);
 
-    const adminUri = await resolveAdminUri(deps);
-
-    return await withVenueState(adminUri, database, deps, async (target) => {
+    return await withVenueState(venueDir, deps, async (target) => {
       let environment: DeploymentEnvironment | null;
+      let migrated: boolean;
       try {
-        // The SQLSTATE-bearing STATE READ: reading the deployment stamp as an admin that may lack
-        // privilege on the target's tables fails 42501, exactly as `instance`/`status` read theirs.
-        // Classified via `asUnreadable`, like the connect in `withVenueState`; the venue APPLY below
-        // keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never dressed as a
-        // read one. Only this stamp read is wrapped, NOT `applyVenue`.
+        // The STATE READS: a venue file that opened and then could not be read — a corrupt or
+        // truncated one. Classified via `asUnreadable`, like the open in `withVenueState`; the venue
+        // APPLY below keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never
+        // dressed as a read one. Only these reads are wrapped, NOT `applyVenue` and NOT the stamp.
         environment = await deps.readEnvironment(target);
+        // Asked only when there is no stamp, because a stamp is itself proof the table is there.
+        migrated = environment !== null || (await deps.readDeploymentTable(target));
       } catch (error) {
-        throw asUnreadable(error, database);
+        throw asUnreadable(error, venueDir);
       }
-      if (environment === null) {
-        // A venue cannot be filed against a database with no environment stamp — stamping is
-        // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
-        // stamped here.
-        throw new AppError("provisioning.database_unstamped", { database });
+      if (!migrated) {
+        // No stamp AND no `deployment` table: nothing has migrated this directory. This is the
+        // commonest wrong-path mistake, because opening a virgin directory SUCCEEDS — the store
+        // creates it. Refused here rather than left to the first query that meets a table which is
+        // not there (the taxpayer read below, then the stamp's own insert): with this block deleted
+        // and the bundle rebuilt, that run printed `unexpected failure (Error)`.
+        throw new AppError("provisioning.database_unmigrated", { database: venueDir });
       }
 
       // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
@@ -564,15 +422,22 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         assertNoForeignTenant(
           await deps.readTenants(target),
           { country: ensure.country, taxId: ensure.taxId },
-          database,
+          venueDir,
         );
       }
 
-      deps.io.stdout(`Plan for a venue in ${database} (${environment}):`);
-      // Which cluster, so the operator confirming this sees the mistake the summary otherwise hides.
-      // Never the password.
-      deps.io.stdout(`Cluster: ${describeAdmin(adminUri)}`);
+      // The DIRECTORY, so the operator confirming this sees the mistake the summary otherwise hides:
+      // a venue stood up somewhere the server never opens. The environment is the one ALREADY
+      // stamped when there is one, so the header never announces a value the stamp below is about
+      // to refuse.
+      deps.io.stdout(`Plan for a venue in ${venueDir} (${environment ?? requested}):`);
       deps.io.stdout("");
+      if (environment === null) {
+        // An unstamped directory is about to be stamped, and a stamp cannot be taken back (§5), so
+        // the irreversible write is in the list the operator is confirming rather than implied by
+        // the header.
+        deps.io.stdout(`  stamp this venue directory ${requested} — permanent, from WAITRON_ENV`);
+      }
       for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
       deps.io.stdout("");
 
@@ -583,6 +448,19 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
           return 1;
         }
       }
+
+      // The stamp, in the position the browser setup wizard's handler puts it — the last thing
+      // before the mint (`provisionVenue` step 3, `apps/server/src/provision.ts`) — and through the
+      // same primitive, so the two paths that stamp cannot disagree. It writes ONLY when there is
+      // no stamp; a directory already stamped for this environment passes through untouched, and one
+      // stamped for the OTHER environment is refused here with `deployment.already_stamped`, which
+      // propagates exactly as it does out of the wizard. That refusal is the fiscal invariant: a
+      // pre-production database promoted to production leaves a permanent hole in the invoice series
+      // (CLAUDE.md §5), and no re-stamp can take it back.
+      //
+      // AFTER the confirmation prompt, unlike the wizard, which has none. Stamping is permanent, so
+      // an operator who answers anything but `y` must leave the directory exactly as it was found.
+      await deps.stampEnvironment(target, requested);
 
       try {
         const result = await deps.applyVenue(actions, { db: target, modules });
@@ -598,7 +476,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
           // A concurrent venue run created a conflicting row between this run's plan and its apply.
           // `applyVenue` guards the natural keys it knows with `ON CONFLICT DO NOTHING`; this is the
           // residual race, named rather than left to reach the operator as `unexpected failure`.
-          throw new AppError("provisioning.venue_conflict", { database });
+          throw new AppError("provisioning.venue_conflict", { database: venueDir });
         }
         throw error;
       }
@@ -609,171 +487,67 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
- * Opens the connections, reads the deployment's state, runs `body`, and closes everything.
+ * Opens the venue DIRECTORY, runs `body` against its venue file, and closes the store in a
+ * `finally`. The store owns both files, so closing it closes both — there is nothing else to
+ * manage: no cluster handle, no second connection, no role to assume.
  *
- * Two reads rather than one: `readInstanceState`'s `target` argument is a connection to a database
- * that, on a first provision, does not exist yet. The first read answers whether it does; only then
- * can the second look inside.
+ * `body` is handed the VENUE handle. A venue plan writes `ledger` and `state` tables — the taxpayer,
+ * the location, the till, the node, its series and each module's seed — and those live in the venue
+ * file; the node file holds this node's own identity, which a venue plan does not touch. Same split
+ * `apps/server`'s boot names (`const db = store.venue`).
  *
- * Any failure carrying a SQLSTATE — from the CONNECT or from either read — becomes
- * `provisioning.state_unreadable`, because the likeliest ones are not bugs. Both were reproduced
- * through the built bundle against `postgres:18-alpine`, not reasoned about:
- *
- * - An admin that did NOT create the target database holds no privilege on the tables inside it,
- *   so the stamp read fails `permission denied for table deployment` (42501). Raw, the operator
- *   saw `unexpected failure (Error)` and nothing else — no database named, no code, no remedy.
- * - A wrong password in the admin connection string fails 28P01 at `deps.connect`, NOT at the
- *   first read: `pg` authenticates when the pool hands out its first connection, which is why the
- *   connect is inside this guard rather than above it. An earlier draft of this comment claimed
- *   the opposite ("`pg` authenticates lazily on first use"); the container disagreed, printing
- *   `unexpected failure (error)` with the connect left outside.
- *
- * README.md carries both transcripts and the remedy for each.
- *
- * A failure with NO SQLSTATE is rethrown untouched. It is a broken socket or a bug, not a fact
- * about this database, and labelling it one would be this repository's dominant defect class.
- */
-async function withState(
-  adminUri: string,
-  database: string,
-  deps: CliDeps,
-  body: (
-    state: InstanceState,
-    admin: Database,
-    openTarget: () => Promise<TargetConnection>,
-  ) => Promise<number>,
-): Promise<number> {
-  let admin: Database;
-  try {
-    admin = await deps.connect(adminUri);
-  } catch (error) {
-    throw asUnreadable(error, database);
-  }
-
-  let target: Database | null = null;
-  try {
-    let state: InstanceState;
-    let probe: InstanceState | undefined;
-    try {
-      probe = await deps.readState(admin, database, null);
-      // The target connection carries the role option `options=-c role=waitron_migrator`, so every
-      // session runs AS the migrator: a plain admin connection cannot even read the migrator-owned
-      // tables the second `readState` looks at, and cannot CREATE TABLE for `applyVenue` (probe A
-      // control). The migrator is `INSTANCE_ROLES[0]`.
-      if (probe.databaseExists) target = await deps.connect(targetUri(adminUri, database));
-      state = target === null ? probe : await deps.readState(admin, database, target);
-    } catch (error) {
-      throw connectFailure(error, database, probe);
-    }
-    // The ONE place a connection to the target is opened, for both the state read above and for
-    // anything `body` hands to `applyInstance`. `release` is a no-op because this function's own
-    // `finally` is what closes it — ownership stated once, here, rather than split across two
-    // files that each half-assume it.
-    return await body(state, admin, async () => {
-      target ??= await deps.connect(targetUri(adminUri, database));
-      return { db: target, release: async () => {} };
-    });
-  } finally {
-    // Nested so a failure closing the target cannot skip closing the admin connection. Both are
-    // pools; leaking either keeps the process alive after `main` returns.
-    try {
-      await target?.close();
-    } finally {
-      await admin.close();
-    }
-  }
-}
-
-/**
- * Opens the OWNER-admin connection to the TARGET database, runs `body`, and closes it in a
- * `finally`. The venue apply owns the tables and runs as itself (Task C1), so there is only one
- * connection to manage — no cluster-admin handle, no second read, no target that may not exist yet.
- * That is why this is a thinner helper than `withState` rather than a reuse of it.
- *
- * The CONNECT is classified exactly as `instance`'s `withState` classifies its own: a
- * SQLSTATE-bearing failure — the target database absent, or the admin URI lacking privilege on it —
- * becomes `provisioning.state_unreadable` naming the database (via `asUnreadable`), while a failure
- * with NO SQLSTATE (a broken socket, a bug) is rethrown untouched. The other SQLSTATE-bearing STATE
- * READ, the deployment-stamp read (`deps.readEnvironment`), is wrapped the same way in `venue()`'s
- * body — so `venue` now gives connect and state-read the same `state_unreadable` contract `instance`
- * does. The two contracts match, for connect and for the stamp read.
+ * The OPEN is classified: a failure carrying an error `code` — the engine's or the filesystem's —
+ * becomes `provisioning.state_unreadable` naming the directory (via `asUnreadable`), while a failure
+ * with no code (a bug) is rethrown untouched.
+ * The other classified reads, the deployment-stamp read (`deps.readEnvironment`) and the
+ * `deployment`-table probe beside it (`deps.readDeploymentTable`), are wrapped the same way in
+ * `venue()`'s body, so open and state reads carry the same contract. The STAMP is not: a refused
+ * stamp is `deployment.already_stamped`, a verdict about environments rather than about whether the
+ * directory could be read.
  *
  * What is deliberately NOT classified is the venue APPLY: `applyVenue`'s own failures keep their
  * mapping in `venue()` (a unique violation → `provisioning.venue_conflict`, anything else rethrown).
- * A genuine insert error is not a fact about whether the database was readable, and labelling it
+ * A genuine insert error is not a fact about whether the directory was readable, and labelling it
  * `state_unreadable` would be wrong — the §1 defect class this repository guards against.
  */
 async function withVenueState(
-  adminUri: string,
-  database: string,
+  venueDir: string,
   deps: CliDeps,
   body: (target: Database) => Promise<number>,
 ): Promise<number> {
-  let target: Database;
+  let store: VenueDatabase;
   try {
-    // As the OWNER-admin, via the role option: `applyVenue` inserts as the table owner
-    // (`waitron_migrator`), and a plain admin connection cannot CREATE TABLE in the migrator-owned
-    // database (probe A control). Unlike `withState` there is no prior admin probe, so a SET-ROLE
-    // failure here surfaces as `state_unreadable` rather than the more specific role_unusable — venue
-    // is not this refusal's primary path (an operator hits it at `instance`/`status` first).
-    target = await deps.connect(targetUri(adminUri, database));
+    store = await deps.openVenue(venueDir);
   } catch (error) {
-    // A SQLSTATE-bearing connect failure is the database's verdict (absent, or no privilege on it);
-    // `asUnreadable` maps it to `provisioning.state_unreadable` and returns a broken socket untouched,
-    // mirroring `withState`'s connect (its own `catch` above).
-    throw asUnreadable(error, database);
+    throw asUnreadable(error, venueDir);
   }
   try {
-    return await body(target);
+    return await body(store.venue);
   } finally {
-    // A pool; leaking it keeps the process alive after `main` returns.
-    await target.close();
+    // Two open SQLite files; leaking them keeps the process alive after `main` returns.
+    await store.close();
   }
 }
 
 /**
- * The structured form of a failure to reach or read a deployment — or the original error, when it
- * carries no SQLSTATE and is therefore not the database's verdict on anything.
+ * The structured form of a failure to open or read a venue directory — or the original error, when
+ * it carries no code and is therefore not the engine's or the filesystem's verdict on anything.
+ *
+ * `reason` is the error's own `code`, never its message: a driver message can quote the failing
+ * statement, and an `Error` here has already reached a path where nothing may be echoed unchecked.
+ * The two real shapes, measured on Node v26.7.0 against `openVenueDatabase` — a directory path
+ * running through a regular file gives `code: "ENOTDIR"`, and a directory whose `venue.db` is not a
+ * database gives `code: "ERR_SQLITE_ERROR"` (errcode 26, "file is not a database"). A VIRGIN
+ * directory is not a failure at all: it is created and opened, so the commonest wrong-path mistake
+ * reaches `provisioning.database_unmigrated` rather than this.
  *
  * Returns the error to throw rather than throwing it, so each call site reads as `throw
  * asUnreadable(...)` and TypeScript still sees the path as terminating.
  */
-function asUnreadable(error: unknown, database: string): unknown {
-  const sqlState = sqlStateOf(error);
-  if (sqlState === null) return error;
-  return new AppError("provisioning.state_unreadable", { database, sqlState });
-}
-
-/** The target database, opened AS the migrator via the session role option — so every session
- * `instance`/`status`/`venue` runs against a migrator-owned database can read and write it. */
-function targetUri(adminUri: string, database: string): string {
-  return withRole(withDatabase(adminUri, database), INSTANCE_MIGRATOR_ROLE);
-}
-
-/**
- * Classifies a failure of the state read or the target connect.
- *
- * When the plain-admin probe already told us the migrator exists but this admin cannot SET ROLE to
- * it (`adminCanSetRole: false`), the role-option connect above is GUARANTEED to fail at session
- * start on the `SET ROLE` — so the failure is the SET-ROLE gap, reported as
- * `provisioning.role_unusable { missing: ["SET ROLE"] }` rather than a bare `state_unreadable` (I1).
- * Without this an operator running `status`/`instance` as an admin that did not create the migrator
- * cannot tell a missing database from a missing SET grant. Anything else falls through to
- * `asUnreadable`.
- */
-function connectFailure(
-  error: unknown,
-  database: string,
-  probe: InstanceState | undefined,
-): unknown {
-  const migrator = probe?.roles[INSTANCE_MIGRATOR_ROLE];
-  if (migrator !== undefined && !migrator.adminCanSetRole) {
-    return new AppError("provisioning.role_unusable", {
-      role: INSTANCE_MIGRATOR_ROLE,
-      missing: ["SET ROLE"],
-    });
-  }
-  return asUnreadable(error, database);
+function asUnreadable(error: unknown, venueDir: string): unknown {
+  const reason = (error as { code?: unknown } | null)?.code;
+  if (typeof reason !== "string") return error;
+  return new AppError("provisioning.state_unreadable", { database: venueDir, reason });
 }
 
 /**
@@ -845,50 +619,35 @@ async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Pr
 }
 
 /**
- * The admin connection string, from the environment or from an echo-off prompt.
+ * The venue directory: the `--venue-dir` flag, then `WAITRON_VENUE_DIR`, then a prompt.
  *
- * There is no third source, and specifically no flag: the string carries a password, `argv` is
- * world-readable in `ps` and lands in shell history, and `parse` above is `strict` precisely so
- * that adding one is a parse error rather than a silent acceptance.
+ * The variable sits BETWEEN the flag and the prompt on purpose. It is the one `apps/server` reads
+ * for the same directory (`config.ts`'s `venueDir`), so on a box that has it set the tool and the
+ * server agree by construction; an operator asked to type the path could type a different one and
+ * stand a venue up in a directory the server never opens. A flag still wins, because an operator
+ * naming a directory explicitly means that one.
  *
- * **An empty answer is refused, not returned.** The env var was already guarded for `""`; the
- * prompt's answer was not, and `bin.ts`'s `ask` returns `""` deliberately for an exhausted stdin or
- * a Ctrl+D. `pg` treats an empty connection string as no connection string at all rather than as an
- * error — run against this repo's `pg@8.23.0`, `new Client({ connectionString: "" })` resolved to
- * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0` builds
- * its clients with `new this.Client(this.options)` (`index.js:241`) from the same options — so
- * `instance` would have created, migrated and STAMPED a database on whatever cluster answers there.
- * See `errors.ts` for why that is the unacceptable failure mode rather than merely a confusing one.
+ * **An empty answer is refused, not returned.** Every path `openVenueStore` builds is
+ * `join(directory, …)`, and `join("", "venue.db")` is the RELATIVE `venue.db` — so an empty value
+ * stands a venue up wherever the process happens to be running, silently, and a hash chain and a
+ * series number cannot be taken back (CLAUDE.md §5). `bin.ts`'s `ask` returns `""` deliberately for
+ * an exhausted stdin or a Ctrl+D, which is exactly the non-interactive shape `README.md` documents,
+ * so the prompt answering nothing is a real case rather than a theoretical one. The same guard
+ * `apps/server`'s `config.ts` carries for the same variable, for the same reason.
  *
- * **A string that is not a URL is refused too**, and this is the ONE place that decides it, for
- * both commands and both sources. `pg` accepts forms `new URL` rejects — measured, not assumed:
- * inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, the
- * connection string `/var/run/postgresql` parsed to `{host:"/var/run/postgresql",port:5432}`,
- * `connect()` succeeded and `select inet_server_addr() is null` returned `t`, while
- * `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. The parse
- * half still holds on the installed `pg@8.23.0` — same `{host,port}`, same `new URL` throw — but
- * the container half, the socket connect, has not been re-run since. Every
- * consumer of this string after this function re-points it with `new URL` — `withState`'s
- * `withDatabase`, the migrator's URL in `instance-apply.ts`, `roleUri` for each printed connection
- * string, `describeAdmin` for the plan summary — so a form only `pg` accepts is a form this tool
- * cannot carry. `errors.ts` records why the fix is a refusal rather than a conninfo parser.
+ * Not a secret, and not an identifier either: a directory path has no grammar this tool can hold it
+ * to (`assertIdentifier`'s lower-case-and-underscores rule described a database NAME, which had to
+ * survive a connection string and a DDL statement). Whether the path is usable is the engine's
+ * answer, and `withVenueState` classifies it.
  */
-async function resolveAdminUri(deps: CliDeps): Promise<string> {
-  const uri = await readAdminUri(deps);
-  // `URL.canParse` rather than a try/catch: there is then no caught error object in scope for a
-  // future edit to print, and the error thrown here carries no part of the string by construction.
-  if (!URL.canParse(uri)) {
-    throw new AppError("provisioning.admin_uri_not_a_url", { variable: ADMIN_URI_VARIABLE });
-  }
-  return uri;
-}
-
-async function readAdminUri(deps: CliDeps): Promise<string> {
-  const fromEnv = deps.env[ADMIN_URI_VARIABLE];
-  if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
-  const answer = (await deps.io.promptSecret("admin connection string (not shown): ")).trim();
+async function resolveVenueDir(flag: string | undefined, deps: CliDeps): Promise<string> {
+  const fromFlag = flag?.trim();
+  if (fromFlag !== undefined && fromFlag !== "") return fromFlag;
+  const fromEnv = deps.env[VENUE_DIR_VARIABLE]?.trim();
+  if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
+  const answer = (await deps.io.prompt("venue directory: ")).trim();
   if (answer === "") {
-    throw new AppError("provisioning.admin_uri_missing", { variable: ADMIN_URI_VARIABLE });
+    throw new AppError("provisioning.venue_dir_missing", { variable: VENUE_DIR_VARIABLE });
   }
   return answer;
 }
@@ -924,43 +683,6 @@ async function readAdminPassword(deps: CliDeps): Promise<string> {
   return deps.io.promptSecret("admin password (not shown): ");
 }
 
-/**
- * WHICH CLUSTER is about to be written to, for the confirmation an operator gives.
- *
- * The plan summary named a database and an environment and nothing else, so it could not reveal
- * the one mistake it exists to catch: an admin connection string pointing somewhere other than
- * where the operator believes. That is the fiscally expensive mistake — one database per
- * environment, a pre-production database is never promoted, and `instance` migrates and STAMPS
- * whatever it is pointed at.
- *
- * Host, port and username. NEVER the password and never the whole string: `README.md`'s "Secrets"
- * section used to promise the admin's username was never printed either, and was narrowed in the
- * commit that added this rather than left to contradict the code.
- *
- * `new URL` cannot throw here, and that is a fact about `resolveAdminUri` rather than about this
- * function: it refuses a string `new URL` cannot parse before returning one, so the only strings
- * that reach here have already been parsed once. This used to carry its own `try`/`catch`
- * returning "unknown — the admin connection string is not a URL", which was the right answer while
- * such a string could get this far. It no longer can, and the case it existed for — a Unix-socket
- * directory path such as `/var/run/postgresql`, which `pg` connects with and `new URL` rejects —
- * is now refused up front, because `withDatabase` and `roleUri` needed the same parse and threw a
- * bare `TypeError` at it after `migrate` and `stamp` had already run.
- */
-function describeAdmin(adminUri: string): string {
-  const url = new URL(adminUri);
-  return url.username === "" ? url.host : `${url.username}@${url.host}`;
-}
-
-function assertEnvironment(environment: string): DeploymentEnvironment {
-  if (environment !== "production" && environment !== "preproduction") {
-    throw new AppError("deployment.unknown_environment", {
-      environment,
-      known: [...ENVIRONMENTS],
-    });
-  }
-  return environment;
-}
-
 /** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check
  * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before it is stored
  * on the taxpayer row. The regex accepts either case; the value is UPPER-CASED before it is
@@ -984,72 +706,6 @@ function assertCountry(value: string): string {
     throw new AppError("provisioning.invalid_country", { value });
   }
   return value.toUpperCase();
-}
-
-/**
- * One line per role, and a connection string only for the roles this run created.
- *
- * A role that already existed gets a line saying so and NOTHING else: this tool did not generate
- * its password, cannot read one back out of `pg_authid` (it is hashed), and a connection string
- * with a wrong password is worse than no connection string — it looks usable and fails at the
- * host's first connect.
- *
- * The screen is cleared afterwards, on the same terms and with the same caveat `runKeyring` states,
- * but ONLY when something secret was printed. Nothing was created means nothing to wipe, and
- * wiping would take the plan summary with it for no benefit.
- */
-async function reportRoles(
-  created: readonly Extract<InstanceAction, { kind: "create-role" }>[],
-  adminUri: string,
-  database: string,
-  deps: CliDeps,
-): Promise<void> {
-  const passwords = new Map<InstanceRole, string>(
-    created.map((action) => [action.role, action.password]),
-  );
-
-  deps.io.stdout("");
-  deps.io.stdout("Roles:");
-  deps.io.stdout("");
-  for (const role of INSTANCE_ROLES) {
-    const password = passwords.get(role);
-    if (password === undefined) {
-      deps.io.stdout(`  ${role}: already existed — no connection string, because this tool did`);
-      deps.io.stdout(`  ${" ".repeat(role.length)}  not generate its password and cannot read it.`);
-      continue;
-    }
-    deps.io.stdout(`  ${role}: ${roleUri(adminUri, role, password, database)}`);
-  }
-
-  if (created.length === 0) return;
-
-  deps.io.stdout("");
-  deps.io.stdout("Each connection string above is shown ONCE. The password in it was generated");
-  deps.io.stdout("here, is stored nowhere, and cannot be recovered — a role whose string is lost");
-  deps.io.stdout("has to be dropped and re-created.");
-  deps.io.stdout("");
-  deps.io.stdout("waitron_app is the host's DATABASE_URL; waitron_migrator is its");
-  deps.io.stdout("WAITRON_MIGRATIONS_DATABASE_URL. See apps/server/README.md.");
-  deps.io.stdout("");
-  // The same wording and the same honesty as `runKeyring`: clearing is a real improvement and not a
-  // guarantee.
-  deps.io.stdout("The screen and scrollback will be cleared when you continue. That is not a");
-  deps.io.stdout("guarantee: a terminal that logs to disk, or tmux's own buffer, still has it.");
-  // AWAITED, not fired and forgotten. `keyring-command.test.ts`'s "waits for the operator before
-  // clearing" documents the mutant this rules out: `void io.prompt(...)` records the same call
-  // order and wipes an unrecoverable secret off the screen before it has been copied.
-  await deps.io.prompt("Press enter once you have stored them. ");
-  deps.io.clearScreen();
-}
-
-/** The admin's connection string, re-pointed at one role and the target database. The generated
- * password needs no escaping: base64url's alphabet is `[A-Za-z0-9_-]` (identifiers.ts). */
-function roleUri(adminUri: string, role: string, password: string, database: string): string {
-  const u = new URL(adminUri);
-  u.username = role;
-  u.password = password;
-  u.pathname = `/${database}`;
-  return u.toString();
 }
 
 /**

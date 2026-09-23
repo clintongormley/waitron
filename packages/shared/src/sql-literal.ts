@@ -1,10 +1,11 @@
 /**
  * The standard SQL string-literal quoting rule, for a literal a utility statement must carry in its
- * own text because PostgreSQL will not bind it. Two packages quote one today: `@waitron/provisioning`
- * quotes the password in `CREATE ROLE … PASSWORD '…'` (`packages/provisioning/src/instance-apply.ts`,
- * reaching this function through the re-export in its `identifiers.ts`), and `@waitron/db` quotes the
- * two `CREATE TRIGGER` arguments the change feed installs (`packages/db/src/change-feed.ts`). It
- * lives here rather than beside either of them so the escaping argument below is written once.
+ * own text because the engine will not bind it. ONE package quotes one today: `@waitron/db` quotes
+ * the two `CREATE TRIGGER` arguments the change feed installs (`packages/db/src/change-feed.ts:45`).
+ * `@waitron/provisioning` was the second until the storage switch deleted the instance path that
+ * emitted `CREATE ROLE … PASSWORD '…'`; it still re-exports this function from its `identifiers.ts`
+ * but no longer calls it. It lives here rather than beside its caller so the escaping argument
+ * below is written once.
  *
  * `''` always doubles a single quote, so a value can never close the literal early. The `E'…'` form
  * is for a backslash: under `standard_conforming_strings = on` (the default since 9.1) a backslash in

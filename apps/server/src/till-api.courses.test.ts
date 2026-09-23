@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToLocation,
@@ -35,8 +34,8 @@ import "./errors.js";
 // PGlite, not real Postgres: these routes are wiring — the session guard + isUuid screens +
 // STATUS mapping over `fireCourse` / `listStationQueue`, which are LOGIC. The auto-fire
 // arithmetic, the held-advance refusal and `fireCourse`'s idempotency are proven at the verb
-// level over a single backend in `working-order.test.ts`; `working-order.pg.test.ts` also covers
-// node filtering of `ticket_items` (`working-order.pg.test.ts`). This file proves the HTTP SHAPE:
+// level over a single backend in `working-order.test.ts`; `working-order.pay-and-dispatch.test.ts` also covers
+// node filtering of `ticket_items` (`working-order.pay-and-dispatch.test.ts`). This file proves the HTTP SHAPE:
 // the fire route fires a held course, the queue read carries each item's `course` + `firedAt`,
 // and the advance route refuses a held item. The KDS-3 block at the foot proves the expo (pass)
 // HTTP shape on the SAME seed — the cross-station `GET /api/expo/queue` aggregates the node's
@@ -72,21 +71,30 @@ const suite = useVenueDb({
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    const locationId = brandLocationId(loc.rows[0]!.id);
+    // Through the table definitions rather than raw SQL, the change
+    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
+    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
+    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
+    // is what refused the `array[...]` constructor that used to fill it
+    // (`near "['es-ES']": syntax error`).
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(loc!.id);
     // A default kitchen station so the place-time fire (placeOrder → fireLines) has a fallback route.
     await seedKitchenStation(db, { locationId });
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: loc!.id, name: "Till 1" })
+      .returning({ id: tills.id });
     const nodeId = await seedNode(db, locationId);
-    const person = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
-    ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    const [person] = await db
+      .insert(persons)
+      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    ana = { id: person!.id };
+    cfg = makeCfg(till!.id, loc!.id, nodeId);
 
     // Seed the courses + three products (two coursed, one loose) on the APP role under the tenant, the
     // same `withTransaction` + `asAppUser` path the routes read/write through — so the course FK + the
@@ -115,7 +123,7 @@ const suite = useVenueDb({
       await mk(PAN); // loose — no course assigned
       await setProductCourse(tx, cfg, sopa, ent.id);
       await setProductCourse(tx, cfg, filete, pri.id);
-      await assignCatalogueToLocation(tx, loc.rows[0]!.id, catalogue.id);
+      await assignCatalogueToLocation(tx, loc!.id, catalogue.id);
     });
   },
 });
@@ -206,16 +214,17 @@ let cookie: string;
 // SP-A.2 cutover: `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so
 // `placeOrder` below carries a `till`-device cookie (bound to `cfg.tillId`). One enrolment for the file
 // — this suite never deletes devices, so it persists. (The device gate itself is proven over real
-// Postgres in `till-api.pg.test.ts`; here it is just the setup a place needs.)
+// Postgres in `till-api.fiscal-sale-paths.test.ts`; here it is just the setup a place needs.)
 let tillDeviceCookie: string;
 
 /** Enrol a REAL `till` device (Task 7: defined by a `till`-form-factor profile, and
  *  `resolveDeviceBinding` auto-creates the register it rings against) and return its
  *  `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
-  const { rows } = await db.execute<{ id: string }>(sql`
-      insert into device_profiles (name, form_factor)
-      values ('Counter till profile', 'till') returning id`);
+  const rows = await db
+    .insert(deviceProfiles)
+    .values({ name: "Counter till profile", formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(db, cfg, { name: "Counter till", profileId: rows[0]!.id });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -457,7 +466,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
 
   it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
     // A well-formed tab id + line no, but a non-uuid courseId — the isUuid screen fires it as a clean 404,
-    // never a 22P02 → 500. (No tab is even opened: the screen runs before lockOpenTab.)
+    // never a 22P02 → 500. (No tab is even opened: the screen runs before assertAnchoredTabOpen.)
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },

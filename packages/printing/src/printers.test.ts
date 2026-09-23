@@ -1,6 +1,13 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, isPgError, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  UNIQUE_VIOLATION,
+  isPgError,
+  locations,
+  printers,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,21 +16,32 @@ import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from ".
 import type { PrintConfig, PrintTransport } from "./printers.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
-// pre-check plus the DB's transport CHECK + partial UNIQUE — none of which is a CONCURRENCY or
-// deployment-role-privilege property. The CHECK/UNIQUE integrity is already proven on real Postgres in
-// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4).
+// One venue file (`useVenueDb`). `createPrinter` is a single INSERT gated by an app-layer
+// required-field pre-check plus the DB's transport CHECK and partial UNIQUE, and every case below
+// runs its transactions one after another, so nothing here turns on two writers contending. The
+// CHECK and the partial UNIQUE have their own cases in `packages/db/src/schema/printing.test.ts`;
+// what this suite adds on top is this package's own behaviour over them — the error codes those
+// refusals are mapped onto, the partial-edit and deactivation paths, the listing, and the layout
+// settings.
+//
+// This engine has no roles and no grants, so no case below is a claim about a privilege
+// (`packages/db/src/testing/roles.ts`), and no suite this branch left behind replaces that half.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 /**
- * A fresh tenant + venue per test, seeded on the superuser connection. Each test gets its OWN
- * tenant (via seedTenant's fresh NIF) so rows are order-independent.
+ * A fresh tenant + venue per test. Each test gets its OWN tenant (via seedTenant's fresh NIF) so
+ * rows are order-independent. There is one handle on the venue file and no role to seed under.
  */
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
+  // Through the table definition rather than raw SQL: `locations.id` is supplied by
+  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
+  // `NOT NULL constraint failed: locations.id`.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -74,14 +92,20 @@ async function fullRow(printerId: string): Promise<{
   ticket_scope: string;
   active: boolean;
 }> {
-  const { rows } = await suite.db.execute<{
-    name: string;
-    host: string | null;
-    local_key: string | null;
-    ticket_scope: string;
-    active: boolean;
-  }>(sql`select name, host, local_key, ticket_scope, active from printers where id = ${printerId}`);
-  return rows[0]!;
+  // Read THROUGH the table definition: `active` is the shared `flag` helper, an integer column with
+  // a boolean read mapping, so a raw `select active` hands back 0 or 1 and only this route gives the
+  // boolean the assertions below are written against.
+  const [row] = await suite.db
+    .select({
+      name: printers.name,
+      host: printers.host,
+      local_key: printers.localKey,
+      ticket_scope: printers.ticketScope,
+      active: printers.active,
+    })
+    .from(printers)
+    .where(eq(printers.id, printerId));
+  return row!;
 }
 
 describe("createPrinter", () => {
@@ -260,9 +284,27 @@ describe("updatePrinter", () => {
     });
   });
 
+  it("a CHECK that is NOT the transport-fields one is not dressed up as printer.invalid_config", async () => {
+    // `printers` carries seven CHECK constraints and only ONE of them — `printers_transport_fields_ck`
+    // — means "this transport is short of a field it needs". A character table outside 0..255 trips
+    // `printers_character_table_ck`, which is a different complaint entirely, so translating it to
+    // `printer.invalid_config {reason: "transport_fields"}` would tell an operator to fix a field
+    // that is not the problem. 16 is accepted (the control, in the update case above), 300 is not.
+    const cfg = await setup();
+    const id = await seedPrinter(cfg);
+    const err = await errorOf(() =>
+      asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { characterTable: 300 })),
+    );
+    expect(err).toBeDefined();
+    expect((err as { code?: string }).code).not.toBe("printer.invalid_config");
+  });
+
   it("a driver error that is NEITHER the UNIQUE NOR the CHECK propagates UNCHANGED (the rethrow branch)", async () => {
-    // An invalid enum value reaches the `transport` column as 22P02 — not 23505/23514 — so
-    // translatePrinterWriteError must rethrow it rather than mistranslate it to a printing code.
+    // A transport the column's own CHECK does not allow. It was an invalid ENUM value on
+    // PostgreSQL, arriving as 22P02 and matching neither translated class; `transport` is a text
+    // column with `printers_transport_ck` here, so the refusal is now a CHECK — but not the
+    // transport-fields one, and translatePrinterWriteError must still rethrow it rather than
+    // mistranslate it to a printing code.
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     const err = await errorOf(() =>
@@ -285,7 +327,7 @@ describe("deactivatePrinter", () => {
     expect((await fullRow(id)).active).toBe(false);
     // The row still exists (deactivated, not deleted).
     const { rows } = await suite.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from printers where id = ${id}`,
+      sql`select count(*) as n from printers where id = ${id}`,
     );
     expect(rows[0]!.n).toBe(1);
     expect(await codeOf(() => asTx(cfg, (tx) => deactivatePrinter(tx, cfg, randomUUID())))).toBe(
@@ -318,32 +360,46 @@ describe("listPrinters", () => {
   });
 });
 
-describe("isPgError (@waitron/db SQLSTATE cause-walk, as printers.ts uses it)", () => {
+// The refusal a driver reports is a numeric extended RESULT CODE on `errcode`, not a five-character
+// SQLSTATE on `code` — `code` is the constant "ERR_SQLITE_ERROR" on every failure alike, so nothing
+// reads it (`packages/db/src/sql-state.ts`). The codes below are the ones that suite measured:
+// 2067 a unique index, 275 a CHECK. Every case in this block kept its subject; what changed is the
+// spelling of a refusal.
+describe("isPgError (@waitron/db result-code cause-walk, as printers.ts uses it)", () => {
   it("recognises a bare driver error", () => {
-    expect(isPgError(Object.assign(new Error("unique"), { code: "23505" }), "23505")).toBe(true);
+    expect(isPgError(Object.assign(new Error("unique"), { errcode: 2067 }), UNIQUE_VIOLATION)).toBe(
+      true,
+    );
   });
 
   it("recognises a violation wrapped in a cause chain (drizzle wraps the real error)", () => {
-    const inner = Object.assign(new Error("unique"), { code: "23505" });
+    const inner = Object.assign(new Error("unique"), { errcode: 2067 });
     expect(
-      isPgError(new Error("outer", { cause: new Error("mid", { cause: inner }) }), "23505"),
+      isPgError(
+        new Error("outer", { cause: new Error("mid", { cause: inner }) }),
+        UNIQUE_VIOLATION,
+      ),
     ).toBe(true);
   });
 
-  it("does not match a different SQLSTATE", () => {
-    expect(isPgError(Object.assign(new Error("check"), { code: "23514" }), "23505")).toBe(false);
+  it("does not match a different class of refusal", () => {
+    expect(isPgError(Object.assign(new Error("check"), { errcode: 275 }), UNIQUE_VIOLATION)).toBe(
+      false,
+    );
   });
 
   it("terminates on a self-referential cause chain", () => {
-    const looped: Error & { cause?: unknown } = new Error("loop");
+    const looped: Error & { cause?: unknown; errcode?: number } = new Error("loop");
     looped.cause = looped;
-    expect(isPgError(looped, "23505")).toBe(false);
+    // The loop carries no result code of its own, so what this case proves is that the walk
+    // RETURNS rather than spinning — with a code on it the answer would be true either way.
+    expect(isPgError(looped, UNIQUE_VIOLATION)).toBe(false);
   });
 
   it("returns false for a non-object value", () => {
-    expect(isPgError(null, "23505")).toBe(false);
-    expect(isPgError(undefined, "23505")).toBe(false);
-    expect(isPgError("nope", "23505")).toBe(false);
+    expect(isPgError(null, UNIQUE_VIOLATION)).toBe(false);
+    expect(isPgError(undefined, UNIQUE_VIOLATION)).toBe(false);
+    expect(isPgError("nope", UNIQUE_VIOLATION)).toBe(false);
   });
 });
 

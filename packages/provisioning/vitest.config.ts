@@ -4,13 +4,13 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // Headroom for the suites that boot a database — the ones that reach a real PostgreSQL through
-    // `startBarePostgres`, and the two `useVenueDb` callers, which boot PGlite. `hookTimeout` below
-    // bounds a hook that passes no timeout of its OWN; a hook given one overrides this config (the
-    // receipt is at `packages/db/src/testing/lifecycle.ts:178`). So it does not bound the container
-    // suites that set a timeout at their own `beforeAll`, and it does not bound PGlite setup, which
-    // runs under the 60s default `useVenueDb` forwards to
-    // (`packages/db/src/testing/lifecycle.ts:22`, applied at `:146`).
+    // Headroom for the suites that open and migrate a venue directory — the two `useVenueDb`
+    // callers, and `schema-ahead.migrate.test.ts`, which owns its own directory. `hookTimeout`
+    // below bounds a hook that passes no timeout of its OWN; a hook given one overrides this config
+    // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`). So it does not bound
+    // `schema-ahead.migrate.test.ts`, which sets a timeout at its own `beforeAll`, and it does not
+    // bound `useVenueDb` setup, which runs under the 60s default that helper forwards to
+    // (`packages/db/src/testing/venue-db.ts:12`, applied at `:196`).
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
@@ -25,16 +25,8 @@ export default defineConfig({
       // `src/bin.ts` is the process entry point: every decision it could get wrong lives in
       // `cli.ts`, which is injected and fully tested, and what remains — a tty, a readline, a
       // process exit code — is verifiable only by running the built bundle, which the plan does
-      // rather than a test. `scripts/**` is a BUILD step (`copy-migrations.mjs`), not something
-      // this package's tests load at all; `apps/server/vitest.config.ts:41` excludes its own for
-      // the same reason.
-      exclude: [
-        ...coverageConfigDefaults.exclude,
-        "scripts/**",
-        "src/bin.ts",
-        "src/index.ts",
-        "src/testing/**",
-      ],
+      // rather than a test.
+      exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/index.ts"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },

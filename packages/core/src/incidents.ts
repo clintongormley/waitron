@@ -5,7 +5,7 @@
 // comment) without constructing one — that happens in record-sale.ts/record-void.ts.
 import "./errors.js";
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
-import { incidents } from "@waitron/db";
+import { incidents, newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import type { SaleId, TillId } from "@waitron/shared";
@@ -76,11 +76,23 @@ export async function recordIncidentOnce(
   input: RecordIncidentInput,
 ): Promise<boolean> {
   const saleId = input.saleId ?? null;
+  // Raw SQL rather than the builder above, for the conflict target alone: `incidents_open_dedup`
+  // indexes an EXPRESSION over `sale_id` (`packages/db/src/schema/incidents.ts` says why), and
+  // drizzle's `onConflictDoNothing({ target })` takes columns only. The target has to repeat the
+  // index's expression and its partial `where`, or SQLite refuses the statement rather than
+  // matching a different index. An UNTARGETED clause is not an option here: this function reads an
+  // empty result as "already open", and untargeted it would read a primary-key collision the same
+  // way (CLAUDE.md §3).
+  //
+  // `id` and `params` are supplied by hand because a raw insert runs neither the `$defaultFn`
+  // generator nor the column's JSON encoder — `newId` is the same generator the column declares.
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into incidents (till_id, sale_id, code, params, severity, detected_at) values (${input.tillId}, ${saleId}, ${input.error.code},
-            ${JSON.stringify(input.error.params)}::jsonb, ${input.severity},
+    insert into incidents (id, till_id, sale_id, code, params, severity, detected_at)
+    values (${newId()}, ${input.tillId}, ${saleId}, ${input.error.code},
+            ${JSON.stringify(input.error.params)}, ${input.severity},
             ${input.detectedAt.toISOString()})
-    on conflict ("till_id", "code", "sale_id") where acknowledged_at is null
+    on conflict (till_id, code, case when sale_id is null then '' else sale_id end)
+      where acknowledged_at is null
     do nothing
     returning id
   `);

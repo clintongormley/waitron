@@ -10,7 +10,7 @@ import net from "node:net";
  * verification approach; real printers are verified manually, design §5).
  */
 
-/** How a printer is reached — the `print_transport` pgEnum on the server (packages/db schema/printers.ts).
+/** How a printer is reached — the `print_transport` column on the server (packages/db schema/printers.ts).
  * Declared here, in the db-free package, so the agent and the server share one wire vocabulary. */
 export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 

@@ -6,13 +6,15 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   joinRequests,
+  locations,
+  nowIso,
   printAgents,
   printJobs,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { NetworkProbe } from "@waitron/print-agent";
 import {
@@ -46,7 +48,7 @@ import "./errors.js";
 // agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
 // (`active = true`) are QUERY predicates, so PGlite shows them faithfully. The property PGlite
 // CANNOT show — the routes running as the non-owner app role with only its grants, the gate proven
-// by DELETION there — lives in `print-api.pg.test.ts` against real Postgres, which is also where
+// by DELETION there — lives in `print-api.printer-wiring.test.ts` against real Postgres, which is also where
 // the pointers to the suites holding the claim's contention behaviour are (CLAUDE.md §4). Tests share the seeded tenant and
 // create their own printers; assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};
@@ -76,10 +78,20 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    locationId = loc.rows[0]!.id;
+    // Through the table definitions, not raw SQL: `locations.id` and `persons.id` are `$defaultFn`
+    // generators on this engine (`id text PRIMARY KEY NOT NULL`,
+    // `packages/db/drizzle/0000_baseline.sql:1`), which a raw insert never reaches, and the locale
+    // list is encoded by the column's own write mapping — the `array[...]` constructor it replaces
+    // is a syntax error here.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
     // The FULL TillConfig the print verbs are typed on (branded ids). Only locationId is read
     // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
     // here, so a branded random uuid stands in.
@@ -95,17 +107,19 @@ const suite = useVenueDb({
     };
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
-      const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const [stf] = await tx
+        .insert(persons)
+        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
-        personId: mgr.rows[0]!.id,
+        personId: mgr!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        personId: stf.rows[0]!.id,
+        personId: stf!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
     });
@@ -367,7 +381,7 @@ describe("GET /print-api/agent/join/status", () => {
     expect(pending.status).toBe(200);
     expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
 
-    // Accept in-process (the route is proven in join-api.pg.test.ts).
+    // Accept in-process (the route is proven in join-api.db.test.ts).
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
@@ -1571,38 +1585,58 @@ describe("mountPrintApi — management: recent jobs", () => {
   it("returns an ISO last-print timestamp regardless of database date display settings", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
-    await suite.db.execute(sql`
-      insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
-      values (${locationId}, ${printerId}, decode('01', 'hex'), 'done',
-        '2020-01-02T03:04:05.678+02:00')`);
-    try {
-      await suite.db.execute(sql`set datestyle = 'SQL, DMY'`);
-      await suite.db.execute(sql`set timezone = 'Europe/Madrid'`);
-      const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
-      expect(result.status).toBe(200);
-      const rows = (await result.json()) as { id: string; lastPrintAt: string | null }[];
-      expect(rows.find((row) => row.id === printerId)?.lastPrintAt).toBe(
-        "2020-01-02T01:04:05.678Z",
-      );
-    } finally {
-      await suite.db.execute(sql`set datestyle = 'ISO, MDY'`);
-      await suite.db.execute(sql`set timezone = 'UTC'`);
-    }
+    // The STAGING went, not the assertion. `set datestyle` / `set timezone` are PostgreSQL session
+    // settings, and this engine refuses the statement outright — measured 2026-09-22 on Node
+    // v26.7.0, `node --experimental-sqlite` preparing each of the four: `near "set": syntax error`.
+    // So a database whose date DISPLAY differs is not a state that can be reached here at all, and
+    // the four statements are deleted rather than translated — the same treatment
+    // `packages/bookings/src/bookings-cas.test.ts` records for a staging mechanism this engine does
+    // not have.
+    //
+    // WHAT STILL HAS TO HOLD, and is what this case now checks: the stored value keeps a +02:00
+    // offset and two ways of spelling the same instant, and the route must still answer the
+    // canonical UTC ISO spelling. `delivered_at` is a text column here, so the conversion the
+    // assertion pins moved out of SQL and into `new Date(...).toISOString()` in `print-api.ts:766`.
+    await suite.db.insert(printJobs).values({
+      locationId,
+      printerId,
+      payload: new Uint8Array([0x01]),
+      status: "done",
+      deliveredAt: "2020-01-02T03:04:05.678+02:00",
+    });
+    const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
+    expect(result.status).toBe(200);
+    const rows = (await result.json()) as { id: string; lastPrintAt: string | null }[];
+    expect(rows.find((row) => row.id === printerId)?.lastPrintAt).toBe("2020-01-02T01:04:05.678Z");
   });
 
   it("summarises all printer jobs", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Summary printer");
     const emptyId = await createPrinterVia(app, "unused", "Empty printer");
-    await suite.db.execute(sql`
-      insert into print_jobs (location_id, printer_id, payload)
-      select ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
-    await suite.db.execute(sql`
-      insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at, delivered_at)
-      values (${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
-             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
-             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
-             (${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
+    // `generate_series` and `decode('01','hex')` are both PostgreSQL functions: the row set is built
+    // in JavaScript and the payload is the byte the hex literal decoded to.
+    const payload = new Uint8Array([0x01]);
+    await suite.db
+      .insert(printJobs)
+      .values(Array.from({ length: 101 }, () => ({ locationId, printerId, payload })));
+    // ONE clock reading bound three times. PostgreSQL's `now()` is transaction-start time, so the
+    // three rows below shared a single value; taking `nowIso()` once keeps that.
+    const stamped = nowIso();
+    await suite.db.insert(printJobs).values([
+      {
+        locationId,
+        printerId,
+        payload,
+        status: "done",
+        attempts: 0,
+        createdAt: "2020-01-01T00:00:00.000Z",
+        deliveredAt: "2020-01-02T00:00:00.000Z",
+      },
+      { locationId, printerId, payload, status: "failed", attempts: 4, createdAt: stamped },
+      { locationId, printerId, payload, status: "failed", attempts: 5, createdAt: stamped },
+      { locationId, printerId, payload, status: "printing", attempts: 0, createdAt: stamped },
+    ]);
     const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     const printers = (await result.json()) as {
       id: string;
@@ -1631,19 +1665,50 @@ describe("mountPrintApi — management: recent jobs", () => {
       });
       const existing = (await before.json()) as { id: string; status: string }[];
       const existingPending = existing.filter((job) => job.status !== "done");
-      const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
-        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
-          attempts, '2020-01-01T00:00:00Z'
-        from (values ('queued', 0), ('printing', 0), ('failed', 4), ('failed', 5)) as jobs(status, attempts)
-        returning id`);
-      const completed = await suite.db.execute<{ id: string; delivered_at: string }>(sql`
-        insert into print_jobs (location_id, printer_id, payload, status, created_at, delivered_at)
-        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
-          '2021-01-01T00:00:00Z'::timestamptz - n * interval '1 second',
-          '2099-01-01T00:00:00Z'::timestamptz + n * interval '1 second'
-        from generate_series(1, 101) as jobs(n)
-        returning id, delivered_at`);
+      // Four PostgreSQL-only shapes went in one rewrite, and none of them was the subject: the
+      // `status::print_job_status` cast (no cast operator here), the `(values …) as jobs(a, b)`
+      // column-aliased VALUES, `generate_series`, and the `::timestamptz ± n * interval '1 second'`
+      // arithmetic. The rows are built in JavaScript, the interval arithmetic happens on a `Date`,
+      // and each timestamp binds as the canonical `toISOString()` spelling — which is what makes a
+      // text column's comparison a time ordering (`print-api.ts:743`).
+      const payload = new Uint8Array([0x01]);
+      const pending = await suite.db
+        .insert(printJobs)
+        .values(
+          (
+            [
+              ["queued", 0],
+              ["printing", 0],
+              ["failed", 4],
+              ["failed", 5],
+            ] as const
+          ).map(([status, attempts]) => ({
+            locationId,
+            printerId,
+            payload,
+            status,
+            attempts,
+            createdAt: "2020-01-01T00:00:00.000Z",
+          })),
+        )
+        .returning({ id: printJobs.id });
+      const second = 1_000;
+      const completed = await suite.db
+        .insert(printJobs)
+        .values(
+          Array.from({ length: 101 }, (_, i) => {
+            const n = i + 1;
+            return {
+              locationId,
+              printerId,
+              payload,
+              status: "done" as const,
+              createdAt: new Date(Date.parse("2021-01-01T00:00:00Z") - n * second).toISOString(),
+              deliveredAt: new Date(Date.parse("2099-01-01T00:00:00Z") + n * second).toISOString(),
+            };
+          }),
+        )
+        .returning({ id: printJobs.id, deliveredAt: printJobs.deliveredAt });
       const result = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -1655,15 +1720,15 @@ describe("mountPrintApi — management: recent jobs", () => {
           .filter((job) => job.status !== "done")
           .map((job) => job.id)
           .sort(),
-      ).toEqual([...existingPending, ...pending.rows].map((job) => job.id).sort());
+      ).toEqual([...existingPending, ...pending].map((job) => job.id).sort());
       expect(
         jobs
           .filter((job) => job.status === "done")
           .map((job) => job.id)
           .sort(),
       ).toEqual(
-        completed.rows
-          .sort((a, b) => Date.parse(b.delivered_at) - Date.parse(a.delivered_at))
+        completed
+          .sort((a, b) => Date.parse(b.deliveredAt!) - Date.parse(a.deliveredAt!))
           .slice(0, 100)
           .map((job) => job.id)
           .sort(),
@@ -1680,19 +1745,48 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");
     try {
-      const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
-        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
-          attempts, '2020-01-01'
-        from (values ('queued', 0), ('printing', 0), ('failed', 4)) as jobs(status, attempts)
-        cross join generate_series(1, 101)
-        returning id`);
-      const failed = await suite.db.execute<{ id: string; created_at: string }>(sql`
-        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
-        select ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
-          '2099-01-01'::timestamptz + n * interval '1 second'
-        from generate_series(1, 101) as jobs(n)
-        returning id, created_at`);
+      // Same rewrite as the case above: the cast, the column-aliased VALUES, the `cross join
+      // generate_series` fan-out and the interval arithmetic are all PostgreSQL-only. `'2020-01-01'`
+      // becomes the canonical `2020-01-01T00:00:00.000Z` because this column is TEXT and a
+      // date-only spelling does not sort against a full timestamp.
+      const payload = new Uint8Array([0x01]);
+      const second = 1_000;
+      const pending = await suite.db
+        .insert(printJobs)
+        .values(
+          (
+            [
+              ["queued", 0],
+              ["printing", 0],
+              ["failed", 4],
+            ] as const
+          ).flatMap(([status, attempts]) =>
+            Array.from({ length: 101 }, () => ({
+              locationId,
+              printerId,
+              payload,
+              status,
+              attempts,
+              createdAt: "2020-01-01T00:00:00.000Z",
+            })),
+          ),
+        )
+        .returning({ id: printJobs.id });
+      const failed = await suite.db
+        .insert(printJobs)
+        .values(
+          Array.from({ length: 101 }, (_, i) => ({
+            locationId,
+            printerId,
+            payload,
+            status: "failed" as const,
+            attempts: 5,
+            createdAt: new Date(
+              Date.parse("2099-01-01T00:00:00Z") + (i + 1) * second,
+            ).toISOString(),
+          })),
+        )
+        .returning({ id: printJobs.id, createdAt: printJobs.createdAt });
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -1710,15 +1804,15 @@ describe("mountPrintApi — management: recent jobs", () => {
           .filter((row) => row.status !== "failed" || row.attempts < 5)
           .map((row) => row.id)
           .sort(),
-      ).toEqual(pending.rows.map((row) => row.id).sort());
+      ).toEqual(pending.map((row) => row.id).sort());
       expect(
         mine
           .filter((row) => row.status === "failed" && row.attempts >= 5)
           .map((row) => row.id)
           .sort(),
       ).toEqual(
-        failed.rows
-          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+        failed
+          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
           .slice(0, 100)
           .map((row) => row.id)
           .sort(),
@@ -1732,20 +1826,31 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");
     try {
-      await suite.db.execute(sql`
-        insert into print_jobs (location_id, printer_id, payload, status)
-        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
-        from generate_series(1, 101)`);
-      const completed = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
-        values (${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
-        returning id`);
+      const payload = new Uint8Array([0x01]);
+      await suite.db.insert(printJobs).values(
+        Array.from({ length: 101 }, () => ({
+          locationId,
+          printerId,
+          payload,
+          status: "done" as const,
+        })),
+      );
+      const completed = await suite.db
+        .insert(printJobs)
+        .values({
+          locationId,
+          printerId,
+          payload,
+          status: "done",
+          deliveredAt: "2099-01-01T00:00:00.000Z",
+        })
+        .returning({ id: printJobs.id });
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
       expect(response.status).toBe(200);
       const rows = (await response.json()) as { id: string; status: string }[];
-      expect(rows.some((row) => row.id === completed.rows[0]!.id)).toBe(true);
+      expect(rows.some((row) => row.id === completed[0]!.id)).toBe(true);
       expect(rows.filter((row) => row.status === "done")).toHaveLength(100);
     } finally {
       await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);

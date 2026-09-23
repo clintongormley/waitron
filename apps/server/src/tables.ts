@@ -5,25 +5,14 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import {
-  FOREIGN_KEY_VIOLATION,
   diningTables,
   floorTableShape,
   floorZones,
   isUniqueViolation,
-  refusalOn,
   tableServiceStatuses,
 } from "@waitron/db";
-import type { ConstraintTarget, Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
-
-/**
- * The table and column a refusal on `dining_tables_zone_fk` names —
- * `FOREIGN KEY ("zone_id") REFERENCES "floor_zones" ("id")`, re-declared on its remaining column
- * after the tenant column went at migration `0034` line 44, in `packages/db/drizzle/`. The
- * REFERENCING side, per `constraintTarget`'s contract, so `dining_tables.zone_id` and never
- * `floor_zones.id`.
- */
-const ZONE_FK: ConstraintTarget = { table: "dining_tables", columns: ["zone_id"] };
 
 /**
  * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
@@ -51,19 +40,27 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 }
 
 /**
- * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
- * naming no `floor_zones` row at all?
+ * Refuse a `zoneId` naming no `floor_zones` row, as `zone.not_found`.
  *
- * It matches on {@link ZONE_FK}'s table and column as well as the 23503, so the sibling
- * `dining_tables_location_fk` / `dining_tables_status_fk` violations — 23503s on the same table,
- * differing only in the column — are deliberately NOT matched: a bad location or status is not a
- * zone fault and stays a raw driver error. A 23503 naming no key at all is re-thrown raw by
- * DECISION, not omission — more than one FK reaches this catch, so an unidentified refusal names no
- * single candidate (`device.ts`'s `createRegister` translates its unidentified 23505 for the
- * opposite reason). Exported for the crafted-error unit tests.
+ * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
+ * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
+ * constraint name (`packages/db/src/constraint-target.ts` states this and names this caller), and
+ * `dining_tables` carries a location FK and a status FK beside the zone one, so a refusal cannot be
+ * attributed to any of the three.
+ *
+ * `dining_tables_zone_fk` is still in the schema and is still what makes a dangling `zone_id`
+ * impossible; this check only decides what the caller is TOLD. The two can disagree only if the
+ * zone is deleted between the select and the write, and they cannot: both run on the caller's
+ * transaction, and `packages/store/src/write-queue.ts` admits one write transaction at a time. A
+ * second process on the same file is outside that and would get the raw refusal.
  */
-export function isZoneFkViolation(error: unknown): boolean {
-  return refusalOn(error, FOREIGN_KEY_VIOLATION, ZONE_FK);
+async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
+  const [zone] = await tx
+    .select({ id: floorZones.id })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId))
+    .limit(1);
+  if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
 /** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer
@@ -89,19 +86,18 @@ export interface DiningTable {
 }
 
 /**
- * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
- * CALLER's transaction as app_user. A duplicate `(location, label)` collides
+ * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
+ * the CALLER's transaction. A duplicate `(location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
- * trips `dining_tables_zone_fk` (23503) and is surfaced as
- * `zone.not_found` — the location FK is a 23503 too, so the check reads the table and column the
- * refusal names (`isZoneFkViolation`) rather than the bare code.
+ * surfaced as `table.label_taken` rather than the raw refusal. A `zoneId` naming no `floor_zones`
+ * row throws `zone.not_found`, from {@link requireZone} before the insert.
  */
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
   input: { label: string; zoneId?: string; capacity?: number },
 ): Promise<{ id: string }> {
+  if (input.zoneId !== undefined) await requireZone(tx, input.zoneId);
   try {
     const [row] = await tx
       .insert(diningTables)
@@ -116,10 +112,6 @@ export async function createTable(
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new AppError("table.label_taken", { label: input.label });
-    }
-    if (isZoneFkViolation(error)) {
-      // The zone FK only fires when a non-null `zoneId` was supplied, so it is defined here.
-      throw new AppError("zone.not_found", { zoneId: input.zoneId! });
     }
     throw error;
   }
@@ -151,8 +143,8 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
 /**
  * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id throws `table.not_found`;
  * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row throws
- * `zone.not_found` (`dining_tables_zone_fk`, `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
- * deactivates via {@link deactivateTable}.
+ * `zone.not_found`, from {@link requireZone} before the update. Reactivate is `updateTable`-shaped
+ * and kept trivial — this task deactivates via {@link deactivateTable}.
  */
 export async function updateTable(
   tx: Transaction,
@@ -165,8 +157,11 @@ export async function updateTable(
 ): Promise<void> {
   const patch: { label?: string; zoneId?: string | null; capacity?: number | null } = {};
   if (input.label !== undefined) patch.label = input.label;
-  if (input.zoneId !== undefined) patch.zoneId = input.zoneId;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
+  if (input.zoneId !== undefined) {
+    patch.zoneId = input.zoneId;
+    await requireZone(tx, input.zoneId);
+  }
 
   let updated: { id: string }[];
   try {
@@ -180,10 +175,6 @@ export async function updateTable(
       // Only `label` participates in the unique, so it was necessarily supplied when this fires.
       throw new AppError("table.label_taken", { label: input.label! });
     }
-    if (isZoneFkViolation(error)) {
-      // The zone FK only fires when a non-null `zoneId` was supplied, so it is defined here.
-      throw new AppError("zone.not_found", { zoneId: input.zoneId! });
-    }
     throw error;
   }
   if (updated.length === 0) {
@@ -191,8 +182,18 @@ export async function updateTable(
   }
 }
 
-/** Deactivate a table (`active = false`) — never a hard delete (the table has order history; app_user
- *  holds no DELETE on `dining_tables`). An absent id throws `table.not_found`. */
+/**
+ * Deactivate a table (`active = false`) — never a hard delete, because the table has order history.
+ * An absent id throws `table.not_found`.
+ *
+ * THIS VERB IS THE WHOLE GUARD, and this note says it once for the deactivate family across
+ * `tables.ts`, `kitchen.ts`, `till-api.ts`, `management-api.ts`, `device-api.ts` and `print-api.ts`,
+ * which point back here. The database used to refuse a hard delete on its own: the application role
+ * held no `DELETE` on these tables, so even a wrong code path could not lose the history. This
+ * engine has no roles and no grants at all — `asAppUser` is now an empty function
+ * (`packages/db/src/index.ts` states that) — so a `delete from dining_tables` issued by any code in
+ * this process would simply run. Nothing below the verb objects.
+ */
 export async function deactivateTable(
   tx: Transaction,
   // Unused here for the same reason as `updateTable` — kept for the uniform verb surface.
@@ -212,7 +213,7 @@ export async function deactivateTable(
 /**
  * The deployment holds one tenant per database. Place a table on the FP-2 spatial floor plan
  * (design §placement): write its zone + canvas coordinates + shape + rotation. Runs on the
- * CALLER's transaction as app_user. LOCATION-scoped to `cfg.locationId` (like
+ * CALLER's transaction. LOCATION-scoped to `cfg.locationId` (like
  * the sibling read {@link listTables}): a tenant can hold several venues, so both the table and
  * the zone must belong to THIS venue — a caller supplying another location's table or zone UUID
  * is refused, not allowed to reach across venues. Validates IN ORDER, each with its own precise
@@ -312,9 +313,9 @@ export interface FloorZone {
 
 /**
  * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction as app_user. A duplicate `(location, name)`
+ * the CALLER's transaction. A duplicate `(location, name)`
  * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
+ * surfaced as `zone.name_taken` rather than the raw refusal — the same shape {@link createTable} maps
  * `table.label_taken` with.
  */
 export async function createZone(
@@ -396,8 +397,9 @@ export async function updateZone(
   }
 }
 
-/** Deactivate a zone (`active = false`) — never a hard delete (a `dining_tables.zone_id` may reference
- *  it; app_user holds no DELETE on `floor_zones`). An absent id throws `zone.not_found`. */
+/** Deactivate a zone (`active = false`) — never a hard delete: a `dining_tables.zone_id` may
+ *  reference it, and the verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). An
+ *  absent id throws `zone.not_found`. */
 export async function deactivateZone(
   tx: Transaction,
   // Unused here for the same reason as `updateZone` — kept for the uniform verb surface.
@@ -579,8 +581,9 @@ export async function updateStatus(
   }
 }
 
-/** Deactivate a status (`active = false`) — never a hard delete (a table may reference it; app_user
- *  holds no DELETE on `table_service_statuses`). Manager/admin only. Absent id → `status.not_found`. */
+/** Deactivate a status (`active = false`) — never a hard delete: a table may reference it, and the
+ *  verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). Manager/admin only.
+ *  Absent id → `status.not_found`. */
 export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; id: string },
@@ -602,7 +605,7 @@ export async function deactivateStatus(
  * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
  * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
  * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction as app_user. The status is occupancy-INDEPENDENT: a
+ * CALLER's transaction. The status is occupancy-INDEPENDENT: a
  * `free` table may carry one, so this never consults the tab state.
  */
 export async function setTableStatus(
@@ -620,9 +623,13 @@ export async function setTableStatus(
   // (false), preserving the three domain errors byte-for-byte: table NULL-or-false → `table.not_found`;
   // status NULL → `status.not_found`; status false → `status.inactive`. The status subquery is added
   // only when `statusId` is set — a CLEAR (null) skips the status check entirely, as before.
+  // `number | null`, not `boolean | null`: these are raw-SQL reads, which go around the `flag`
+  // helper's boolean mapping, so the engine hands back 1, 0, or null for a subquery that matched no
+  // row. The three branches below turn on truthiness and on `=== null`, both of which read 0/1 the
+  // same way they read false/true.
   const { rows } = await tx.execute<{
-    table_active: boolean | null;
-    status_active: boolean | null;
+    table_active: number | null;
+    status_active: number | null;
   }>(
     statusId === null
       ? sql`select (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active`

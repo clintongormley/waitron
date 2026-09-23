@@ -1,5 +1,5 @@
-import { foreignKey, primaryKey, unique } from "drizzle-orm/pg-core";
-import { count, day, id, json, label, table, ts } from "./columns.js";
+import { foreignKey, primaryKey, unique } from "drizzle-orm/sqlite-core";
+import { count, day, id, json, label, newId, now, table, ts } from "./columns.js";
 import { nodes } from "./nodes.js";
 
 /**
@@ -46,7 +46,7 @@ export interface DailyCloseSnapshot {
 export const dailyCloses = table(
   "daily_closes",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     nodeId: id("node_id").notNull(),
     businessDay: day("business_day").notNull(),
     // 1-based per node, monotonic — the chain position.
@@ -55,7 +55,7 @@ export const dailyCloses = table(
     prevEntryHash: label("prev_entry_hash").notNull(),
     // SHA-256(canonical(identity ‖ snapshot) ‖ prev_entry_hash), uppercase hex — set in a later task.
     entryHash: label("entry_hash").notNull(),
-    closedAt: ts("closed_at").notNull().defaultNow(),
+    closedAt: ts("closed_at").notNull().$defaultFn(now),
     // The counting actor (identity person id). Plain uuid, no FK: the person schema is a later slice
     // (design D3), and the close must not depend on it.
     closedBy: id("closed_by").notNull(),

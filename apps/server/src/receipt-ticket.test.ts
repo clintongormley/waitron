@@ -319,7 +319,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // "es". Reading the map's first entry instead prints a non-Spanish abbreviation either way, and
     // WHICH one depends on the filing path. The five pairs below are `EACH_UNIT`'s
     // (`packages/catalogue/src/units.ts`) — the unit a product with no `product_units` row reads as,
-    // and the one unit the venue seed never writes; `till-api.pg.test.ts` pins the same five on a
+    // and the one unit the venue seed never writes; `till-api.fiscal-sale-paths.test.ts` pins the same five on a
     // real filed sale, with `toEqual`, which compares values and never key order. A RETRIEVED or
     // parked order is priced from `working_order_lines.unit_name`, a `jsonb` column, and jsonb
     // re-sorts its keys — that is this fixture's order, whose first value is the Catalan "u". A

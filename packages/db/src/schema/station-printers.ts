@@ -1,5 +1,7 @@
-import { primaryKey } from "drizzle-orm/pg-core";
+import { primaryKey } from "drizzle-orm/sqlite-core";
 import { id, table } from "./columns.js";
+import { kitchenStations } from "./kitchen-stations.js";
+import { printers } from "./printers.js";
 
 /**
  * The KDS station → printer MAPPING (KDS-4 §2a, "Slice B" of kitchen printing). A many-to-many join:
@@ -15,12 +17,16 @@ import { id, table } from "./columns.js";
 export const stationPrinters = table(
   "station_printers",
   {
-    // Bare column: the (station_id) → kitchen_stations(id)
-    // FK is hand-written in the --custom migration.
-    stationId: id("station_id").notNull(),
-    // Bare column: the (printer_id) → printers(id) FK
-    // is hand-written in the --custom migration.
-    printerId: id("printer_id").notNull(),
+    stationId: id("station_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => kitchenStations.id),
+    /* v8 ignore stop */
+    printerId: id("printer_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => printers.id),
+    /* v8 ignore stop */
   },
   (t) => [
     primaryKey({

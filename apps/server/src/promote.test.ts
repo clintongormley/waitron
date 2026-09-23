@@ -4,8 +4,7 @@ import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
-  createPgliteDb,
-  runMigrations,
+  locations,
   stampDeployment,
   setSingletonRole,
   setDeploymentMode,
@@ -14,10 +13,12 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   readStandardSeriesId,
+  withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
@@ -46,38 +47,6 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-
-// PGlite is sufficient for the promote LOGIC (fence, idempotency, mirror-guard, the holder flip,
-// and now the mint): none of these has a privilege / concurrency dependency, and the reads/writes
-// all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter target when the heavier
-// one's justification does not apply). `appDb` and `ownerDb` are the same handle here; the
-// owner-vs-app distinction is exercised for real only against Postgres. Setup now also runs
-// CREDENTIALS_MIGRATIONS and establishes a node identity so the mint has a key to sign with — the
-// fence/mirror/already-primary paths return before any mint, so the established identity is
-// harmless to them.
-async function localSecondary(): Promise<{
-  db: Database;
-  nodeId: string;
-  deps: (log: PromoteDeps["log"]) => PromoteDeps;
-}> {
-  const db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-  await stampDeployment(db, "preproduction");
-  await setSingletonRole(db, "secondary"); // (primary, secondary) — a local secondary
-  await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
-  const holders = createDeploymentHolders("primary", "secondary");
-  return {
-    db,
-    nodeId,
-    deps: (log) => ({ appDb: db, ownerDb: db, holders, log, ring: RING, nodeId }),
-  };
-}
 
 const noopLog: PromoteDeps["log"] = () => {};
 
@@ -129,6 +98,60 @@ function heldFencedDoc(
 }
 
 describe("promoteLocalSecondaryToPrimary", () => {
+  // One migrated venue file for this whole block. `useVenueDb` empties the DATA after every case
+  // (schema survives), so `localSecondary()` below re-seeds from an empty schema on each `it` —
+  // which is the per-case isolation the `createPgliteDb()` call it replaces used to give by opening
+  // a new database. The suite is declared inside the describe, not at module scope, so its hooks do
+  // not also fire around the mirror block's cases (the same split
+  // `packages/db/src/node-membership.test.ts` makes for the same reason).
+  //
+  // There is no target choice left to justify: one storage engine, one file, one connection, and no
+  // roles (`asAppUser` is inert — `packages/db/src/testing/roles.ts`). What the block still proves
+  // is the promote LOGIC — fence, idempotency, mirror-guard, the holder flip and the mint.
+  //
+  // Setup also applies CREDENTIALS_MIGRATIONS and establishes a node identity so the mint has a key
+  // to sign with — the fence/mirror/already-primary paths return before any mint, so the
+  // established identity is harmless to them.
+  //
+  // The reset is doing real work here, measured rather than assumed: adding `resetPerTest: false`
+  // to this call and re-running `vitest run src/promote.test.ts` fails the term-0 mint case with
+  // `expected 5 to be +0`, because it then reads the previous case's held document (2026-09-22).
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+    timeoutMs: 60_000,
+  });
+
+  async function localSecondary(): Promise<{
+    db: Database;
+    nodeId: string;
+    deps: (log: PromoteDeps["log"]) => PromoteDeps;
+  }> {
+    const db = suite.db;
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary"); // (primary, secondary) — a local secondary
+    await seedTenant(db);
+    // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts` took:
+    // `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL DEFAULT, so a raw
+    // insert omitting it returns nothing to brand — and `array['es-ES']` is PostgreSQL array syntax
+    // the engine refuses at prepare.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
+    const holders = createDeploymentHolders("primary", "secondary");
+    return {
+      db,
+      nodeId,
+      deps: (log) => ({ db, holders, log, ring: RING, nodeId }),
+    };
+  }
+
   it("refuses without a fence attestation and leaves state unchanged", async () => {
     const { db, deps } = await localSecondary();
     const error = await captureError(() =>
@@ -136,7 +159,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     );
     expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
     expect(await readSingletonRole(db)).toBe("secondary"); // no write happened
-    await db.close();
   });
 
   it("claims the singletons and flips the holder so the fiscal pass starts", async () => {
@@ -160,7 +182,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(await readSingletonRole(db)).toBe("primary");
     expect(d.holders.singletonRole.current).toBe("primary");
     expect((await pass(new Date())).duties.map((r) => r.duty)).toContain(DRAIN_DUTY); // primary: real pass runs
-    await db.close();
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
@@ -170,7 +191,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const second = await promoteLocalSecondaryToPrimary(d, { oldNodeNeutralised: true });
     expect(second).toEqual({ alreadyPrimary: true });
     expect(await readSingletonRole(db)).toBe("primary");
-    await db.close();
   });
 
   it("mints the next membership document atomically with the role flip", async () => {
@@ -218,7 +238,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(verdict.valid).toBe(true);
     expect(held!.signerNodeId).toBe(nodeId);
     expect(held!.endorsements).toEqual([]); // R1 signs directly-trusted, no endorsement chain
-    await db.close();
   });
 
   it("mints a term-0 document naming this node when NO membership document is held", async () => {
@@ -240,7 +259,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     // It verifies against this node's own directly-trusted key — a real signed mint, not a stub.
     const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
-    await db.close();
   });
 
   it("is idempotent: a second promote does not bump the term again", async () => {
@@ -257,7 +275,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     });
     expect(second.alreadyPrimary).toBe(true); // early return before any re-mint
     expect((await readNodeMembership(db))?.body.term).toBe(4); // term unchanged — no re-bump
-    await db.close();
   });
 
   it("refuses a fenced (sell-only) node with promotion.node_fenced and writes nothing", async () => {
@@ -273,7 +290,6 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(isAppError(error) && error.params).toEqual({ standing: "sell-only" });
     expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
-    await db.close();
   });
 
   it("refuses a fenced (evicted) node with promotion.node_fenced and writes nothing", async () => {
@@ -286,25 +302,25 @@ describe("promoteLocalSecondaryToPrimary", () => {
     expect(isAppError(error) && error.params).toEqual({ standing: "evicted" });
     expect(await readSingletonRole(db)).toBe("secondary"); // never promoted
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
-    await db.close();
   });
 
   it("refuses a mirror with promotion.not_a_local_secondary before any write", async () => {
-    const db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
+    // Not `localSecondary()`: this case stamps a MIRROR and establishes no identity. The suite's
+    // file also carries the credentials tables, which is harmless here — the mirror guard returns
+    // before any identity read.
+    const db = suite.db;
     await stampDeployment(db, "preproduction");
     await setDeploymentMode(db, "mirror"); // (mirror, secondary)
     const holders = createDeploymentHolders("mirror", "secondary");
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
         // The mirror guard returns before any identity read, so placeholder ring/ids are harmless here.
-        { appDb: db, ownerDb: db, holders, log: noopLog, ring: RING, nodeId: "n" },
+        { db, holders, log: noopLog, ring: RING, nodeId: "n" },
         { oldNodeNeutralised: true },
       ),
     );
     expect(isAppError(error) && error.code).toBe("promotion.not_a_local_secondary");
     expect(await readSingletonRole(db)).toBe("secondary"); // never written
-    await db.close();
   });
 });
 
@@ -319,84 +335,104 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
   };
 }
 
-// The mirror fixture: a read-only cloud node that already holds its OWN dormant identity (R2/R3a)
-// — a sealed signing key under NODE_KEY_PURPOSE, an endorsement on its `nodes` row, and a
-// reserved standard invoice_series — established exactly as the adopt path does via
-// `establishReservedStandbyIdentity`. Stamped `mirror` (co-sets singleton_role='secondary').
-// PGlite is sufficient for the promote LOGIC (the mode/singleton flip, the endorsed term-bumped
-// mint, and the term-guard): none has a privilege/concurrency dependency here — the reserved
-// SIF's `currentSif` behaviour on reboot is Task 5's real-PG e2e. Migrates the FULL manifest
-// because `establishReservedStandbyIdentity` writes the reserved SIF (`registro_sif`) and each
-// module lands on top of its dependencies in one ordered set — the production order.
-async function mirror(): Promise<{
-  db: Database;
-  nodeId: string;
-  standardSeriesId: string;
-  endorsement: Endorsement;
-  deps: (
-    log: PromoteDeps["log"],
-    persistTradingEnv?: (seriesId: string) => Promise<void>,
-  ) => MirrorPromoteDeps;
-}> {
-  const db = await createPgliteDb();
-  for (const migrations of migrationOptionsFor(manifestSets(), null)) {
-    await runMigrations(db, migrations);
-  }
-  await stampDeployment(db, "preproduction");
-  await setDeploymentMode(db, "mirror"); // (mirror, secondary)
-  await seedTenant(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
-  const nif = t.rows[0]!.tax_id;
-
-  const standby = generateStandbyIdentity();
-  // The primary's endorsement of the cloud's own key — stored on `nodes.endorsement`, read back by the
-  // promote signer and attached to the minted document (R3b's first non-setup-signed doc).
-  const endorsement: Endorsement = {
-    nodeId: standby.nodeId,
-    publicKey: standby.publicKey,
-    endorsedBy: "primary-node",
-    signature: "endorsement-sig",
-  };
-  await establishReservedStandbyIdentity(
-    { ownerDb: db, ring: RING },
-    {
-      locationId,
-      standby,
-      nodeName: "cloud",
-      filingModule: "verifactu",
-      taxModule: "vat",
-      modules: ALL_MODULES,
-      reserved: {
-        modules: { "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 } },
-        series: [{ code: "FA-7", purpose: "standard" }],
-        endorsement,
-      },
-    },
-  );
-  const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
-  const holders = createDeploymentHolders("mirror", "secondary");
-  return {
-    db,
-    nodeId: standby.nodeId,
-    standardSeriesId,
-    endorsement,
-    deps: (log, persistTradingEnv = async () => {}) => ({
-      appDb: db,
-      ownerDb: db,
-      holders,
-      log,
-      ring: RING,
-      nodeId: standby.nodeId,
-      persistTradingEnv,
-    }),
-  };
-}
-
 describe("promoteMirrorToPrimary", () => {
+  // The FULL manifest, applied once to one venue file. `establishReservedStandbyIdentity` writes the
+  // reserved SIF (`registro_sif`), and each module lands on top of its dependencies in one ordered
+  // set — the production order, which is why this is `migrationOptionsFor(manifestSets(), null)`
+  // rather than a hand-picked three. `useVenueDb` empties the data after every case, so the `mirror()`
+  // fixture below re-seeds from an empty schema per `it`, exactly as the per-case `createPgliteDb()`
+  // it replaces did. It is declared inside this describe so its hooks do not also fire around the
+  // local-secondary block's cases.
+  //
+  // What this block proves is the promote LOGIC (the mode/singleton flip, the endorsed term-bumped
+  // mint, and the term-guard); none of that has a concurrency dependency. The reserved SIF's
+  // `currentSif` behaviour on reboot is a separate e2e.
+  //
+  // The reset is doing real work here, measured rather than assumed: adding `resetPerTest: false`
+  // to this call and re-running `vitest run src/promote.test.ts` fails five of this block's six
+  // cases, each of which needs a node the previous case has not already promoted (2026-09-22).
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+
+  // The mirror fixture: a read-only cloud node that already holds its OWN dormant identity (R2/R3a)
+  // — a sealed signing key under NODE_KEY_PURPOSE, an endorsement on its `nodes` row, and a
+  // reserved standard invoice_series — established exactly as the adopt path does via
+  // `establishReservedStandbyIdentity`. Stamped `mirror` (co-sets singleton_role='secondary').
+  async function mirror(): Promise<{
+    db: Database;
+    nodeId: string;
+    standardSeriesId: string;
+    endorsement: Endorsement;
+    deps: (
+      log: PromoteDeps["log"],
+      persistTradingEnv?: (seriesId: string) => Promise<void>,
+    ) => MirrorPromoteDeps;
+  }> {
+    const db = suite.db;
+    await stampDeployment(db, "preproduction");
+    await setDeploymentMode(db, "mirror"); // (mirror, secondary)
+    await seedTenant(db);
+    // Through the table definition rather than raw SQL, for the reason the local-secondary fixture
+    // above states: `locations.id` defaults in the client here, not in the engine.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
+    const nif = t.rows[0]!.tax_id;
+
+    const standby = generateStandbyIdentity();
+    // The primary's endorsement of the cloud's own key — stored on `nodes.endorsement`, read back by the
+    // promote signer and attached to the minted document (R3b's first non-setup-signed doc).
+    const endorsement: Endorsement = {
+      nodeId: standby.nodeId,
+      publicKey: standby.publicKey,
+      endorsedBy: "primary-node",
+      signature: "endorsement-sig",
+    };
+    await establishReservedStandbyIdentity(
+      { ownerDb: db, ring: RING },
+      {
+        locationId,
+        standby,
+        nodeName: "cloud",
+        filingModule: "verifactu",
+        taxModule: "vat",
+        modules: ALL_MODULES,
+        reserved: {
+          modules: {
+            "fiscal-verifactu": { nif, idSistemaInformatico: "W1", numeroInstalacion: 7 },
+          },
+          series: [{ code: "FA-7", purpose: "standard" }],
+          endorsement,
+        },
+      },
+    );
+    const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
+    const holders = createDeploymentHolders("mirror", "secondary");
+    return {
+      db,
+      nodeId: standby.nodeId,
+      standardSeriesId,
+      endorsement,
+      deps: (log, persistTradingEnv = async () => {}) => ({
+        db,
+        holders,
+        log,
+        ring: RING,
+        nodeId: standby.nodeId,
+        persistTradingEnv,
+      }),
+    };
+  }
+
   it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the corrected seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
     // A held term-3 chart naming the outgoing primary as serving-primary and this node as secondary.
@@ -417,7 +453,6 @@ describe("promoteMirrorToPrimary", () => {
     // Signed by the cloud's OWN key, carrying the primary's endorsement (the first non-setup-signed doc).
     expect(held!.signerNodeId).toBe(nodeId);
     expect(held!.endorsements).toEqual([endorsement]);
-    await db.close();
   });
 
   it("persists the corrected trading.env BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
@@ -443,7 +478,6 @@ describe("promoteMirrorToPrimary", () => {
     expect(await readDeploymentMode(db)).toBe("mirror");
     expect(await readSingletonRole(db)).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
-    await db.close();
   });
 
   it("refuses without a fence attestation, leaving the node a mirror and persisting nothing", async () => {
@@ -460,7 +494,6 @@ describe("promoteMirrorToPrimary", () => {
     expect(isAppError(err) && err.code).toBe("promotion.fence_not_attested");
     expect(await readDeploymentMode(db)).toBe("mirror"); // no write
     expect(persisted).toEqual([]); // fence refusal is before any persist
-    await db.close();
   });
 
   it("is idempotent — a second promote on an already-primary node is a no-op", async () => {
@@ -473,7 +506,6 @@ describe("promoteMirrorToPrimary", () => {
     expect(second.alreadyPrimary).toBe(true);
     expect(first.seriesId).toBe(second.seriesId); // the same corrected series, re-derived on re-run
     expect((await readNodeMembership(db))?.body.term).toBe(4); // not re-bumped
-    await db.close();
   });
 
   it("refuses a fenced node with promotion.node_fenced, leaving it a mirror and persisting nothing", async () => {
@@ -497,7 +529,6 @@ describe("promoteMirrorToPrimary", () => {
     expect(await readSingletonRole(db)).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3); // no re-mint
     expect(persisted).toEqual([]); // the fence refusal is before persistTradingEnv
-    await db.close();
   });
 
   it("aborts the whole PONR with promotion.membership_superseded when a newer term raced in", async () => {
@@ -511,7 +542,7 @@ describe("promoteMirrorToPrimary", () => {
     await writeNodeMembership(db, docAtTerm(5, nodeId));
 
     const err = await captureError(() =>
-      db.transaction((tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
+      withTransaction(db, (tx) => commitMirrorPromotionTx(tx, docAtTerm(4, nodeId))),
     );
     expect(isAppError(err) && err.code).toBe("promotion.membership_superseded");
     // The whole PONR rolled back: the held term is untouched and the node is still a mirror — the flip
@@ -519,6 +550,5 @@ describe("promoteMirrorToPrimary", () => {
     expect((await readNodeMembership(db))?.body.term).toBe(5);
     expect(await readDeploymentMode(db)).toBe("mirror");
     expect(await readSingletonRole(db)).toBe("secondary");
-    await db.close();
   });
 });

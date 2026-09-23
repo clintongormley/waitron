@@ -4,42 +4,41 @@ import { describe, expect, it } from "vitest";
 import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected.js";
 
 /**
- * Four tables the application role may read and never write, kept refused after the grants go.
+ * Four tables the application code may read and never write: `tenants`, `nodes`, `deployment` and
+ * `mirror_config`.
  *
- * The connection a request is served on wears `app_user` or a role that inherits from it — on a box
- * it is `waitron_app`, which `packages/provisioning/src/instance-plan.ts` makes a member of
- * `app_user`, with no `NOINHERIT` anywhere in the tree — and `app_user` holds SELECT and nothing on
- * `tenants`, `nodes`, `deployment` and `mirror_config`, so PostgreSQL refuses the write itself
- * today. Run on 2026-09-19 against the core migrations in PGlite, inside a transaction
- * that had called `asAppUser`: an insert and an update of `tenants`, an insert of `nodes`, an update
- * of `deployment` and a delete from `mirror_config` each came back `42501 permission denied for
- * table <name>`, and `select 1 from tenants` in the same shape was allowed. SQLite has no roles, so
- * after the storage switch nothing refuses any of them. This guard is what refuses them instead, and
- * it is written now, while the grants still exist to check it against.
+ * NOTHING BUT THIS FILE REFUSES THEM. The database used to: the connection a request was served on
+ * wore `app_user`, which held SELECT and no write on the four, so PostgreSQL answered a write with
+ * `42501`. SQLite has no roles and no grants — one process opens one file, and
+ * `packages/db/src/testing/roles.ts` records what went with them — and every path, request and
+ * provisioning alike, now shares that one venue handle. So the rule survives only as a convention
+ * over source text, and this guard is the whole of its enforcement rather than a second opinion on
+ * an engine that would refuse the write anyway. Read the four hedges below before trusting it.
  *
- * It is about the ROLE the connection wears, not about being a request. A request can reach these
- * tables: `apps/server/src/promote.ts` writes `deployment` from the promote route's flow, and the
- * setup-mode provision and adopt routes write `tenants`, `nodes` and `mirror_config`. None of them
- * serves the write on the request's own connection — each opens a separate handle, on
- * `adminDatabaseUrl` at those sites. Note what that means for a dev or CI host: with neither
- * variable set, `apps/server/src/config.ts` resolves the admin URL to the migrations URL and that to
- * `databaseUrl`, so where there is only one role the request connection IS the owner and PostgreSQL
- * refuses nothing.
+ * It is about WHICH FILE does the write, not about being a request. A request can legitimately
+ * reach these tables: the promote route reaches `deployment`, and the setup-mode provision and
+ * adopt routes reach `tenants`, `nodes` and `mirror_config`. Each does it by calling into one of
+ * the files `write-path-tables.json` names, which is where such a write is allowed to live. Keeping
+ * those writes in a handful of named files is the property being defended; hedge 2 below is what it
+ * costs, and there is no longer a separate connection making the distinction for us.
  *
- * WHY A ROOT-PROJECT PROGRAM. These four tables' grants are declared in one migration file, the
- * matrix that records every table's is in a different package, and the code that could write them is
- * spread across every app and package, so no per-package suite can see both sides — the same reason
- * `two-file-foreign-keys.test.ts` and `classification-complete.test.ts` live here. The root project
- * is not typechecked (the root `vitest.config.ts` carries the mutation that measured it), so the
- * import of `PRIVILEGES` above is checked by running, not by `tsc`.
+ * WHY A ROOT-PROJECT PROGRAM. The list of four lives in a different package from the code that
+ * could write them, which is spread across every app and package, so no per-package suite can see
+ * both sides — the same reason `two-file-foreign-keys.test.ts` and `classification-complete.test.ts`
+ * live here. The root project is not typechecked (the root `vitest.config.ts` carries the mutation
+ * that measured it), so the import of `PRIVILEGES` above is checked by running, not by `tsc`.
  *
  * WHERE THE LIST COMES FROM. `packages/fiscal-verifactu/src/privileges.expected.ts` — the matrix
- * whose own suite reads every table's privileges back from the live catalogue. The four tables are
- * the ones it records as `S`. That matrix measures TABLE-level grants only, as its own header says,
- * so a column-scoped write grant on one of the four would not show up in it or here.
- * `write-path-tables.json` beside this file holds the same four FROZEN, because the matrix describes
- * PostgreSQL grants and goes when they do; the case below cross-checks the two while both exist, and
- * deleting the matrix breaks this file's import rather than making it quietly pass.
+ * that recorded `app_user`'s table privileges. The four tables are the ones it records as `S`. It
+ * is a frozen record now, not a measurement: the suite its own header points at,
+ * `privileges.test.ts`, read every table's privileges back from a live PostgreSQL catalogue, and it
+ * is gone with the engine (`ls packages/fiscal-verifactu/src/privileges*.ts` returns the matrix
+ * alone, 2026-09-22), so nothing checks the matrix against a database any more. It only ever
+ * measured TABLE-level grants, as its own header says, so a column-scoped write grant on one of the
+ * four never showed up in it or here. `write-path-tables.json` beside this file holds the same four
+ * FROZEN, because the matrix goes when the rest of the grant-era record does; the case below
+ * cross-checks the two while both exist, and deleting the matrix breaks this file's import rather
+ * than making it quietly pass.
  *
  * It is WEAKER than "no write path touches a forbidden table", in four ways that are worth stating
  * because a failing test can never restore a missing hedge:
@@ -54,14 +53,15 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *    that calls into one of them writes through it unseen. What it catches is the shape that has
  *    actually occurred: a write appearing in a file that had no business having one.
  * 3. **It reads `<member>/src` under `apps` and `packages` only**, minus `*.test.ts` and everything
- *    under a `testing/` directory. Three fixtures there seed `tenants` and `nodes` as the owner
- *    (`packages/db/src/testing/seed.ts` and two others), so including them would mean an allowance
- *    list of fixtures that hides the real ones. Outside the walk entirely, and so unseen: a package's
+ *    under a `testing/` directory. Fixtures there seed `tenants` and `nodes` outright
+ *    (`packages/db/src/testing/seed.ts` among them), so including them would mean an allowance list
+ *    of fixtures that hides the real ones. Outside the walk entirely, and so unseen: a package's
  *    `test/` directory, `apps/<app>/scripts` (four demo scripts there write `tenants`, three of them `nodes` too),
  *    and anything at a package root.
- * 4. **It is about the four tables the role cannot write AT ALL.** The grants refuse plenty more one
- *    operation at a time — no DELETE on the sale tables, UPDATE narrowed to named columns on two
- *    others — and none of that is checked here. `docs/backlog.md` → B9 carries the decision.
+ * 4. **It is about the four tables that were refused AT ALL.** The grants used to refuse plenty more
+ *    one operation at a time — no DELETE on the sale tables, UPDATE narrowed to named columns on two
+ *    others — and none of that was ever checked here, nor is any of it refused now.
+ *    `docs/backlog.md` → B9 carries the decision.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -268,9 +268,10 @@ describe("no source writes a table the application role may only read", () => {
     }
     expect(
       offenders,
-      "`app_user` holds SELECT and no write on these tables, so PostgreSQL refuses this write " +
-        "today with 42501 and SQLite will not. Either the write belongs on a provisioning or boot " +
-        "path that opens its own owner handle, or it should not exist. Adding the file to " +
+      "This guard is the ONLY thing refusing this write. A role used to hold SELECT and no write " +
+        "on these tables, so the database refused it; SQLite has no roles, so nothing at runtime " +
+        "will stop you. Either the write belongs on a provisioning or boot " +
+        "path, or it should not exist. Adding the file to " +
         "scripts/write-path-tables.json is the wrong answer unless it is such a path:\n  " +
         offenders.join("\n  "),
     ).toEqual([]);

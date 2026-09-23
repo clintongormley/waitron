@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, id, label, table, tsString } from "@waitron/db";
+import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { count, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -14,7 +14,7 @@ import { persons } from "./persons.js";
 export const managementAccountActions = table(
   "management_account_actions",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair,
     // for the same reason as google_oidc_states.mode: measured 2026-09-18, substituting leaves the
@@ -27,7 +27,7 @@ export const managementAccountActions = table(
     codeHash: label("code_hash"),
     codeExpiresAt: tsString("code_expires_at"),
     codeAttempts: count("code_attempts").notNull().default(0),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     expiresAt: tsString("expires_at").notNull(),
     usedAt: tsString("used_at"),
   },

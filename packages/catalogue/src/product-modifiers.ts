@@ -35,25 +35,29 @@ export function isModifierListKind(value: unknown): value is ProductModifierRef[
 }
 
 /**
- * A uuid column compares either case in SQL and hands its value back LOWER-CASED, so an id also
- * compared in JAVASCRIPT has to be lower-cased first, or it finds its row in SQL and then matches
- * nothing in a set. Every LIST id is normalised here, at the boundary, because the two checks in
- * {@link assertRefsExist} compare them — deleting this call turns "refuses a duplicate that
- * differs only in case" and "matches a list id the caller sent in upper case"
- * (product-modifiers.test.ts) red. `updateExtraList` (extras.ts) and `updateOptionList`
- * (options.ts) normalise their caller's id for the same reason.
+ * An id may arrive in either case, and settling it is this file's job rather than the column's.
  *
- * The PRODUCT id is deliberately NOT normalised: nothing here compares it in JavaScript, it only
- * ever reaches SQL, and the file was run both ways with no test able to tell.
+ * It USED to be the column's: an id was a PostgreSQL `uuid`, which compares either case in SQL and
+ * hands its value back lower-cased. It is a plain `text` column now
+ * (`packages/db/src/schema/columns.ts`) and text compares byte for byte, so an id the caller sent
+ * in upper case finds no row at all — measured on node:sqlite (Node v26.7.0): a child naming a
+ * lower-cased parent in upper case is refused `FOREIGN KEY constraint failed`, while the same
+ * insert in lower case is accepted.
+ *
+ * Every id this file writes or looks up therefore passes through here — the LIST ids, which
+ * {@link assertRefsExist} also compares in JavaScript, and the PRODUCT id, which reaches SQL as a
+ * foreign key and comes back as a map key. `updateExtraList` (extras.ts) and `updateOptionList`
+ * (options.ts) normalise their caller's id at the same boundary.
  */
 const normalise = (value: string) => value.toLowerCase();
 
 /**
  * Every named product's attachment list, in `sort` order, keyed by product id.
  *
- * The keys, and every list id in the values, are the LOWER-CASED form the uuid columns hand back,
- * whatever case the caller asked in — so a caller holding an upper-cased product id has to
- * lower-case it before looking one up. `readProductEditor` (product-editor.ts) does exactly that;
+ * The keys, and every list id in the values, are LOWER-CASED whatever case the caller asked in —
+ * {@link normalise} settles the ids on the way in and {@link writeProductModifiers} stores them
+ * that way, so a caller holding an upper-cased product id may still look one up, and may also key
+ * by its own lower-cased form. `readProductEditor` (product-editor.ts) lower-cases before it asks;
  * `readProductExtras` (extra-projection.ts) hands the keys on as its own, and `listProducts`
  * (operations.ts) looks up ids that came straight out of the database and are lower-cased already.
  *
@@ -79,7 +83,7 @@ export async function readProductModifiers(
       optionListId: productModifiers.optionListId,
     })
     .from(productModifiers)
-    .where(inArray(productModifiers.productId, productIds))
+    .where(inArray(productModifiers.productId, productIds.map(normalise)))
     .orderBy(productModifiers.sort, productModifiers.id);
   for (const row of rows) {
     // `product_modifiers_one_reference_ck` is what makes this pair exhaustive: exactly one of the
@@ -99,48 +103,25 @@ export async function readProductModifiers(
 const refKey = (ref: ProductModifierRef) => `${ref.kind}\u0000${ref.id}`;
 
 /**
- * The list this ref names exists, and this transaction holds its row until it ends — `true` when
- * the row is there, `false` when nothing holds that id.
+ * The list this ref names exists — `true` when the row is there, `false` when nothing holds that
+ * id.
  *
- * The strength is `for key share`, which is the SAME lock the insert in
- * {@link writeProductModifiers} takes on this row a few statements later when
- * `product_modifiers_extra_list_fk` (or its options twin) is checked. Taking it here changes WHEN
- * that lock is acquired, not WHICH lock it is: before any attachment row is touched rather than
- * after. That the insert's own key check holds exactly this strength was measured on
- * PostgreSQL 18, not read off the documentation — with one session holding an open transaction
- * that had inserted a child row, a second session's `for key share` on the parent returned at
- * once and a third session's `for update` on it blocked, and the same `for update` returned at
- * once as a control once the inserter had committed. Read for exactly what it settles: those two
- * probes rule OUT `for update` and rule out anything that would let a `for update` through, which
- * leaves three of PostgreSQL's four row-lock strengths, and no pair of probes can separate
- * `for key share` from `for no key update` — that the check takes `for key share` specifically is
- * PostgreSQL's documented behaviour for a foreign key, not something measured here. What the
- * measurement does establish is the part this code turns on: taking `for key share` here neither
- * adds a conflict the insert would not have had, nor removes one. It is also shared, so two products attaching the SAME list still run side by side —
- * measured by "lets two products attach the same list at once, without either waiting for the
- * other" (product-modifiers.pg.test.ts), which stalls and fails on its own deadline when this is
- * changed to `for update`. It is not the first in this package: `assignProductUnit` (units.ts)
- * already locks a referenced row this way before writing the row that points at it — that file
- * states no reason for the strength, and nothing here rests on its choice.
+ * This read used to take `for key share`, the same lock the insert in
+ * {@link writeProductModifiers} takes on the row a few statements later when
+ * `product_modifiers_extra_list_fk` (or its options twin) is checked, so that a concurrent delete
+ * of one of these lists could not slip between the two. There is no concurrent delete: one write
+ * transaction runs on the venue file at a time. `assertExtraListForWrite` (extras.ts) states the
+ * mechanism and carries the receipt.
  *
- * One statement per id rather than one `in (…) for update`: the order the rows are locked in is
- * the point ({@link assertRefsExist}), and a loop makes it this code's choice rather than a query
- * plan's — the reason `lockPublishedLists` (extras.ts) gives for the same shape. The count is the
- * number of lists ONE product attaches.
+ * One statement per id rather than one `in (…)`: what the loop buys is now only the ORDER the
+ * refusal reports in, which {@link assertRefsExist} states. The count is the number of lists ONE
+ * product attaches.
  */
-async function lockList(tx: Transaction, ref: ProductModifierRef): Promise<boolean> {
+async function listExists(tx: Transaction, ref: ProductModifierRef): Promise<boolean> {
   const rows =
     ref.kind === "extras"
-      ? await tx
-          .select({ id: extraLists.id })
-          .from(extraLists)
-          .where(eq(extraLists.id, ref.id))
-          .for("key share")
-      : await tx
-          .select({ id: optionLists.id })
-          .from(optionLists)
-          .where(eq(optionLists.id, ref.id))
-          .for("key share");
+      ? await tx.select({ id: extraLists.id }).from(extraLists).where(eq(extraLists.id, ref.id))
+      : await tx.select({ id: optionLists.id }).from(optionLists).where(eq(optionLists.id, ref.id));
   return rows.length > 0;
 }
 
@@ -154,29 +135,11 @@ async function lockList(tx: Transaction, ref: ProductModifierRef): Promise<boole
  * write that never comes through here — the same division `assertProductsExist` and
  * `extra_list_items_list_product_uq` already make in extras.ts.
  *
- * **The existence read is also a LOCK, and it runs before any attachment row is touched.** A save
- * that deleted the product's rows first and only then reached for a list row deadlocked against a
- * concurrent delete of one of those lists: the save held the attachment row and wanted the list
- * row for its insert's foreign key, while `deleteExtraList` (extras.ts) held the list row
- * (`lockExtraList`) and wanted that same attachment row for its cascade. Measured on real
- * PostgreSQL, before this lock existed, by
- * "saves a product's extras attachment list while one of its lists is being deleted, without
- * deadlocking" (product-modifiers.pg.test.ts): `40P01` for one of the two transactions. The
- * OPTIONS side was measured, not assumed, by the same case's second row: `deleteOptionList` takes
- * no `for update` at all, and it deadlocked just the same — its `delete from option_lists` holds
- * the list row exclusively while its cascade waits.
- *
- * LOCK ORDER, because more than one row can be locked here: every EXTRAS list first, in ascending
- * id order, then every OPTIONS list, in ascending id order — one total order over the (kind, id)
- * pairs, which is what two saves naming the same two lists in opposite body order need in order
- * not to wait on each other. The kind comes first in the key so that the extras half is exactly
- * the ascending-id order `lockPublishedLists` (extras.ts) takes, which is the only other path in
- * this package that locks more than one list row; an options list is locked by no other path
- * today. Where this sits in the order that file's `lockPublishedLists` states — menu OFFER row,
- * then `extra_lists` rows ascending, then the content-languages advisory lock — is BELOW the offer
- * row (this path never takes one) and AT the list-rows step, with the options rows appended after
- * it; this path reaches no advisory lock. That placement is traced over those two files by hand;
- * only the two-transaction race above was measured.
+ * The refusal names the FIRST entry the body sent that names nothing, which is why the reads run
+ * in a sorted order and the report runs in body order. A concurrent delete of one of these lists
+ * used to be a real hazard here — this read took `for key share` to hold each row against one —
+ * and it is not one now: one write transaction runs on the venue file at a time
+ * (`assertExtraListForWrite`, extras.ts).
  *
  * What this does NOT check is the product: an unknown `productId` reaches
  * `product_modifiers_product_fk` and surfaces as a `23503` driver error. Neither caller can send
@@ -193,14 +156,14 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
   }
 
   const held = new Set<string>();
-  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3), and in turn is
-  // also what makes the order above real. Duplicates are already refused, so no pair of keys is
-  // equal and the comparator never has to say two refs are the same.
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3). Duplicates are
+  // already refused, so no pair of keys is equal and the comparator never has to say two refs are
+  // the same.
   const ordered = [...refs].sort((left, right) => (refKey(left) < refKey(right) ? -1 : 1));
-  for (const ref of ordered) if (await lockList(tx, ref)) held.add(refKey(ref));
+  for (const ref of ordered) if (await listExists(tx, ref)) held.add(refKey(ref));
 
-  // Reported in the BODY's order, not the lock order: the field a refusal names is the first entry
-  // the editor sent that names nothing, whichever of them the locks reached first.
+  // Reported in the BODY's order, not the read order: the field a refusal names is the first entry
+  // the editor sent that names nothing, whichever of them was read first.
   const at = refs.findIndex((ref) => !held.has(refKey(ref)));
   if (at !== -1) throw new AppError("product.invalid", { field: `modifiers.${at}.id` });
 }
@@ -223,35 +186,28 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
  * dot is escaped in that command, so this comment quoting it is not itself a match.) The second
  * condition, serialising two writers, is the paragraph below.
  *
- * Every list the body names is locked BEFORE the delete below, which is what keeps this path from
- * deadlocking against a delete of one of those lists; the lock, its strength and its order are on
- * {@link assertRefsExist}.
+ * Every list the body names is read BEFORE the delete below, and the refusal order that produces
+ * is on {@link assertRefsExist}.
  *
- * What this does NOT do is serialise two saves of the same product — a delete cannot see another
- * transaction's uncommitted inserts, so two overlapping saves could otherwise collide on
- * `product_modifiers_product_extra_uq` or its options twin and surface as an opaque `23505`, the
- * shape measured one table over and written up on `lockExtraList` (extras.ts). What stands between
- * that and a caller is the PRODUCT row: both callers write it first in the same transaction —
- * `saveProductEditor` (product-editor.ts) takes `select … for update` on an existing product, and
- * the `PATCH` route's `updateProduct` (operations.ts) issues an `UPDATE` on it — and a created
- * product is a row no second writer can have named yet. NOT MEASURED: no test races two saves of
- * one product, and PGlite cannot show one (every query serialises onto its one backend,
- * CLAUDE.md §4), so this paragraph is read off the call chain, not off a run — unlike the list
- * lock above, which is.
+ * The second condition — serialising two writers — is met by the engine rather than by this file:
+ * one write transaction runs on the venue file at a time, so two saves of one product cannot
+ * overlap and no delete of a list can land between this body's statements.
+ * `assertExtraListForWrite` (extras.ts) states the mechanism and carries the receipt.
  */
 export async function writeProductModifiers(
   tx: Transaction,
   productId: string,
   refs: ProductModifierRef[],
 ): Promise<void> {
+  const product = normalise(productId);
   const normalised = refs.map((ref) => ({ kind: ref.kind, id: normalise(ref.id) }));
   await assertRefsExist(tx, normalised);
-  await tx.delete(productModifiers).where(eq(productModifiers.productId, productId));
+  await tx.delete(productModifiers).where(eq(productModifiers.productId, product));
   if (normalised.length === 0) return;
   await tx.insert(productModifiers).values(
     normalised.map((ref, sort) => ({
       id: randomUUID(),
-      productId,
+      productId: product,
       sort,
       extraListId: ref.kind === "extras" ? ref.id : null,
       optionListId: ref.kind === "options" ? ref.id : null,

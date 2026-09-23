@@ -23,8 +23,8 @@ export interface Sealed {
  * `Buffer`'s own `.equals()` on the result. Declaring `Sealed` with `Uint8Array` fields instead
  * gave `tsc --noEmit` two `TS2339`s on exactly those two lines, measured 2026-09-18.
  *
- * That both types survive node's crypto is carried by `credentials.test.ts`'s real-PostgreSQL round
- * trip, which reads a row through this column and decrypts it — a `Uint8Array` all the way in. */
+ * That both types survive node's crypto is carried by `credentials.test.ts`'s round trip, which
+ * reads a row back through this column and decrypts it — a `Uint8Array` all the way in. */
 export interface SealedRow {
   ciphertext: Uint8Array;
   iv: Uint8Array;

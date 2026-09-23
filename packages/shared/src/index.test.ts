@@ -17,6 +17,7 @@ import {
   hasCode,
   isAppError,
   isSupportedLocale,
+  isUuid,
   isValidTelephone,
   isZeroDecimal,
   locationId,
@@ -26,6 +27,8 @@ import {
   MONEY_SCALE,
   multiplyDecimal,
   negateDecimal,
+  nodeId,
+  normaliseUuid,
   resolveActiveLocale,
   QUANTITY_SCALE,
   RATE_SCALE,
@@ -41,7 +44,7 @@ import {
   toScale,
   workingOrderId,
   workingOrderLineId,
-  sqlStateOf,
+  sqliteFailureOf,
   worstBand,
 } from "./index.js";
 
@@ -65,10 +68,13 @@ describe("package public surface (./index.js)", () => {
     expect(hasCode(error, "shared.invalid_id")).toBe(true);
   });
 
-  it("re-exports every id constructor", () => {
+  it("re-exports every id constructor and both uuid screens", () => {
     const uuid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+    expect(isUuid(uuid)).toBe(true);
+    expect(normaliseUuid(uuid.toUpperCase(), "ProductId")).toBe(uuid);
     expect(locationId(uuid)).toBe(uuid);
     expect(tillId(uuid)).toBe(uuid);
+    expect(nodeId(uuid)).toBe(uuid);
     expect(seriesId(uuid)).toBe(uuid);
     expect(workingOrderId(uuid)).toBe(uuid);
     expect(workingOrderLineId(uuid)).toBe(uuid);
@@ -110,9 +116,12 @@ describe("package public surface (./index.js)", () => {
   });
 
   it("re-exports the cause-chain readers", () => {
-    const wrapped = new Error("w", { cause: Object.assign(new Error("d"), { code: "42704" }) });
-    expect(sqlStateOf(wrapped)).toBe("42704");
-    expect(firstCodeInCauseChain(wrapped, (code) => code === "42704")).toBe("42704");
+    const wrapped = new Error("Failed query", {
+      cause: Object.assign(new Error("no such table: tenants"), { errcode: 1 }),
+    });
+    expect(sqliteFailureOf(wrapped)).toEqual({ errcode: 1, message: "no such table: tenants" });
+    const coded = new Error("w", { cause: Object.assign(new Error("d"), { code: "ENOENT" }) });
+    expect(firstCodeInCauseChain(coded, (code) => code === "ENOENT")).toBe("ENOENT");
   });
 
   it("re-exports the profile helpers", () => {

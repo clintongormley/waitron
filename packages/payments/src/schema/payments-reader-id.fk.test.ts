@@ -1,18 +1,25 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
+  captureError,
+  isPgError,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { payments } from "./payments.js";
 
-// Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4) — payments'
-// existing SELECT/INSERT/UPDATE grants are unchanged by this column, and writing under
-// `app_user`'s grants (`asAppUser`) is what would show a regression. A clone of the
-// `core_payments` template (CORE + PAYMENTS).
-const postgres = useTemplateDb({ template: "core_payments" });
+// This suite used to run on real PostgreSQL under a non-superuser LOGIN inheriting `app_user`'s
+// grants, and doubled as the grant check for `payments`' SELECT/INSERT/UPDATE. That half is GONE
+// and has no replacement: this engine has no roles. What is left is the column and its foreign
+// key, which the schema still refuses on its own.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 /** Seeds a till/working_order (via the shared payments seed helper) plus one card reader — the
  * rows `payments.reader_id`'s FK points at. */
@@ -37,11 +44,10 @@ async function seedOrderWithReader(db: Database): Promise<{
 
 describe("payments.reader_id", () => {
   it("stores a payment's reader and round-trips it", async () => {
-    const db = postgres.admin;
+    const db = suite.db;
     const { workingOrderId, readerId } = await seedOrderWithReader(db);
 
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(payments).values({
         workingOrderId,
         readerId,
@@ -52,20 +58,18 @@ describe("payments.reader_id", () => {
       });
     });
 
-    const stored = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      return tx.select().from(payments).where(eq(payments.paymentRef, "pay_1"));
-    });
+    const stored = await withTransaction(db, (tx) =>
+      tx.select().from(payments).where(eq(payments.paymentRef, "pay_1")),
+    );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
   });
 
   it("refuses a reader that does not exist", async () => {
-    const db = postgres.admin;
+    const db = suite.db;
     const { workingOrderId } = await seedOrderWithReader(db);
     const error = await captureError(() =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         await tx.insert(payments).values({
           workingOrderId,
           readerId: randomUUID(),
@@ -76,7 +80,13 @@ describe("payments.reader_id", () => {
         });
       }),
     );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
-    expect(pgErrorMessage(error)).toMatch(/payments_reader_fk/);
+    // Was `pgErrorCode(error) === "23503"` plus `pgErrorMessage(error)` matching
+    // `/payments_reader_fk/`. LOSS: the second half has no replacement. SQLite reports every
+    // foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names neither the
+    // constraint nor the column (`packages/db/src/constraint-target.ts`), so this case can no
+    // longer tell `payments_reader_fk` from the row's OTHER foreign key onto `working_orders`.
+    // What keeps it honest is the statement: `workingOrderId` is a real seeded row and
+    // `readerId` is the one unknown id in it, so only the reader key can be what fired.
+    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

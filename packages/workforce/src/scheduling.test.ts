@@ -21,7 +21,10 @@ import {
 // attach shifts) — there is no privilege decision to prove here. The app role's exact grants on
 // shifts/roster_versions (that they CAN be UPDATEd/DELETEd, the inverse of time_entries' append-only
 // floor) are `shifts`/`roster_versions: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the append-only
-// floor itself is immutability.test.ts.
+// floor itself is `packages/migrations/src/apply-append-only.test.ts`, which proves `time_entries`
+// refuses an update and a delete after the product's own migrate. (It was this package's
+// `immutability.test.ts` until task F1 deleted that file on 2026-09-22; the privileges half of it
+// has no counterpart on this engine.)
 const backend = new WorkforceBackend();
 
 let locationId: string;
@@ -495,7 +498,7 @@ describe("updateShift / removeShift", () => {
       }),
     );
     const row = await suite.db.execute<{ ends_at: string; role: string | null }>(sql`
-      select to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at, role
+      select ends_at, role
       from shifts where id = ${shiftId}`);
     expect(row.rows[0]!.ends_at).toBe("2026-09-07T15:00:00Z");
     expect(row.rows[0]!.role).toBe("kitchen");

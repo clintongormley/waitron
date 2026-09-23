@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { asAppUser, pgErrorCode, withTransaction } from "@waitron/db";
+import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -45,6 +45,33 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
  */
 const ownChain = (seeded: { nodeId: string }) =>
   sql`registro_id in (select id from registros_facturacion where node_id = ${seeded.nodeId})`;
+
+/**
+ * Puts `incidencia` back into the boolean the column means. A raw read skips drizzle's decoding and
+ * this engine stores a flag as 0 or 1, so the reads below hand back the integer; mapping it here
+ * keeps every assertion in this file saying `toBe(true)` / `toBe(false)` about the flag itself,
+ * rather than each expectation being loosened to whatever number came out.
+ */
+const decodeFlags = <Row extends { incidencia: number }>(result: {
+  rows: Row[];
+}): { rows: (Omit<Row, "incidencia"> & { incidencia: boolean })[] } => ({
+  rows: result.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 })),
+});
+
+/**
+ * The same treatment for an incident's `params`, a `json` column. Drizzle decodes one read through
+ * the table definition; a raw read hands back the stored text, which every `toEqual`/`toMatchObject`
+ * below is written against as an object. `packages/payments/src/reconcile.test.ts` carries the same
+ * wrapper for the same column on the same engine.
+ */
+const parseParams = <Row extends { params: string }>(result: {
+  rows: Row[];
+}): { rows: (Omit<Row, "params"> & { params: Record<string, unknown> })[] } => ({
+  rows: result.rows.map(({ params, ...rest }) => ({
+    ...rest,
+    params: JSON.parse(params) as Record<string, unknown>,
+  })),
+});
 
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
@@ -102,9 +129,14 @@ describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
     const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
+    // `id` and `created_at` are supplied here because `persons` declares both with a drizzle
+    // `$defaultFn` (`packages/identity/src/schema/persons.ts:27,67`), which runs for a BUILDER
+    // insert and never for raw SQL, and the generated DDL gives neither a SQL DEFAULT — omitting
+    // them is refused `NOT NULL constraint failed: persons.id`. Same fix, same reason, as
+    // `packages/workforce/src/migrations.test.ts`'s `rowIdentity`.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      sql`insert into persons (display_name, pin_hash, role)
-          values ('P', ${hashPin("1234")}, 'manager') returning id`,
+      sql`insert into persons (id, created_at, display_name, pin_hash, role)
+          values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
     const voidSession = await withTransaction(pg.db, (tx) =>
       loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
@@ -205,11 +237,11 @@ describe("drain — batching (the >cap split)", () => {
     expect(first.nextDueAt).not.toBeNull();
 
     const pending = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ count: string }>(sql`
-      select count(*)::text as count from envios where ${ownChain(seeded)} and estado = 'pendiente'
+      tx.execute<{ count: number }>(sql`
+      select count(*) as count from envios where ${ownChain(seeded)} and estado = 'pendiente'
     `),
     );
-    expect(Number(pending.rows[0].count)).toBe(1);
+    expect(pending.rows[0].count).toBe(1);
 
     // Second pass, gated on `t`: the deferred 1-row tail goes.
     const second = await drain(deps, first.nextDueAt!);
@@ -337,10 +369,12 @@ describe("drain — stale claim recovery", () => {
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // > RECUPERACION_ENVIANDO_MS past enviado_en
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string; incidencia: boolean }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number }>(sql`
         select estado, incidencia from envios where ${ownChain(seeded)}
       `),
+      ),
     );
     // Recovered (-> pendiente) then re-claimed and resubmitted in this SAME pass, since nothing
     // else gates it — aceptado, but incidencia (raised by the recovery) is never cleared by the
@@ -366,10 +400,12 @@ describe("drain — stale claim recovery", () => {
     const result = await drain(deps, now);
 
     expect(result.recordsSubmitted).toBe(0); // untouched — not stale, so not reclaimed
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string; incidencia: boolean }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number }>(sql`
         select estado, incidencia from envios where ${ownChain(seeded)}
       `),
+      ),
     );
     expect(rows.rows[0]?.estado).toBe("enviando");
     expect(rows.rows[0]?.incidencia).toBe(false);
@@ -390,16 +426,18 @@ describe("drain — retry backoff on a transient submit failure", () => {
     const deps = drainDeps(staticResolver(failing));
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{
-        estado: string;
-        intentos: number;
-        incidencia: boolean;
-        proximo_intento_en: string;
-      }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{
+          estado: string;
+          intentos: number;
+          incidencia: number;
+          proximo_intento_en: string;
+        }>(sql`
         select estado, intentos, incidencia, proximo_intento_en from envios
         where ${ownChain(seeded)}
       `),
+      ),
     );
     // Claimed (intentos incremented to 1 at claim), then the submit threw — backed off to
     // pendiente rather than left stuck `enviando`, with incidencia raised.
@@ -481,12 +519,14 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const deps = drainDeps(staticResolver(aeat.client()));
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId}
         order by r.secuencia
       `),
+      ),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "detenido"]);
     expect(rows.rows[1]?.incidencia).toBe(true);
@@ -495,10 +535,12 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.recordsAccepted).toBe(1); // only secuencia 1
     expect(result.incidentsRaised).toBeGreaterThanOrEqual(1);
 
-    const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(sql`
+    const inc = parseParams(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ code: string; severity: string; params: string }>(sql`
         select code, severity, params from incidents
       `),
+      ),
     );
     expect(
       inc.rows.some((i) => i.severity === "error" && i.code === "fiscal.registro_rechazado"),
@@ -565,11 +607,13 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     // and comfortably short of the 00:02:00Z shared-`pg.db` hazard this test's own comment explains.
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
-    const row4 = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string; incidencia: boolean }>(sql`
+    const row4 = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number }>(sql`
         select e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} and r.secuencia = 4
       `),
+      ),
     );
     expect(row4.rows[0]?.estado).toBe("detenido");
     expect(row4.rows[0]?.incidencia).toBe(true);
@@ -615,9 +659,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     // hazards (see the previous test's own comment: 00:02:00Z and 00:05:00Z).
     const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
-    const rowA = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string; incidencia: boolean }>(
-        sql`select estado, incidencia from envios where registro_id = ${chainA4.registroId}`,
+    const rowA = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number }>(
+          sql`select estado, incidencia from envios where registro_id = ${chainA4.registroId}`,
+        ),
       ),
     );
     expect(rowA.rows[0]?.estado).toBe("detenido");
@@ -729,11 +775,13 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // resubmit both -> 3000 each
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
+      ),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
     expect(rows.rows.every((r) => r.incidencia)).toBe(true);
@@ -769,9 +817,11 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string; incidencia: boolean }>(
-        sql`select estado, incidencia from envios where ${ownChain(seeded)}`,
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number }>(
+          sql`select estado, incidencia from envios where ${ownChain(seeded)}`,
+        ),
       ),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado"); // routeB's consulta found AEAT's huella == ours
@@ -847,11 +897,13 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     // fresh and, on its own per-line merits, would read "Correcto" -> accepted.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-    const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
+    const rows = decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ secuencia: number; estado: string; incidencia: number }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
         where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
+      ),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
     expect(rows.rows.every((r) => r.incidencia)).toBe(true);
@@ -976,9 +1028,11 @@ describe("drain — the deployment-environment guard", () => {
       // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
-      const inc = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
-          sql`select code, severity, params from incidents`,
+      const inc = parseParams(
+        await withTransaction(pg.db, (tx) =>
+          tx.execute<{ code: string; severity: string; params: string }>(
+            sql`select code, severity, params from incidents`,
+          ),
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -999,7 +1053,7 @@ describe("drain — the deployment-environment guard", () => {
       // in place it would sit `pendiente` forever in this file's SHARED `pg.db`, violating the
       // "batching (the >cap split)" describe's own documented assumption that nothing else here
       // leaves work behind (its header comment, corrected in this same fix round). Deleting the
-      // `envios` row (not the registro — `envios_work_due` reads only this table)
+      // `envios` row (not the registro — `workIsDue` reads only this table)
       // is `boot.test.ts`'s own established pattern for the identical need.
       await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
@@ -1019,9 +1073,9 @@ describe("drain — the deployment-environment guard", () => {
       );
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
-      const inc = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ code: string; params: Record<string, unknown> }>(
-          sql`select code, params from incidents`,
+      const inc = parseParams(
+        await withTransaction(pg.db, (tx) =>
+          tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -1114,9 +1168,9 @@ describe("drain — the deployment-environment guard", () => {
       expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
       expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 
-      const inc = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ code: string; params: Record<string, unknown> }>(
-          sql`select code, params from incidents`,
+      const inc = parseParams(
+        await withTransaction(pg.db, (tx) =>
+          tx.execute<{ code: string; params: string }>(sql`select code, params from incidents`),
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -1199,12 +1253,12 @@ describe("drain — the deployment-environment guard", () => {
       expect(healthyRow.rows[0]?.estado).toBe("aceptado");
 
       const refused = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ count: string }>(sql`
-            select count(*)::text as count from envios
+        tx.execute<{ count: number }>(sql`
+            select count(*) as count from envios
             where ${ownChain(seeded)} and estado = 'pendiente'
           `),
       );
-      expect(Number(refused.rows[0]!.count)).toBe(3);
+      expect(refused.rows[0]!.count).toBe(3);
 
       const inc = await withTransaction(pg.db, (tx) =>
         tx.execute<{ code: string }>(sql`select code from incidents`),
@@ -1293,33 +1347,18 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
 });
 
 /**
- * The reason `claimBatch`'s claim names the table it locks. `app_user` is revoked from
- * `registros_facturacion` and re-granted `select, insert` alone
- * (drizzle/0001_fiscal_baseline_sql.sql:4 and :6), and PostgreSQL wants an update-shaped privilege
- * on every table a `FOR UPDATE` locks — so a lock the claim did not narrow would be refused before
- * it read anything. PGlite is enough for this one and a container is not needed: nothing here runs
- * a second session, and a grant is enforced once the session has assumed the role (CLAUDE.md §4).
+ * WHAT WAS HERE, and where the property went. A case named "refuses the same selection when the
+ * lock is not narrowed" ran `claimBatch`'s selection twice as `app_user` — once with
+ * `for update skip locked` and once with `for update of e skip locked` — and pinned the first at
+ * SQLSTATE `42501` and the second at "allowed". It held the reason the claim narrowed its lock:
+ * `app_user` could read `registros_facturacion` and never write it, so an unnarrowed `FOR UPDATE`
+ * over that join was refused before it read anything.
+ *
+ * Both halves of that subject are gone on this engine, so the case is deleted rather than
+ * re-spelled: there is no `FOR UPDATE` (`claimLockedRows` adds no lock clause — see `claimBatch`'s
+ * own paragraph in `./drain.ts`, and `packages/db/src/job-claim.ts`'s doc comment for what
+ * replaced it), and there are no roles to hold or withhold a privilege. Nothing in this file can
+ * state the property any more. What keeps a second drain off these rows now is that one writer
+ * holds the file at a time and the claim commits with its stamps inside one `withTransaction`;
+ * that is `packages/store/src/write-queue.ts`'s subject, and its own cases hold it.
  */
-describe("the claim's lock is narrowed to the envíos, and has to be", () => {
-  it("refuses the same selection when the lock is not narrowed", async () => {
-    const selection = sql`select e.registro_id from envios e
-      join registros_facturacion r on r.id = e.registro_id
-      where e.estado = 'pendiente' order by r.sif_id, r.secuencia limit 1`;
-    // Each form is caught OUTSIDE its transaction: a refusal aborts the transaction it happened
-    // in, so catching it inside and carrying on there fails on the next statement with `25P02`
-    // instead (CLAUDE.md §3).
-    const attempt = async (locking: ReturnType<typeof sql>) =>
-      withTransaction(pg.db, async (tx) => {
-        await asAppUser(tx);
-        await tx.execute(sql`${selection} ${locking}`);
-      }).then(
-        () => "allowed",
-        (error: unknown) => pgErrorCode(error) ?? "no code",
-      );
-
-    expect(await attempt(sql`for update skip locked`)).toBe("42501");
-    // The control in the other direction, so the case cannot pass just because the query was
-    // broken: narrowed to the envíos, the very same selection is allowed.
-    expect(await attempt(sql`for update of e skip locked`)).toBe("allowed");
-  });
-});

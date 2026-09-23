@@ -3,8 +3,8 @@ import type { Transaction } from "@waitron/db";
 import type { NodeId } from "@waitron/shared";
 import type { IntegrityIssue, IntegrityReport } from "@waitron/fiscal";
 import { computeHuella, verifyHuella } from "@waitron/verifactu";
-import { lockChainHead } from "./chain.js";
-import { fromRegistroRow, type RegistroRow } from "./registro-row.js";
+import { readChainHead } from "./chain.js";
+import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 
 /**
  * Orden HAC/1177/2024 art. 7.i: before generating record n, verify that record n−1 is itself
@@ -43,22 +43,22 @@ import { fromRegistroRow, type RegistroRow } from "./registro-row.js";
 export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
   // Under the same lock, in the same transaction, as the append that follows. Verifying a
   // predecessor another writer is concurrently replacing verifies nothing; re-acquiring the lock
-  // inside appendToChain afterwards is free (chain.ts's own doc comment on lockChainHead).
-  await lockChainHead(tx, nodeId);
+  // inside appendToChain afterwards is free (chain.ts's own doc comment on readChainHead).
+  await readChainHead(tx, nodeId);
 
   // (node_id, secuencia) is already uniquely indexed (node-id rekey, 2026-08-03's
   // registros_tenant_node_secuencia_uq) — this is the same index, no new one. Ordered by chain
   // POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
   // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure
   // on an intact chain.
-  const { rows } = await tx.execute<RegistroRow>(sql`
+  const { rows } = await tx.execute<Record<string, unknown>>(sql`
     select * from registros_facturacion
     where node_id = ${nodeId}
     order by secuencia desc
     limit 2
   `);
 
-  const previous = rows[0];
+  const previous = rows[0] === undefined ? undefined : decodeRegistroRow<RegistroRow>(rows[0]);
   // n is itself the first record of the chain: no predecessor, neither check applies. Normal, not
   // a failure.
   if (previous === undefined) return { ok: true, checked: 0, issues: [] };
@@ -83,7 +83,8 @@ export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<Inte
     return { ok: issues.length === 0, checked: 1, issues };
   }
 
-  const beforePrevious = rows[1];
+  const beforePrevious =
+    rows[1] === undefined ? undefined : decodeRegistroRow<RegistroRow>(rows[1]);
   if (beforePrevious === undefined) {
     // n−1 points at a predecessor that is not there. `params` is empty rather than carrying
     // undefined values — there is no pair to compare, so there is nothing to name as expected or

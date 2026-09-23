@@ -1,17 +1,36 @@
-// Real PostgreSQL exercises configuration and authorization queries after SET ROLE app_user.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Exercise service-status configuration and manager authorization on PostgreSQL.
+/**
+ * The `/management-api/service-statuses` surface end to end: create, list, edit, deactivate, the
+ * body screens, and both gates (a staff session 403, no session 401).
+ *
+ * ## What went with PostgreSQL
+ *
+ * The file's stated reason was `SET ROLE app_user` — every query ran as the non-owner deployment
+ * role so that a missing GRANT showed up. SQLite has no roles and no grants; `asAppUser` is an
+ * inert function (`packages/db/src/testing/roles.ts`) and every call below runs on the one
+ * connection. Nothing here now says anything about which identity the routes reach the database
+ * as. The 403 and 401 gates are unaffected: both are `authorizeManager` and
+ * `requireManagementSession`, never a privilege, and both cases still pass.
+ *
+ * **Two deletion receipts written into the cases below are retired by the column types, and are
+ * flagged where they sit** (the int4-range screen at `parseDisplayOrder`, and the `isUuid` screen
+ * on `:id`). Measured 2026-09-22 on Node v26.7.0 against `node:sqlite` directly, over the columns
+ * `packages/db/drizzle/0000_baseline.sql:516-523` now declares for this table — `id` text primary
+ * key, `display_order` integer: the out-of-int4-range insert is ACCEPTED and stores 2147483648, and
+ * `where id = 'not-a-uuid'` returns zero rows rather than raising. Neither case can any longer
+ * tell its screen from the absence of it; both still pin the response.
+ */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
@@ -19,21 +38,25 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.
+// One NIF per provisioned venue. Kept as a counter rather than a constant because `setupTenant` is
+// exported and a second caller inside this database would need a second NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A label unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the status
- *  set accumulates across tests, and `(label)` is unique, so a fixed label would collide. */
+/** A label unique within the tenant, so tests are order-independent (CLAUDE.md §4) — `resetPerTest`
+ *  is off, so the status set accumulates across tests and a fixed label would collide. */
 function uniqueLabel(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
@@ -71,20 +94,30 @@ export async function setupTenant(): Promise<{ managerId: string; staffId: strin
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
-    await asAppUser(tx);
-    const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
-      returning id`);
-    const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, email, pin_hash, password_hash, role)
-      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
-      returning id`);
-    return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
+  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
+  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
+  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
+    const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
+      const [person] = await tx
+        .insert(persons)
+        .values({
+          displayName,
+          email,
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(PASSWORD),
+          role,
+        })
+        .returning({ id: persons.id });
+      return person!.id;
+    };
+    return {
+      managerId: await seed("The Manager", MANAGER_EMAIL, "manager"),
+      staffId: await seed("The Clerk", STAFF_EMAIL, "staff"),
+    };
   });
   return { managerId, staffId };
 }
@@ -94,7 +127,7 @@ function mountApp(): Hono {
   mountManagementApi(
     app,
     {
-      db: suite.admin,
+      db: suite.db,
       // The all-zero node id (the capture default): this suite exercises the staff-status routes, not
       // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
@@ -272,10 +305,11 @@ describe("/management-api/service-statuses", () => {
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
 
-    // An integer OUTSIDE int4 range clears `Number.isInteger` but would overflow the Postgres `integer`
-    // column and raise 22003 — an opaque 500 — without the range bound. The screen refuses it with a
-    // clean 400 (prove-by-behaviour for the int4-range half of `parseDisplayOrder`; delete the range
-    // check and this reverts to a 500).
+    // An integer OUTSIDE int4 range is refused with a clean 400 by `parseDisplayOrder`'s range bound.
+    // The receipt that bound was written against is gone: it rested on a PostgreSQL `integer` column
+    // raising 22003, and `display_order` is now a SQLite INTEGER which stores 2147483648 without
+    // complaint (measured, see this file's header). The case pins the 400; it no longer shows the
+    // range check is needed.
     const hugeOrder = await request(
       "",
       {
@@ -342,8 +376,10 @@ describe("/management-api/service-statuses", () => {
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "status.not_found" } });
 
-    // Dropping the `if (!isUuid(id))` line makes this a 500 (raw `22P02`) instead of 404 — the
-    // prove-by-deletion for the `:id` guard.
+    // The `if (!isUuid(id))` guard used to be provable here: without it a malformed id reached a
+    // PostgreSQL `uuid` column and came back a 500 (raw `22P02`). `id` is a text column now, so the
+    // same query matches nothing and the route answers 404 either way (measured, see this file's
+    // header). The 404 is still the right answer; the guard is what has stopped being observable.
     const malformed = await request(
       "/not-a-uuid",
       { method: "PATCH", body: JSON.stringify({ label: uniqueLabel("X") }) },
@@ -419,7 +455,7 @@ describe("/management-api/service-statuses", () => {
   it("PATCH with a null / empty body → 204 no-op (never a 500), the status unchanged", async () => {
     // A `null` body coerces to `{}` (`?? {}`) and carries no mutable field: the route answers a 204
     // no-op WITHOUT reaching updateStatus's empty `.set()` (which Drizzle rejects → a 500). Mirrors the
-    // staff PATCH route's "null body → 204 no-op" (management-api.pg.test.ts).
+    // staff PATCH route's "null body → 204 no-op" (management-api.accounts-and-receipt-config.test.ts).
     const { id } = (await (
       await request(
         "",

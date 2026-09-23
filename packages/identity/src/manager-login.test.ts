@@ -26,7 +26,10 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
-const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
+// `Promise<T> | T`, the widening `withTransaction` itself took (`packages/db/src/tenancy.ts`):
+// `tx.execute` is synchronous on this engine and a `Promise<T>`-only parameter refuses it.
+const run = <T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> =>
+  withTransaction(suite.db, fn);
 
 describe("loginManager", () => {
   it("logs in with a correct email + password (no TOTP enrolled)", async () => {

@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -37,15 +38,16 @@ afterEach(() => {
 //     try), after $WT_DOCKER_PS_PENDING probes that answer empty — a container with no health
 //     verdict yet, which is what the script's retry loop exists for.
 //   - `compose logs` -> prints the database_ahead line when $WT_AHEAD_LOGS is 1.
-//   - `compose exec … psql … -d waitron …` -> prints $WT_DB_STAMP, but ONLY when `-d waitron` is
-//     present, so a stamp query that forgot the app-db name (the wrong-db bug) reads empty and its
-//     test fails.
+//   - `compose run … --entrypoint node app …` -> prints $WT_DB_STAMP, but ONLY when the command
+//     names a `venue.db`, so a stamp read pointed at the wrong file reads empty and its test fails.
+//   - `compose exec … psql …` -> exits non-zero. No cluster on a box carries a database named
+//     waitron any more, so a stamp read that still shells out to psql cannot succeed.
 //   - `run … <trading.env read>` -> prints $WT_TRADING_ENV (set it to "__ABSENT__" to model an
 //     unprovisioned box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
 //   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless $WT_RM_FAIL names a
 //     volume ("db" makes `docker volume rm waitron_db` fail, to test the abort-on-failure path).
 // Failure knobs model the read/write faults the install and production-safety fixes must survive:
-//   - WT_READ_ERROR: BOTH is_production reads (trading.env cat and the db-stamp psql) exit non-zero,
+//   - WT_READ_ERROR: BOTH is_production reads (trading.env cat and the venue stamp) exit non-zero,
 //     so the environment cannot be established — reset must then fail CLOSED.
 //   - WT_RM_FAIL: the named volume's `docker volume rm` exits non-zero.
 //   - WT_MV_FAIL: `mv` exits non-zero, so the atomic .env rewrite's final rename fails.
@@ -100,12 +102,17 @@ case "$1" in
         if [ "$n" -le "\${WT_DOCKER_PS_PENDING:-0}" ]; then echo ""; else echo "\${WT_DOCKER_PS}"; fi ;;
       *" logs "*)
         [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
+      *" run "*)
+        # The deployment stamp read: the app image's own node against the venue file on the state
+        # volume. The stamp comes back ONLY when the command names a venue.db, so a reader pointed
+        # at the wrong file reads empty and the production-stamp case fails.
+        [ "\${WT_READ_ERROR}" = "1" ] && exit 1
+        case "$args" in *venue.db*) echo "\${WT_DB_STAMP}" ;; esac ;;
       *" exec "*)
-        case "$args" in
-          *psql*)
-            [ "\${WT_READ_ERROR}" = "1" ] && exit 1
-            case "$args" in *"-d waitron"*) echo "\${WT_DB_STAMP}" ;; esac ;;
-        esac ;;
+        # Nothing on a box answers psql any more — the storage is a file, and no cluster on it
+        # carries a database named waitron. A stamp read that still shells out to psql therefore
+        # ERRORS, which is what the unprovisioned-box case below fails on.
+        case "$args" in *psql*) exit 1 ;; esac ;;
     esac ;;
   volume)
     case "$2" in
@@ -407,16 +414,20 @@ describe("waitron.sh reset", () => {
     expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
   });
 
-  // Spec §8: refusal must also fire on the DB-stamp signal alone (trading.env empty). Because the
-  // stub only returns the stamp when `-d waitron` is present, this test also fails if the query
-  // targets the wrong database — the wrong-db bug cannot pass unnoticed.
-  it("refuses on a production box (db-stamp signal) and removes no volume", () => {
+  // Spec §8: refusal must also fire on the stamp signal alone (trading.env empty). The refusal
+  // alone does not prove the stamp was READ — an unreadable stamp also refuses, by failing closed —
+  // so the case pins the read itself: the stub answers only a command naming a venue.db, and the
+  // log has to show that command.
+  it("refuses on a production box (stamp signal) and removes no volume", () => {
     const sb = sandbox({ tradingEnv: "", dbStamp: "production" });
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/PRODUCTION/);
-    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
+    const calls = readFileSync(sb.log, "utf8");
+    // The reader is several lines long, so the two halves of this are on different lines of the log.
+    expect(calls).toMatch(/docker compose [\s\S]*? run [\s\S]*?venue\.db/);
+    expect(calls).not.toMatch(/docker volume rm/);
   });
 
   it("--force-production --yes proceeds on a production box", () => {
@@ -439,8 +450,10 @@ describe("waitron.sh reset", () => {
     expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
   });
 
-  // The other side of C1: a genuinely unprovisioned box (trading.env ABSENT, db stamp empty) is a
+  // The other side of C1: a genuinely unprovisioned box (trading.env ABSENT, stamp empty) is a
   // successful read of "nothing there", NOT an error — the demo/reset workflow must still proceed.
+  // This is the case a stamp read through `psql -d waitron` fails: no box carries that database now,
+  // so the read errors and an unprovisioned box is refused as if it were production.
   it("proceeds on an unprovisioned box (trading.env absent, empty stamp)", () => {
     const sb = sandbox({ tradingEnv: "__ABSENT__", dbStamp: "" });
     installedBox(sb);
@@ -461,6 +474,105 @@ describe("waitron.sh reset", () => {
     expect(calls).toMatch(/docker volume rm .*waitron_db\b/);
     expect(calls).not.toMatch(/docker volume rm .*waitron_backups\b/);
     expect(calls).not.toMatch(/find \/s .*! -name tls/);
+  });
+});
+
+// The stamp reader is JavaScript that SHIPS inside deploy/waitron.sh and runs in the app image,
+// which is where node:sqlite and the state volume both are. No case above can see whether it reads a
+// real file correctly — the docker stub answers in its place — so these extract the shipped text and
+// RUN it against databases built here. The three states are the three `is_production` distinguishes:
+// a value, a clean "nothing there", and a read that failed.
+describe("the venue stamp reader inside waitron.sh", () => {
+  const READER = (() => {
+    const m = /VENUE_STAMP_JS='([\s\S]*?)'\n/.exec(readFileSync(SCRIPT, "utf8"));
+    if (!m) throw new Error("deploy/waitron.sh no longer assigns VENUE_STAMP_JS in single quotes");
+    return m[1];
+  })();
+
+  // A venue directory as the product leaves it: `venue.db` with a `deployment` table, carrying the
+  // stamp row only when the box has been stamped. Built with node:sqlite rather than with the
+  // product's own opener, because the reader must work against the FILE, not against our schema.
+  function venueDir({ migrated = true, stamp = "" } = {}) {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
+    dirs.push(dir);
+    const db = new DatabaseSync(join(dir, "venue.db"));
+    if (migrated) {
+      db.exec("create table deployment (id integer primary key, environment text not null)");
+      if (stamp) db.prepare("insert into deployment values (1, ?)").run(stamp);
+    }
+    db.close();
+    return dir;
+  }
+
+  const readStamp = (env) =>
+    spawnSync(process.execPath, ["-e", READER], {
+      encoding: "utf8",
+      env: { ...process.env, WAITRON_VENUE_DIR: "", WAITRON_STATE_DIR: "", ...env },
+    });
+
+  it("prints the environment a stamped box carries", () => {
+    const r = readStamp({ WAITRON_VENUE_DIR: venueDir({ stamp: "production" }) });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("production");
+  });
+
+  it("finds the venue directory under the state directory the image sets", () => {
+    const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
+    dirs.push(state);
+    mkdirSync(join(state, "venue"));
+    const db = new DatabaseSync(join(state, "venue", "venue.db"));
+    db.exec("create table deployment (id integer primary key, environment text not null)");
+    db.prepare("insert into deployment values (1, ?)").run("production");
+    db.close();
+    const r = readStamp({ WAITRON_STATE_DIR: state });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("production");
+  });
+
+  // "Nothing there", both shapes of it: a box that has never booted has no venue file at all, and a
+  // box that booted but was never provisioned has the table and no row. Both are reads that
+  // SUCCEEDED and found nothing, so reset stays open on them.
+  it("succeeds with no output when the box has no venue database yet", () => {
+    const r = readStamp({ WAITRON_VENUE_DIR: mkdtempSync(join(tmpdir(), "waitron-venue-")) });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  it("succeeds with no output when the box is migrated but not stamped", () => {
+    const r = readStamp({ WAITRON_VENUE_DIR: venueDir() });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  // A third shape of "nothing there", and the one an operator actually meets: `openVenueStore`
+  // CREATES `venue.db` on any open, and `apps/server/src/boot.ts` opens the venue directory for its
+  // stamp probe before it applies migrations — so every box that got as far as booting and then
+  // failed sits with the file present and the `deployment` table absent. That box has no records to
+  // protect and must stay resettable with no extra flag.
+  it("succeeds with no output when the venue file exists but was never migrated", () => {
+    const r = readStamp({ WAITRON_VENUE_DIR: venueDir({ migrated: false }) });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  // The third state, and the only one that still fails closed: bytes at venue.db that are not a
+  // SQLite database at all, so nothing about this box can be established. is_production treats a
+  // non-zero exit as "cannot establish" and refuses the reset, which is only safe if the reader
+  // really does exit non-zero here rather than printing an empty line. This case used to be driven
+  // by an unmigrated file, which is a readable database and now reads as "nothing there" — the case
+  // directly above.
+  it("fails when the venue file is not a database", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "venue.db"), "these bytes are not a SQLite database");
+    const r = readStamp({ WAITRON_VENUE_DIR: dir });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  it("fails when neither the venue directory nor the state directory is set", () => {
+    const r = readStamp({});
+    expect(r.status).not.toBe(0);
   });
 });
 

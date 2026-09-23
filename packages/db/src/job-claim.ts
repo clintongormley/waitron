@@ -25,45 +25,59 @@ export interface ClaimSpec {
   readonly limit: number;
   /** What claiming stamps on the rows it takes. */
   readonly set: SQL;
-  /** A table the STAMP joins, so its `returning` can read the claimed row's neighbours. */
-  readonly join?: { readonly from: SQL; readonly on: SQL };
-  /** What the claim hands back. Spelled by every caller: a default would hide the join above. */
+  /**
+   * What the claim hands back, spelled by every caller.
+   *
+   * **Write the TABLE's name here, never the alias `j`.** `j` names the inner selection's copy of
+   * the table; {@link claimRows}'s outer `update` is unaliased, so this clause cannot see it.
+   * {@link claimable}, {@link order} and {@link claimableJoin} are the three written against `j`,
+   * and this one is the odd one out.
+   *
+   * To read a neighbour of the claimed row — the printer a print job names — write a correlated
+   * subquery here. There was a `join` option that put a second table into the statement's `FROM`
+   * for this clause to read; SQLite refuses that.
+   *
+   * All four re-driven on 2026-09-23 against SQLite 3.53.4 (`node:sqlite`, Node v26.7.0), on the
+   * exact statement `claimRows` builds — a job table `pj`, a printer table `pr`:
+   *  - `… returning j.id` — refused, `no such column: j.id`;
+   *  - `… returning pj.id`, and a bare `… returning id` — both return the claimed row;
+   *  - `… returning pj.id, (select host from pr where pr.id = pj.p) as host` — returns the
+   *    neighbour, which is what `packages/printing/src/runtime.ts` writes;
+   *  - `update pj set … from pr where pr.id = pj.p returning pj.id, pr.host` — refused,
+   *    `no such column: pr.host`, which is the `join` option's obituary.
+   *
+   * A table the PREDICATE reads is a different thing and still joins — {@link claimableJoin}.
+   */
   readonly returning: SQL;
 }
 
 /**
  * Claims up to `limit` rows by UPDATING them, and returns the rows it claimed.
  *
- * One statement, so no second claimer can slip between choosing a row and stamping it. The inner
- * selection chooses and locks the batch, skipping any row another claimer already holds, and the
- * outer UPDATE stamps exactly those rows, finding them again by `key`.
+ * One statement, so nothing can slip between choosing a row and stamping it. The inner selection
+ * chooses the batch and the outer UPDATE stamps exactly those rows, finding them again by `key`.
  *
- * `key` must be the row's own identifier and not its physical address, and that is the whole reason
- * this parameter exists. Measured 2026-09-21 on PostgreSQL 18, with a claim held mid-statement on
- * an advisory lock while another transaction committed a change to the row it was about to take:
- * keyed on the row's `ctid` the claim returned NOTHING, because the outer scan still saw the row
- * where it used to be while the selection had followed it to where it now was; keyed on its primary
- * key the same claim took the row, carrying the other transaction's change. The regression case is
- * `job-claim.pg.test.ts`'s "takes a row another transaction rewrote while the claim was running".
+ * `key` must be the row's own identifier and not its physical address. On SQLite the address is
+ * `rowid`, and `VACUUM` rewrites it; the measurement that first bought this parameter was taken on
+ * PostgreSQL 18, where keying on `ctid` made a claim return NOTHING when another transaction had
+ * moved the row mid-statement. That reading belongs to PostgreSQL and to a concurrency this engine
+ * does not admit, so it is recorded here as the reason the parameter exists rather than as a
+ * property of the code today; its regression case, `job-claim.pg.test.ts`, is deleted with the
+ * PostgreSQL suites.
  *
- * What `skip locked` buys is that a claimer does not WAIT for another claimer. That much is
- * measured: delete it and this module's own `job-claim.pg.test.ts` fails on its test timeout, while
- * `packages/printing`'s two-agent suites still pass. It is therefore NOT the only thing keeping a
- * row from being claimed twice — but what else keeps it is the CALLER's business, not this
- * function's: a caller whose `claimable` excludes the state its `set` writes (as `claimPrintJobs`
- * does, on `status` and the lease) refuses a second claim on the predicate alone, and a caller whose
- * predicate does not read what it stamps has only the clause. The runs are in
- * `docs/developers/testing-guide.md` under "A proof-by-deletion belongs to the SHAPE of the code it
- * was taken against".
+ * **What used to keep two claimers apart, and what does now.** The statement carried
+ * `for update of j skip locked`, which had a claimer take the rows it chose and pass over any row
+ * another claimer already held. SQLite has no such clause and needs none: one writer holds the
+ * file at a time (`packages/store/src/write-queue.ts`), so a second claim does not run until the
+ * first has committed and can only see what the first left. That is the whole mechanism now —
+ * with one exception the caller owns. A claim that is not INSIDE a write transaction is one
+ * statement on its own, which is atomic, but two such claims in a row see each other's results
+ * only because they are serialised; a caller that then acts on the rows in a SECOND statement
+ * wants both inside one `withTransaction`. Every caller today does that.
  *
- * `for update … skip locked` has no SQLite equivalent. Task F1 of the storage switch removes it,
- * leaving the conditional update as the whole mechanism — under the write queue one transaction
- * writes at a time, so there are no locked rows to skip
- * (`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, step 16). Keeping the clause
- * here means that step edits this module rather than each caller. The clause is still spelled
- * outside it, but only ever by a suite and never by a caller — some hold a row against the claim
- * under test, others run it as a control they expect to be refused. Grep rather than trust a list
- * here: this sentence has carried a count twice and been wrong both times.
+ * The other half stays the caller's business exactly as before: a caller whose `claimable`
+ * excludes the state its `set` writes (as `claimPrintJobs` does, on `status` and the lease)
+ * refuses a second claim on the predicate alone.
  */
 export async function claimRows<Row extends Record<string, unknown>>(
   tx: Transaction,
@@ -71,97 +85,77 @@ export async function claimRows<Row extends Record<string, unknown>>(
 ): Promise<Row[]> {
   const name = sql.identifier(spec.table);
   const key = sql.identifier(spec.key);
-  const stamp = spec.join;
-  const claimed = await tx.execute<Row>(sql`
+  const claimed = tx.execute<Row>(sql`
     update ${name} set ${spec.set}
-    ${stamp === undefined ? sql.empty() : sql`from ${stamp.from}`}
-    where ${stamp === undefined ? sql.empty() : sql`${stamp.on} and `}${name}.${key} in (
+    where ${name}.${key} in (
       select j.${key} from ${name} j ${spec.claimableJoin ?? sql.empty()}
       where ${spec.claimable}
       order by ${spec.order}
       limit ${spec.limit}
-      for update of j skip locked
     )
     returning ${spec.returning}
   `);
-  // `tx.execute` hands back `Assume<Row, Record<string, unknown>>[]`, which the constraint above
-  // already makes the same type — but TypeScript will not reduce that while `Row` is a parameter.
+  // `tx.execute` hands back `Record<string, unknown>[]` under the type argument it was given,
+  // which the constraint above already makes the same type — but TypeScript will not reduce that
+  // while `Row` is a parameter.
   return claimed.rows as Row[];
 }
 
 export interface LockedClaimSpec {
   /** The rows to claim: a complete SELECT, carrying its own joins, ordering and limit. */
   readonly selection: SQL;
-  /**
-   * Which ONE of the tables the selection names is locked, spelled as the selection spells it —
-   * its alias where it has one. Quoted by `sql.identifier`, like {@link ClaimSpec.table}, which
-   * means it is passed through as written: PostgreSQL folds an unquoted alias to lower case, so
-   * a selection written `from envios E` needs `of: "e"` here and not `"E"`.
-   */
-  readonly of: string;
 }
 
 /**
- * Claims rows by LOCKING them and stamping nothing, like {@link claimLock}. Two things differ.
- * The caller hands over raw SQL rather than a drizzle query, and gets back what `tx.execute`
- * returns rather than drizzle's typed rows; and the lock it takes is narrowed to one table, where
- * {@link claimLock} locks everything its query names.
+ * Runs the caller's selection and hands back its rows, stamping nothing.
  *
- * Both differences come back to the same thing: drizzle's `LockConfig` does carry an `of` (read in
- * drizzle-orm 0.45.2, `pg-core/query-builders/select.types.d.ts:61`), but it wants a table object,
- * and a caller writing its selection as raw SQL has only an alias to name. `Lockable` below, this
- * module's own structural type, pins the config to `{ skipLocked: true }` and so offers no `of` at
- * all.
+ * It was a claim: the selection carried `for update of <table> skip locked`, so the rows it
+ * returned were locked for the caller's transaction and rows another claimer held were passed
+ * over. SQLite has neither clause, so what is left here is an ordinary ordered SELECT — and the
+ * claim now comes from the write queue around it, which admits one writer per file at a time
+ * (`packages/store/src/write-queue.ts`). **That makes the caller's transaction boundary the whole
+ * of the claim**: a selection taken inside `withTransaction`, acted on, and committed there cannot
+ * overlap another writer; the same selection taken outside one carries no claim at all.
+ * `packages/fiscal-verifactu/src/drain.ts` takes it inside one and says so at its call site.
  *
- * A caller needs that narrowing whenever it joins a table the role may not lock: PostgreSQL wants
- * an update-shaped privilege on every table a `FOR UPDATE` touches, so an unnarrowed lock over
- * such a join is refused `42501` before it reads anything. The case, with its control running the
- * refused form first, is `job-claim.test.ts`'s "locks only the table `of` names" — measured there
- * against a table-wide grant, which is the only shape it covers.
+ * It survives the clause's deletion rather than being inlined into that caller because the
+ * paragraph above is what a reader needs, and it has one home here instead of one per caller. The
+ * `of` parameter is gone with the lock it narrowed: it named which ONE table a `FOR UPDATE`
+ * touched, and there is no `FOR UPDATE`.
  *
- * A caller that needs to STAMP everything it locks wants {@link claimRows} instead, which does
- * both in one statement. This one exists for a caller that locks a window and then decides, row by
- * row, which of those rows it will stamp — `packages/fiscal-verifactu/src/drain.ts` reads each
- * claimed record's own environment before it commits to sending it, and leaves the rest alone.
- *
- * Like {@link claimLock}, what task F1 leaves of this is an ordinary ordered SELECT with no claim
- * in it, sound because the write queue admits one writer at a time — see that function's own
- * paragraph. A caller relying on that should check {@link claimRows}'s warning against its own
- * predicate first; the drain's does exclude the state it stamps, and says so at its call site.
+ * It still differs from {@link claimLock} in what the caller hands over — raw SQL rather than a
+ * Drizzle query — and so in what comes back: the driver's rows rather than Drizzle's typed ones.
  */
 export async function claimLockedRows<Row extends Record<string, unknown>>(
   tx: Transaction,
   spec: LockedClaimSpec,
 ): Promise<Row[]> {
-  const claimed = await tx.execute<Row>(
-    sql`${spec.selection} for update of ${sql.identifier(spec.of)} skip locked`,
-  );
+  const claimed = tx.execute<Row>(spec.selection);
   // Same reduction TypeScript will not make for `claimRows` above, for the same reason.
   return claimed.rows as Row[];
 }
 
-/** A select this module can add the claim's lock clause to — drizzle's builder, structurally. */
-interface Lockable<Row> extends PromiseLike<Row[]> {
-  for(strength: "update", config: { skipLocked: true }): PromiseLike<Row[]>;
-}
+/**
+ * A select this module runs for the caller — drizzle's builder, structurally.
+ *
+ * It used to declare `for(strength, config)` as well, because this module added the claim's lock
+ * clause to whatever it was handed. With that clause gone the structural requirement is only that
+ * the query can be awaited for its rows.
+ */
+type Lockable<Row> = PromiseLike<Row[]>;
 
 /**
- * Claims rows by LOCKING them and stamping nothing, and returns the rows it claimed.
+ * Runs the caller's Drizzle selection and hands back its rows, stamping nothing.
  *
- * The claim is the lock itself, held until the claiming transaction ends:
+ * The {@link claimLockedRows} paragraph applies here unchanged: the `for update … skip locked` this
+ * added is gone, the write queue is what keeps two writers apart, and so the claim is now the
+ * caller's transaction boundary rather than anything in this function.
  * `packages/payments/src/store.ts` reads its forward queue out of the payment rows' own state and
- * has no column to stamp, so a claim there is a row lock plus the caller's own state-guarded
- * advances. A no-op UPDATE would put it through {@link claimRows} instead, at the price of writing
- * a new version of every row a forward pass merely looked at.
+ * has no column to stamp, which is why it wants this rather than {@link claimRows} — a no-op
+ * UPDATE would write a new version of every row a forward pass merely looked at.
  *
- * On PostgreSQL, two concurrent claimers partition the queue exactly as {@link claimRows}: the
- * second returns the rows the first does not hold, immediately, rather than waiting for it. What
- * task F1 should leave of each is NOT the same, and the difference is worth knowing before that
- * task starts: its step 16 names `claimRows`, which keeps a conditional update that still does the
- * claiming, and says nothing about this function, which has nothing left to keep — an ordinary
- * ordered SELECT with no claim in it. That is sound only because the write queue admits one writer
- * at a time, and it is this comment's reading of the plan rather than a line in it.
+ * What it does for a reader is name the selection a claim, in the one place the reasoning lives.
  */
 export async function claimLock<Row>(query: Lockable<Row>): Promise<Row[]> {
-  return query.for("update", { skipLocked: true });
+  return query;
 }

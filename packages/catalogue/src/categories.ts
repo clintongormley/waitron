@@ -1,7 +1,7 @@
-import { categories, products, type Transaction } from "@waitron/db";
+import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
@@ -27,6 +27,18 @@ export interface ProductCategoryInput {
   categoryIds: string[];
   primaryCategoryId?: string | null;
 }
+/**
+ * A product's category ids, gathered in one column as a JSON array.
+ *
+ * `json_group_array` is what SQLite has in place of `array_agg`, and the value arrives as the JSON
+ * TEXT it built, never as a JavaScript array — so every caller parses. Measured on SQLite 3.53.4
+ * (Node v26.7.0): with the `filter` removing every row the aggregate returns the string `[]`, not
+ * null, which is why the `coalesce` that wrapped the PostgreSQL form is gone rather than
+ * translated. The filter itself stays, because a product with no membership reaches this through a
+ * left join and would otherwise gather one null.
+ */
+export const categoryIdArray = sql<string>`json_group_array(${productCategories.categoryId} order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null)`;
+
 const columns = {
   id: categories.id,
   name: categories.name,
@@ -35,10 +47,15 @@ const columns = {
   parentId: categoryDetails.parentId,
 };
 
-/** Hierarchy edits, membership replacement and deletion share one lock. */
-export async function lockCategories(tx: Transaction): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"categories"}, 0))`);
-}
+/*
+ * Hierarchy edits, membership replacement and deletion used to share one advisory lock, taken as
+ * the first statement of each. There is nothing left for it to arrange: `withTransaction`
+ * (`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits
+ * one write transaction at a time (`packages/store/src/write-queue.ts`), so two of these paths
+ * cannot overlap however they are started. Receipt: `racePair` in
+ * `packages/catalogue/test/fixtures.ts`, which carries the measurement and its control, and the
+ * three `serializes …` cases in `categories.db.test.ts` that use it.
+ */
 export async function listCategories(tx: Transaction): Promise<Category[]> {
   return tx
     .select(columns)
@@ -65,26 +82,26 @@ async function validateParent(tx: Transaction, id: string, parentId: string | nu
 }
 async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
   if (filename === null) return;
-  const media = await tx.execute<{ present: boolean }>(
-    sql`select to_regclass('public.media_images') is not null as present`,
-  );
-  if (!media.rows[0]!.present) throw new AppError("category.image_not_found", {});
-  // The media module owns the FK; KEY SHARE holds the reference through a concurrent deletion.
-  const image = await tx.execute(
-    sql`select 1 from media_images where filename = ${filename} for key share`,
-  );
+  if (!(await tablePresent(tx, "media_images"))) throw new AppError("category.image_not_found", {});
+  // The media module owns the foreign key. The row cannot be deleted between this read and the
+  // write that depends on it: one write transaction runs on the venue file at a time, so there is
+  // no concurrent deleter to hold the reference against.
+  const image = await tx.execute(sql`select 1 from media_images where filename = ${filename}`);
   if (!image.rows.length) throw new AppError("category.image_not_found", {});
 }
 /**
- * Is the venue-service module's `preparation_routes` table in this database? Routes belong to an
- * optional module, so both the delete and its preview have to ask before naming the table in raw
- * SQL. Follows validateImage's precedent for `media_images`.
+ * Has an optional module's table been migrated into this database?
+ *
+ * `media_images` and `preparation_routes` both belong to modules a venue need not have, so every
+ * path that names one in raw SQL asks first. The count is read rather than a boolean expression:
+ * this is a raw statement, so no drizzle column mapping runs over the result and SQLite has no
+ * boolean type — a `... is not null` expression comes back as the number 1 or 0.
  */
-async function preparationRoutesPresent(tx: Transaction): Promise<boolean> {
-  const table = await tx.execute<{ present: boolean }>(
-    sql`select to_regclass('public.preparation_routes') is not null as present`,
+async function tablePresent(tx: Transaction, name: string): Promise<boolean> {
+  const found = await tx.execute<{ n: number }>(
+    sql`select count(*) as n from sqlite_master where type = 'table' and name = ${name}`,
   );
-  return table.rows[0]!.present;
+  return found.rows[0]!.n > 0;
 }
 function validateColor(color: string | null | undefined): void {
   if (color === undefined || color === null) return;
@@ -97,7 +114,6 @@ export async function createCategory(
 ): Promise<Category> {
   await validateContentTranslations(tx, input.name, fallbackLanguage);
   validateColor(input.color);
-  await lockCategories(tx);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
   await validateImage(tx, input.image ?? null);
@@ -116,9 +132,9 @@ export async function updateCategory(
   patch: Partial<CategoryInput>,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
-  // Take the content lock before the hierarchy lock, as creation does.
+  // Validate the translations before reading the hierarchy, as creation does. Neither step takes
+  // a lock any more: one write transaction runs on the venue file at a time.
   if (patch.name !== undefined) await validateContentTranslations(tx, patch.name, fallbackLanguage);
-  await lockCategories(tx);
   const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   const image = patch.image === undefined ? current.image : patch.image;
@@ -128,7 +144,7 @@ export async function updateCategory(
   validateColor(color);
   await tx
     .update(categories)
-    .set({ name: patch.name ?? current.name, updatedAt: sql`now()` })
+    .set({ name: patch.name ?? current.name, updatedAt: now() })
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
@@ -140,20 +156,16 @@ export async function updateCategory(
   return readCategory(tx, id);
 }
 export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
-  await lockCategories(tx);
   const category = await readCategory(tx, id); // 404s an absent id
-  // Lock the identity: route inserts hold its FK's KEY SHARE lock.
-  await tx
-    .select({ id: categories.id })
-    .from(categories)
-    .where(eq(categories.id, id))
-    .for("update");
+  // The identity used to be locked here, so that a concurrent route insert holding its foreign
+  // key could not slip between this delete's steps. One write transaction runs on the venue file
+  // at a time, so no other writer exists to race; see the note beside this file's imports.
   // 1. memberships
   await tx.delete(productCategories).where(eq(productCategories.categoryId, id));
   // 2. clear reporting category where it was this one
   await tx
     .update(products)
-    .set({ categoryId: null, updatedAt: sql`now()` })
+    .set({ categoryId: null, updatedAt: now() })
     .where(eq(products.categoryId, id));
   // 3. reparent direct children to this category's own parent (clears the RESTRICT parent FK)
   await tx
@@ -161,7 +173,7 @@ export async function deleteCategory(tx: Transaction, id: string): Promise<void>
     .set({ parentId: category.parentId })
     .where(eq(categoryDetails.parentId, id));
   // 4. drop preparation routes for this category, if the (optional) venue table exists.
-  if (await preparationRoutesPresent(tx))
+  if (await tablePresent(tx, "preparation_routes"))
     await tx.execute(sql`delete from preparation_routes where category_id = ${id}`);
   // 5. the category row (category_details cascades via its FK)
   await tx.delete(categories).where(eq(categories.id, id));
@@ -191,7 +203,7 @@ export async function categoryDependants(tx: Transaction, id: string): Promise<C
     .orderBy(categories.id);
   // Raw SQL, because this joins two other modules' tables by name.
   const routes: CategoryDependants["routes"] = [];
-  if (await preparationRoutesPresent(tx)) {
+  if (await tablePresent(tx, "preparation_routes")) {
     const routeRows = await tx.execute<{ id: string; station: string | null; zone: string | null }>(
       sql`
       select pr.id,
@@ -219,23 +231,20 @@ export async function readProductCategories(
   const [product] = await tx
     .select({
       primaryCategoryId: products.categoryId,
-      categoryIds: sql<
-        string[]
-      >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
+      categoryIds: categoryIdArray,
     })
     .from(products)
     .leftJoin(productCategories, eq(productCategories.productId, products.id))
     .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!product) throw new AppError("product.not_found", { productId });
-  return product;
+  return { ...product, categoryIds: JSON.parse(product.categoryIds) as string[] };
 }
 export async function replaceProductCategories(
   tx: Transaction,
   productId: string,
   input: ProductCategoryInput,
 ): Promise<ProductCategoryMembership> {
-  await lockCategories(tx);
   const current = await readProductCategories(tx, productId);
   if (
     !Array.isArray(input.categoryIds) ||
@@ -264,7 +273,7 @@ export async function replaceProductCategories(
       .values(input.categoryIds.map((categoryId) => ({ productId, categoryId })));
   await tx
     .update(products)
-    .set({ categoryId: primary, updatedAt: sql`now()` })
+    .set({ categoryId: primary, updatedAt: now() })
     .where(eq(products.id, productId));
   return { categoryIds: [...input.categoryIds].sort(), primaryCategoryId: primary };
 }
@@ -281,7 +290,6 @@ export async function addProductsToCategory(
   categoryId: string,
   productIds: string[],
 ): Promise<void> {
-  await lockCategories(tx);
   await readCategory(tx, categoryId); // 404s an absent category
   // A coerced non-array, or a malformed id reaching a uuid column, would otherwise surface as a
   // TypeError or a 22P02 — neither of which a route can serve as anything but a 500.
@@ -304,21 +312,19 @@ export async function addProductsToCategory(
   if (needReporting.length)
     await tx
       .update(products)
-      .set({ categoryId, updatedAt: sql`now()` })
+      .set({ categoryId, updatedAt: now() })
       .where(inArray(products.id, needReporting));
 }
 export async function listCategoryProducts(tx: Transaction, categoryId: string) {
   await readCategory(tx, categoryId);
   const selected = alias(productCategories, "selected_membership");
-  return tx
+  const rows = await tx
     .select({
       id: products.id,
       name: products.name,
       active: products.active,
       primaryCategoryId: products.categoryId,
-      categoryIds: sql<
-        string[]
-      >`array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId})`,
+      categoryIds: categoryIdArray,
     })
     .from(products)
     .innerJoin(
@@ -328,4 +334,5 @@ export async function listCategoryProducts(tx: Transaction, categoryId: string) 
     .innerJoin(productCategories, eq(productCategories.productId, products.id))
     .groupBy(products.id)
     .orderBy(products.id);
+  return rows.map((row) => ({ ...row, categoryIds: JSON.parse(row.categoryIds) as string[] }));
 }

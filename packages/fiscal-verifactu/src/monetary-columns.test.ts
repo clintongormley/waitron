@@ -1,3 +1,4 @@
+import { newId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -10,41 +11,46 @@ const pg = useVenueDb({
 });
 
 /**
- * `cuota_total`/`importe_total` must be `text`, not `numeric(12,2)` — this is the test that would
- * have caught the regression. `@waitron/verifactu`'s `buildCadena` reads
+ * `cuota_total`/`importe_total` hold the huella's literal hash input, so the bytes read back must
+ * equal the bytes written. `@waitron/verifactu`'s `buildCadena` reads
  * `record.CuotaTotal`/`record.ImporteTotal` verbatim as strings and hashes them byte-for-byte; it
- * never re-runs `formatAmountExact`. The stored column value therefore IS the huella's hash input, and
- * the bytes read back must equal the bytes written — a guarantee only `text` gives. `numeric`
- * would additionally silently re-render a non-canonical literal (e.g. drop a trailing zero, or
- * normalise `-0.00`), which would corrupt an art. 7.i re-render of a row nobody touched.
+ * never re-runs `formatAmountExact`. A column that re-rendered the literal — dropping a trailing
+ * zero, normalising `-0.00` — would corrupt an art. 7.i re-render of a row nobody touched.
  *
- * `numeric(12,2)` is also objectively too narrow for the domain type it was standing in for:
- * AEAT's `ImporteSgn12.2Type` allows 12 integer digits, `numeric(12,2)` allows only 10 (its
- * `precision` of 12 is TOTAL digits, split 10 integer + 2 scale) — so a fully legal 11-or-12
- * integer-digit amount overflows with SQLSTATE 22003 under `numeric(12,2)`, not merely
- * theoretically but the first time a large sale reaches this column.
+ * The amount below is 12 integer digits, the widest `ImporteSgn12.2Type` permits, and the case
+ * still asks for it because a column that silently narrowed a legal amount is the failure this
+ * test was written for. What the ENGINE refuses has changed: `packages/db/src/schema/columns.ts`
+ * records that the SQLite column accepts values its PostgreSQL predecessor rejected, so this case
+ * is now about the round trip alone and nothing here should be read as a width guarantee.
+ *
+ * Three spellings in the statement below changed with the engine, each measured against it by
+ * running this file: `'[]'::jsonb` arrived as `unrecognized token: ":"` (a colon opens a bind
+ * parameter to SQLite's parser) and the columns are TEXT holding JSON, so the cast is gone;
+ * `repeat('F', 64)` arrived as `no such function: repeat`, so the 64 F's are built in JavaScript
+ * and bound, the shape `node-columns.test.ts` already used; and `id`/`creado_en` are stated rather
+ * than omitted, because both are `$defaultFn` columns only the insert BUILDER fills — a raw
+ * statement omitting them is refused `NOT NULL constraint failed: registros_facturacion.id`.
  */
 describe("cuota_total / importe_total round-trip the huella's literal hash input", () => {
   it("stores and reads back a 12-integer-digit AEAT-legal amount byte-identically", async () => {
-    // 12 integer digits + 2 decimal — the maximum ImporteSgn12.2Type permits, and 2 digits wider
-    // than numeric(12,2)'s 10+2. Not scale-2-padded from a round number either: proves no numeric
+    // 12 integer digits + 2 decimal. Not scale-2-padded from a round number either: proves no
     // re-rendering happens on the way in or out, only a literal string round-trip.
     const importeTotal = "999999999999.99";
     const cuotaTotal = "173913043.47";
 
     const result = await pg.db.execute<{ cuota_total: string; importe_total: string }>(sql`
       insert into registros_facturacion (
-        till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+        id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
         tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
         primer_registro, sistema_informatico,
-        fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-      ) values (${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+        fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
+      ) values (${newId()}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         1, 'alta',
         '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
-        'F2', 'Venta en establecimiento', '[]'::jsonb, ${cuotaTotal}, ${importeTotal},
-        true, '{}'::jsonb,
-        '2026-07-20T19:20:30+01:00', 60, '01', repeat('F', 64)
+        'F2', 'Venta en establecimiento', '[]', ${cuotaTotal}, ${importeTotal},
+        true, '{}',
+        '2026-07-20T19:20:30+01:00', 60, '01', ${"F".repeat(64)}, '2026-07-20T18:20:30.000Z'
       ) returning cuota_total, importe_total
     `);
 

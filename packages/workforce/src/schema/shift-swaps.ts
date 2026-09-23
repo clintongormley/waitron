@@ -1,5 +1,5 @@
-import { foreignKey, index, pgEnum } from "drizzle-orm/pg-core";
-import { id, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { enumCheck, enumType, id, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { shifts } from "./shifts.js";
 
@@ -10,12 +10,7 @@ import { shifts } from "./shifts.js";
  * approve/reject transition is a later slice's owner-gated workflow (plan §7), not built here.
  * English tokens, same reason as the sibling enums.
  */
-export const shiftSwapStatus = pgEnum("shift_swap_status", [
-  "requested",
-  "accepted",
-  "approved",
-  "rejected",
-]);
+export const shiftSwapStatus = enumType(["requested", "accepted", "approved", "rejected"]);
 
 /** One of `requested`/`accepted`/`approved`/`rejected` — the `shift_swap_status` enum's union. */
 export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
@@ -23,9 +18,9 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
 /**
  * A request to swap shifts between two people — person A (the requester) offers their `from_shift` to
  * person B (`to_person`), optionally taking B's `to_shift` in return. PLANNING data, ordinary mutable
- * rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain (design 2026-07-22
- * §2.1 / plan §2.1).
+ * rows: no append-only trigger and no chain (design 2026-07-22 §2.1 / plan §2.1), so nothing in the
+ * database refuses an edit or a delete here — the grant that used to name the permitted writes went
+ * with PostgreSQL.
  *
  * `from_shift_id` cascades on delete — a swap is meaningless once the offered shift is gone, so
  * discarding that shift discards the swap. `to_shift_id` is nullable (a one-sided give-away) and SET
@@ -36,7 +31,7 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
 export const shiftSwaps = table(
   "shift_swaps",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     /** The person offering the swap — must own `from_shift` (`requestSwap` enforces it). */
     requestedByPersonId: id("requested_by_person_id").notNull(),
     /** The shift being offered. */
@@ -51,7 +46,7 @@ export const shiftSwaps = table(
     decidedByPersonId: id("decided_by_person_id"),
     /** When the swap was decided; null until it is. Mirrors roster_versions.published_at. */
     decidedAt: tsString("decided_at"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
@@ -85,5 +80,9 @@ export const shiftSwaps = table(
       name: "shift_swaps_decided_by_person_fk",
     }).onDelete("restrict"),
     index("shift_swaps_from_shift_idx").on(t.fromShiftId),
+    // The refusal the PostgreSQL enum TYPE performed, put back as a constraint: the SQLite column
+    // is plain text and refuses nothing on its own (see enumText in
+    // packages/db/src/schema/columns.ts).
+    check("shift_swaps_status_ck", enumCheck(t.status)),
   ],
 );

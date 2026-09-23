@@ -5,25 +5,19 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // globalSetup boots one shared Postgres container and makes the migrated `core` template
-    // available. The retained suites use PGlite; globalSetup still precedes every worker, so a
-    // Docker-absent run fails the whole package. See src/testing/global-setup.ts.
-    globalSetup: ["./src/testing/global-setup.ts"],
-    // The PGlite suites boot a WASM PostgreSQL and apply migrations in beforeAll, so hookTimeout
-    // covers that setup. The container boot/image pull runs in globalSetup, outside hookTimeout.
-    // testTimeout covers work inside an individual test.
+    // `testTimeout` covers work inside an individual test. `hookTimeout` bounds only a hook that
+    // passes no timeout of its OWN, so it does NOT bound the database setup: `useVenueDb` hands its
+    // own timeout to `beforeAll` (60s unless the suite overrides it;
+    // `packages/db/src/testing/venue-db.ts`).
     testTimeout: 30_000,
     hookTimeout: 180_000,
-    // The suites use PGlite and do not open PostgreSQL backend pools, so they need no
-    // shared-cluster connection cap. Coverage merges across the default fork workers.
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // src/index.ts is a pure re-export barrel; src/testing/** and test/** hold the DB harness and
-      // fixtures. All are test infrastructure, not measured product code (the same exclusions
-      // packages/recipes records).
-      exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/testing/**", "test/**"],
+      // src/index.ts is a pure re-export barrel; test/** holds the database fixtures. Both are test
+      // infrastructure, not measured product code (the same exclusions packages/recipes records).
+      exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "test/**"],
       thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
     },
   },

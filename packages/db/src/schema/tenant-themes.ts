@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check } from "drizzle-orm/pg-core";
-import { count, json, table, tsString } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { count, json, nowIso, table, tsString } from "./columns.js";
 
 /**
  * The owner-authored base THEME (design §4, SP-A.2 §16.3).
@@ -24,7 +24,7 @@ export const tenantThemes = table(
     // Timestamp: `tsString` follows the `devices` precedent (devices.ts) — an inert Drizzle
     // read-type choice, not a column-type difference; the "same precedent" note above is about the
     // jsonb decision only, not this column.
-    updatedAt: tsString("updated_at").notNull().defaultNow(),
+    updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [check("tenant_themes_singleton_ck", sql`${t.id} = 1`)],
 );

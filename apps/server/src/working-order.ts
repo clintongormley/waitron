@@ -43,6 +43,7 @@ import {
   isUniqueViolation,
   kitchenCourses,
   kitchenStations,
+  nowIso,
   products,
   sales,
   ticketItems,
@@ -486,8 +487,9 @@ async function priceOrderLines(
 
   // KDS-2 (A1): screen each non-null course OVERRIDE against the SAME live-course definition the config
   // verbs use, so this — the ONE course-write path that skipped it — no longer accepts a crafted id. A
-  // malformed (non-uuid) override would `22P02` at `requireLiveCourse`'s own `id = $1` uuid cast, so fold
-  // it to the SAME `course.not_found` first (the shape the fire route's `isUuid` screen uses);
+  // malformed (non-uuid) override reaches `requireLiveCourse`'s own `id = $1` read, which neither
+  // objects to it nor matches it, so fold it to the SAME `course.not_found` first (the shape the fire
+  // route's `isUuid` screen uses);
   // `requireLiveCourse` then refuses an absent / DIFFERENT-venue (its FK does not carry the venue) / retired
   // id — location-scoped, `course.not_found`. Only the OVERRIDE is screened: the product DEFAULT
   // (`product.course_id`, resolved below) is an already-valid stored FK, and re-validating it would
@@ -764,12 +766,12 @@ export function toVatBreakdown(
  *
  * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
  * That id is what makes park IDEMPOTENT — a re-sent park (a lost-response retry) PK-collides on
- * `working_orders.id`, and `parkOrder` catches that 23505 and REPLAYS the existing OPEN order's
+ * `working_orders.id`, and `parkOrder` catches that refusal and REPLAYS the existing OPEN order's
  * `{ id, orderNumber }` rather than surfacing the collision, so at most one order is ever parked for the
  * id and the retry sees the original result. This mirrors PAY's own replay (`payWorkingOrder`, which
  * re-returns an already-settled order's ticket rather than filing a second chained record). The ONE
  * exception is a colliding id whose committed row is no longer `open` (abandoned/settled/placed) — a
- * pathological id reuse, not a held-order retry — which is re-thrown as the raw 23505 unchanged.
+ * pathological id reuse, not a held-order retry — which is re-thrown raw and unchanged.
  * `quantity` is a positive decimal string validated against the selected unit's snapshotted precision.
  *
  * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
@@ -842,7 +844,7 @@ export async function createOpenOrder(
 }> {
   // Check the delivery table exists before insertion so an unknown id produces
   // table.not_found rather than a raw foreign-key failure. One tenant per database, so the id alone
-  // identifies the table. This permits an inactive table and takes no row lock.
+  // identifies the table. This permits an inactive table.
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
   if (deliveryTableId !== null) {
@@ -936,12 +938,12 @@ export async function parkOrder(
     if (!isUniqueViolation(error)) {
       throw error;
     }
-    // A 23505 on `working_orders_pkey`: a re-sent park (see `ParkOrderRequest` for the stable client id)
-    // collides on the id an EARLIER park already committed. That row is READABLE now in a fresh
-    // transaction — the unique violation fires only against a COMMITTED conflicting row (an UNCOMMITTED
-    // concurrent insert of the same key would BLOCK on the index until its writer commits or aborts, not
-    // error), which is exactly why `payWorkingOrder`'s 23505 backstop (`till-sale.ts`) replays in a fresh
-    // tx too. Replay the committed OPEN order's number, filing and inserting nothing.
+    // A duplicate-key refusal on `working_orders`' primary key: a re-sent park (see `ParkOrderRequest`
+    // for the stable client id) collides on the id an EARLIER park already committed. That row is
+    // READABLE in a fresh transaction, because `packages/store/src/write-queue.ts` admits one write
+    // transaction on the venue file at a time — so the colliding row was committed before this
+    // transaction began, and there is no uncommitted writer to wait for. That is why
+    // `payWorkingOrder`'s duplicate-key backstop (`till-sale.ts`) replays in a fresh tx too. Replay the committed OPEN order's number, filing and inserting nothing.
     return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [existing] = await tx
@@ -949,7 +951,7 @@ export async function parkOrder(
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // Not a replayable held order — the colliding id is not `open` (abandoned/settled/placed, a
-      // pathological id reuse) — so re-throw the raw 23505 unchanged per the docstring's exception, never fabricating a result.
+      // pathological id reuse) — so re-throw the raw refusal unchanged per the docstring's exception, never fabricating a result.
       if (existing === undefined) {
         throw error;
       }
@@ -959,19 +961,35 @@ export async function parkOrder(
 }
 
 /**
- * Open the running tab on a table (design §3a). Takes the `dining_tables` row `FOR UPDATE` — THIS
- * per-table lock is the one-open-tab-per-table concurrency guard: there is NO partial-unique now (a
- * single nullable `tab_id` gives one-tab-per-table structurally), so the lock is what serialises the
- * check-then-set. A second concurrent openTab on the same table blocks on this lock until the first
- * commits, then reads the now-set `tab_id`, finds it points at an OPEN order, and is refused
- * `tab.already_open` (proven by deletion of the lock — §7). A STALE `tab_id` (pointing at a
- * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no settle-time
- * write (design §2b).
+ * Open the running tab on a table (design §3a).
+ *
+ * ## One open tab per table, without a lock
+ *
+ * There is NO partial-unique index behind this rule — a single nullable `tab_id` gives
+ * one-tab-per-table structurally, and what enforces it against a second caller is that the
+ * check-then-set below runs without interruption. On PostgreSQL the `dining_tables` row was taken
+ * `for update` to arrange that. What arranges it now is that a second `openTab` on the same table
+ * cannot be running at the same time at all: one write transaction runs on the venue file at a
+ * time. `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`) carries the mechanism and
+ * the receipt for that; the call chain from here is `withTransaction`
+ * (`packages/db/src/tenancy.ts:34`) → `StoreHandle.withWriteLock`
+ * (`packages/store/src/index.ts:176`) → `createWriteQueue(...).run`
+ * (`packages/store/src/write-queue.ts:19`), which issues `begin immediate`, awaits the body and
+ * only then `commit`s, so the next caller's `begin` has not run yet.
+ *
+ * The second `openTab` therefore runs after the first has committed, reads the now-set `tab_id`,
+ * finds it points at an OPEN order, and is refused `tab.already_open` — the same outcome, reached
+ * by waiting for the whole transaction rather than for one row. A STALE `tab_id` (pointing at a
+ * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no
+ * settle-time write (design §2b).
+ *
+ * The read itself survives the lock: it is also the `table.not_found` / `table.inactive` check and
+ * the source of `zoneId`.
  *
  * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
  * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
  * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
- * CALLER's transaction as app_user. `table.not_found`/`table.inactive` guard the
+ * CALLER's transaction. `table.not_found`/`table.inactive` guard the
  * table itself.
  */
 export async function openTab(
@@ -985,8 +1003,7 @@ export async function openTab(
   const [table] = await tx
     .select({ active: diningTables.active, tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
-    .where(eq(diningTables.id, req.tableId))
-    .for("update");
+    .where(eq(diningTables.id, req.tableId));
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
   }
@@ -1030,28 +1047,30 @@ export async function openTab(
 }
 
 /**
- * Lock an open working-order row, otherwise tab.not_open. This accepts table-less
- * orders; lockOpenTab adds the table back-pointer check. Callers that also lock dining
- * tables acquire working-order locks first, matching the settlement path.
+ * This working order is an open tab a dining table points at, else `tab.not_open`. The status half
+ * is {@link assertTabOpen}; the back-pointer is what makes it a TAB rather than a detached CHECK (a
+ * table-less open order a split minted), and it is the half `splitOffCheck` and `transferLines`
+ * gate on.
+ *
+ * On PostgreSQL this also took the tab's `working_orders` row `for update`. That lock arranged
+ * one thing: that a second writer on the same tab — another round, a void, a pay — could not
+ * interleave with the caller's read-then-write. There is no second writer to interleave with. One
+ * write transaction runs on the venue file at a time; `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`) carries the mechanism and the receipt, and the chain from
+ * here is `withTransaction` (`packages/db/src/tenancy.ts:34`) → `StoreHandle.withWriteLock`
+ * (`packages/store/src/index.ts:176`) → `createWriteQueue(...).run`
+ * (`packages/store/src/write-queue.ts:19`). What the name says now is all this function does: it
+ * asserts, and every caller's subsequent statements were already safe from anyone else.
+ *
+ * The back-pointer read never held a lock even on PostgreSQL — it was a plain SELECT — so nothing
+ * about it changed.
  */
-async function lockOpenTabRow(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
-  void cfg;
-  const [row] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (row?.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
-  }
-}
-
-/**
- * Lock the open working-order row and require a dining-table back-pointer.
- * The caller holds the lock through its line allocation or deletion until commit.
- */
-async function lockOpenTab(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
-  await lockOpenTabRow(tx, cfg, tabId);
+async function assertAnchoredTabOpen(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+): Promise<void> {
+  await assertTabOpen(tx, cfg, tabId);
   const [pointer] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -1075,9 +1094,9 @@ async function lockOpenTab(tx: Transaction, cfg: TillConfig, tabId: string): Pro
  *
  * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
  * denormalised grouping key; `working_order_line_id` is the fired line, whose `(
- * working_order_line_id)` unique makes a double-fire collide (23505) rather than duplicate. The two
+ * working_order_line_id)` unique makes a double-fire collide rather than duplicate. The two
  * catalogue reads (the venue default once, then all lines' product/category routes in one batched
- * `inArray`) and the insert all run on the CALLER's transaction as app_user. An
+ * `inArray`) and the insert all run on the CALLER's transaction. An
  * empty `lines` inserts nothing — the `values([])` guard `createOpenOrder` uses.
  *
  * SIDE EFFECT (KDS-4 print-on-fire, §3b): after the insert, the newly-fired items (the insert's
@@ -1175,8 +1194,16 @@ export async function fireLines(
     .select({
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
-      anyFired: sql<boolean>`bool_or(${ticketItems.firedAt} is not null)`,
-      itemCount: sql<number>`count(${ticketItems.id})::int`,
+      // `max(...)` over 0/1 in place of PostgreSQL's `bool_or`, which this engine does not have.
+      // `is not null` yields 1 or 0 here, so a group's maximum is 1 exactly when one of its items
+      // is fired. Measured 2026-09-22 on Node v26.7.0 over this same LEFT JOIN shape: a course with
+      // a fired item reads 1, one with only unfired items reads 0, and one with no items at all
+      // reads 0 rather than null — so the truthiness test below sorts all three the way `bool_or`
+      // did. The value arrives as a number; nothing here compares it with `===`.
+      anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null)`,
+      // `cast(x as int)` in place of `x::int`: this engine has no cast OPERATOR and refuses the
+      // colons with `unrecognized token: ":"`.
+      itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)
     .leftJoin(
@@ -1214,9 +1241,13 @@ export async function fireLines(
       ? new Map<string, PreparationRoute>()
       : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
+  // One clock reading for the whole round, so every item of it carries the same `fired_at` — which
+  // is what PostgreSQL's `now()`, being transaction-start time, gave for free. `nowIso` because
+  // these are `tsString` columns, and that spelling is what makes a later comparison on them a
+  // correct time ordering (`packages/printing/src/runtime.ts` has the measurement).
+  const firedAt = nowIso();
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
-  // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
-  // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
+  // to go.
   const values = lines
     .map((line) => {
       const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
@@ -1260,7 +1291,7 @@ export async function fireLines(
         // ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
         // afterwards never moves this fired ticket.
         note: line.note,
-        firedAt: fired ? sql`now()` : null,
+        firedAt: fired ? firedAt : null,
         state: "queued" as const,
       };
     })
@@ -1278,7 +1309,7 @@ export async function fireLines(
     });
   } catch (error) {
     // A line already fired collides on `ticket_items`' per-line `(working_order_line_id)`
-    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
+    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that refusal to the domain
     // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
     // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
     // path (placeOrder / sendToPrep / addTabRound) is covered by construction. Any other error re-throws.
@@ -1312,7 +1343,9 @@ export async function fireCourse(
   await requireCourse(tx, cfg, courseId);
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: sql`now()` })
+    // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does
+    // not have. `nowIso` because `fired_at` is a `tsString` column.
+    .set({ firedAt: nowIso() })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1341,7 +1374,7 @@ export async function sendLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   // Empty list ⇒ no line filter ⇒ every HELD line of the tab fires ("send all together"). A non-empty
   // list restricts the fire to the ticket items whose line is in the set. The subquery selects from
   // `working_order_lines` (its own FROM), so its bare `"id"` resolves inward and the outer
@@ -1362,9 +1395,12 @@ export async function sendLines(
               ),
             ),
         );
+  // ONE clock reading for both stamps: `now()` was transaction time, so the two calls it replaces
+  // could not disagree, and `queued_at` is what every age on the boards is measured from.
+  const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: sql`now()`, queuedAt: sql`now()` })
+    .set({ firedAt: firedNow, queuedAt: firedNow })
     .where(
       and(
         eq(ticketItems.workingOrderId, tabId),
@@ -1394,7 +1430,7 @@ export async function recallLines(
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   if (lineNos.length === 0) {
     return;
   }
@@ -1414,20 +1450,24 @@ export async function recallLines(
     }
   }
   const lineIds = lines.map((r) => r.id);
-  // Race-safe read (Copilot #191, twin of setLineCourse). {@link fireCourse} stamps `fired_at` on
-  // `ticket_items` WITHOUT taking {@link lockOpenTab}, so the tab-row lock above does NOT serialise it: a
-  // concurrent `fireCourse` firing (and PRINTING) a held line BETWEEN this lock-free read and the un-fire
-  // below would leave the line seen as not-previously-fired here — so it would be un-fired with NO RECALLED
-  // slip enqueued, while the kitchen ticket `fireCourse` printed is never pulled. So take a ROW LOCK on the
-  // named lines' held ticket-item rows (`FOR UPDATE`) BEFORE reading `state`/`fired_at` for the started
-  // check AND the RECALLED capture. A concurrent `fireCourse`'s `UPDATE ticket_items` on any of these rows
-  // then BLOCKS until this tx commits, serialising the two: either this recall wins (reads the line held,
-  // un-fires it, nothing printed, no slip) or `fireCourse` wins (line fires + prints, and this recall then
-  // reads it as previously-fired → un-fires AND enqueues the RECALLED slip). A line with NO ticket item yet
-  // (a pending line) contributes no row: not started, never fired, un-fire is a no-op. Single-table lock,
-  // NOT a LEFT JOIN, so no lock-through-outer-join hazard. `working_order_line_id` is unique on
-  // `ticket_items`, so each line contributes at most one row. Read BEFORE the un-fire so a STARTED
-  // (preparing/ready) line can be named in the refusal and `fired_at` reflects the pre-recall state.
+  // The named lines' ticket items, read for two things at once: the started check below, and the
+  // set of lines that had actually printed and so need a RECALLED slip.
+  //
+  // This read used to take `for update` on those rows (Copilot #191, twin of setLineCourse), and
+  // the hazard it was aimed at was specific: {@link fireCourse} stamps `fired_at` on `ticket_items`
+  // WITHOUT calling {@link assertAnchoredTabOpen}, so the tab-row lock this verb held did not
+  // serialise it — a concurrent `fireCourse` could fire and PRINT a held line between an unlocked
+  // read here and the un-fire below, leaving the line un-fired with no RECALLED slip while the
+  // ticket it printed is never pulled. That hazard needed two transactions overlapping. One write
+  // transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
+  // and the receipt), so a `fireCourse` is either wholly before this recall or wholly after it, on
+  // every row in the file rather than on the ones a clause named.
+  //
+  // What the read still gives is unchanged: a line with NO ticket item yet (a pending line)
+  // contributes no row — not started, never fired, un-fire is a no-op — and
+  // `working_order_line_id` is unique on `ticket_items`, so each line contributes at most one. It
+  // stays BEFORE the un-fire so a STARTED (preparing/ready) line can be named in the refusal and
+  // `fired_at` reflects the pre-recall state.
   const items = await tx
     .select({
       ticketItemId: ticketItems.id,
@@ -1437,8 +1477,7 @@ export async function recallLines(
       stationId: ticketItems.stationId,
     })
     .from(ticketItems)
-    .where(inArray(ticketItems.workingOrderLineId, lineIds))
-    .for("update");
+    .where(inArray(ticketItems.workingOrderLineId, lineIds));
   // Refuse the WHOLE call if any named line has started (nothing is un-fired unless every line is
   // recallable). A started line has a ticket item, so it appears in `items`.
   const started = items.find((r) => r.state === "preparing" || r.state === "ready");
@@ -1506,7 +1545,8 @@ export async function markCourseAway(
   await requireCourse(tx, cfg, courseId);
   await tx
     .update(ticketItems)
-    .set({ awayAt: sql`now()` })
+    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+    .set({ awayAt: nowIso() })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1524,11 +1564,13 @@ export async function markCourseAway(
  * the whole basket (`:633-634`), re-locking every line at the current catalogue price — wrong for an
  * incremental tab.
  *
- * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
- * row is taken `FOR UPDATE` by {@link lockOpenTab}, which serialises concurrent writers to this tab on
- * the `working_orders` row lock, so the `max(line_no)+1` read-then-insert below cannot interleave. A
- * naïve `max(line_no)+1` without the lock races and collides on the `working_order_lines`
- * `(working_order_id, line_no)` unique — a real-PG concurrent test proves it by deletion of the lock.
+ * Concurrency (this matters for QR ordering — multiple guests append to one shared tab at once):
+ * the `max(line_no)+1` read-then-insert below must not interleave with another append, or both
+ * compute the same `line_no` and the second collides on the `working_order_lines`
+ * `(working_order_id, line_no)` unique. On PostgreSQL the tab's `working_orders` row was held
+ * `for update` to arrange that. Nothing can interleave with it now: one write transaction runs on
+ * the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the receipt), so
+ * the two appends run one after the other and the second reads the first's committed maximum.
  */
 export async function addTabRound(
   tx: Transaction,
@@ -1552,14 +1594,14 @@ export async function addTabRound(
     hold?: boolean;
   } & LineExtras)[],
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  // The next line_no, allocated under the per-tab row lock — concurrent rounds serialise on it, so no two
-  // reads see the same max.
+  // The next line_no. Two concurrent rounds cannot both read this max, because they cannot both be
+  // running (the docstring's concurrency note).
   const [{ maxLineNo }] = await tx
-    .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .select({ maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
   // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
@@ -1612,9 +1654,11 @@ export async function addTabRound(
 /**
  * Void ONE not-yet-paid line from an OPEN tab (design §3b) — pre-fiscal, so nothing is filed and there
  * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
- * `require_open_parent` trigger is the DB backstop). {@link lockOpenTab} locks the tab row `FOR UPDATE`
- * so a concurrent round/pay cannot race the delete, and confirms it is an open tab. `tab.not_open` if the
- * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it.
+ * `require_open_parent` trigger is the DB backstop). {@link assertAnchoredTabOpen} confirms it is an
+ * open tab — `tab.not_open` if it is not; `tab.line_not_found` if the `line_no` matches nothing on
+ * it. It used to also hold the tab row `for update` so a concurrent round or pay could not race the
+ * delete; there is no concurrent round or pay to race, because one write transaction runs on the
+ * venue file at a time (that function carries the chain and the receipt).
  *
  * CORRECTION PRINT (A6): if the voided line had ALREADY FIRED (printed) — its ticket item carries a
  * non-null `fired_at` — a VOID correction slip tells the paper kitchen to bin it. The ticket item is read
@@ -1630,12 +1674,12 @@ export async function voidTabLine(
   tabId: string,
   lineNo: number,
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   // FIX 2: a parent dish takes its modifiers with it (design §6). Resolve the named line's id first so
   // its child modifier lines (`parent_line_id = <that id>`) can be removed in the SAME delete — the
   // self-referential `working_order_lines_parent_fk` is NO ACTION (0080), checked at statement END, so
-  // deleting the parent alone would orphan its children and raise 23503 (an opaque `server.internal`
-  // 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
+  // deleting the parent alone would orphan its children and be refused by the foreign key (an opaque
+  // `server.internal` 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
   // Voiding a CHILD line directly matches only itself (a modifier has no children), so this is a plain
   // one-row delete in that case — unchanged behaviour.
   // A6: resolve the named line AND its (at most one) ticket item in ONE round trip via a LEFT JOIN, still
@@ -1675,9 +1719,11 @@ export async function voidTabLine(
 
 /**
  * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null
- * (coursing editing A1, design §3b). {@link lockOpenTab} locks the tab row `FOR UPDATE` and confirms it
- * is an open tab a `dining_tables.tab_id` points at (else `tab.not_open`), serialising this re-course
- * against a concurrent round/void the way every tab verb does. A non-null target is screened with
+ * (coursing editing A1, design §3b). {@link assertAnchoredTabOpen} confirms it is an open tab a
+ * `dining_tables.tab_id` points at (else `tab.not_open`); what used to serialise this re-course
+ * against a concurrent round or void was its `for update`, and what does it now is that no such
+ * transaction can be running (that function carries the chain and the receipt). A non-null target
+ * is screened with
  * {@link requireLiveCourse} — the SAME live-course definition the config/fire verbs use, so an absent /
  * foreign / RETIRED course is `course.not_found` (a deactivated course is not a valid new target); a
  * malformed (non-uuid) id is screened to that same code at the ROUTE before it reaches this uuid cast.
@@ -1701,7 +1747,7 @@ export async function setLineCourse(
   lineNo: number,
   courseId: string | null,
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
@@ -1714,23 +1760,28 @@ export async function setLineCourse(
   if (line === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  // Race-safe fired check (Copilot #191). {@link fireCourse} stamps `fired_at` on `ticket_items` WITHOUT
-  // taking {@link lockOpenTab}, so the tab-row lock above does NOT serialise it: a concurrent `fireCourse`
-  // could fire this line AFTER a lock-free read of `fired_at` and BEFORE this verb's write, re-coursing an
-  // already-fired line under the pass. So take a ROW LOCK on this line's held ticket item (`FOR UPDATE`)
-  // BEFORE reading `fired_at`. A concurrent `fireCourse`'s `UPDATE ticket_items` on the same row then BLOCKS
-  // until this tx commits, serialising the two: either we re-course the held line (and it fires LATER under
-  // its new course — `fireCourse`'s `course_id` predicate re-reads the moved row and skips it) or
-  // `fireCourse` fires first and this SELECT then reads `fired_at` set and throws `ticket.already_fired`. A
-  // line with NO ticket item yet (a pending line) locks zero rows and has no fire to race — the check below
-  // is skipped and the `ticket_items` update stays a 0-row no-op. This REVERTS the simplify pass's LEFT-JOIN
-  // fold here (correctness over the one-query micro-optimisation); the sibling `voidTabLine`/`recallLines`
-  // folds keep theirs. `working_order_line_id` is unique on `ticket_items`, so at most one row is locked.
+  // This line's held ticket item, read to decide whether the line has already fired.
+  //
+  // It used to be read `for update` (Copilot #191), against a specific hazard: {@link fireCourse}
+  // stamps `fired_at` on `ticket_items` WITHOUT calling {@link assertAnchoredTabOpen}, so the
+  // tab-row lock this verb held did not serialise it, and a concurrent `fireCourse` could fire this
+  // line after an unlocked read of `fired_at` and before the write below — re-coursing a line the
+  // pass is already cooking. That needed two transactions overlapping, and they cannot: one write
+  // transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
+  // and the receipt). Either this verb re-courses the held line and it fires LATER under its new
+  // course (`fireCourse`'s `course_id` predicate re-reads the moved row and skips it), or
+  // `fireCourse` committed first and this read sees `fired_at` set and throws
+  // `ticket.already_fired`.
+  //
+  // It stays its own query rather than the LEFT JOIN the simplify pass folded it into, because the
+  // separate read is what the `ticket.already_fired` refusal is taken from; the sibling
+  // `voidTabLine`/`recallLines` folds keep theirs. A line with NO ticket item yet (a pending line)
+  // returns no row — the check below is skipped and the `ticket_items` update stays a 0-row no-op
+  // — and `working_order_line_id` is unique on `ticket_items`, so at most one row comes back.
   const [item] = await tx
     .select({ firedAt: ticketItems.firedAt })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderLineId, line.id))
-    .for("update");
+    .where(eq(ticketItems.workingOrderLineId, line.id));
   // A line whose kitchen ticket has already fired is corrected via recall, not moved — refuse it here.
   if (item !== undefined && item.firedAt != null) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
@@ -1742,8 +1793,9 @@ export async function setLineCourse(
 
 /**
  * Set (or clear) ONE line's `served_at` on an OPEN tab — the shared body of {@link markLineServed} and
- * {@link unmarkLineServed}. {@link lockOpenTab} locks the tab row `FOR UPDATE` and confirms it is an
- * open tab a `dining_tables.tab_id` points at (else `tab.not_open`), then a single conditional UPDATE
+ * {@link unmarkLineServed}. {@link assertAnchoredTabOpen} confirms it is an open tab a
+ * `dining_tables.tab_id` points at (else `tab.not_open`) — it no longer holds the row, for the
+ * reason that function gives — then a single conditional UPDATE
  * writes the line: `served ? now() : null`. `now()` is the DATABASE clock (the venue's server time),
  * not a JS instant — the served marker is a floor-UI signal, so the write is stamped where every other
  * timestamp on this row is. A 0-row UPDATE (no such `line_no` on the tab) throws `tab.line_not_found`,
@@ -1762,10 +1814,11 @@ async function setLineServed(
   lineNo: number,
   served: boolean,
 ): Promise<void> {
-  await lockOpenTab(tx, cfg, tabId);
+  await assertAnchoredTabOpen(tx, cfg, tabId);
   const updated = await tx
     .update(workingOrderLines)
-    .set({ servedAt: served ? sql`now()` : null })
+    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+    .set({ servedAt: served ? nowIso() : null })
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
     .returning({ lineNo: workingOrderLines.lineNo });
   if (updated.length === 0) {
@@ -1813,19 +1866,21 @@ export async function unmarkLineServed(
  * allocation collide with the rows being updated. `mergeTabs` already guards this at its own top, but
  * `moveTabLines` is an exported primitive, so the guard lives here too, reusing `tab.merge_self`.
  *
- * Both tabs are locked `FOR UPDATE` in ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order
- * discipline, NOT a deadlock-safety property any concurrent test at THIS level exercises: this primitive's
- * only caller today (`mergeTabs`) has already taken both `working_orders` row locks (in this same
- * ascending-id order) before `moveTabLines` runs, so the re-lock here is a deliberate no-op and no
- * `moveTabLines`-level race reaches this ordering. (mergeTabs's OWN lock order — `working_orders` before
- * `dining_tables` — is what carries the merge-vs-pay deadlock safety; see there.) These locks are on
- * `working_orders`, whose `id` is its PRIMARY KEY, so `mergeTabs`'s unindexed-`tab_id` seq-scan argument
- * does not apply to this leg. Their status is read off the locked copies: a non-`open` parent is refused
- * `tab.not_open` (moving lines under a settled/abandoned order would violate
- * `working_order_lines_require_open_parent` anyway). The lock on `toTab` also serialises `line_no`
- * allocation the way `addTabRound`'s per-tab lock does, so a concurrent append/move cannot collide on the
- * `working_order_lines` `(working_order_id, line_no)` unique. Runs on the CALLER's transaction as
- * app_user.
+ * Both tabs' `working_orders` rows are read in ONE query and their status checked: a non-`open`
+ * parent is refused `tab.not_open` (moving lines under a settled/abandoned order would violate
+ * `working_order_lines_require_open_parent` anyway). That read survives unchanged.
+ *
+ * What is gone is the `for update` it carried, and with it a whole paragraph of lock-order
+ * reasoning — an ascending-`id` discipline against a deadlock between two transactions holding
+ * each other's rows. Two transactions cannot hold anything at the same time: one write transaction
+ * runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the
+ * receipt), so there is no pair to order and no deadlock class to defend against. The `orderBy`
+ * went with it — the two rows are picked out of the result by id with `.find` below, so the order
+ * they arrive in has no effect at all. The `toTab` lock's second job, serialising `line_no`
+ * allocation against a concurrent append, is covered by the same one-writer property
+ * (`addTabRound` says the same about its own allocation).
+ *
+ * Runs on the CALLER's transaction.
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -1839,14 +1894,12 @@ export async function moveTabLines(
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
   }
-  const locked = await tx
+  const both = await tx
     .select({ id: workingOrders.id, status: workingOrders.status })
     .from(workingOrders)
-    .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)))
-    .orderBy(workingOrders.id)
-    .for("update");
-  const from = locked.find((r) => r.id === fromTabId);
-  const to = locked.find((r) => r.id === toTabId);
+    .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)));
+  const from = both.find((r) => r.id === fromTabId);
+  const to = both.find((r) => r.id === toTabId);
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
@@ -1886,9 +1939,10 @@ export async function moveTabLines(
     .where(sourceWhere)
     .orderBy(workingOrderLines.lineNo);
 
-  // The next free line_no on the destination, allocated under the toTab lock above (no race).
+  // The next free line_no on the destination. Nothing can append to it between this read and the
+  // updates below (the docstring's concurrency note).
   const [agg] = await tx
-    .select({ next: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .select({ next: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
@@ -1920,10 +1974,17 @@ export async function moveTabLines(
 }
 
 /**
- * Assert a working order is an OPEN tab, else throw `tab.not_open` (design §3) — the one definition of
- * "this tab is open" that `moveTab`/`joinTable` both gate on, so the check cannot drift between them. A
- * single UNLOCKED status read: deliberately NOT `lockOpenTab`, which takes `FOR UPDATE` and checks a
- * `dining_tables` back-pointer both verbs intentionally avoid (see their docstrings).
+ * Assert a working order is OPEN, else throw `tab.not_open` (design §3) — the one definition of
+ * "this order is open", so the check cannot drift between the verbs that make it. A single status
+ * read, and deliberately NOT {@link assertAnchoredTabOpen}: `moveTab`, `joinTable` and
+ * `unjoinTable` all work on orders whose `dining_tables` back-pointer is exactly what they are
+ * about to change, so requiring one up front would be wrong (see their docstrings).
+ *
+ * Two functions used to make this exact read, differing only by a `for update` on the row. With
+ * that clause gone the two bodies were the same statement and the same refusal, so there is one
+ * of them. What the lock arranged — that no other writer touches this order between
+ * the read and the caller's write — the venue file's write queue arranges for every row at once
+ * ({@link assertAnchoredTabOpen} carries the chain and the receipt).
  */
 async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
   void cfg;
@@ -2066,8 +2127,8 @@ export async function readTabLines(
 /**
  * Assert a move/join TARGET table exists, is `active`, and is FREE — the one occupancy predicate the
  * whole table-service feature rests on (design §3), shared by `moveTab`/`joinTable` so the three-way
- * check cannot drift between them. `table` is the caller's already-fetched-and-`FOR UPDATE`-locked row
- * (or undefined). "Free" = `tab_id` null OR pointing at a settled/abandoned order (a stale pointer,
+ * check cannot drift between them. `table` is the row the caller already read (or undefined).
+ * "Free" = `tab_id` null OR pointing at a settled/abandoned order (a stale pointer,
  * TS-1 §2b); a still-`open` pointed order throws `table.occupied` ("use merge"). Throws
  * `table.not_found`/`table.inactive`/`table.occupied`, each naming the caller-supplied `tableId`.
  */
@@ -2115,14 +2176,22 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
  * `table.occupied` ("use merge"). Then frees the tab's current source table(s) and points the target at
  * the tab. NO line-move, no fiscal effect.
  *
- * Locks the involved `dining_tables` rows (target + the tab's current source table(s)) `FOR UPDATE` in
- * ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order discipline shared across the
- * table-service verbs, NOT a deadlock-safety property any concurrent test exercises (this verb's race
- * test proves the single TARGET-row lock below, not the multi-row ordering). Locking the target
- * is the concurrency guard: a second concurrent move onto the same free table blocks, then re-reads its
- * now-set `tab_id` and is refused `table.occupied` (proven by deletion of this lock — §7). The tab's own
- * `working_orders` row is NOT locked (a move neither settles nor abandons it — unlike merge); a race
- * with a concurrent pay leaves at worst a harmless stale pointer, which the occupancy read ignores.
+ * Reads the involved `dining_tables` rows (target + the tab's current source table(s)) in one
+ * query. That read survives: it is what `assertTableAvailable` judges, and it carries the target's
+ * `zoneId`.
+ *
+ * It used to take them `for update`, in ascending `id` order. The target's lock was the
+ * concurrency guard — a second concurrent move onto the same free table blocked, then re-read its
+ * now-set `tab_id` and was refused `table.occupied` — and the ascending order was a defensive
+ * discipline against a deadlock between two such movers. Neither is needed: one write transaction
+ * runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the
+ * receipt), so the second move runs after the first has committed and is refused `table.occupied`
+ * by the same read, and no two transactions hold rows to deadlock over. The `orderBy` went with
+ * the lock — the target is picked out of the result by id with `.find` below, so the order the
+ * rows arrive in has no effect.
+ *
+ * The tab's own `working_orders` row was never locked either (a move neither settles nor abandons
+ * it — unlike merge).
  *
  * The freed source table(s) get `tab_id → NULL` AND `status_id → NULL` in one statement — a move is a
  * turnover for the source, so its TS-2 manual status must not linger onto the next party (design §4).
@@ -2147,9 +2216,7 @@ export async function moveTab(
       zoneId: diningTables.zoneId,
     })
     .from(diningTables)
-    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
-    .orderBy(diningTables.id)
-    .for("update");
+    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)));
   await assertTableAvailable(
     tx,
     cfg,
@@ -2173,8 +2240,13 @@ export async function moveTab(
 }
 
 /**
- * Join an active, free table to an open tab. Lock the target table before checking
- * occupancy so concurrent joins serialize. The existing tab lines remain in place.
+ * Join an active, free table to an open tab. The existing tab lines remain in place.
+ *
+ * The target row was read `for update` so that two concurrent joins onto one free table serialised
+ * and the loser saw the winner's `tab_id` and was refused `table.occupied`. They still serialise,
+ * and for a wider reason: one write transaction runs on the venue file at a time
+ * ({@link assertAnchoredTabOpen} carries the chain and the receipt). The read itself is unchanged
+ * — it is what `assertTableAvailable` judges and where the zone check below gets `zoneId`.
  */
 export async function joinTable(
   tx: Transaction,
@@ -2192,8 +2264,7 @@ export async function joinTable(
       zoneId: diningTables.zoneId,
     })
     .from(diningTables)
-    .where(eq(diningTables.id, tableId))
-    .for("update");
+    .where(eq(diningTables.id, tableId));
   await assertTableAvailable(tx, cfg, table, tableId);
 
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
@@ -2222,27 +2293,23 @@ export async function joinTable(
  * case, the source turns over); `false` re-points it at `intoTab` (both tables now covered by the one
  * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
  *
- * Lock order — both `working_orders` rows `FOR UPDATE` ASCENDING id FIRST, THEN the involved
- * `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id. This MATCHES the
- * sale/settle/abandon path: `payWorkingOrder` (till-sale.ts) locks the `working_orders` row `FOR UPDATE`,
- * then its settle UPDATE fires the 0050 `working_orders_clear_table_status` trigger, which UPDATEs
- * `dining_tables WHERE tab_id = NEW.id` — i.e. `working_orders` then `dining_tables`; `collectOrder`
- * (settle, which locks its `working_orders` row with an explicit `SELECT … FOR UPDATE`) and
- * `abandonHeldOrder` (abandon, via its conditional `UPDATE working_orders`) each lock the
- * `working_orders` row BEFORE the same trigger touches `dining_tables` — the identical two-class order.
- * Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
- * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
- * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
- * race test (move-merge.pg.test.ts) asserts no 40P01, and by deletion the previous
- * `dining_tables`-first order reproduces the 40P01 against the real trigger.
+ * ## The lock-order argument is retired, and so is the second query it needed
  *
- * The `dining_tables` leg's OWN ascending-id order is, by contrast, DEFENSIVE not proven load-bearing:
- * for a merge-vs-merge (same-verb) race the `dining_tables` lock is on the UNINDEXED `tab_id`, so both
- * backends seq-scan the two rows in identical heap order and serialise on the first regardless of the
- * `.orderBy`. The ascending-id discipline on that leg only future-proofs against a schema/plan change
- * that lets scan orders diverge; a same-verb race cannot prove it load-bearing (a §1 "both answers look
- * alike" measurement). The deterministic hazard control (move-merge.pg.test.ts) proves the general
- * inconsistent-order 40P01 hazard is real.
+ * This verb used to take four locks in a pinned order — both `working_orders` rows `for update`
+ * ascending by id FIRST, then the involved `dining_tables` rows ascending by id — to match the
+ * class order the sale/settle/abandon path takes, so that a concurrent merge and pay could not
+ * cross-lock and raise `40P01`. That whole argument is about two transactions holding rows at the
+ * same time. They cannot: one write transaction runs on the venue file at a time
+ * ({@link assertAnchoredTabOpen} carries the chain and the receipt). A merge and a pay on the same
+ * tabs now run one wholly after the other, so there is no pair to order, no cross-lock, and no
+ * deadlock class.
+ *
+ * Two things went with it. The `orderBy` on the `working_orders` read — the two rows are picked
+ * out by id with `.find` below, so the order they arrive in has no effect. And the whole
+ * `dining_tables` SELECT, which read nothing: it selected ids into no variable and existed only to
+ * take the second set of locks.
+ *
+ * What survives is the status read: both orders must be `open`, else `tab.not_open`.
  *
  * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
  * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears
@@ -2261,14 +2328,11 @@ export async function mergeTabs(
     throw new AppError("tab.merge_self", { tabId: intoTabId });
   }
 
-  // Lock working-order rows before dining-table rows, with each set ordered by id.
-  // Check the order status before acquiring table locks.
+  // Both orders in one read; each must be open.
   const tabs = await tx
     .select({ id: workingOrders.id, status: workingOrders.status })
     .from(workingOrders)
-    .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)))
-    .orderBy(workingOrders.id)
-    .for("update");
+    .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)));
   const into = tabs.find((t) => t.id === intoTabId);
   const from = tabs.find((t) => t.id === fromTabId);
   if (into === undefined || into.status !== "open") {
@@ -2277,17 +2341,10 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
-  await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
-    .orderBy(diningTables.id)
-    .for("update");
-
   // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
-  //    moveTabLines re-locks + re-validates these two rows as open — a deliberate no-op re-lock here
-  //    (we already hold and checked them), because moveTabLines is a standalone primitive TS-4 calls
-  //    directly and must self-validate; the extra round trip is accepted rather than couple the two.
+  //    moveTabLines re-reads and re-validates these two rows as open — a deliberate repeat of the
+  //    check above, because moveTabLines is a standalone primitive TS-4 calls directly and must
+  //    self-validate; the extra round trip is accepted rather than couple the two.
   await moveTabLines(tx, cfg, fromTabId, intoTabId);
 
   // 2. Re-point fromTab's table(s) BEFORE the abandon (Plan note 2).
@@ -2327,8 +2384,8 @@ function grossLineTotal(grossUnit: string, quantity: string): Decimal {
 }
 
 /**
- * Refuse a carve-off batch that names the same source `line_no` more than once, BEFORE any lock, mint or
- * write (`tab.transfer_duplicate_line`, naming the FIRST line_no that repeats). A repeated line_no does
+ * Refuse a carve-off batch that names the same source `line_no` more than once, BEFORE any check,
+ * mint or write (`tab.transfer_duplicate_line`, naming the FIRST line_no that repeats). A repeated line_no does
  * NOT conserve quantity: every entry is validated against the STATIC pre-batch snapshot of the line's
  * quantity (never updated between entries) and the split write sets the source to `original − q` (a plain
  * set, not a cumulative decrement), so two partial "1"s off a café×3 line both pass and the destination
@@ -2353,9 +2410,19 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
 /**
  * Transfer selected lines between two open tabs in the caller's transaction.
  * Whole-line transfers move the line; partial transfers preserve its stored unit
- * prices and divide its quantity. Validate the entire batch before any move.
- * Lock both working-order rows in ascending id order so opposite transfers acquire
- * the same first lock. Each tab files its own sale when paid.
+ * prices and divide its quantity. Validate the entire batch before any move. Each tab files its
+ * own sale when paid.
+ *
+ * Both ends are checked with {@link assertAnchoredTabOpen}, which used to hold each
+ * `working_orders` row `for update`; the ascending-id order the loop below takes them in was there
+ * so that two opposite transfers took the same row first and could not deadlock. Two transfers
+ * cannot run at the same time at all — one write transaction runs on the venue file at a time
+ * (that function carries the chain and the receipt) — so there is no lock order left to keep.
+ *
+ * The sort STAYS, for the one effect it has left: when BOTH ends fail the check, the
+ * `tab.not_open` that escapes names the lower id in string order rather than `fromTabId`. No test
+ * pins that — each of the `tab.not_open` cases in `transfer-lines.test.ts` has exactly one bad end
+ * — so the sort is kept because removing it would change an unpinned refusal for no reason.
  */
 export async function transferLines(
   tx: Transaction,
@@ -2364,40 +2431,41 @@ export async function transferLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
-  // A tab cannot transfer to itself — refused before any lock (which would take the row twice).
+  // A tab cannot transfer to itself — refused before anything else: it is a no-op the caller did
+  // not mean, and the loop below would check the same row twice.
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
 
-  // A batch may name each source line_no AT MOST once — refused before any lock or write (the same
-  // pre-lock rejection this verb has always made; see {@link assertDistinctTransferLines} for why a
-  // repeated line_no cannot conserve quantity).
+  // A batch may name each source line_no AT MOST once — refused before any read or write (the same
+  // up-front rejection this verb has always made; see {@link assertDistinctTransferLines} for why
+  // a repeated line_no cannot conserve quantity).
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Acquire both working-order locks in ascending id order. lockOpenTab also
-  // requires each order to be open and referenced by a dining table.
+  // Both ends must be open tabs a dining table points at. Sorted for the reason the docstring
+  // gives, which is no longer a lock order.
   for (const tabId of [fromTabId, toTabId].sort()) {
-    await lockOpenTab(tx, cfg, tabId);
+    await assertAnchoredTabOpen(tx, cfg, tabId);
   }
 
-  // The origin and destination row locks are held; carry the items over (whole lines + partial splits).
+  // Carry the items over (whole lines + partial splits).
   await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
 }
 
 /**
  * Carry `transfers` (whole lines and/or partial-quantity splits) from `fromTabId` onto `toTabId`, keeping
  * each unit's LOCKED price columns (no catalogue re-read) and CONSERVING quantity — the shared move/split
- * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It performs NO locking of its
- * own: the CALLER must already hold the `FOR UPDATE` row locks on both orders (`transferLines` via its
- * `lockOpenTab` loop, requiring both ends to be TABS; `splitOffCheck` via its own origin lock, its
- * destination being a freshly-minted, uncontended check). Every transfer is VALIDATED before any move or
+ * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It makes no open-order
+ * check of its own: the CALLER must already have made one on both orders (`transferLines` via its
+ * `assertAnchoredTabOpen` loop, requiring both ends to be TABS; `splitOffCheck` on its origin, its
+ * destination being a check it has just minted). Every transfer is VALIDATED before any move or
  * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
  * quantity outside `0 < q ≤ line.quantity` or a malformed literal, `tab.transfer_modifier_line` for a
  * modifier child named alone or a partial split of a dish carrying modifiers — ordering modifiers FIX
  * 2/4), so one bad entry leaves both orders untouched. The whole-line path delegates to
  * {@link moveTabLines} (which accepts any OPEN destination, so a table-less check is a valid target —
- * unlike `lockOpenTab`) and cascades a dish's modifier children along with it; the split path appends new
- * destination lines after the moves.
+ * unlike `assertAnchoredTabOpen`) and cascades a dish's modifier children along with it; the split
+ * path appends new destination lines after the moves.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -2406,7 +2474,7 @@ async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
-  // Read ALL of fromTab's lines ONCE, under the lock, into a map — not just the named ones: the
+  // Read ALL of fromTab's lines ONCE into a map — not just the named ones: the
   // parent↔child structure (FIX 2/4) needs the WHOLE tab to know which named lines are dishes carrying
   // modifiers and which are modifier children. `id` and `parentLineId` come too. The per-unit locked
   // values a split INHERITS also come from here — never a catalogue re-read.
@@ -2480,7 +2548,8 @@ async function carveOffLines(
     }
     // FIX 2: a modifier CHILD line may not be named directly — it transfers only WITH its dish (a
     // parent whole-line move cascades its children below). Naming it alone would orphan it: the source
-    // child would reference a deleted parent (23503) or land ungrouped on the destination. Refuse.
+    // child would reference a deleted parent (refused by the foreign key) or land ungrouped on the
+    // destination. Refuse.
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
@@ -2532,12 +2601,15 @@ async function carveOffLines(
   }
 
   // Then the splits. Allocate destination `line_no`s AFTER the moves (so they don't collide with moved
-  // rows): read the current max under the lock and hand out max+1, max+2, ... in order — the same
-  // per-tab allocation `addTabRound`/`moveTabLines` make, safe against the
-  // `(working_order_id, line_no)` unique because the destination row is held FOR UPDATE by the lock loop.
+  // rows): read the current max and hand out max+1, max+2, ... in order — the same per-tab allocation
+  // `addTabRound`/`moveTabLines` make. It cannot collide on the `(working_order_id, line_no)` unique
+  // because no other writer can append to the destination between this read and these inserts: one
+  // write transaction runs on the venue file at a time ({@link assertAnchoredTabOpen}).
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
-      .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+      .select({
+        maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)`,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, toTabId));
     for (let i = 0; i < partials.length; i++) {
@@ -2599,7 +2671,8 @@ async function carveOffLines(
  * (design §2), so unlike a tab there is no `dining_tables.tab_id` back-pointer to set. Because the check
  * is table-less, the items are carried over by {@link carveOffLines} directly (TS-4's whole/partial
  * move/split core, which delegates whole lines to `moveTabLines`) rather than by `transferLines` — whose
- * `lockOpenTab` loop requires BOTH ends to be tabs and would reject a detached check. The move keeps each
+ * `assertAnchoredTabOpen` loop requires BOTH ends to be tabs and would reject a detached check.
+ * The move keeps each
  * unit's LOCKED `unit_price_gross` (no catalogue re-look-up) and CONSERVES quantity, so the check and the
  * origin remainder each stay internally consistent and each files its OWN correct desglose on its own pay
  * (design §4), and it raises TS-4's inherited `tab.transfer_quantity_invalid` / `tab.line_not_found`.
@@ -2629,25 +2702,25 @@ export async function splitOffCheck(
     throw new AppError("sale.empty_basket", {});
   }
 
-  // Refuse a batch naming a source line_no twice BEFORE locking, minting the check, or moving anything —
+  // Refuse a batch naming a source line_no twice BEFORE checking, minting the check, or moving anything —
   // the same up-front guard `transferLines` makes (a duplicate does not conserve quantity: two "1"s off a
   // 3× line would leave 2 on the origin AND 2 on the check, 4 from an original 3). Reused so split-bill
   // inherits it, naming the origin tab.
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Lock + validate the origin is an OPEN TAB (table-anchored) before minting the check — fail fast
-  // with the `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
-  // catalogue read + `allocateOrderNumber`). The origin MUST be a tab, not merely any open order: the
-  // spec §3 and the `/api/tabs/:id/split` route require a table-anchored tab, so a detached CHECK (a
-  // table-less open order minted by a prior split) must NOT be a split origin. `lockOpenTab` adds the
-  // is-a-tab `dining_tables` back-pointer assertion `lockOpenTabRow` (status-only) lacks; it holds NO
-  // `dining_tables` lock (the pointer read is a plain SELECT, {@link lockOpenTab}), so this reintroduces
-  // no lock-order/deadlock concern. Ordering is about doing LESS WORK, not saving an order number:
-  // everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the counter
-  // increment together (`allocateOrderNumber` is a transactional UPSERT into `working_order_counters`,
-  // `packages/db/src/allocate-order-number.ts` — a rolled-back allocation leaves no gap). The FOR UPDATE
-  // also serialises a concurrent carve-off of the same tab (TS-3/TS-4 lock discipline).
-  await lockOpenTab(tx, cfg, fromTabId);
+  // Check the origin is an OPEN TAB (table-anchored) before minting the check — fail fast with the
+  // `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
+  // catalogue read + `allocateOrderNumber`). The origin MUST be a tab, not merely any open order:
+  // the spec §3 and the `/api/tabs/:id/split` route require a table-anchored tab, so a detached
+  // CHECK (a table-less open order minted by a prior split) must NOT be a split origin.
+  // `assertAnchoredTabOpen` adds the is-a-tab `dining_tables` back-pointer assertion
+  // `assertTabOpen` (status-only) lacks. Ordering is about doing LESS WORK, not saving an order
+  // number: everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the
+  // counter increment together (`allocateOrderNumber` is a transactional UPSERT into
+  // `working_order_counters`, `packages/db/src/allocate-order-number.ts` — a rolled-back allocation
+  // leaves no gap). A concurrent carve-off of the same tab, which this check's `for update` used to
+  // serialise, cannot be running ({@link assertAnchoredTabOpen}).
+  await assertAnchoredTabOpen(tx, cfg, fromTabId);
 
   // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
   // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
@@ -2658,9 +2731,8 @@ export async function splitOffCheck(
 
   // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
   // core, which keeps the locked gross, conserves quantity, and raises the inherited
-  // `tab.transfer_quantity_invalid` / `tab.line_not_found` guards. The origin row is already locked
-  // above and the check is a fresh, uncontended row, so no further lock is needed here. A failure rolls
-  // back the whole tx, check included — no orphan.
+  // `tab.transfer_quantity_invalid` / `tab.line_not_found` guards. A failure rolls back the whole
+  // tx, check included — no orphan.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
 
   return { checkId };
@@ -2675,28 +2747,28 @@ export async function splitOffCheck(
  * seat, not a payment unit (design §2). Returns the new `tabId` (with items) or `{}` (freed). Runs on
  * the caller's tx scope.
  *
- * Lock order — the shared `working_orders` tab row `FOR UPDATE` FIRST (via {@link lockOpenTabRow}), THEN
- * the `dining_tables[tableId]` row. This MATCHES the sale/settle path and {@link mergeTabs}:
- * `payWorkingOrder` locks the tab's `working_orders` row, then its settle UPDATE fires the 0050
- * `working_orders_clear_table_status` trigger UPDATE-ing `dining_tables WHERE tab_id = NEW.id` (which
- * includes `tableId` while it is joined) — i.e. `working_orders` THEN `dining_tables`. Acquiring in that
- * SAME class order is what PREVENTS an unjoin-vs-pay/settle DEADLOCK: a concurrent unjoin and pay both
- * take `working_orders` before `dining_tables`, so they cannot cross-lock and trip a 40P01. This is
- * load-bearing and proven — the concurrent unjoin/pay race test (split-bill.pg.test.ts) asserts no
- * 40P01, and by deletion the previous `dining_tables`-first order reproduces the 40P01 against the real
- * trigger. (The status check therefore fires BEFORE the `dining_tables` lock; in every tested scenario
- * only one guard fails at a time, so the thrown code is unchanged from the old order.)
+ * The two reads used to be two LOCKS in a pinned class order — the shared `working_orders` tab row
+ * `for update` first (via {@link assertTabOpen}), then the `dining_tables[tableId]` row — matching
+ * the order the sale/settle path takes, so that a concurrent unjoin and pay could not cross-lock
+ * and raise `40P01`. That argument needed the two to overlap, and they cannot: one write
+ * transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
+ * and the receipt).
+ *
+ * The ORDER of the two reads stays as it was, for a surviving effect: the tab's status is checked
+ * before the table's join state, so a call that is wrong about both is refused `tab.not_open`
+ * rather than `table.not_joined`. Nothing pins which — every tested scenario has exactly one bad
+ * argument — so the order is kept because swapping it would change an unpinned refusal for no
+ * reason.
  *
  * The with-items branch repoints the detached table BEFORE the move, so both `tabId` (still covered by
  * its origin table(s)) and `newTabId` (now covered by the detached table) are TABS when {@link
  * transferLines} runs — which is exactly why the reuse is `transferLines` here, not `splitOffCheck`'s
  * bare `carveOffLines`: `splitOffCheck`'s destination is table-LESS and would be rejected by
- * `transferLines`' `lockOpenTab` back-pointer check, whereas an un-joined table's new tab passes it. So
- * `transferLines` gives the correct is-a-tab validation AND the ascending-id lock ordering for free,
- * over a `newTabId` that is a freshly-minted, uncontended row (no deadlock hazard against the origin
- * lock this verb already holds). `transferLines` re-locks `tabId` (a no-op — already held above) and
- * only ever takes further `working_orders` locks over `newTabId`, so the class order stays
- * working_orders-before-dining_tables throughout.
+ * `transferLines`' `assertAnchoredTabOpen` back-pointer check, whereas an un-joined table's new tab
+ * passes it. So
+ * `transferLines` gives the correct is-a-tab validation, over a `newTabId` this verb has just
+ * minted. `transferLines` re-checks `tabId` — a deliberate repeat of the check above, because it
+ * is a standalone primitive that must self-validate.
  */
 export async function unjoinTable(
   tx: Transaction,
@@ -2705,19 +2777,17 @@ export async function unjoinTable(
   tableId: string,
   transfers?: { lineNo: number; quantity?: string }[],
 ): Promise<{ tabId?: string }> {
-  // Lock the shared tab's working_orders row FIRST (see the docstring's lock-order note): it must be
-  // OPEN — you cannot re-carve a settled/abandoned bill — else `tab.not_open`. Taking this BEFORE the
-  // dining_tables lock is the deadlock-safe order the sale/settle path uses.
-  await lockOpenTabRow(tx, cfg, tabId);
+  // The shared tab must be OPEN — you cannot re-carve a settled/abandoned bill — else
+  // `tab.not_open`. Checked first for the reason the docstring gives.
+  await assertTabOpen(tx, cfg, tabId);
 
-  // Then lock the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
-  // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId and
-  // fail closed, design §3).
+  // Then the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
+  // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId
+  // and fail closed, design §3). `zoneId` comes from the same read.
   const [table] = await tx
     .select({ tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
-    .where(eq(diningTables.id, tableId))
-    .for("update");
+    .where(eq(diningTables.id, tableId));
   if (table?.tabId !== tabId) {
     throw new AppError("table.not_joined", { tableId, tabId });
   }
@@ -2735,8 +2805,8 @@ export async function unjoinTable(
 
   // With items: split them off onto a NEW tab. This only makes sense when `tableId` is one of ≥2 tables
   // sharing `tabId` — you un-join a table FROM a join. If `tableId` is the SOLE table anchoring `tabId`,
-  // the repoint below would leave `tabId` anchorless and `transferLines`' `lockOpenTab` back-pointer
-  // check would throw a MISLEADING `tab.not_open` on a tab that IS open. Reject honestly, before minting
+  // the repoint below would leave `tabId` anchorless and `transferLines`' `assertAnchoredTabOpen`
+  // back-pointer check would throw a MISLEADING `tab.not_open` on a tab that IS open. Reject honestly, before minting
   // anything, when no OTHER table anchors this tab.
   const [otherAnchor] = await tx
     .select({ id: diningTables.id })
@@ -2749,8 +2819,8 @@ export async function unjoinTable(
 
   // Create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
   // with `transferLines` — repointing FIRST makes `newTabId` a real tab (back-pointer set) so
-  // `transferLines`' is-a-tab lock passes. `transferLines` re-locks `tabId` (a no-op — already held
-  // above) and `newTabId` (fresh), in ascending-id order.
+  // `transferLines`' is-a-tab check passes. It re-checks `tabId` too, a deliberate repeat of the
+  // check above.
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
@@ -2863,10 +2933,11 @@ export async function listHeldOrders(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
-        itemCount: sql<number>`count(${workingOrderLines.id})::int`,
-        // A count of whole cents read raw, cast `::text` and converted by `rawCentsToDecimal` —
-        // see its doc comment.
-        total: sql<string>`coalesce(sum(${workingOrderLines.lineTotal}), 0)::text`,
+        itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
+        // A count of whole cents read raw, cast to text and converted by `rawCentsToDecimal` — see
+        // its doc comment for why it is text and not an integer cast. `cast(x as text)` is the
+        // spelling because this engine has no cast operator.
+        total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -3044,7 +3115,10 @@ export interface UpdateHeldOrderRequest {
 
 /**
  * Update an open held order anywhere in the venue, preserving stored prices for quantity-only edits.
- * One transaction keeps the order and replacement lines together.
+ * One transaction keeps the order and replacement lines together — and, because one write
+ * transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
+ * and the receipt), also keeps every other writer out of the order for the whole edit, which is
+ * what the `for update` on its status read used to do for this one row.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
@@ -3055,16 +3129,16 @@ export async function updateHeldOrder(
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
-    // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
-    // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
-    // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
-    // Venue-wide (till-reroute §3.6 — any node's open tab is editable): an unknown id misses the lock
-    // and reads as absent rather than reaching the line insert (a raw 23503). `status` stays off the WHERE so a closed order is told from an absent one in the tx.
+    // Read the order's status. Absent or not-open → `working_order.not_open`; the DB triggers
+    // (enforce_transition on the label update, require_open_parent on the line delete/insert) are
+    // the backstop if this app check is ever wrong. Venue-wide (till-reroute §3.6 — any node's open
+    // tab is editable): an unknown id reads as absent here rather than reaching the line insert (a
+    // raw foreign-key refusal). `status` stays off the WHERE so a closed order is told from an
+    // absent one.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
+      .where(eq(workingOrders.id, id));
 
     if (order === undefined || order.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -3249,7 +3323,8 @@ export async function updateHeldOrder(
 
     // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
     // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
-    // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
+    // open (checked above, and nothing else can have closed it since — the docstring's note), so the
+    // line delete and the re-insert both satisfy
     // `require_open_parent`, and the re-numbered `line_no`s start from 1.
     // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
     const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
@@ -3319,9 +3394,14 @@ export interface PlaceOrderResult {
 /**
  * Place an open order, append its genesis amendment and fire kitchen items in one
  * transaction. invoice_first also files a deferred invoice from the stored prices.
- * Lock the order before checking status so concurrent placement cannot file twice.
  * The operator and trusted clock identify the amendment; saleTillId identifies the
  * authenticated device's register on the fiscal record.
+ *
+ * A second concurrent placement must not file a second invoice. The status read below used to
+ * take the order's row `for update` to arrange that; what arranges it now is that the two
+ * placements cannot overlap — one write transaction runs on the venue file at a time
+ * ({@link assertAnchoredTabOpen} carries the chain and the receipt) — so the second reads
+ * `placed` and is refused before it reaches the file.
  */
 export async function placeOrder(
   deps: TillSaleDeps,
@@ -3333,14 +3413,12 @@ export async function placeOrder(
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
-    // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
-    // to lock) or not-open → `working_order.not_open`; the enforce_transition trigger is the DB
-    // backstop if this app check is ever wrong.
+    // Read the order's status. Absent or not-open → `working_order.not_open`; the
+    // enforce_transition trigger is the DB backstop if this app check is ever wrong.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
+      .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
@@ -3350,9 +3428,9 @@ export async function placeOrder(
     // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
     // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
     // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
-    // deferred file tags the sale with `working_order_id = id`, so the FOR UPDATE lock above already
-    // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
-    // this).
+    // deferred file tags the sale with `working_order_id = id`, and the status check above already
+    // guarantees one invoice per order (a second place sees `placed` and is refused before
+    // reaching this — see the docstring for why it cannot read a stale `open`).
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
@@ -3457,8 +3535,13 @@ export async function placeOrder(
 
 /**
  * Cancel a placed order and append its reasoned amendment in one transaction.
- * Require a non-empty reason before database work, then lock and check the order.
+ * Require a non-empty reason before database work, then check the order.
  * The operator and trusted clock identify the cancellation amendment.
+ *
+ * The status read used to take the order's row `for update` so that a second cancel could not
+ * append a second amendment. It cannot: one write transaction runs on the venue file at a time
+ * ({@link assertAnchoredTabOpen} carries the chain and the receipt), so the second cancel reads
+ * `abandoned` and is refused `working_order.not_placed`.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -3481,8 +3564,7 @@ export async function cancelPlacedOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
+      .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: id });
     }
@@ -3588,9 +3670,44 @@ export async function markCollected(
     // predicate keeps a concurrent double-collect a no-op for the loser rather than a trigger RAISE.
     await tx
       .update(workingOrders)
-      .set({ collectedAt: sql`now()` })
+      // The clock is read in JavaScript and bound — see `fireCourse` above for why.
+      .set({ collectedAt: nowIso() })
       .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
   });
+}
+
+/** One unserved, fired line of an open tab, as `listTablesWithState`'s JSON aggregate emits it. */
+interface UnservedLine {
+  queuedAt: string;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
+}
+
+/**
+ * The `tab_unserved_lines` aggregate, parsed.
+ *
+ * It arrives as JSON TEXT because `json_group_array` returns a string and a raw read reaches no
+ * column mapping. An empty tab carries the literal `'[]'` the query coalesces to.
+ */
+function parseUnservedLines(value: string): UnservedLine[] {
+  return JSON.parse(value) as UnservedLine[];
+}
+
+/**
+ * Whole minutes from a stored ISO stamp to `nowMs`, floored — what
+ * `floor(extract(epoch from (now() - stamp)) / 60)::int` computed in SQL.
+ *
+ * It moved out of SQL because this engine has neither `now()` nor `extract`, and because a
+ * timestamp column here is TEXT rather than a point in time. The reason the SQL version existed —
+ * that the DATABASE's clock and the app server's could skew — is gone with the swap: the engine
+ * runs inside this process (`node:sqlite`), so there is one clock, the same conclusion
+ * `packages/printing/src/runtime.ts` reaches for the print-job lease. Callers read that clock ONCE
+ * per query and pass it in, so every row of one board is aged against one instant, which is what
+ * `now()` gave for free by being transaction time.
+ */
+function minutesSince(stamp: string, nowMs: number): number {
+  return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
 }
 
 /** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
@@ -3617,13 +3734,17 @@ const TICKET_TRANSITIONS = {
 >;
 
 /** The typed `.set()` payload for a forward move: the new state plus the stamp column the transition
- *  names, set to `now()`. A ternary on the (two-valued) stamp column keeps each branch a concrete object
- *  Drizzle infers against `ticket_items`' update shape — a computed key would widen it to a string index
- *  and drop the typing the per-verb switch/ternary existed to hold. */
+ *  names, stamped from this process's clock. A ternary on the (two-valued) stamp column keeps each
+ *  branch a concrete object Drizzle infers against `ticket_items`' update shape — a computed key would
+ *  widen it to a string index and drop the typing the per-verb switch/ternary existed to hold.
+ *
+ *  The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does not
+ *  have. `nowIso` because both stamp columns are `tsString`. */
 function advanceSet(to: Exclude<TicketState, "queued">) {
+  const at = nowIso();
   return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
-    ? { state: to, preparingAt: sql`now()` }
-    : { state: to, readyAt: sql`now()` };
+    ? { state: to, preparingAt: at }
+    : { state: to, readyAt: at };
 }
 
 /**
@@ -3823,9 +3944,9 @@ export interface StationQueueGroup {
  * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
  * order fixes that group's position (oldest-first) and its `queuedAt`. Venue-wide (till-reroute §3.6 —
  * not node-scoped): the station's queue is the whole venue's, so a promoted node keeps serving the
- * dead node's fired items. Runs on the CALLER's transaction as app_user. PGlite
+ * dead node's fired items. Runs on the CALLER's transaction. PGlite
  * proves the join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
- * real-Postgres's job (working-order.pg.test.ts), the CLAUDE.md §4 split.
+ * real-Postgres's job (working-order.pay-and-dispatch.test.ts), the CLAUDE.md §4 split.
  */
 /**
  * Read modifier descriptions for the supplied parent lines, then each parent product's OWN allergens
@@ -3954,11 +4075,6 @@ export async function listStationQueue(
       // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
       // guaranteed by the WHERE, so this is the only remaining collectability signal.
       status: workingOrders.status,
-      // KDS order-timing alerts (design §3/§6): this line's age on the DB clock, in whole minutes since
-      // `queued_at` — the same `now()`-based idiom `listExpoQueue`'s `openedMinutes` uses, so the band
-      // classification below is immune to any app-server/DB clock skew (reconstructed as an offset from
-      // `Date.now()`, never by parsing `queued_at` with the app clock).
-      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -3997,6 +4113,10 @@ export async function listStationQueue(
     rows.map((row) => row.workingOrderLineId),
   );
 
+  // KDS order-timing alerts (design §3/§6): the clock is read ONCE here, so every item on this board
+  // is aged against one instant — which is what `now()`, being transaction time, gave the SQL this
+  // replaced. See {@link minutesSince}.
+  const nowMs = Date.now();
   // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
   // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
   const groups = new Map<string, StationQueueGroup>();
@@ -4061,10 +4181,10 @@ export async function listStationQueue(
       // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
       queuedAt: row.queuedAt,
-      // Reconstruct a `queuedAtMs` offset from `Date.now()` using the DB-computed age, rather than
-      // `Date.parse(row.queuedAt)` directly — the DB's `now()` and this process's clock can skew, and
-      // this keeps the classification anchored to the DB clock exactly as `ageMinutes` was computed.
-      band: classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds),
+      // Still a whole-minute offset reconstructed from the age, not `Date.parse(row.queuedAt)`
+      // straight: only where the age is COMPUTED moved (see {@link minutesSince}), and rounding the
+      // age to the minute first is what the bands were tuned against.
+      band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
     });
   }
   return [...groups.values()];
@@ -4181,9 +4301,9 @@ export interface ExpoOrder {
  *
  * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
  * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction as `app_user`. PGlite proves the join, the
+ * Runs on the CALLER's transaction. PGlite proves the join, the
  * exclusions, the course grouping and the fired/away roll-ups — plain SQL a single backend proves; the
- * venue-wide, cross-node read is real-Postgres's job (working-order.pg.test.ts), the same split
+ * venue-wide, cross-node read is real-Postgres's job (working-order.pay-and-dispatch.test.ts), the same split
  * `listStationQueue` uses (CLAUDE.md §4).
  */
 export async function listExpoQueue(
@@ -4227,7 +4347,6 @@ export async function listExpoQueue(
       // its OWN station's thresholds — an order's items can span several stations, so unlike
       // `listStationQueue` (one station per call) these ride per item, not per order.
       queuedAt: ticketItems.queuedAt,
-      ageMinutes: sql<number>`floor(extract(epoch from (now() - ${ticketItems.queuedAt})) / 60)::int`,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -4238,9 +4357,9 @@ export async function listExpoQueue(
       courseDisplayOrder: kitchenCourses.displayOrder,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      // Minutes since the order opened — the pass's urgency clock. `::int` so pg/PGlite hand back a
-      // number; `now()` is transaction time, so an order opened earlier in this same tx reads 0.
-      openedMinutes: sql<number>`floor(extract(epoch from (now() - ${workingOrders.openedAt})) / 60)::int`,
+      // Minutes since the order opened — the pass's urgency clock, computed from this column below
+      // rather than in SQL (see {@link minutesSince}).
+      openedAt: workingOrders.openedAt,
       // The dining-table label, resolved by a FAN-OUT-PROOF scalar subquery (a LEFT JOIN could multiply
       // an order's item rows if two tables pointed at it — tab_id carries no DB unique, only an app lock).
       // Covers both directions a table binds an order: a TAB (`dining_tables.tab_id` back-points at the
@@ -4249,8 +4368,9 @@ export async function listExpoQueue(
       // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
       // listTablesWithState while the READ itself is venue-wide (§3.6). The `order by` — a seated-tab match
       // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
-      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table AND
-      // a table it delivers to — and PostgreSQL could then return either label across calls).
+      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table
+      // AND a table it delivers to — and nothing makes an unordered `limit 1` pick the same one
+      // twice, whatever the engine; the `order by` is what does).
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}
@@ -4307,6 +4427,9 @@ export async function listExpoQueue(
     rows.map((row) => row.lineId),
   );
 
+  // Read ONCE, so every order and item on this board is aged against one instant — what `now()`,
+  // being transaction time, gave the SQL this replaced. See {@link minutesSince}.
+  const nowMs = Date.now();
   const orders = new Map<string, ExpoOrder>();
   const courseMaps = new Map<string, Map<string, ExpoCourse>>();
   for (const row of rows) {
@@ -4315,7 +4438,7 @@ export async function listExpoQueue(
       order = {
         orderId: row.orderId,
         orderNumber: row.orderNumber,
-        openedMinutes: Number(row.openedMinutes),
+        openedMinutes: minutesSince(row.openedAt, nowMs),
         courses: [],
         // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
@@ -4348,9 +4471,13 @@ export async function listExpoQueue(
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Reconstructed from the DB-computed age (not `Date.parse(row.queuedAt)`) so the classification is
-    // immune to app-server/DB clock skew — the same idiom `listStationQueue` uses.
-    const band = classifyBand(Date.now() - Number(row.ageMinutes) * 60_000, Date.now(), thresholds);
+    // Still a whole-minute offset reconstructed from the age rather than `Date.parse(row.queuedAt)`
+    // straight — the same idiom, and the same reason, as `listStationQueue`.
+    const band = classifyBand(
+      nowMs - minutesSince(row.queuedAt, nowMs) * 60_000,
+      nowMs,
+      thresholds,
+    );
     course.items.push({
       id: row.itemId,
       // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
@@ -4490,14 +4617,13 @@ export async function listTablesWithState(
     ready_to_serve: number;
     en_route: number;
     // KDS order-timing alerts (design §3/§6): one entry per unserved, fired line on the open tab, each
-    // carrying its DB-clock age plus its OWN station's thresholds — the raw material `classifyBand`/
+    // carrying its `queued_at` plus its OWN station's thresholds — the raw material `classifyBand`/
     // `worstBand` reduce in JS below (never classified in SQL, so server and client share one classifier).
-    tab_unserved_lines: {
-      ageMinutes: number;
-      warmAfterMinutes: number;
-      overdueAfterMinutes: number;
-      forgottenAfterMinutes: number;
-    }[];
+    //
+    // JSON TEXT, not a parsed array: `json_group_array` returns a string and a raw read reaches no
+    // column mapping, so it is parsed at the row below. The age is no longer computed in SQL —
+    // see {@link minutesSince}.
+    tab_unserved_lines: string;
     pending_deliveries: number;
     status_id: string | null;
     status_label: string | null;
@@ -4511,42 +4637,51 @@ export async function listTablesWithState(
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
       tab.id as tab_id,
-      coalesce(tab.line_count, 0)::int as tab_line_count,
+      cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
-      coalesce(tab.pending_to_serve, 0)::int as pending_to_serve,
-      coalesce(tab.ready_to_serve, 0)::int as ready_to_serve,
-      coalesce(tab.en_route, 0)::int as en_route,
+      cast(coalesce(tab.pending_to_serve, 0) as int) as pending_to_serve,
+      cast(coalesce(tab.ready_to_serve, 0) as int) as ready_to_serve,
+      cast(coalesce(tab.en_route, 0) as int) as en_route,
       coalesce(tab.unserved_lines, '[]') as tab_unserved_lines,
-      coalesce(del.pending, 0)::int as pending_deliveries,
+      cast(coalesce(del.pending, 0) as int) as pending_deliveries,
       tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
-    left join lateral (
+    -- A GROUPED derived table joined on the tab id, not a LEFT JOIN LATERAL ... ON TRUE: this
+    -- engine has no LATERAL and refuses it at prepare with near "select": syntax error (measured
+    -- 2026-09-22 on Node v26.7.0). The LATERAL form's only correlation was wo.id = dt.tab_id, which is
+    -- an ordinary join key, so every open order is aggregated once and matched by id. Same shape,
+    -- same rows; the engine does more grouping work and the answer is unchanged.
+    left join (
       select wo.id,
-             count(wol.id)::int as line_count,
-             (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
+             cast(count(wol.id) as int) as line_count,
+             cast(count(wol.id) filter (where wol.served_at is null) as int) as pending_to_serve,
              -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
              -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
              -- (working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
-             (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
+             cast(count(*) filter (where ti.state = 'ready' and wol.served_at is null) as int) as ready_to_serve,
              -- KDS-3 section 3c "en camino": lines the pass has DISPATCHED (ti.away_at is not null, set by
              -- markCourseAway) that the waiter has not yet carried out (served_at is null). Same 1:1
              -- ti-on-line join as ready_to_serve, so no wol multiplication; an away item is still ready
              -- and unserved, so it counts here AND in ready_to_serve until served -- the client applies the
              -- en-camino > listos precedence off the two counts.
-             (count(*) filter (where ti.away_at is not null and wol.served_at is null))::int as en_route,
-             -- A count of whole cents read raw, cast ::text and converted by rawCentsToDecimal in
-             -- the mapping below -- see its doc comment.
-             coalesce(sum(wol.line_total), 0)::text as tab_total,
-             -- KDS order-timing alerts (design §3/§6): the raw age + thresholds of each unserved, FIRED
-             -- (ti.id is not null) line, one JSON object per line -- the age is computed here on the DB
-             -- clock (never a band label; §3's "authoritative on the DB clock, classified in JS" split),
-             -- reduced with classifyBand/worstBand in JS below. An unfired line (no ticket_items row) has
-             -- not reached a station yet, so it carries no age and is excluded, same as a served one.
-             json_agg(
-               json_build_object(
-                 'ageMinutes', floor(extract(epoch from (now() - ti.queued_at)) / 60)::int,
+             cast(count(*) filter (where ti.away_at is not null and wol.served_at is null) as int) as en_route,
+             -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
+             -- the mapping below -- see its doc comment for why it is text and not an integer cast.
+             cast(coalesce(sum(wol.line_total), 0) as text) as tab_total,
+             -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved,
+             -- FIRED (ti.id is not null) line, one JSON object per line -- never a band label (§3's
+             -- raw-material-in-SQL, classified-in-JS split), reduced with classifyBand/worstBand in
+             -- JS below. An unfired line (no ticket_items row) has not reached a station yet, so it
+             -- carries no stamp and is excluded, same as a served one.
+             --
+             -- json_group_array(json_object(...)) in place of PostgreSQL's aggregate pair:
+             -- those two are PostgreSQL names and this engine does not have them. The result is
+             -- JSON TEXT here rather than a value the driver parses, so the row mapping parses it.
+             json_group_array(
+               json_object(
+                 'queuedAt', ti.queued_at,
                  'warmAfterMinutes', ks.warm_after_minutes,
                  'overdueAfterMinutes', ks.overdue_after_minutes,
                  'forgottenAfterMinutes', ks.forgotten_after_minutes
@@ -4557,30 +4692,37 @@ export async function listTablesWithState(
         on wol.working_order_id = wo.id
       left join ticket_items ti
         on ti.working_order_line_id = wol.id
-      -- The unserved line's OWN station thresholds, for the json_agg above. LEFT (not INNER): a row
+      -- The unserved line's OWN station thresholds, for the JSON aggregate above. LEFT (not INNER): a row
       -- with no ticket item (ti null) must survive so line_count/tab_total/the other aggregates above
       -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
       left join kitchen_stations ks
         on ks.id = ti.station_id
-      where wo.id = dt.tab_id and wo.status = 'open'
+      where wo.status = 'open'
       group by wo.id
-    ) tab on true
-    left join lateral (
-      select count(*)::int as pending
+    ) tab on tab.id = dt.tab_id
+    -- The delivery count, grouped the same way: the LATERAL form's correlation was
+    -- d.delivery_table_id = dt.id, so it becomes the join key. A NULL delivery_table_id groups
+    -- to a row nothing joins to, which is the LATERAL form's no-rows answer.
+    left join (
+      select d.delivery_table_id, cast(count(*) as int) as pending
       from working_orders d
-      where d.delivery_table_id = dt.id
-        and d.status <> 'abandoned' and d.collected_at is null
+      where d.status <> 'abandoned' and d.collected_at is null
         and exists (
           select 1 from ticket_items ti
           where ti.working_order_id = d.id
         )
-    ) del on true
+      group by d.delivery_table_id
+    ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);
 
+  // Read ONCE, so every table on this floor plan is aged against one instant — what `now()`, being
+  // transaction time, gave the SQL this replaced. NOT the `now` parameter above, which is the VENUE
+  // clock the module annotators take and can be supplied by a caller.
+  const nowMs = Date.now();
   const states = result.rows.map((r) => {
     const hasOpenTab = r.tab_id !== null;
     const pendingDeliveries = Number(r.pending_deliveries);
@@ -4593,8 +4735,10 @@ export async function listTablesWithState(
     // read-model and the client's `TickingClock` share one classifier), then worst-wins across the open
     // tab. `worstBand([])` is `"fresh"`, covering a free table or one whose lines are all still fresh.
     const timingBand = worstBand(
-      r.tab_unserved_lines.map((line) =>
-        classifyBand(Date.now() - Number(line.ageMinutes) * 60_000, Date.now(), {
+      parseUnservedLines(r.tab_unserved_lines).map((line) =>
+        // Still a whole-minute offset reconstructed from the age, the same idiom the two kitchen
+        // boards use — only where the age is COMPUTED moved (see {@link minutesSince}).
+        classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, {
           warmAfterMinutes: line.warmAfterMinutes,
           overdueAfterMinutes: line.overdueAfterMinutes,
           forgottenAfterMinutes: line.forgottenAfterMinutes,

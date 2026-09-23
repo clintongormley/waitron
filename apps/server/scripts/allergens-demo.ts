@@ -1,25 +1,33 @@
 // Self-contained, human-checkable demonstration of the allergens seam: EU 1169/2011 Annex II
 // declarations authored on catalogue products and read back for the till, end-to-end and
-// headless. Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather
-// than `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs
-// neither a real backend nor a proof of the non-superuser grants used by catalogue-demo.
-// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables and the
-// `products.allergens` jsonb column, which is everything read here.
+// headless. Modelled on `daily-close-demo.ts` (a throwaway venue directory, self-migrating,
+// tsx-run) rather than on the real-database demo it sat beside — this demo never writes a fiscal
+// record, so it needs no fiscal backend, no AEAT and no SIF registration. Two migration sets
+// carry everything it touches — `core` the `tenants` and `locations` rows it seeds, `catalogue`
+// the catalogue tables and the `products.allergens` column it reads back.
+//
+// LOST with the storage swap: this demo used to seed the tenant as the PGlite superuser and then
+// author the catalogue through `asAppUser`, to show that a running POS writes as `app_user` — a
+// role holding no INSERT on `tenants`. SQLite has no roles and no grants, and `asAppUser` is now
+// an empty function (`packages/db/src/testing/roles.ts`), so that half of the demonstration is
+// gone; the calls are deleted rather than left standing as no-ops that still read like a claim.
+// What the demo still shows is the allergen seam itself, which is what its name says.
 //
 // It:
-// 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
-// 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
-//    deliberately (a running POS cannot create tenants);
-// 3. as the application role, seeds ONE catalogue with four products carrying VARIED allergen
-//    states, then assigns the catalogue to the location:
+// 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`
+//    migration sets to it through `applyMigrations` (the entry point `dev-setup.ts` also uses),
+//    and removes the directory when it finishes;
+// 2. seeds a tenant + location with plain drizzle inserts;
+// 3. seeds ONE catalogue with four products carrying VARIED allergen states, then assigns the
+//    catalogue to the location:
 //    - "Empanada de trigo" → contains gluten (source: wheat) + eggs — a `contains` with a SOURCE
 //    - "Tarta de la casa" → contains milk, MAY contain nuts — a `may_contain`
 //    - "Ensalada de la huerta"→ {} — reviewed, no declarable allergens — the empty-but-reviewed
 //      case
 //    - "Sopa del día" → allergens unset (null) — NOT yet reviewed → PENDING
-// 4. reads the sellable products back with `listAvailableProducts` (as the app role, exactly as
-//    the till does) and prints (a) an allergen matrix (product × allergen) and (b) a
-//    single-product operator-lookup view.
+// 4. reads the sellable products back with `listAvailableProducts`, exactly as the till does, and
+//    prints (a) an allergen matrix (product × allergen) and (b) a single-product
+//    operator-lookup view.
 //
 // The load-bearing distinction (design D4): a reviewed product with no allergens ({}) is allergen-FREE,
 // while a product with `allergens = null` is PENDING — never yet reviewed, and must NEVER be shown as
@@ -29,18 +37,14 @@
 // Run it:
 //   pnpm --filter @waitron/server demo:allergens
 //   # or: pnpm --filter @waitron/server exec tsx scripts/allergens-demo.ts
-import { sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
-  withTransaction,
-} from "@waitron/db";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { locations, openVenueDatabase, tenants, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   ALLERGEN_CODES,
-  CATALOGUE_MIGRATIONS,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -49,23 +53,36 @@ import {
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 
+/** The migration sets this demo applies, in manifest order — core carries `tenants`/`locations`,
+ * catalogue the products and their allergen columns. */
+const SETS = ["core", "catalogue"];
+
 interface Venue {
   locationId: string;
 }
 
 /**
- * Seeds tenant → location as the PGlite superuser, exactly as the package's own fixtures do. Only
- * these two rows are needed: this demo rings no sale, so no till / node / series.
+ * Seeds tenant → location. Only these two rows are needed: this demo rings no sale, so no till /
+ * node / series.
+ *
+ * Drizzle inserts rather than the raw SQL that was here: `locations.id` no longer carries a SQL
+ * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
+ * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
+ * text column, not the PostgreSQL `array['es-ES']` this used to write.
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  await db.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name)
-          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
-  );
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { locationId: loc.rows[0]!.id };
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  return { locationId: loc!.id };
 }
 
 /** The product's staff-facing name, or a stable fallback when it is blank. `apps/*` is out of the
@@ -171,17 +188,19 @@ function printOperatorLookup(p: AvailableProduct): void {
 }
 
 async function main(): Promise<void> {
-  const db = await createPgliteDb();
+  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
+  // the end. The migrate goes through `applyMigrations`, which takes the DIRECTORY and opens it
+  // itself; `openVenueDatabase` then hands back the venue handle every write below takes.
+  const venueDir = await mkdtemp(join(tmpdir(), "allergens-demo-"));
+  const sets = manifestSets().filter((set) => SETS.includes(set.name));
+  await applyMigrations(venueDir, migrationOptionsFor(sets, null));
+  const store = await openVenueDatabase(venueDir);
+  const db = store.venue;
   try {
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, CATALOGUE_MIGRATIONS);
     const venue = await seedVenue(db);
 
-    // Author the catalogue as the application role (not the superuser owner), exactly as the
-    // running POS does: `withTransaction` opens the transaction, `asAppUser` selects the app role on
-    // PostgreSQL.
+    // Author the catalogue in one transaction, exactly as the running POS does.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const comida = await createCategory(tx, { name: { en: "Comida" } });
       const postres = await createCategory(tx, { name: { en: "Postres" } });
@@ -238,13 +257,11 @@ async function main(): Promise<void> {
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     });
 
-    // The read the till performs: sellable products at the location, with their allergens, as the
-    // app role. `listAvailableProducts` orders by (catalogue.name, created_at, id); all four
-    // share both a catalogue and a created_at, so the print order falls to the random-uuid id
-    // tiebreak, not seed order. Order is immaterial here — the matrix labels each row's review
-    // state explicitly.
+    // The read the till performs: sellable products at the location, with their allergens.
+    // `listAvailableProducts` orders by (catalogue.name, created_at, id); all four share both a
+    // catalogue and a created_at, so the print order falls to the random-uuid id tiebreak, not
+    // seed order. Order is immaterial here — the matrix labels each row's review state explicitly.
     const products = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return (await listAvailableProducts(tx, venue.locationId)).products;
     });
 
@@ -261,7 +278,8 @@ async function main(): Promise<void> {
     const lookup = products.find((p) => label(p) === "Empanada de trigo") ?? products[0];
     if (lookup !== undefined) printOperatorLookup(lookup);
   } finally {
-    await db.close();
+    await store.close();
+    await rm(venueDir, { recursive: true, force: true });
   }
 }
 

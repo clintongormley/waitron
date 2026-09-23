@@ -1,3 +1,4 @@
+import { getTableColumns } from "drizzle-orm";
 import { formatDateTime } from "@waitron/verifactu";
 import type {
   DesgloseRectificacion,
@@ -43,10 +44,10 @@ export interface RegistroRowContext {
   saleId: string;
   secuencia: number;
   /**
-   * From the SAME `PendingRegistro.input` the record was built from — never re-derived. A
-   * `timestamptz` column normalises to UTC on storage and renders back in the reading session's
-   * zone, so the ORIGINAL offset the huella hashed cannot be recovered from the column alone
-   * (./schema/registros.ts's own note on `offset_minutos`). Storing this value beside it is what
+   * From the SAME `PendingRegistro.input` the record was built from — never re-derived. The
+   * instant column beside it stores UTC and nothing else — a record generated at `+02:00` stores
+   * the literal `2026-07-21T17:20:30.000Z` — so the ORIGINAL offset the huella hashed cannot be
+   * recovered from the column alone (./schema/registros.ts's own note on `offset_minutos`). Storing this value beside it is what
    * lets a later reader call `formatDateTime(storedInstant, storedOffsetMinutes)` and reproduce
    * the exact literal that was hashed, rather than a value merely equal to it in wall-clock terms.
    */
@@ -78,8 +79,8 @@ function isAlta(record: RegistroAlta | RegistroAnulacion): record is RegistroAlt
  * AEAT's `sf:fecha` ("DD-MM-YYYY", what the huella hashes) reordered to this column's real `date`
  * type ("YYYY-MM-DD"). A pure digit reordering, and lossless in both directions — unlike the
  * money columns (more than one literal, "123.1" vs "123.10", can hash to the same value) or
- * `fecha_hora_huso_gen_registro` (a `timestamptz` cannot retain which offset was originally
- * written), a calendar day has exactly one value no matter which order its digits are printed in,
+ * `fecha_hora_huso_gen_registro` (an instant stored as UTC cannot retain which offset was
+ * originally written), a calendar day has exactly one value no matter which order its digits are printed in,
  * so storing it as a real `date` and reformatting on the way in and out never risks producing a
  * literal other than the one that was hashed.
  */
@@ -219,17 +220,15 @@ export function pointerTo(row: {
 }
 
 /**
- * The raw shape of one `select * from registros_facturacion` row — snake_case columns, exactly as
- * an UNTYPED `tx.execute(sql\`...\`)` hands them back. Deliberately NOT `typeof
+ * One `select * from registros_facturacion` row after {@link decodeRegistroRow} — snake_case
+ * columns, each value in the shape Drizzle's read mapping produces. Deliberately NOT `typeof
  * registrosFacturacion.$inferSelect` (camelCase, the shape Drizzle's own typed `.select()` query
  * builder produces): a raw `sql` execution is not tied to any schema column, so Drizzle has no
- * `PgColumn` to run `mapFromDriverValue` through and returns whatever the driver itself gives back
- * (chain.test.ts's own "stores the exact literals" test makes the identical observation for
- * `fecha_hora_huso_gen_registro`). Verified live against PGlite: `date` and `jsonb` columns come
- * back already as a plain ISO string and a parsed object/array respectively; `timestamptz` comes
- * back as a non-ISO `"YYYY-MM-DD HH:MM:SS±HH"` string in the reading session's own zone — which is
- * exactly why `fromRegistroRow` below never reads it directly and instead rebuilds the literal via
- * `formatDateTime` + the stored `offset_minutos`, per this file's own note on that column above.
+ * column to run `mapFromDriverValue` through and hands back whatever the driver gives it.
+ *
+ * Which is why this type describes the DECODED row and not the driver's: a raw row reaching a
+ * consumer of this type undecoded has six JSON columns as text and `primer_registro` as a number.
+ * {@link decodeRegistroRow}'s own note carries the measurement and the two defects it caused.
  *
  * A `type` alias over an object literal, deliberately not an `interface`: `Transaction["execute"]`
  * constrains its row generic to `Record<string, unknown>` (packages/db/src/client.ts's own
@@ -280,7 +279,7 @@ export type RegistroRow = {
   anterior_fecha_expedicion_factura: string | null;
   anterior_huella: string | null;
   sistema_informatico: SistemaInformatico;
-  fecha_hora_huso_gen_registro: string;
+  fecha_hora_huso_gen_registro: Date;
   offset_minutos: number;
   tipo_huella: TipoHuella;
   huella: string;
@@ -288,8 +287,57 @@ export type RegistroRow = {
   // for why: a value that reached recomputation would make one environment's chain unverifiable
   // under the other.
   entorno: string | null;
-  creado_en: string;
+  creado_en: Date;
 };
+
+/**
+ * Drizzle's own read mapping, re-applied to a row that came back from a raw `tx.execute`.
+ *
+ * A raw `select` is tied to no schema column, so no `mapFromDriverValue` runs on its way out and
+ * the row arrives as the ENGINE stored it (this file's own note on {@link RegistroRow} above).
+ * That is not cosmetic here. Measured against a real migrated `node:sqlite` database, a
+ * `select * from registros_facturacion` hands back `facturas_rectificadas`,
+ * `facturas_sustituidas`, `importe_rectificacion`, `destinatarios`, `desglose` and
+ * `sistema_informatico` as the stored JSON TEXT, `primer_registro` as `0`/`1`, and
+ * `fecha_hora_huso_gen_registro`/`creado_en` as ISO strings rather than `Date`s — while
+ * {@link RegistroRow} and every consumer of it describe the decoded shape. The gap is what made
+ * `filedReceiptFor` throw `desglose.map is not a function` on the receipt every immediate sale
+ * prints (./backend.ts) and `serializeEnvio` file an F3 with no `FacturasSustituidas` element at
+ * all. Pinned by the "hands back exactly what drizzle's own typed select hands back" case in
+ * ./registro-row.roundtrip.test.ts, which compares the two rows side by side rather than
+ * asserting a list of columns somebody wrote down — so a column added to the table later is
+ * covered without this function being touched.
+ *
+ * READ SIDE ONLY, and that is the constraint that matters on this table (CLAUDE.md §5): nothing
+ * here reaches a write path or a huella input. The two amount columns the huella hashes are
+ * `text`, whose mapping is the identity, and the generated-at literal is still rebuilt below from
+ * `offset_minutos` rather than read off the column.
+ *
+ * A column the row carries that this table does not declare passes through untouched — ./drain.ts's
+ * claim selects `r.*, e.intentos`, and `intentos` belongs to `envios`.
+ */
+export function decodeRegistroRow<Row extends RegistroRow = RegistroRow>(
+  raw: Record<string, unknown>,
+): Row {
+  const decoded: Record<string, unknown> = { ...raw };
+  for (const column of REGISTRO_COLUMNS) {
+    const value = raw[column.name];
+    // `undefined` is a column this selection did not ask for. The null skip is drizzle's own
+    // short circuit, copied rather than invented: its `mapResultRow` reads
+    // `rawValue === null ? null : decoder.mapFromDriverValue(rawValue)`
+    // (drizzle-orm 0.45.2, `utils.js`, `mapResultRow`). Without it a null instant would decode to
+    // `new Date(null)`, the epoch, and a null JSON column to `JSON.parse(null)`, which is `null`
+    // only because the argument is stringified to "null" first — both checked on this repo's
+    // Node.
+    if (value === undefined || value === null) continue;
+    decoded[column.name] = column.mapFromDriverValue(value);
+  }
+  return decoded as Row;
+}
+
+/** Keyed by the SQL column name, which is what a raw row is keyed by — `getTableColumns` returns
+ * the camelCase property names Drizzle's typed select uses. */
+const REGISTRO_COLUMNS = Object.values(getTableColumns(registrosFacturacion));
 
 /**
  * Rebuilds a record from its stored columns, for recomputation only (art. 7.i, ./verify.ts).
@@ -298,8 +346,8 @@ export type RegistroRow = {
  * whole point: the huella is SHA-256 over the literal that was serialised, so re-deriving "123.10"
  * from a numeric 123.1 would produce a different hash and report a corrupt chain on untouched
  * rows. `FechaHoraHusoGenRegistro` is the one field that genuinely needs reconstruction rather than
- * a straight column read: `fecha_hora_huso_gen_registro` is a `timestamptz` and therefore renders
- * in the READING SESSION's zone, not the original one the huella hashed — `offset_minutos` beside
+ * a straight column read: `fecha_hora_huso_gen_registro` holds the instant as UTC and nothing
+ * else, so on its own it cannot say which offset the huella hashed — `offset_minutos` beside
  * it (this file's own note on `RegistroRowContext.offsetMinutes`, and ./schema/registros.ts's
  * identical note on the column) is what makes the ORIGINAL literal reproducible via
  * `formatDateTime`, exactly as chain.test.ts's own "stores the exact literals" test already
@@ -328,6 +376,9 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     IDVersion: "1.0" as const,
     Encadenamiento: encadenamiento,
     SistemaInformatico: row.sistema_informatico,
+    // `new Date` on a value `decodeRegistroRow` has already made a `Date` is a copy; it is what
+    // also keeps this correct for a row that reached here undecoded, where the column is its ISO
+    // string. Either way the instant is the same one, and the literal below is rebuilt from it.
     FechaHoraHusoGenRegistro: formatDateTime(
       new Date(row.fecha_hora_huso_gen_registro),
       row.offset_minutos,

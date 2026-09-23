@@ -1,4 +1,5 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "./schema/persons.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
@@ -33,6 +34,6 @@ export async function markPasskeyOffered(
 ): Promise<void> {
   await tx
     .update(persons)
-    .set({ passkeyOfferedAt: sql`now()` })
+    .set({ passkeyOfferedAt: nowIso() })
     .where(eq(persons.id, input.personId));
 }

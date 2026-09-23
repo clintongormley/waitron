@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,12 +11,17 @@ import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js"
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
-// PGlite is the right target here: `enqueuePrintJob` is a single INSERT plus a not_found pre-check
-// SELECT — no concurrency, and `app_user`'s privileges on the printing tables are pinned by the
-// matrix in packages/fiscal-verifactu (the enrol race is agent.test.ts's). The load-bearing assertion is the
-// NEVER-BLOCK invariant (CLAUDE.md §5 / design §5): enqueue opens NO socket. PGlite is in-process
-// WASM, so the DB access itself opens no socket either — which makes "Socket.prototype.connect was
-// never called" a clean structural proof rather than one muddied by driver traffic.
+// One venue file (`useVenueDb`). `enqueuePrintJob` is a single INSERT plus a not_found pre-check
+// SELECT, so nothing here contends (the enrol race is agent.test.ts's). This engine has no roles
+// and no grants, so no case below says anything about a privilege, and this suite's old pointer
+// to a privilege matrix in packages/fiscal-verifactu is dropped rather than re-aimed: no suite
+// reads that matrix any more.
+//
+// The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5 / design §5): enqueue opens NO
+// socket. `node:sqlite` reaches the venue file in-process, so the database access opens no socket
+// of its own — which is what keeps "Socket.prototype.connect was never called" a clean structural
+// proof rather than one muddied by driver traffic. The spy is installed around the database work
+// too, so these cases passing IS the evidence for that second half.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(() => {
@@ -25,15 +30,22 @@ afterEach(() => {
 
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
+  // Through the table definition rather than raw SQL: `locations.id` is supplied by
+  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
+  // `NOT NULL constraint failed: locations.id`.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
 /** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model, so `payload`
- * is typed by the shared `binary` column: a Uint8Array. This suite runs on PGlite, which returns
- * one from a bytea column regardless, so it cannot tell the column's mapping from the driver's
- * (measured in @waitron/db's columns.test.ts, with both mapping functions deleted). */
+ * is typed by the shared `binary` column: a Uint8Array. It cannot tell that column's mapping from
+ * the driver's own value, because `node:sqlite` hands a BLOB back as a plain `Uint8Array` already —
+ * measured 2026-09-22 on Node v26.7.0 through `openVenueDatabase`, selecting a `blob` column back:
+ * `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`. `binary`'s `fromDriver` is a
+ * copy on this driver, not a conversion (`packages/db/src/schema/columns.ts`). */
 async function jobRow(
   tx: Transaction,
   jobId: string,

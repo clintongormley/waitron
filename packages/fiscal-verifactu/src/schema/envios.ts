@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index } from "drizzle-orm/pg-core";
-import { count, flag, id, label, table, ts } from "@waitron/db";
+import { check, index } from "drizzle-orm/sqlite-core";
+import { count, flag, id, label, now, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -35,7 +35,7 @@ export const envios = table(
     intentos: count("intentos").notNull().default(0),
     // Persisted, never an in-memory timer. This is what makes art. 16.4's hourly duty survive a
     // restart and a week-long offline period.
-    proximoIntentoEn: ts("proximo_intento_en").notNull().defaultNow(),
+    proximoIntentoEn: ts("proximo_intento_en").notNull().$defaultFn(now),
     incidencia: flag("incidencia").notNull().default(false),
     // Written in the same transaction as the response that carried it. AEAT: the CSV "no podrá
     // ser recuperado a través de consultas posteriores" — neither consulta nor resubmission ever

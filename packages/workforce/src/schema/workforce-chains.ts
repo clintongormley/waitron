@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey } from "drizzle-orm/pg-core";
-import { count, id, label, locations, nodes, table, ts, tsString } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/sqlite-core";
+import { count, id, label, locations, nodes, now, table, ts, tsString } from "@waitron/db";
 import { timeEntries } from "./time-entries.js";
 
 /**
  * The tamper-evidence chain head — MUTABLE, unlike the `time_entries` it points at. One row per
  * (node, location): a location's chain is written by ONE node at a time, but across a
  * promotion by two nodes in succession (the box, then a promoted cloud, then the box again), so
- * `node_id` joins the key to give each writer its own chain (spec §2.1). Row-locked with
- * `FOR UPDATE` during an append, as fiscal's `cadenas` is per node.
+ * `node_id` joins the key to give each writer its own chain (spec §2.1). An append used to hold
+ * this row `FOR UPDATE`; `selectHead` (../chain.ts) says what replaced that.
  *
  * `sequence_no` is monotonic and NEVER reset — the chain position `time_entries.sequence_no` advances
  * from. `last_entry_id`/`last_entry_hash` are the predecessor an append reads to compute the next
@@ -32,7 +32,7 @@ export const workforceChains = table(
     // without a mode, which is drizzle's date default. Nothing in the tree reads or writes it from
     // JavaScript, so no test catches the wrong helper here — the measurement is in the P1b workforce
     // report in docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md.
-    updatedAt: ts("updated_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
   // Drizzle stores this extraConfig callback lazily and runs it only when something walks the table's
   // full metadata. Unlike fiscal's `cadenas.ts`, this one IS exercised inside this package's own

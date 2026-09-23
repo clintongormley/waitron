@@ -1,5 +1,7 @@
-import { check } from "drizzle-orm/pg-core";
-import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
+import { check } from "drizzle-orm/sqlite-core";
+import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
+import { sales } from "./sales.js";
+import { tills } from "./tenants.js";
 
 /**
  * The cash-drawer AUDIT log (counter-receipt/drawer slice §2). One append-only row per drawer kick,
@@ -8,11 +10,9 @@ import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
  * sale settled at the till). The drawer is the till's receipt printer's kick (deli-hardware §6 — no
  * separate device), so this table records the ACT of opening, not a device.
  *
- * `till_id` and `sale_id` are BARE uuids: their FKs —
- * (till_id) → tills(id) and (sale_id) → sales(id) — are
- * hand-written in the --custom migration (a bare column carries no FK), exactly as `sale_voids`'s
- * own `sale_id` FK is. `sale_id` is NULLABLE (a manual open has no sale; a cash-sale open
- * references it) — MATCH SIMPLE skips the FK check on a NULL. `person_id` is a plain uuid with NO
+ * `till_id` references `tills(id)` and `sale_id` references `sales(id)`. `sale_id` is NULLABLE
+ * (a manual open has no sale; a cash-sale open references it), and a foreign key does not check a
+ * NULL. `person_id` is a plain uuid with NO
  * FK: the person/identity schema is a separate slice, so this audit row records the acting operator
  * as a raw id and stays independent of it — the `daily_closes.closed_by` / `order_amendments.actor_id`
  * / `sale_voids.voided_by` house seam pattern.
@@ -20,32 +20,34 @@ import { enumCheck, enumText, flag, id, table, ts } from "./columns.js";
  * `authorized_by` (nullable) and `via_override` (bool, default false) are the authorization AUDIT: who
  * authorized the open under a `gated` `drawer_open_policy` and whether a supervisor override was used.
  * `authorized_by` is a plain uuid with NO FK, the same `person_id` seam — it points at the identity
- * slice's persons without depending on it. Both are drizzle-native (a nullable uuid and a bool with a
- * default), so they land in the generated migration, not the --custom one.
+ * slice's persons without depending on it.
  */
 export const drawerOpens = table(
   "drawer_opens",
   {
-    id: id("id").primaryKey().defaultRandom(),
-    // Bare column: the (till_id) → tills(id) FK is
-    // hand-written in the --custom migration.
-    tillId: id("till_id").notNull(),
+    id: id("id").primaryKey().$defaultFn(newId),
+    tillId: id("till_id")
+      .notNull()
+      /* v8 ignore start */
+      .references(() => tills.id),
+    /* v8 ignore stop */
     // The acting operator (identity person id). Plain uuid, no FK: the person schema is a separate
     // slice and this audit row must not depend on it (the daily_closes.closed_by / sale_voids.voided_by
     // shape).
     personId: id("person_id").notNull(),
-    // Server-clock kick time — defaultNow(), the daily_closes.closedAt shape (a server-generated
+    // Server-clock kick time — $defaultFn(now), the daily_closes.closedAt shape (a server-generated
     // timestamp, not an application-supplied one).
-    openedAt: ts("opened_at").notNull().defaultNow(),
+    openedAt: ts("opened_at").notNull().$defaultFn(now),
     // Why the drawer opened: 'cash_sale' (auto kick on a cash sale) or 'manual' (staff open). A text
     // column + CHECK, matching invoice_series.purpose / incidents.severity. `enumText` and
     // `enumCheck` (`packages/db/src/schema/columns.ts`) build the column and its constraint from the
     // single values array below.
     reason: enumText("reason", ["cash_sale", "manual"] as const).notNull(),
-    // NULLABLE bare column: a manual open has no sale; a cash-sale open references it. The
-    // (sale_id) → sales(id) FK is hand-written in the
-    // --custom migration; MATCH SIMPLE skips it on a NULL sale_id.
-    saleId: id("sale_id"),
+    // NULLABLE: a manual open has no sale; a cash-sale open references it. A foreign key does not
+    // check a NULL.
+    /* v8 ignore start */
+    saleId: id("sale_id").references(() => sales.id),
+    /* v8 ignore stop */
     // Who authorized this open under a 'gated' drawer_open_policy (cash-drawer-authorization slice §2).
     // Plain uuid, NULLABLE, NO FK — the same shape and reason as `person_id` above: the person/identity
     // schema is a separate slice, so this audit row records the authorizer as a raw id and stays

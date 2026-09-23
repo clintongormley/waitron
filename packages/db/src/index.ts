@@ -1,6 +1,6 @@
 // The public surface of @waitron/db. Re-exports only — no logic here.
-export { createPgliteDb, createPostgresDb } from "./client.js";
-export type { Database, Driver, Schema, Transaction } from "./client.js";
+export { openVenueDatabase } from "./client.js";
+export type { Database, Schema, Transaction, VenueDatabase } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 // Each shape a job claim takes, and the one file holding the engine-specific SQL they all rest on
@@ -17,11 +17,16 @@ export {
   day,
   enumCheck,
   enumText,
+  enumType,
   flag,
   id,
   json,
   label,
+  labelList,
   money,
+  newId,
+  now,
+  nowIso,
   quantity,
   rate,
   smallCount,
@@ -98,6 +103,7 @@ export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
 export {
+  deploymentTableExists,
   readBreakGlassVerifier,
   readDeploymentAxes,
   readDeploymentEnvironment,
@@ -138,28 +144,45 @@ export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTransaction } from "./tenancy.js";
 export { isPgError, isUniqueViolation } from "./unique-violation.js";
 export {
+  checkFailed,
   constraintTarget,
+  indexViolated,
   refusalOn,
   sameTarget,
+  triggerRaised,
   type ConstraintTarget,
 } from "./constraint-target.js";
 export {
+  COVERAGE_REFUSAL,
+  FORM_FACTOR_REFUSAL,
+  LOCALES_REFUSAL,
+  OPEN_PARENT_REFUSAL,
+  POST_SETTLEMENT_REFUSAL,
+  TRANSITION_REFUSAL,
+  VARIANT_LOCALES_REFUSAL,
+} from "./trigger-refusals.js";
+export {
   CHECK_VIOLATION,
   FOREIGN_KEY_VIOLATION,
+  NOT_NULL_VIOLATION,
   RESTRICT_VIOLATION,
+  TRIGGER_ABORT,
   UNIQUE_VIOLATION,
 } from "./sql-state.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
- * Testing infrastructure exported for reuse by a module package's OWN test suite — not test-only
- * dependency-heavy internals like `describeEachTarget` (which pulls in `@testcontainers/postgresql`
- * and would make it a transitive dependency of the production surface for every consumer of this
- * package), but the three small, dependency-light primitives every immutability suite in this
- * repo is built from. `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` (Task 12) is the first
- * consumer outside this package: it reproduces `immutability.test.ts`'s pattern against its own
- * module-owned table and needs the same non-owner-role switch and the same wrapped-driver-error
- * readers this package's own suite uses.
+ * Testing infrastructure exported for reuse by a module package's OWN test suite: three small,
+ * dependency-light primitives every immutability suite in this repo is built from. Nothing that
+ * drags a test-only dependency in with it belongs here — it would become a transitive dependency of
+ * the production surface for every consumer of this package.
+ *
+ * `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` is the first consumer outside this package:
+ * it reproduces `immutability.test.ts`'s pattern against its own module-owned table and needs the
+ * same wrapped-driver-error readers this package's own suite uses.
+ *
+ * `asAppUser` does nothing on this engine — SQLite has no roles — and is exported only so its call
+ * sites still compile until task T1 removes them (`./testing/roles.ts`).
  */
 export { asAppUser } from "./testing/roles.js";
 export { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";

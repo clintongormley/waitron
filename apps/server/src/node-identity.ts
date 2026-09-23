@@ -17,11 +17,12 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  * The deployment holds one tenant per database. The seal and the stamp are ONE logical change —
  * the private key and its matching public key must land together or not at all — so they share a
  * single `withTransaction` (CLAUDE.md §3: `withTransaction` IS that transaction; nothing non-DB sits
- * between them to force a split). The shared transaction runs OWNER-role because the `nodes`
- * stamp needs it: app_user holds SELECT only on `nodes` (`0001_db_baseline_sql.sql`), so it
- * cannot UPDATE `public_key`. The seal alone could run as app_user (which DOES hold DML on
- * `tenant_credentials`, `0001_credentials_baseline_sql.sql`), but it rides the same owner
- * transaction here. Runs AFTER provisionVenue mints the node row the stamp updates.
+ * between them to force a split). The handle is named `ownerDb` because the `nodes` stamp belongs on
+ * the owner path: `nodes` is one of the four tables a request path may read and never write. That
+ * used to be enforced by the database — the application role held SELECT on `nodes` and nothing
+ * more. It is not enforced by anything in the engine now: there are no roles and no grants, and
+ * `ownerDb` and the app handle are the SAME handle at runtime. What keeps this write in a named
+ * file is `scripts/write-path-tables.test.ts`, which reads the tree as text. Runs AFTER provisionVenue mints the node row the stamp updates.
  */
 export interface EstablishIdentityDeps {
   ownerDb: Database;
@@ -43,7 +44,7 @@ export async function establishNodeIdentity(
 }
 
 /**
- * Unseal the node's identity PRIVATE key (base64 PKCS8) as `app_user` under `withTransaction`. The
+ * Unseal the node's identity PRIVATE key (base64 PKCS8) under `withTransaction`. The
  * Slice-5 signer's entry point (mint + sign a membership document); exercised now by the establish
  * round-trip. Throws `credentials.decrypt_failed` (a key
  * sealed under a different box key) or `credentials.missing` (never established).

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, primaryKey } from "drizzle-orm/pg-core";
-import { count, id, label, nodes, table, ts } from "@waitron/db";
+import { check, primaryKey } from "drizzle-orm/sqlite-core";
+import { count, id, label, nodes, now, table, ts } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -35,14 +35,16 @@ export const cadenas = table(
     ultimoRegistroId: id("ultimo_registro_id").references(() => registrosFacturacion.id),
     /* v8 ignore stop */
     ultimaHuella: label("ultima_huella"),
-    actualizadoEn: ts("actualizado_en").notNull().defaultNow(),
+    actualizadoEn: ts("actualizado_en").notNull().$defaultFn(now),
   },
   // Drizzle stores this extraConfig callback lazily and invokes it only when something walks the
   // table's full metadata — `drizzle-kit generate`, in its own separate CLI process, or a
   // `drizzle(client, { schema })` wired to THIS package's own schema (no test in this package
-  // constructs one; every test reaches these tables through `@waitron/db`'s `createPgliteDb()`,
-  // wired to CORE's schema, and raw `sql` execution instead). It never runs inside this package's
-  // own `vitest run`. The ignore markers bracket the WHOLE arrow function, not just its returned
+  // constructs one; every test here reaches a database through `@waitron/db`'s `useVenueDb`, whose
+  // handle is wired to CORE's schema barrel — `packages/db/src/client.ts` hands
+  // `./schema/index.js` to `openVenueStore` as both schemas, and that barrel names none of this
+  // package's tables — so these tables are reached by raw `sql` execution alone). It never runs
+  // inside this package's own `vitest run`. The ignore markers bracket the WHOLE arrow function, not just its returned
   // array's elements: v8 tracks "was this function ever called" as well as per-statement
   // coverage, and a range that opened only after the arrow function's own `(t) => [` left the
   // function's closing bracket itself reported as a separately uncovered line.

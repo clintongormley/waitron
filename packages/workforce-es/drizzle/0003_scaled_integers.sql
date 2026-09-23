@@ -1,1 +1,0 @@
-ALTER TABLE "convenio_config" ALTER COLUMN "night_premium_pct" SET DATA TYPE integer;

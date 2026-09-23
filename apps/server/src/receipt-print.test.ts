@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
@@ -9,10 +9,12 @@ import {
   locations,
   printJobs,
   sales,
+  tenantReceipts,
   tills,
   withTransaction,
 } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -45,19 +47,33 @@ import { createTable } from "./tables.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
-// REAL Postgres, not PGlite: the point is the auto-print HOOK writing a `print_jobs` outbox row and a
-// `drawer_opens` audit row through the deployment role, atomically with a genuine chained
-// fiscal sale (CLAUDE.md §4 — PGlite runs every connection as a superuser holding every grant). The sale path
-// runs through `asAppUser` exactly as `till-sale.test.ts` does; provisioning runs as the owner.
-//
-// NEVER-BLOCK (CLAUDE.md §5): the LOAD-BEARING guarantee is that a broken/absent receipt printer can
-// never delay or fail a sale. Each test asserts the fiscal record still lands, and the cash test spies
-// the printer TRANSPORT (the ONLY code that opens a printer socket / writes a device) to prove the sale
-// path invoked NONE of it — the enqueue is a pure DB INSERT and the job is left `queued` for the async
-// agent. (A global `net.createConnection` spy is deliberately NOT used: node-postgres opens DB sockets
-// too, so it would be noisy; the transport `send` methods are the printer-hardware entry points.)
+/**
+ * The auto-print hook, on the engine the box now runs: a `print_jobs` outbox row and a `drawer_opens`
+ * audit row written atomically with a genuine chained fiscal sale.
+ *
+ * ## The role half of the old header is gone and is replaced by nothing
+ *
+ * It argued real PostgreSQL was mandatory rather than PGlite because the hook wrote through the
+ * deployment role while provisioning ran as the owner. SQLite has no roles: one process opens one
+ * file, and `asAppUser` is an empty function body (`packages/db/src/testing/roles.ts:25`). The
+ * `asAppUser(tx)` calls below are where the product path puts them, and they check nothing.
+ *
+ * ## What is unchanged, and must stay that way — CLAUDE.md §5
+ *
+ * PRINTING NEVER OPENS THE DRAWER: a receipt is a `document` job carrying no drawer command, the
+ * kick is a separate `drawer` job, and cash settlement writes its own audit row. NEVER-BLOCK: a
+ * broken or absent receipt printer can never delay or fail a sale. Each test asserts the fiscal
+ * record still lands, and the cash test spies the printer TRANSPORT — the only code that opens a
+ * printer socket or writes a device — to prove the sale path invoked none of it; the enqueue is a
+ * plain INSERT and the job is left `queued` for the agent. (A global `net.createConnection` spy is
+ * deliberately not used: the transport `send` methods are the printer-hardware entry points, and
+ * they are what a spy can prove silent.)
+ */
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 // The acting operator recorded in `drawer_opens.person_id` — an identity person id (plain uuid, no FK;
 // the person schema is a separate slice), the shape `drawer-opens.test.ts` uses.
@@ -89,8 +105,8 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique and tenants
-// accumulate for the shared container's life) — the `till-sale.test.ts` counter.
+// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique) — the
+// `till-sale.test.ts` counter.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -149,11 +165,11 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.admin, async (tx) => {
+  const available = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -183,7 +199,7 @@ async function makePrinter(
   cfg: TillConfig,
   { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
 ): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
@@ -203,7 +219,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -224,7 +240,7 @@ async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -240,7 +256,7 @@ async function drawerOpensFor(
   cfg: TillConfig,
 ): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -255,7 +271,7 @@ async function drawerOpensFor(
 
 async function registroCount(cfg: TillConfig): Promise<number> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.select().from(registrosFacturacion);
     return rows.length;
@@ -266,7 +282,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
  *  one — for pinning the `drawer_opens.sale_id` back-reference the helper wires. */
 async function onlySaleId(cfg: TillConfig): Promise<string> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
@@ -277,7 +293,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
@@ -298,7 +314,7 @@ afterEach(() => {
   usbSend.mockClear();
 });
 
-const deps = () => ({ db: suite.admin, backend, clock });
+const deps = () => ({ db: suite.db, backend, clock });
 
 describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
@@ -308,7 +324,7 @@ describe("receipt grouping after table changes", () => {
       const cfg: TillConfig = { ...base.cfg, orderFlow };
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
-      const { tableId, tabId } = await withTransaction(suite.admin, async (tx) => {
+      const { tableId, tabId } = await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         const table = await createTable(tx, cfg, { label: "Terrace 6" });
         const tab = await openTab(tx, cfg, {
@@ -346,14 +362,14 @@ describe("receipt grouping after table changes", () => {
       expect(decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload))).toContain(
         "Terrace 6",
       );
-      await withTransaction(suite.admin, async (tx) => {
+      await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(diningTables)
           .set({ label: "Renamed table" })
           .where(eq(diningTables.id, tableId));
       });
-      await reprintSale({ db: suite.admin, backend }, cfg, tabId);
+      await reprintSale({ db: suite.db, backend }, cfg, tabId);
       if (orderFlow === "invoice_first") {
         const collected = await collectOrder(
           deps(),
@@ -367,11 +383,11 @@ describe("receipt grouping after table changes", () => {
         );
         expect(collected.orderLabel).toBe("Terrace 6");
       }
-      await withTransaction(suite.admin, async (tx) => {
+      await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await openTab(tx, cfg, { tableId });
       });
-      await reprintSale({ db: suite.admin, backend }, cfg, tabId);
+      await reprintSale({ db: suite.db, backend }, cfg, tabId);
       const receiptTexts = (await printJobsFor(cfg))
         .map((job) => decodeTicket(new Uint8Array(job.payload)))
         .filter((text) => text.includes("TOTAL"));
@@ -422,7 +438,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
@@ -500,11 +516,14 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(sql`
-        insert into tenant_receipts (receipt)
-        values (${JSON.stringify({ footerMessage: "Gracias por su visita" })}::jsonb)`);
+      // Through the table definition: `receipt` is a JSON column whose own write mapping encodes
+      // the object, and `updated_at` is a JavaScript generator a raw insert never reaches. The
+      // `::jsonb` cast this replaces is a syntax error on this engine.
+      await tx
+        .insert(tenantReceipts)
+        .values({ receipt: { footerMessage: "Gracias por su visita" } });
     });
 
     await recordTillSale(
@@ -678,7 +697,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
-      const deviceTillId = await withTransaction(suite.admin, async (tx) => {
+      const deviceTillId = await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         const [till] = await tx
           .insert(tills)
@@ -692,7 +711,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       const printerId = await makePrinter(cfg);
       await configureReceipt({ ...cfg, tillId: deviceTillId }, { mode, printerId });
       const id = randomUUID();
-      await parkOrder({ db: suite.admin }, cfg, {
+      await parkOrder({ db: suite.db }, cfg, {
         id,
         lines: [{ productId: base.each.id, quantity: "1" }],
       });
@@ -709,7 +728,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
-      await withTransaction(suite.admin, async (tx) => {
+      await withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(locations)
@@ -721,7 +740,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       await configureReceipt(cfg, { mode, printerId });
 
       const id = randomUUID();
-      await parkOrder({ db: suite.admin }, cfg, {
+      await parkOrder({ db: suite.db }, cfg, {
         id,
         lines: [{ productId: base.each.id, quantity: "1" }],
       });

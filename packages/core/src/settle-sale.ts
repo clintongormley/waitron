@@ -2,12 +2,13 @@
 import "./errors.js";
 import { eq, sql } from "drizzle-orm";
 import {
-  isPgError,
   isUniqueViolation,
+  POST_SETTLEMENT_REFUSAL,
   saleSettlements,
   saleVoids,
   sales,
   tenders,
+  triggerRaised,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -29,17 +30,6 @@ export interface SettleSaleInput {
 }
 
 /**
- * SQLSTATE raised by the `tenders_reject_post_settlement` trigger
- * (`packages/db/drizzle/0001_db_baseline_sql.sql` line 270) when a tender INSERT lands after the
- * sale is already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
- *
- * It stays here rather than in `@waitron/db`'s `sqlstate.ts`, whose members are codes PostgreSQL
- * itself defines: this one is raised by a `RAISE ... USING ERRCODE` in our own trigger, and this is
- * the only file that reads it.
- */
-const POST_SETTLEMENT_VIOLATION = "WT002";
-
-/**
  * The deferred half of the sale write path, and the single implementation of
  * settlement (recordSale's `immediate` mode calls this in the same transaction,
  * so the two cannot drift — design D6). Payment is not a fiscal event: this
@@ -51,14 +41,15 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   //
-  // The subquery is a count of whole cents read raw, cast `::text` and converted by
-  // `rawCentsToDecimal` — see its doc comment. `sales.total` beside it is a typed drizzle column,
-  // so the column's own mapping converts that one and it needs no cast.
+  // The subquery is a count of whole cents read raw, cast to text and converted by
+  // `rawCentsToDecimal` — see its doc comment for why it is text and not an integer cast.
+  // `sales.total` beside it is a typed drizzle column, so the column's own mapping converts that
+  // one and it needs no cast.
   const [sale] = await tx
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::text`,
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));
@@ -79,7 +70,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // Clean `already_settled` for the sequential retry. The concurrent race is caught by the
   // constraints below, not by this SELECT: two callers both pass it (the other's uncommitted
   // settlement is invisible), and whichever the loser reaches first arbitrates — the `tenders`
-  // post-settlement trigger (WT002) when the winner has already committed, otherwise the
+  // post-settlement trigger when the winner has already committed, otherwise the
   // `sale_settlements` UNIQUE. Both are translated to `sale.already_settled` below; the loser's
   // whole transaction, tenders included, rolls back.
   const [existing] = await tx
@@ -156,13 +147,13 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       );
     } catch (error) {
       // The other concurrent-loser interleaving. When the winner has already COMMITTED its
-      // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger, which raises
-      // SQLSTATE WT002 (`packages/db/drizzle/0001_db_baseline_sql.sql`). That trigger fires iff a
-      // `sale_settlements` row already exists for the sale, so WT002 here ALWAYS means "already
-      // settled" — translate it to the same code the `sale_settlements` UNIQUE path maps to below,
-      // so a retry/idempotency caller keying on `sale.already_settled` recognises the loser
-      // whichever insert it reached.
-      if (isPgError(error, POST_SETTLEMENT_VIOLATION)) {
+      // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger. That trigger
+      // fires iff a `sale_settlements` row already exists for the sale, so its refusal here ALWAYS
+      // means "already settled" — translate it to the same code the `sale_settlements` UNIQUE path
+      // maps to below, so a retry/idempotency caller keying on `sale.already_settled` recognises
+      // the loser whichever insert it reached. Every other failure of this INSERT is rethrown as it
+      // arrived.
+      if (triggerRaised(error, POST_SETTLEMENT_REFUSAL)) {
         throw new AppError("sale.already_settled", { saleId: input.saleId });
       }
       throw error;

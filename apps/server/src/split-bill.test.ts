@@ -1,9 +1,18 @@
+// The domain outcomes of un-joining a table and settling a tab, single-threaded.
+//
+// A sibling suite used to race the two against each other and assert that pay was never the
+// deadlock victim. It was deleted with the storage switch (2026-09-22): there is one writer per
+// venue file, so the ordering between `unjoinTable` and the settle path is unobservable, and
+// nothing covers it now.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
   diningTables,
+  locations,
+  tableServiceStatuses,
+  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -68,15 +77,21 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Through the table definitions rather than raw SQL: `invoice_locales` is a JSON array in a text
+  // column on this engine (`labelList`, packages/db/src/schema/columns.ts), so there is no array
+  // constructor to write, and `id` is a `$defaultFn` a raw insert would never reach.
+  const locationId = randomUUID();
+  await db.insert(locations).values({
+    id: locationId,
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const tillId = randomUUID();
+  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -108,15 +123,19 @@ async function setupVenue(): Promise<Seeded> {
     await assignCatalogueToLocation(tx, locationId, cat.id);
     const t1 = await createTable(tx, cfg, { label: "T1" });
     const t2 = await createTable(tx, cfg, { label: "T2" });
-    const status = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
-    );
+    // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
+    // engine, which a raw insert never reaches — it failed with
+    // `NOT NULL constraint failed: table_service_statuses.id`.
+    const activeStatusId = randomUUID();
+    await tx
+      .insert(tableServiceStatuses)
+      .values({ id: activeStatusId, label: "Bill requested", color: "#ef4444" });
     return {
       aguaId: agua.id,
       jamonId: jamon.id,
       tableId: t1.id,
       tableId2: t2.id,
-      activeStatusId: status.rows[0]!.id,
+      activeStatusId,
     };
   });
   return { cfg, ...seeded };
@@ -261,8 +280,8 @@ describe("splitOffCheck", () => {
   it("refuses a DETACHED CHECK as the split origin (tab.not_open) — origin must be an open TAB", async () => {
     // The origin of a split must be an open TAB (table-anchored, spec §3 + the `/api/tabs/:id/split`
     // route). A detached check — a table-LESS open order minted BY a prior split — is a payment unit,
-    // not a seat, and must not itself be a split origin. `lockOpenTab` adds the is-a-tab back-pointer
-    // assertion that `lockOpenTabRow` (status-only) lacks; a check has no `dining_tables.tab_id`
+    // not a seat, and must not itself be a split origin. `assertAnchoredTabOpen` adds the is-a-tab back-pointer
+    // assertion that `assertTabOpen` (status-only) lacks; a check has no `dining_tables.tab_id`
     // pointing at it, so it fails closed to `tab.not_open`.
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
@@ -422,7 +441,7 @@ describe("unjoinTable", () => {
         .from(diningTables)
         .where(eq(diningTables.id, tableId));
       const [{ count }] = await tx
-        .select({ count: sql<number>`count(*)::int` })
+        .select({ count: sql<number>`cast(count(*) as int)` })
         .from(workingOrders)
         .where(eq(workingOrders.status, "open"));
       return { anchor, count };

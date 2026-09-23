@@ -68,11 +68,13 @@ async function borrowedUnitPrices(
  * (apps/server/src/working-order.test.ts), which reaches the same empty-ACTIVE-list shape by the
  * other route — a menu offer withdrawing the item — rather than by an unpriceable one.
  * `extra_list_items_product_fk` is ON DELETE RESTRICT
- * (schema/extras.ts), which forbids that state at any ONE instant — but the items and the products
- * are read by two statements with a read-committed snapshot each, so another transaction can drop
- * the item from the list and then delete the product in between. Seen that way, on a real backend,
- * by "leaves out a list item whose product disappears between the menu view's two reads"
- * (extras.pg.test.ts).
+ * (schema/extras.ts), which forbids that state at any ONE instant. On PostgreSQL it was still
+ * reachable: the items and the products were read by two statements with a read-committed snapshot
+ * each, so another transaction could drop the item from the list and then delete the product in
+ * between, and the case that reproduced it did exactly that. One write transaction runs on the
+ * venue file at a time now, so a read taken inside `withTransaction` cannot be torn that way;
+ * "leaves out a list item whose product has gone" (extras.concurrency.test.ts) writes the same row
+ * directly instead, and that case's own note says how and why.
  */
 function priceItems(
   candidates: Candidate[],

@@ -1,12 +1,17 @@
-// Real PostgreSQL checks app_user allocation grants and competing backends.
-import { afterEach, beforeEach, expect, it } from "vitest";
+// LOSS, from the storage swap: the "allocates as the app role" case below used to run the
+// allocation as the non-owner `app_user` on a real PostgreSQL, and its whole point was the
+// COLUMN-SCOPED `grant update (next_number)` — without that grant, allocation worked in every test
+// that skipped the role switch and failed only in production. SQLite has no roles and no grants
+// (`packages/db/src/testing/roles.ts`), so that case now duplicates the first one and is deleted.
+// Nothing states which privileges this allocation needed.
+import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
+import { CORE_MIGRATIONS } from "./migrations.js";
 import { invoiceSeries } from "./schema/series.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
-import { describeEachTarget } from "./testing/harness.js";
-import { asAppUser } from "./testing/roles.js";
+import { useVenueDb } from "./testing/venue-db.js";
 import { seedNode } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -58,31 +63,15 @@ async function makeSeries(
   return row.id;
 }
 
-describeEachTarget("allocateInvoiceNumber", (target) => {
+describe("allocateInvoiceNumber", () => {
+  // One migrated database, emptied between tests by the helper's default reset — what the per-test
+  // `target.create()` this replaces bought, without building a fresh file each time.
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let db: Database;
 
   beforeEach(async () => {
-    // No truncate before seed(): target.create() (testing/harness.ts) already
-    // returns a freshly migrated, empty database per test, so the truncate
-    // this beforeEach used to run was always a no-op. Removed rather than
-    // kept as harmless boilerplate: Task 8 added sales/sale_lines/tenders,
-    // which are append-only and reachable by FK cascade from tenants, and
-    // TRUNCATE ... CASCADE fires the BEFORE TRUNCATE trigger on every table it
-    // cascades into, not only the one named in the statement — verified live.
-    // A `truncate table tenants cascade` here would now fail this hook on
-    // every test in the file with "table sales is append-only: TRUNCATE is
-    // not permitted", for a statement that was never doing anything to begin
-    // with.
-    db = await target.create();
+    db = suite.db;
     await seed(db);
-  });
-
-  // This package's convention (see tenancy.test.ts): without it, a pg Pool
-  // per test is left open when the postgres target's container stops at
-  // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
-  // rejection rather than a test failure.
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("returns the starting number on the first allocation", async () => {
@@ -183,19 +172,6 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     expect([a1, b1, a2]).toEqual([1, 1, 2]);
   });
 
-  it("allocates as the app role", async () => {
-    // The application never runs as owner. If the column-scoped
-    // GRANT UPDATE (next_number) is missing, allocation works in every test
-    // that skips asAppUser and fails only in production — the exact shape of a
-    // suite that asserts nothing.
-    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
-    const n = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      return allocateInvoiceNumber(tx, seriesId);
-    });
-    expect(n).toBe(1);
-  });
-
   it("throws series.not_found for an unknown series", async () => {
     const error = await withTransaction(db, (tx) =>
       allocateInvoiceNumber(tx, UNKNOWN_SERIES),
@@ -205,22 +181,28 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     expect((error as AppError).params).toEqual({ seriesId: UNKNOWN_SERIES });
   });
 
-  it.runIf(target.name === "postgres")(
-    "hands out distinct numbers to twenty concurrent allocators",
-    async () => {
-      // PGlite cannot run this: concurrent queries serialise onto one backend,
-      // so a read-then-write implementation passes there by accident. Running
-      // it on PGlite would be worse than skipping it — a green result that
-      // means nothing. Real Postgres only, per the Global Constraint.
-      const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
-      const results = await Promise.all(
-        Array.from({ length: 20 }, () =>
-          withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)),
-        ),
-      );
-      expect(new Set(results).size).toBe(20);
-      expect(Math.min(...results)).toBe(1);
-      expect(Math.max(...results)).toBe(20);
-    },
-  );
+  it("hands out distinct numbers to twenty allocators started together", async () => {
+    // WHAT THIS CASE NOW SHOWS, AND WHAT IT NO LONGER DOES. On PostgreSQL it ran on the real
+    // container only, because twenty allocators on twenty backends could genuinely collide and a
+    // read-then-write allocator handed the same number out twice; on PGlite every query landed on
+    // one backend, so a pass there meant nothing and the case was skipped.
+    //
+    // SQLite admits one writer per file and has no row locks, so the collision this guarded
+    // against cannot arise: `withTransaction` runs each body inside the venue file's write queue
+    // (`packages/store/src/write-queue.ts`), which issues `begin immediate` and `commit` around it,
+    // so the next caller's transaction does not start until the previous one has committed. What
+    // twenty overlapping calls test HERE is that the queue actually serialises them — twenty
+    // distinct, contiguous numbers — and not that a lock holds under contention. The receipt for
+    // the queue itself, with a control in the other direction, is `racePair` in
+    // `packages/catalogue/test/fixtures.ts`.
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)),
+      ),
+    );
+    expect(new Set(results).size).toBe(20);
+    expect(Math.min(...results)).toBe(1);
+    expect(Math.max(...results)).toBe(20);
+  });
 });

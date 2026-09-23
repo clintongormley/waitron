@@ -1,14 +1,20 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { AltaInput, Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { registrosFacturacion } from "./schema/registros.js";
-import { fromRegistroRow, toRegistroRow, type RegistroRow } from "./registro-row.js";
+import {
+  decodeRegistroRow,
+  fromRegistroRow,
+  toRegistroRow,
+  type RegistroRow,
+} from "./registro-row.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
 
-// PGlite exercises record flattening, storage, rehydration and XML assembly without concurrency.
+// Record flattening, storage, rehydration and XML assembly, without concurrency: one writer
+// against one venue database is all these cases need.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
@@ -44,12 +50,12 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
     entorno: "production",
   });
   await pg.db.insert(registrosFacturacion).values(row);
-  const { rows } = await pg.db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const raw = rows[0];
   if (raw === undefined) throw new Error(`storeAndReadBack: no row for sale ${saleId}`);
-  return raw;
+  return decodeRegistroRow(raw);
 }
 
 /** The reachable v1 case: an R5 rectificativa por diferencias — TipoRectificativa "I", one rectified
@@ -255,5 +261,75 @@ describe("drain serialisation files the mandatory rectificativa fields (the gap-
     expect(xml).toContain("<sf:FacturasRectificadas>");
     // The rectified invoice's identity reached the wire too, inside FacturasRectificadas.
     expect(xml).toContain("<sf:NumSerieFactura>A/7</sf:NumSerieFactura>");
+  });
+});
+
+describe("decodeRegistroRow", () => {
+  it("hands back exactly what drizzle's own typed select hands back", async () => {
+    // The drift guard for `decodeRegistroRow`, and the reason that function derives its work from
+    // `getTableColumns` rather than from a list of column names somebody wrote down: the property
+    // asserted here is "a decoded raw row IS drizzle's typed select, renamed", so a column added
+    // to `registros_facturacion` later is covered without either side being touched.
+    //
+    // The record is an F3 canje because it is the storable shape that leaves the most JSON columns
+    // non-null at once — `facturas_sustituidas`, `destinatarios`, `desglose` and
+    // `sistema_informatico` — and `registros_facturas_sustituidas_f3_ck` refuses the block on any
+    // other `tipo_factura`. A null column proves nothing here: `decodeRegistroRow` skips nulls, so
+    // a row whose JSON columns were all null would pass this case with the decoding deleted.
+    const built = buildAltaRecord({
+      IDEmisorFactura: TEST_NIF,
+      NumSerieFactura: "F3/2",
+      FechaExpedicionFactura: new Date("2026-07-21T00:00:00+02:00"),
+      NombreRazonEmisor: "Waitron SL",
+      TipoFactura: "F3",
+      FacturasSustituidas: [
+        {
+          IDEmisorFactura: TEST_NIF,
+          NumSerieFactura: "A/8",
+          FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
+        },
+      ],
+      Destinatarios: {
+        IDDestinatario: [{ NombreRazon: "Cliente Empresarial SL", NIF: "B12345678" }],
+      },
+      DescripcionOperacion: "Canje de tiques simplificados",
+      Desglose: [
+        {
+          BaseImponibleOimporteNoSujeto: "102.02",
+          CuotaRepercutida: "21.43",
+          TipoImpositivo: "21",
+          CalificacionOperacion: "S1",
+        },
+      ],
+      CuotaTotal: "21.43",
+      ImporteTotal: "123.45",
+      SistemaInformatico: TEST_SISTEMA,
+      generadoEn: new Date(Date.UTC(2026, 6, 21, 17, 20, 30)),
+      offsetMinutes: 120,
+      Encadenamiento: { PrimerRegistro: "S" },
+    });
+    const decoded = await storeAndReadBack(built);
+
+    const [typed] = await pg.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, decoded.id));
+
+    // Compared by VALUE under the snake_case names, not key by key: `toEqual` on the whole object
+    // is what makes a column nobody thought about part of the assertion.
+    const renamed = Object.fromEntries(
+      Object.entries(typed as Record<string, unknown>).map(([key, value]) => [
+        key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+        value,
+      ]),
+    );
+    expect(decoded).toEqual(renamed);
+    // Named as well, because the deep-equal above would also hold if BOTH sides were text: these
+    // are the four the raw read gets wrong on this engine, and the two defects behind this
+    // function were a `desglose` that was a string and a `facturas_sustituidas` that was one.
+    expect(Array.isArray(decoded.desglose)).toBe(true);
+    expect(typeof decoded.facturas_sustituidas).toBe("object");
+    expect(typeof decoded.destinatarios).toBe("object");
+    expect(decoded.primer_registro).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, day, id, label, money, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, day, id, label, money, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -9,8 +9,9 @@ import { persons } from "@waitron/identity";
  * carry `contracted_minutes_per_week`, the ordinary-working-time baseline the overtime computation
  * subtracts from (art. 35.5: overtime = actual − ordinary working time). MUTABLE — a contract's terms
  * change and an employment ends by setting `end_date`, never by deleting the row (the time history
- * in `time_entries` must keep its referent) — so the app role holds SELECT, INSERT, UPDATE and no
- * DELETE (drizzle/0001_workforce_baseline_sql.sql), the same shape as `persons`.
+ * in `time_entries` must keep its referent). The grant that withheld DELETE went with PostgreSQL, and
+ * no foreign key stands in for it — nothing in the schema references `employments` — so the
+ * never-delete rule is now the callers', the same shape as `persons`.
  *
  * No `convenio_ref`: the 2026-08-02 plan §3 listed one, but `convenio` is workforce-es's declared
  * vocabulary, which the English-only guard forbids in this generic package, and it has
@@ -20,7 +21,7 @@ import { persons } from "@waitron/identity";
 export const employments = table(
   "employments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** Ordinary weekly working time, in minutes — the overtime baseline (art. 35.5). Minutes, not hours,
      * so the projection never carries a fractional-hour rounding error. */
@@ -31,7 +32,7 @@ export const employments = table(
     endDate: day("end_date"),
     /** Tenant currency, no currency column (single-currency-per-tenant convention, `sales.total`). */
     payRate: money("pay_rate").notNull(),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a

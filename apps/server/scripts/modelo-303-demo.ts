@@ -1,12 +1,21 @@
 // Self-contained, human-checkable demonstration of `@waitron/reporting`'s two date-range roll-ups
 // over the filed VAT desglose: `computeVatSummaryForPeriod` (a business-day range summary, scope 3)
 // and `computeVatReturn` (the modelo 303 output-VAT / *IVA devengado* aggregate for one month,
-// scope 4). Modelled on `daily-close-demo.ts`: it boots an in-memory PGlite (a WASM PostgreSQL),
-// applies `@waitron/db`'s CORE + `@waitron/identity`'s migrations, and rings up a whole MONTH of
-// trade through the REAL write path (`recordSale` / `recordCorrection` from `@waitron/core`) against
-// the fake `FiscalBackend` from `@waitron/fiscal` — no external Postgres, no AEAT, no SIF
-// registration. Both functions read only `sales.vat_breakdown` (a queryable copy of the filed
-// desglose), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
+// scope 4). Modelled on `daily-close-demo.ts`: it makes a throwaway venue directory under the OS
+// temp dir, applies the `core` and `identity` migration sets to it through `applyMigrations` (the
+// entry point `dev-setup.ts` also uses), rings up a whole MONTH of trade through the REAL write
+// path (`recordSale` / `recordCorrection` from `@waitron/core`) against the fake `FiscalBackend`
+// from `@waitron/fiscal` — no AEAT and no SIF registration — and removes the directory when it
+// finishes. Both roll-ups read only `sales.vat_breakdown` (a queryable copy of the filed desglose),
+// which the `core` set creates along with the received-invoice tables; the fiscal chain is never
+// read. The `identity` set is here for the supervisor whose session authorises the rectificativa.
+//
+// LOST with the storage swap: the venue rows, the supervisor and the received invoices used to be
+// seeded as the PGlite superuser and every read and write below used to run through `asAppUser`, to
+// show a running POS filing as `app_user` — a role holding no INSERT on `tenants`. SQLite has no
+// roles and no grants, and `asAppUser` is now an empty function
+// (`packages/db/src/testing/roles.ts`), so that part of the demonstration is gone; the calls are
+// deleted rather than left as no-ops that still read like a claim.
 //
 // It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
 // onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"
@@ -40,7 +49,9 @@
 //   base imponible total 495.00 ; cuota (IVA devengado) total 86.35
 // The script recomputes that 86.35 independently from the seeded figures (`addDecimal`, not a JS
 // number) and asserts it equals `computeVatReturn`'s summed cuota — printing OK or throwing.
-import { sql } from "drizzle-orm";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   computeVatReturn,
   computeVatSummaryForPeriod,
@@ -60,14 +71,19 @@ import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
+  purchaseInvoiceVat,
+  purchaseInvoices,
+  tenants,
+  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
   addDecimal,
   compareDecimal,
@@ -82,6 +98,10 @@ import {
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
+
+/** The migration sets this demo applies, in manifest order — core carries `sales` and the
+ * received-invoice tables, identity the supervisor who authorises the rectificativa. */
+const SETS = ["core", "identity"];
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -283,51 +303,69 @@ interface Venue {
 
 /**
  * Seeds tenant → location → till → supervisor → TWO nodes, each with a standard and a
- * rectificative series, as the PGlite superuser, exactly as `daily-close-demo.ts` does —
- * `app_user` holds no INSERT on `tenants` deliberately (a running POS cannot create tenants).
+ * rectificative series, exactly as `daily-close-demo.ts` does.
+ *
+ * Drizzle inserts rather than the raw SQL that was here: these `id` columns no longer carry a SQL
+ * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
+ * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
+ * text column, not the PostgreSQL `array['es-ES']` this used to write.
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  await db.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name)
-          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
-  );
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(
-    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`,
-  );
-  const tillId = brandTillId(till.rows[0]!.id);
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "50000000K", legalName: "Deli Demo SL" });
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Sala principal",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const locationId = loc!.id;
+  const [till] = await db
+    .insert(tills)
+    .values({ locationId, name: "Caja 1" })
+    .returning({ id: tills.id });
+  const tillId = brandTillId(till!.id);
 
-  const nodes: SeededNode[] = [];
+  const seeded: SeededNode[] = [];
   for (let i = 1; i <= 2; i++) {
-    const node = await db.execute<{ id: string }>(
-      sql`insert into nodes (location_id, name) values (${locationId}, ${`Nodo ${i}`}) returning id`,
-    );
-    const nodeId = brandNodeId(node.rows[0]!.id);
+    const [node] = await db
+      .insert(nodes)
+      .values({ locationId, name: `Nodo ${i}` })
+      .returning({ id: nodes.id });
+    const nodeId = brandNodeId(node!.id);
     // Codes are unique per (node_id, code), so 'A'/'R' can repeat across the two nodes.
-    const series = await db.execute<{ id: string }>(
-      sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
-    );
-    const rSeries = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (node_id, code, purpose)
-      values (${nodeId}, 'R', 'rectificative') returning id`);
-    nodes.push({
+    const [series] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "A" })
+      .returning({ id: invoiceSeries.id });
+    const [rSeries] = await db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    seeded.push({
       nodeId,
-      seriesId: brandSeriesId(series.rows[0]!.id),
-      rectificativeSeriesId: brandSeriesId(rSeries.rows[0]!.id),
+      seriesId: brandSeriesId(series!.id),
+      rectificativeSeriesId: brandSeriesId(rSeries!.id),
     });
   }
 
-  // A supervisor (holds `sale.rectify`), PIN "1234", inserted as the superuser like everything else
-  // — the authorizer the rectificativa's gate requires.
-  const person = await db.execute<{ id: string }>(sql`
-    insert into persons (display_name, email, pin_hash, role)
-    values ('Supervisora', 'supervisor@modelo-303.demo', ${hashPin("1234")}, 'supervisor') returning id`);
-  const authorizerId = person.rows[0]!.id;
+  // A supervisor (holds `sale.rectify`), PIN "1234" — the authorizer the rectificativa's gate
+  // requires.
+  const [person] = await db
+    .insert(persons)
+    .values({
+      displayName: "Supervisora",
+      email: "supervisor@modelo-303.demo",
+      pinHash: hashPin("1234"),
+      role: "supervisor",
+    })
+    .returning({ id: persons.id });
+  const authorizerId = person!.id;
 
-  return { tillId, nodes, authorizerId };
+  return { tillId, nodes: seeded, authorizerId };
 }
 
 /** The expected *IVA devengado* per rate, summed independently from the seeded figures (corrections
@@ -374,8 +412,8 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
 }
 
 /**
- * Seeds the received supplier invoices directly (as the PGlite superuser), exactly as seedVenue
- * seeds the tenant — a received invoice is a plain accounting record, no fiscal write path.
+ * Seeds the received supplier invoices directly, exactly as seedVenue seeds the tenant — a received
+ * invoice is a plain accounting record, no fiscal write path.
  */
 async function seedPurchaseInvoices(db: Database): Promise<void> {
   // These go straight into `purchase_invoices` and `purchase_invoice_vat`, whose `total`, `base`
@@ -384,15 +422,25 @@ async function seedPurchaseInvoices(db: Database): Promise<void> {
   // number too, at its OWN scale: a count of basis points, where 2100 is 21%.
   for (const p of PURCHASE_INVOICES) {
     const total = addDecimal(decimal(p.base), decimal(p.tax));
-    const inv = await db.execute<{ id: string }>(sql`
-      insert into purchase_invoices
-        (supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
-      values (${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${decimalToCents(total)}, ${p.regime})
-      returning id`);
-    const id = inv.rows[0]!.id;
-    await db.execute(sql`
-      insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind)
-      values (${id}, ${decimalToBasisPoints(decimal(p.rate))}, ${decimalToCents(decimal(p.base))}, ${decimalToCents(decimal(p.tax))}, ${p.kind})`);
+    const [inv] = await db
+      .insert(purchaseInvoices)
+      .values({
+        supplierTaxId: p.supplierTaxId,
+        supplierName: p.supplierName,
+        supplierInvoiceNumber: p.number,
+        issuedOn: p.issuedOn,
+        receivedOn: p.receivedOn,
+        total: decimalToCents(total),
+        regime: p.regime,
+      })
+      .returning({ id: purchaseInvoices.id });
+    await db.insert(purchaseInvoiceVat).values({
+      purchaseInvoiceId: inv!.id,
+      rate: decimalToBasisPoints(decimal(p.rate)),
+      base: decimalToCents(decimal(p.base)),
+      tax: decimalToCents(decimal(p.tax)),
+      kind: p.kind,
+    });
   }
 }
 
@@ -477,21 +525,24 @@ function reconcileDeducible(
 }
 
 async function main(): Promise<void> {
-  const db = await createPgliteDb();
+  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
+  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; it applies identity AFTER
+  // core, the order the manifest states, because identity's `persons`/`sessions` carry a foreign
+  // key onto core's `tenants`/`tills` — recordCorrection's `sale.rectify` gate reads both.
+  const venueDir = await mkdtemp(join(tmpdir(), "modelo-303-demo-"));
+  const sets = manifestSets().filter((set) => SETS.includes(set.name));
+  await applyMigrations(venueDir, migrationOptionsFor(sets, null));
+  const store = await openVenueDatabase(venueDir);
+  const db = store.venue;
   try {
-    await runMigrations(db, CORE_MIGRATIONS);
-    // IDENTITY_MIGRATIONS after CORE: identity's `persons`/`sessions` carry a foreign key onto core's
-    // `tenants`/`tills`. recordCorrection's `sale.rectify` gate reads both.
-    await runMigrations(db, IDENTITY_MIGRATIONS);
     await FakeFiscalBackend.install(db);
     const venue = await seedVenue(db);
     const backend = new FakeFiscalBackend(db);
 
-    // Register both nodes once (a one-time admin action recordSale itself never performs), as
-    // app_user in its own committed transaction so the later write transactions see them.
+    // Register both nodes once (a one-time admin action recordSale itself never performs), each in
+    // its own committed transaction so the later write transactions see them.
     for (const node of venue.nodes) {
       await withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         await backend.registerNode(tx, node.nodeId);
       });
     }
@@ -527,7 +578,6 @@ async function main(): Promise<void> {
         settlement: { kind: "deferred" },
       };
       const { saleId } = await withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         return recordSale(tx, backend, input);
       });
       saleIds.push(saleId);
@@ -536,7 +586,6 @@ async function main(): Promise<void> {
     // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
     // requires — exactly as a till would at the start of a shift.
     const authorizerSession = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return loginWithPin(tx, {
         tillId: venue.tillId,
         personId: venue.authorizerId,
@@ -568,7 +617,6 @@ async function main(): Promise<void> {
       authz: { sessionId: authorizerSession.id },
     };
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await recordCorrection(tx, backend, correctionInput);
     });
 
@@ -576,13 +624,12 @@ async function main(): Promise<void> {
     // record — no fiscal write path — so seeded directly like the tenant itself.
     await seedPurchaseInvoices(db);
 
-    // The reads: as the application role, exactly as a report consumer would call them.
+    // The reads, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
     const { periodAll, periodNode1, periodNode2, weekOne, vatReturn } = await withTransaction(
       db,
       async (tx) => {
-        await asAppUser(tx);
         const base = {
           timeZone: TIME_ZONE,
           dayCutover: CUTOVER,
@@ -613,15 +660,14 @@ async function main(): Promise<void> {
     );
 
     // The fiscal periods beyond the single month: the quarter (trimestre) that CONTAINS `MONTH`, its
-    // three constituent civil months, and the whole civil year — read as the application role, exactly
-    // as a report consumer would. Only August carries trade in this demo, so the quarter/year equal the
+    // three constituent civil months, and the whole civil year — read exactly as a report consumer
+    // would. Only August carries trade in this demo, so the quarter/year equal the
     // month; the reconciliation below still exercises the wider civil-date bounds.
     const quarter = qOf(MONTH);
     const [qm1, qm2, qm3] = monthsOfQuarter(quarter);
     const { monthlyReturns, quarterReturn, annualReturn } = await withTransaction(
       db,
       async (tx) => {
-        await asAppUser(tx);
         const forPeriod = (period: LiquidationPeriod): Promise<VatReturn> =>
           computeVatReturn(tx, { year: YEAR, period });
         return {
@@ -783,7 +829,8 @@ async function main(): Promise<void> {
       `OK — quarterly DR303 file self-validated: length 2944, envelope período ${quarterToken} at its documented offset.`,
     );
   } finally {
-    await db.close();
+    await store.close();
+    await rm(venueDir, { recursive: true, force: true });
   }
 }
 

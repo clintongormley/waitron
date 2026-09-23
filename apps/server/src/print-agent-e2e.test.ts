@@ -4,10 +4,10 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import { FakeSink, NetworkTcpTransport, RoutingTransport, createAgent } from "@waitron/print-agent";
@@ -36,7 +36,7 @@ import "./errors.js";
 // the agent package cannot reach the routes it must be proven against, so the wiring that joins them
 // is proven here. PGlite (not real Postgres) is enough: this asserts the request/response flow and the
 // byte path (register → pull-with-inventory → deliver → done → revoke-halts); grants and the derived
-// authorization boundary are proven as `app_user` on real Postgres in `print-api.pg.test.ts` and
+// authorization boundary are proven as `app_user` on real Postgres in `print-api.printer-wiring.test.ts` and
 // `packages/printing`'s `runtime.eligibility.test.ts`.
 const noopLog: Logger = () => {};
 
@@ -59,10 +59,19 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    locationId = loc.rows[0]!.id;
+    // Through the table definition: `locations.id` is a `$defaultFn` generator on this engine, which
+    // a raw insert never reaches (`id text PRIMARY KEY NOT NULL`,
+    // `packages/db/drizzle/0000_baseline.sql:1`), and the locale list is encoded by the column's own
+    // write mapping — the `array[...]` constructor it replaces is a syntax error here.
+    const [loc] = await db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
     // The full TillConfig the print/join verbs are typed on. The routes read only locationId
     // and echo nodeId on the pull; the fiscal ids are unused here, so a branded random uuid stands in —
     // and nodeId needs no `nodes` row, exactly as `print-api.test.ts` seeds none.
@@ -78,12 +87,13 @@ const suite = useVenueDb({
     };
     const managerSid = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (display_name, pin_hash, role)
-        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      const [mgr] = await tx
+        .insert(persons)
+        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
       // A `manager` role carries `printer.manage`, the permission the shared list, the challenge and
       // the print-agent accept are gated on.
-      const session = await startManagementSession(tx, { personId: mgr.rows[0]!.id });
+      const session = await startManagementSession(tx, { personId: mgr!.id });
       return session.id;
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;

@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -9,10 +10,20 @@ import { appendToChain } from "./chain.js";
 import { currentSif, esPrimerRegistro, registerSif, type SifRegistration } from "./registro-sif.js";
 import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
 import { FISCAL_RESTORE, installationFloor, restoreFiscal } from "./restore.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { altaFor, seedSale, seedTill } from "./testing/seed.js";
 import { verifyChain } from "./verify.js";
 
-let db: Awaited<ReturnType<typeof createPgliteDb>>;
+// ONE database for the suite, emptied by the helper after each test, with `seedTenants` back in
+// `beforeEach` — the same per-test blank slate the fresh-instance-per-test setup this replaces
+// gave, since the helper's reset deletes the rows `seedTenants` writes.
+const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 60_000 });
+
+let db: Database;
+
+beforeAll(() => {
+  db = suite.db;
+});
 
 const NODE: ProvisionedNode = {
   locationId: brandLocationId(TENANT_A.locationId),
@@ -27,10 +38,14 @@ async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
   );
-  await db.execute(sql`
-    insert into invoice_series (node_id, code, purpose, next_number) values (${TENANT_A.nodeId}, 'FA', 'standard', 5),
-      ( ${TENANT_A.nodeId}, 'RE', 'rectificative', 1)
-  `);
+  // Through the table definition, not the raw insert this replaces: `invoice_series.id` is a
+  // `$defaultFn(newId)` generator that only the insert BUILDER runs. Measured here — the raw
+  // statement is refused `NOT NULL constraint failed: invoice_series.id`. Same change, and the
+  // same reason, as `test/fixtures.ts`'s own header records. Every seeded value is unchanged.
+  await db.insert(invoiceSeries).values([
+    { nodeId: TENANT_A.nodeId, code: "FA", purpose: "standard", nextNumber: 5 },
+    { nodeId: TENANT_A.nodeId, code: "RE", purpose: "rectificative", nextNumber: 1 },
+  ]);
   return sif;
 }
 
@@ -42,12 +57,15 @@ async function liveSeriesCodes(): Promise<string[]> {
   return rows.map((r) => r.code);
 }
 
-function counterOf() {
-  return db
-    .execute<{ proximo_numero: number }>(
-      sql`select proximo_numero from contadores_instalacion where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
-    )
-    .then((r) => r.rows[0]?.proximo_numero);
+// Synchronous: `execute` on this engine is declared to return its rows rather than a promise of
+// them — `): RawResult<TRow>;`, `packages/store/src/node-sqlite-adapter.ts:190` — so the `.then`
+// this used to chain has nothing to attach to. Not measured at runtime: the signature is what the
+// two call sites below now compile against, and `tsc --noEmit` over this package is clean.
+function counterOf(): number | undefined {
+  const { rows } = db.execute<{ proximo_numero: number }>(
+    sql`select proximo_numero from contadores_instalacion where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
+  );
+  return rows[0]?.proximo_numero;
 }
 
 describe("installationFloor", () => {
@@ -61,12 +79,7 @@ describe("installationFloor", () => {
 
 describe("restoreFiscal", () => {
   beforeEach(async () => {
-    db = await createPgliteDb();
-    for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
     await seedTenants(db);
-  });
-  afterEach(async () => {
-    if (db !== undefined) await db.close();
   });
 
   it("revokes the live SIF, mints a floored number, resets the chain head, keeps the ledger, returns disjoint series", async () => {
@@ -96,7 +109,7 @@ describe("restoreFiscal", () => {
     );
     expect(head[0]?.secuencia).toBe(7); // ours; never reset
     const { rows: ledger } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from registros_facturacion`,
+      sql`select cast(count(*) as int) as n from registros_facturacion`,
     );
     expect(ledger[0]?.n).toBe(1); // the seeded S7/1 registro is untouched
     // seedSoldRegistro also opened an `S7` series on the node — it is live, so it is re-derived too.
@@ -116,7 +129,7 @@ describe("restoreFiscal", () => {
     // minted 2 (revoking 1). Now rebuild state A EXACTLY — no row for 2, 1 live again, counter back —
     // which is what restoring the older artifact does, and run the hook: it must not mint 2 again.
     await seedLiveNode();
-    const counterAtBackup = await counterOf();
+    const counterAtBackup = counterOf();
     const later = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
     );
@@ -148,7 +161,7 @@ describe("restoreFiscal", () => {
 
     const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBe(nextNumber);
-    expect(await counterOf()).toBe(nextNumber + 1);
+    expect(counterOf()).toBe(nextNumber + 1);
   });
 
   it("creates the counter row when the restored database has none (a promoted standby's backup)", async () => {
@@ -160,21 +173,27 @@ describe("restoreFiscal", () => {
   });
 
   it("does nothing for a node with no live SIF: no mint, no series", async () => {
-    await db.execute(sql`
-      insert into invoice_series (node_id, code) values (${TENANT_A.nodeId}, 'FA')
-    `);
+    // Through the builder for `invoice_series.id`'s generator — see `seedLiveNode` above.
+    await db.insert(invoiceSeries).values({ nodeId: TENANT_A.nodeId, code: "FA" });
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
     expect(outcome.series).toBeUndefined();
     expect(outcome.report).toMatch(/no live SIF/);
     const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from registro_sif`,
+      sql`select cast(count(*) as int) as n from registro_sif`,
     );
     expect(rows[0]?.n).toBe(0);
   });
 
   it("derives from live series only, stripping our own suffixes, and ignores retired ones", async () => {
     const first = await seedLiveNode();
-    await db.execute(sql`update invoice_series set retired_at = now() where code = 'RE'`);
+    // Through the builder, not `set retired_at = now()`: this engine has no `now()` — measured
+    // here, `no such function: now` — and `retired_at` is an ISO-string column whose encoder only
+    // the builder runs. What the case turns on is the column being NON-NULL, not which instant it
+    // holds.
+    await db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(eq(invoiceSeries.code, "RE"));
     // A previous restore's derived code, live (the unique key is per code, so the rename is allowed).
     await db.execute(
       sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`,
@@ -196,7 +215,7 @@ describe("restoreFiscal", () => {
     expect(isAppError(err) && err.code).toBe("series.code_too_long");
     // Only the seeded SIF remains after the transaction rolls back.
     const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from registro_sif`,
+      sql`select cast(count(*) as int) as n from registro_sif`,
     );
     expect(rows[0]?.n).toBe(1);
   });
@@ -224,13 +243,18 @@ describe("restoreFiscal", () => {
     const after = await db.transaction((tx) =>
       appendToChain(tx, till.nodeId, altaFor(till.tillId, sale2, 2, 2)),
     );
-    const { rows: rec } = await db.execute<{
-      primer_registro: boolean;
-      anterior_huella: string | null;
-      sif_id: string;
-    }>(
-      sql`select primer_registro, anterior_huella, sif_id from registros_facturacion where id = ${after.id}`,
-    );
+    // Through the table definition, not raw SQL: `primer_registro` is a flag, which this engine
+    // stores as 0 or 1, and only the builder maps it back to a boolean — the same change, and the
+    // same reason, as `chain.test.ts`'s `records()` helper records. The keys are aliased to the
+    // column names so the `toEqual` below is unchanged, matcher included.
+    const rec = await db
+      .select({
+        primer_registro: registrosFacturacion.primerRegistro,
+        anterior_huella: registrosFacturacion.anteriorHuella,
+        sif_id: registrosFacturacion.sifId,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, after.id));
     expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
     expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
     const report = await withTransaction(db, (tx) => verifyChain(tx, till.nodeId));

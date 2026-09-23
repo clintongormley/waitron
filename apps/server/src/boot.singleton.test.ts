@@ -5,26 +5,53 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { setSingletonRole, stampDeployment, type Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  openVenueDatabase,
+  setSingletonRole,
+  stampDeployment,
+  tenants,
+  tills,
+  type Database,
+} from "@waitron/db";
 import { runTunnelClient } from "@waitron/tunnel";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer } from "./boot.js";
-import { roleUrl } from "./testing/postgres.js";
 
-// The primary-only SINGLETON duties (scheduled backup, outbound tunnel client) gate on `singleton_role`,
-// not on `mode` (promotion #158 follow-on). Since swap step 4 the outbox sync SOURCE and retention sweep
-// are deleted, so two singleton duties remain; this suite pins the topology no other boot suite exercises
-// WITH THE SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY LOCAL SECONDARY — `deployment.mode='primary'` AND
-// `singleton_role='secondary'` — which is NOT a mirror (so `isMirror` is false and the old `!isMirror`
-// gate ran all of them, the active-active duplication this gate fixes) yet must run NEITHER, because the
-// one singleton primary owns them. TWO manifest clones of the SAME identity: a `(primary, secondary)` one
-// that runs neither, and a default-`primary` one that runs both — the control proving the secondary's
-// absence is real, not a boot that silently wired nothing (CLAUDE.md §1). Real Postgres, not PGlite: the
-// boot reads `deployment` as the non-superuser app role, whose grants PGlite's superuser connection
-// would not enforce.
+/**
+ * The primary-only SINGLETON duties (scheduled backup, outbound tunnel client) gate on
+ * `singleton_role`, not on `mode` (promotion #158 follow-on). Since swap step 4 the outbox sync
+ * SOURCE and retention sweep are deleted, so two singleton duties remain; this suite pins the
+ * topology no other boot suite exercises WITH THE SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY LOCAL
+ * SECONDARY — `deployment.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
+ * (so `isMirror` is false and the old `!isMirror` gate ran all of them, the active-active
+ * duplication this gate fixes) yet must run NEITHER, because the one singleton primary owns them.
+ * TWO migrated venue directories holding the SAME identity: a `(primary, secondary)` one that runs
+ * neither, and a default-`primary` one that runs both — the control proving the secondary's absence
+ * is real, not a boot that silently wired nothing (CLAUDE.md §1).
+ *
+ * ## What the move off PostgreSQL took out of this file
+ *
+ * **The ROLE SPLIT is gone and is replaced by nothing.** The header used to say the container was
+ * mandatory because boot reads `deployment` as the non-superuser app role. There are no roles on
+ * this engine: `pg.connectAs` has no counterpart and `asAppUser` is an inert function
+ * (`packages/db/src/testing/roles.ts`). Both boots below run every statement on the one connection
+ * `openVenueStore` hands out, so nothing here now shows that the deployment role can read
+ * `deployment` and cannot write it.
+ *
+ * **Boot owns the file, so the suite hands over a DIRECTORY and lets go of it.** `startServer`
+ * opens `config.venueDir` itself and holds it for the life of the server, and it states that it
+ * never holds two opens of one directory at once (`boot.ts:830-836`). The seeding handle each
+ * directory gets below is therefore closed before `startServer` is called, and no test reads the
+ * database back while a server is up. `DATABASE_URL` and `WAITRON_MIGRATIONS_DATABASE_URL` are not
+ * set because nothing reads them any more:
+ * `grep -rn "DATABASE_URL" apps/server/src --include="*.ts" | grep -v "\.test\.ts"` returns two
+ * lines and both are COMMENTS — `restore-command.ts:48` and `backup-config.ts:21` (re-run
+ * 2026-09-22, after the PostgreSQL test harness was deleted).
+ */
 
 vi.mock("@waitron/tunnel", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/tunnel")>();
@@ -41,12 +68,10 @@ beforeEach(() => {
   vi.mocked(runTunnelClient).mockClear();
 });
 
-const secondary = useTemplateDb({ template: "manifest", resetPerTest: false });
-const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
-
 // The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode (a secondary is
-// a trading boot: it sells, it just files nothing and owns no singletons). Seeded on both clones so
-// `readOrderFlow` / `readVenueLocale` resolve and the sync source (on the primary control) names this node.
+// a trading boot: it sells, it just files nothing and owns no singletons). Seeded in both venue
+// directories so `readOrderFlow` / `readVenueLocale` resolve and the sync source (on the primary
+// control) names this node.
 const TILL_ENV = {
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -75,28 +100,79 @@ const KEY_ENV = {
 
 let migrationsRoot: string;
 let backupDir: string;
-let secondaryDatabaseUrl: string;
-let primaryDatabaseUrl: string;
+let secondaryVenueDir: string;
+let primaryVenueDir: string;
 
 /**
- * Seed the venue identity — the taxpayer row, location, node, till and series — with the WAITRON_TILL_*_ID on one
- * clone, as the container superuser — mirrors boot.mirror.test.ts's `seedIdentity`.
+ * Seed the venue identity — the taxpayer row, location, node, till and series — with the
+ * WAITRON_TILL_*_ID into one already-migrated venue handle.
  */
-async function seedIdentity(admin: Database): Promise<void> {
-  await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (1, 'ES', '90333333P', 'Secondary SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
-            array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
-            ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
-            ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
+async function seedIdentity(db: Database): Promise<void> {
+  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
+  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
+  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
+  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
+  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
+  // narrowing it would be a behaviour change this conversion is not making.
+  await db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
+    .onConflictDoNothing();
+  await db
+    .insert(locations)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Loc",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    })
+    .onConflictDoNothing();
+  await db
+    .insert(nodes)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Node",
+    })
+    .onConflictDoNothing();
+  await db
+    .insert(tills)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_TILL_ID,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Till",
+    })
+    .onConflictDoNothing();
+  await db
+    .insert(invoiceSeries)
+    .values({
+      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      code: "A",
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * A fresh venue directory, migrated through the manifest and seeded, with the seeding handle CLOSED
+ * again before it is returned.
+ *
+ * Closing is the point. `startServer` opens `config.venueDir` itself and keeps it open for the life
+ * of the server, and it holds exactly one open of the directory at a time on purpose
+ * (`boot.ts:830-836`); a handle left open here would be a SECOND write queue onto the same file.
+ * The migration run is this suite's, not boot's, because the rows below have to exist before boot
+ * reads them — boot's own `applyMigrations` over the same directory then finds nothing to do.
+ */
+async function migratedVenueDir(seed: (db: Database) => Promise<void>): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "waitron-singleton-venue-"));
+  await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
+  const store = await openVenueDatabase(directory);
+  try {
+    await seed(store.venue);
+  } finally {
+    await store.close();
+  }
+  return directory;
 }
 
 beforeAll(async () => {
@@ -109,26 +185,28 @@ beforeAll(async () => {
   }
   backupDir = await mkdtemp(join(tmpdir(), "waitron-singleton-backup-"));
 
-  await seedIdentity(secondary.admin);
-  await seedIdentity(primary.admin);
-
   // The sell-only local secondary: stamp preproduction (so the deployment guard passes and
   // `setSingletonRole` has a row to update), then set singleton_role='secondary'. The mode column keeps
   // its default 'primary' — this is a `(primary, secondary)` node, valid under `deployment_role_valid_ck`
   // (a mirror could not hold 'secondary' this way; only a real primary-mode box can be a local secondary).
-  // Owner-role writes (app_user holds no UPDATE on deployment), so they run on the superuser admin.
-  await stampDeployment(secondary.admin, "preproduction");
-  await setSingletonRole(secondary.admin, "secondary");
+  secondaryVenueDir = await migratedVenueDir(async (db) => {
+    await seedIdentity(db);
+    await stampDeployment(db, "preproduction");
+    await setSingletonRole(db, "secondary");
+  });
   // The control keeps the column default ('primary', 'primary') — the singleton primary that owns both.
-  await stampDeployment(primary.admin, "preproduction");
-
-  secondaryDatabaseUrl = roleUrl(secondary.pg.uri, "app_login", "app_pw");
-  primaryDatabaseUrl = roleUrl(primary.pg.uri, "app_login", "app_pw");
+  primaryVenueDir = await migratedVenueDir(async (db) => {
+    await seedIdentity(db);
+    await stampDeployment(db, "preproduction");
+  });
 }, 180_000);
 
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
   if (backupDir !== undefined) await rm(backupDir, { recursive: true, force: true });
+  if (secondaryVenueDir !== undefined)
+    await rm(secondaryVenueDir, { recursive: true, force: true });
+  if (primaryVenueDir !== undefined) await rm(primaryVenueDir, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -198,8 +276,8 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 /** True if any captured line's `event` is EXACTLY `event`. Exact, not prefix: `backup.disabled` and
- * `backup.disabled_probe_failed` must be told apart — a non-primary logs the former (the duty is
- * skipped before the probe), a primary that runs and fails the probe logs the latter. */
+ * `backup.disabled_open_failed` must be told apart — a non-primary logs the former (the duty is
+ * skipped before the venue is ever opened), a primary whose venue will not open logs the latter. */
 function hasEvent(lines: readonly string[], event: string): boolean {
   return lines.some((line) => {
     try {
@@ -213,7 +291,7 @@ function hasEvent(lines: readonly string[], event: string): boolean {
 // The singleton duties' config, present in FULL on both boots so the ONLY thing that decides whether
 // they run is `singleton_role`. The relay is unreachable (port 1) on purpose: the real call-through
 // worker backs off — this suite asserts the WIRING (started or not), never a live connection. Each
-// boot fills in its own DATABASE url.
+// boot fills in its own `WAITRON_VENUE_DIR`.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
@@ -227,27 +305,33 @@ function dutyEnv(port: number) {
 
 // The backup config goes through the RAW `base` arg (2nd `startServer` param), not the merged `env`:
 // the supervisor re-reads its config off `loadBoxEnv(base, stateDir)` each reload, so a value only in
-// `env` would never reach it. The backup DB is unreachable (port 1) on purpose so the read-privilege
-// probe fails fast on the primary — the WIRING assertion, never a live connection.
+// `env` would never reach it.
+//
+// **A LEVER THIS PAIR OF CASES LOST, stated rather than quietly worked around.** It used to point
+// the backup duty at an unreachable database (`WAITRON_BACKUP_DATABASE_URL`, port 1) so that a
+// primary — and only a primary — emitted a loud `backup.disabled_probe_failed`. That setting is
+// gone with PostgreSQL: the supervisor opens the box's own venue directory, and there is no way to
+// make THAT open fail without breaking the whole server the suite is booting. The primary case's
+// assertion below is therefore the weaker (but true) one — the primary does NOT take the
+// non-primary branch — instead of the stronger "it reached the probe and failed it". Re-founding it
+// belongs with whoever converts this suite's two-node harness; nothing in it runs today.
 function backupBase() {
   return {
     WAITRON_BACKUP_DIR: backupDir,
-    WAITRON_BACKUP_DATABASE_URL: "postgres://user:pw@127.0.0.1:1/db",
-    // Required since BR-1 Task 4 (fail-closed like the db url) — without it loadBackupConfig throws
-    // backup.recovery_key_missing before either boot reaches the wiring this suite asserts.
+    // Required since BR-1 Task 4 — without it loadBackupConfig throws backup.recovery_key_missing
+    // before either boot reaches the wiring this suite asserts.
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
   };
 }
 
-describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)", () => {
+describe("singleton-duty boot (deployment.singleton_role gating)", () => {
   it("a sell-only local secondary (primary, secondary) runs NEITHER singleton duty, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
       const started = await startServer(
         {
           ...dutyEnv(port),
-          DATABASE_URL: secondaryDatabaseUrl,
-          WAITRON_MIGRATIONS_DATABASE_URL: secondary.pg.uri,
+          WAITRON_VENUE_DIR: secondaryVenueDir,
         },
         backupBase(),
       );
@@ -259,12 +343,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
     });
     try {
       // 1. Backup — the supervisor is built and `reload()` runs on every boot, but a NON-PRIMARY takes
-      // the disabled branch BEFORE the read-privilege probe: `backup.disabled` is logged and the
-      // probe-failure line (only a primary that RUNS the probe emits it) is ABSENT. The primary control
-      // below emits `backup.disabled_probe_failed` for the identical config, so this split is the gate
-      // (duty skipped on the secondary, entered on the primary), not a missing config.
+      // the disabled branch before the venue is ever opened: `backup.disabled` is logged. The primary
+      // control below does NOT log it for the identical config, so this split is the gate (duty
+      // skipped on the secondary, entered on the primary), not a missing config.
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
-      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(false);
+      expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
       // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
@@ -284,8 +367,7 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       const started = await startServer(
         {
           ...dutyEnv(port),
-          DATABASE_URL: primaryDatabaseUrl,
-          WAITRON_MIGRATIONS_DATABASE_URL: primary.pg.uri,
+          WAITRON_VENUE_DIR: primaryVenueDir,
         },
         backupBase(),
       );
@@ -295,10 +377,11 @@ describe("singleton-duty boot (real Postgres, deployment.singleton_role gating)"
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the gate RAN: with the port-1 backup DB the read-privilege probe fails, so
-      // `backup.disabled_probe_failed` is emitted. The positive twin of the secondary's absence
-      // assertion — the probe is entered on the singleton primary, skipped on the secondary.
-      expect(hasEvent(lines, "backup.disabled_probe_failed")).toBe(true);
+      // 1. Backup — the gate RAN: a singleton primary does not take the non-primary branch, so
+      // `backup.disabled` is ABSENT here where the secondary above logs it. The positive twin of the
+      // secondary's assertion. See `backupBase` for the stronger assertion this replaced and why its
+      // lever no longer exists.
+      expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
       // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);

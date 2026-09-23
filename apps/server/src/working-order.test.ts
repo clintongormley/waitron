@@ -4,9 +4,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
   captureError,
-  pgErrorCode,
+  isUniqueViolation,
+  locations,
+  nowIso,
   printJobs,
   ticketItems,
+  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -27,6 +30,7 @@ import {
   replaceProductCategories,
   setMenuVariants,
   setProductVariants,
+  units,
   updateCategory,
   EACH_UNIT,
 } from "@waitron/catalogue";
@@ -89,6 +93,18 @@ import "./errors.js";
 // Writes run as app_user. Real PostgreSQL covers concurrent order-number allocation.
 const LOCALE = "es-ES";
 
+/**
+ * An ISO timestamp `minutes` in the past, for backdating a `queued_at` that a band assertion reads.
+ *
+ * This replaces `now() - interval '12 minutes'`: SQLite has no interval type, and `queued_at` is a
+ * `tsString` column (packages/db/src/schema/ticket-items.ts:62), so the arithmetic happens on a
+ * JavaScript `Date` and the ISO string binds. The reading is the TEST process's clock rather than
+ * the database's, which on this engine is the same process.
+ */
+function minutesAgo(minutes: number): string {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -124,20 +140,41 @@ interface SeededVenue {
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   await seedTenant(db);
-  const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
-      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
-    returning id, seed_key`);
-  const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
-  const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${locationId}, 'Caja 1') returning id`);
+  // Through the table definitions rather than raw SQL, the same change `testing/seed-units.ts`
+  // took: `units.id`, `locations.id` and `tills.id` are `$defaultFn` generators a raw insert never
+  // reaches, the `::jsonb` casts are `unrecognized token: ":"` on this engine, and
+  // `invoice_locales` is a JSON array in a text column (`labelList`), so there is no array
+  // constructor to write. The ids are minted here rather than read back from `returning`, which
+  // also drops the find-by-seed-key step the two-row insert needed.
+  const eachUnitId = randomUUID();
+  const kgUnitId = randomUUID();
+  await db.insert(units).values([
+    {
+      id: eachUnitId,
+      seedKey: "each",
+      name: { en: "each" },
+      abbreviation: { en: "ea" },
+      precision: 0,
+      hardwareUnit: null,
+    },
+    {
+      id: kgUnitId,
+      seedKey: "kg",
+      name: { en: "kg" },
+      abbreviation: { en: "kg" },
+      precision: 3,
+      hardwareUnit: "kg",
+    },
+  ]);
+  const locationId = randomUUID();
+  await db.insert(locations).values({
+    id: locationId,
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const tillId = randomUUID();
+  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
@@ -185,34 +222,56 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         sectionId: premiumSection.id,
         grossPrice: "3.25",
       });
-      const department = await tx.execute<{ id: string }>(sql`
+      // `departments.id`/`floor_zones.id` and both tables' `created_at` are `$defaultFn`
+      // generators a raw insert never reaches — it failed with
+      // `NOT NULL constraint failed: departments.id`. One clock reading for the two rows, which
+      // is what the transaction-start `now()` default gave them.
+      const departmentId = randomUUID();
+      const zoneId = randomUUID();
+      const createdAt = nowIso();
+      await tx.execute(sql`
       insert into departments
-        (location_id, name, trading_name, default_service_mode)
-      values (${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}) returning id`);
-      const zone = await tx.execute<{ id: string }>(sql`
-      insert into floor_zones (location_id, name)
-      values (${locationId}, 'Counter') returning id`);
+        (id, location_id, name, trading_name, default_service_mode, created_at)
+      values (${departmentId}, ${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}, ${createdAt})`);
+      await tx.execute(sql`
+      insert into floor_zones (id, location_id, name, created_at)
+      values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
+      // Three statements where this fixture had two, because `zone_service_policies` and
+      // `zone_menus` point at each other: a policy's `default_menu_id` names a row of `zone_menus`,
+      // and a `zone_menus` row's `zone_id` names a row of `zone_service_policies`. The policy's
+      // half was DEFERRABLE INITIALLY DEFERRED on PostgreSQL, so one insert order satisfied both;
+      // sqlite-core has no deferrable option, both checks land at their own statement, and NEITHER
+      // order works. Both measured here, one run each with this fixture: policy-first with
+      // `default_menu_id = ${cat.id}` is refused AT THE POLICY INSERT, and zone_menus-first is
+      // refused AT THE `zone_menus` INSERT — `FOREIGN KEY constraint failed` either way, which is
+      // the only text SQLite gives for a key. The way through is the
+      // one recorded against the schema itself (packages/venue-service/src/schema/service.ts, above
+      // `zone_service_policies_default_menu_zone_fk`): insert the policy with a NULL default menu,
+      // insert the allowed menus, then name one of them. The end state is the row this fixture
+      // always wrote.
       await tx.execute(sql`
       insert into zone_service_policies
         (location_id, zone_id, department_id, default_menu_id, is_counter_default)
-      values (${locationId}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+      values (${locationId}, ${zoneId}, ${departmentId}, null, true)`);
       await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id, display_order)
       values
-        (${zone.rows[0]!.id}, ${cat.id}, 0),
-        (${zone.rows[0]!.id}, ${premium.id}, 1)`);
+        (${zoneId}, ${cat.id}, 0),
+        (${zoneId}, ${premium.id}, 1)`);
+      await tx.execute(sql`
+      update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zoneId}`);
       return {
         cafeId: cafe.id,
         aguaId: agua.id,
         catalogueId: cat.id,
-        zoneId: zone.rows[0]!.id,
+        zoneId,
         cafeOfferId: cafeOffer.id,
         premiumCafeOfferId: premiumCafeOffer.id,
       };
     });
 
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
     seriesId: brandSeriesId(randomUUID()),
@@ -436,8 +495,8 @@ describe("a sold line's label carries its variant", () => {
       const { offerId, variantId, productId } = await seedVariantOffer(tx, catalogueId);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await tx.execute(sql`
-        insert into preparation_routes (location_id, zone_id, product_id, station_id)
-        values (${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
+        insert into preparation_routes (id, location_id, zone_id, product_id, station_id)
+        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
       await createOpenOrder(
         tx,
         cfg,
@@ -553,15 +612,26 @@ describe("parkOrder", () => {
     const frozen = await db.execute<{
       name: string;
       variant_name: string | null;
-      descriptions: Record<string, string>;
-      variant_descriptions: Record<string, string> | null;
+      descriptions: string;
+      variant_descriptions: string | null;
       kitchen_name: string | null;
       variant_kitchen_name: string | null;
     }>(sql`
       select name, variant_name, descriptions, variant_descriptions, kitchen_name,
              variant_kitchen_name
       from working_order_lines where working_order_id = ${id} order by line_no`);
-    expect(frozen.rows).toEqual([
+    // The two description columns hold JSON in a TEXT column, and a RAW read returns the stored
+    // text — the parse is drizzle's column mapping, which `db.execute` does not go through. Parsed
+    // here so the assertion below still names the maps it always named rather than a serialisation.
+    const frozenRows = frozen.rows.map((row) => ({
+      ...row,
+      descriptions: JSON.parse(row.descriptions) as Record<string, string>,
+      variant_descriptions:
+        row.variant_descriptions === null
+          ? null
+          : (JSON.parse(row.variant_descriptions) as Record<string, string>),
+    }));
+    expect(frozenRows).toEqual([
       {
         name: "Coffee",
         variant_name: "Large",
@@ -592,10 +662,13 @@ describe("parkOrder", () => {
     });
 
     // Read straight from the column, which counts whole cents: 325 is the locked 3.25. Nothing
-    // converts here, so this asserts the stored COUNT; the ::int cast only normalises it to a
-    // number for the assertion, and would raise 22003 rather than answer wrong on a big one.
+    // converts here, so this asserts the stored COUNT. The cast is a no-op on this engine — the
+    // column is already an integer and the driver hands it back as a number — and is kept only so
+    // the select list says which JavaScript type the assertion below is written against. The
+    // sentence this replaces claimed the cast would raise 22003 on an out-of-range value; that was
+    // PostgreSQL's four-byte `::int`, and SQLite's INTEGER is 64-bit, so nothing here refuses one.
     const line = await db.execute<{ unit_price_gross: number }>(sql`
-      select unit_price_gross::int as unit_price_gross
+      select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${id}`);
     const context = await db.execute<{ zone_id: string; service_mode: string }>(sql`
       select zone_id, service_mode from order_service_contexts where working_order_id = ${id}`);
@@ -707,7 +780,7 @@ describe("parkOrder", () => {
     // Read as TEXT rather than through drizzle, so what is asserted is the number the column holds
     // and not a driver's or an engine's rendering of it.
     const stored = await db.execute<{ quantity: string; vat_rate: string }>(sql`
-      select quantity::text as quantity, vat_rate::text as vat_rate
+      select cast(quantity as text) as quantity, cast(vat_rate as text) as vat_rate
       from working_order_lines where working_order_id = ${id}`);
     // 1.500 kg is 1500 thousandths, and the general 21.00% rate is 2100 basis points.
     expect(stored.rows).toEqual([{ quantity: "1500", vat_rate: "2100" }]);
@@ -787,7 +860,7 @@ describe("parkOrder", () => {
     // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
     // real non-superuser role to serialise): one connection replaying its own committed write is exactly
     // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
-    // proven separately against real Postgres in `working-order.pg.test.ts` ("parkOrder concurrent replay").
+    // proven separately against real Postgres in `working-order.pay-and-dispatch.test.ts` ("parkOrder concurrent replay").
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "2" }];
@@ -857,12 +930,20 @@ describe("parkOrder", () => {
     await abandonHeldOrder({ db }, cfg, id);
 
     // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
-    // held order, so the ORIGINAL raw 23505 is re-thrown rather than a result fabricated. The SQLSTATE is
-    // read via `pgErrorCode` (not `.rejects.toMatchObject({ code })`) because Drizzle wraps the pg error in
-    // a `DrizzleQueryError` whose own `.code` is undefined and PGlite nests the real code under `.cause` —
-    // the same normalisation `record-void.test.ts` makes for this identical assertion shape.
+    // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Read
+    // through `isUniqueViolation` (not `.rejects.toMatchObject({ code })`) because drizzle wraps the
+    // driver error in a `DrizzleQueryError` whose own `code` is undefined, and the predicate walks
+    // the cause chain — the same normalisation `record-void.test.ts` makes for this identical
+    // assertion shape.
+    //
+    // This asserted the SQLSTATE `23505` through `pgErrorCode` until the storage swap. `node:sqlite`
+    // puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the discriminating value on
+    // `errcode`, so no string code separates a duplicate key from anything else here; and SQLite
+    // splits what PostgreSQL folded into `23505` — 1555 for a primary key, 2067 for any other
+    // unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the claim is
+    // the one this case always made: the collision surfaced as a duplicate key.
     const error = await captureError(() => parkOrder({ db }, cfg, { id, lines }));
-    expect(pgErrorCode(error)).toBe("23505");
+    expect(isUniqueViolation(error)).toBe(true);
 
     // The failed re-park did not resurrect the abandoned row.
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
@@ -879,8 +960,9 @@ describe("openTab service context", () => {
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Offer table', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Offer table', ${zoneId}, ${nowIso()})
+        returning id`);
 
       const { tabId } = await openTab(tx, cfg, {
         tableId: table.rows[0]!.id,
@@ -888,7 +970,7 @@ describe("openTab service context", () => {
       });
 
       const priced = await tx.execute<{ unit_price_gross: number }>(sql`
-        select unit_price_gross::int as unit_price_gross
+        select cast(unit_price_gross as int) as unit_price_gross
         from working_order_lines where working_order_id = ${tabId}`);
       const context = await tx.execute<{ zone_id: string; service_mode: string }>(sql`
         select zone_id, service_mode from order_service_contexts where working_order_id = ${tabId}`);
@@ -904,21 +986,22 @@ describe("openTab service context", () => {
       const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       await tx.execute(sql`
         insert into preparation_routes
-          (location_id, zone_id, product_id, station_id)
-        values (${cfg.locationId}, ${zoneId},
+          (id, location_id, zone_id, product_id, station_id)
+        values (${randomUUID()}, ${cfg.locationId}, ${zoneId},
           (select product_id from menu_items where id = ${premiumCafeOfferId}), ${station.id})`);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Round table', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Round table', ${zoneId}, ${nowIso()})
+        returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
 
       const line = await tx.execute<{ unit_price_gross: number; menu_item_id: string }>(sql`
-        select l.unit_price_gross::int as unit_price_gross, c.menu_item_id
+        select cast(l.unit_price_gross as int) as unit_price_gross, c.menu_item_id
         from working_order_lines l
         join working_line_contexts c on c.working_order_line_id = l.id
         where l.working_order_id = ${tabId}`);
@@ -935,36 +1018,47 @@ describe("openTab service context", () => {
         where location_id = ${cfg.locationId}
         returning id`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (location_id, name)
-        values (${cfg.locationId}, 'Downstairs') returning id`);
+        insert into floor_zones (id, location_id, name, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${nowIso()}) returning id`);
+      // The policy goes in with a NULL default menu, the allowed menus follow, and the last
+      // statement names one — the same three-step the venue fixture above explains: the two tables
+      // point at each other and neither key is deferrable on this engine.
       await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, default_menu_id)
         values (${cfg.locationId}, ${downstairsZone.rows[0]!.id},
-          ${department.rows[0]!.id}, ${catalogueId})`);
+          ${department.rows[0]!.id}, null)`);
       await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
         values
           (${downstairsZone.rows[0]!.id}, ${catalogueId}),
           (${downstairsZone.rows[0]!.id},
             (select menu_id from menu_items where id = ${premiumCafeOfferId}))`);
+      await tx.execute(sql`
+        update zone_service_policies set default_menu_id = ${catalogueId}
+        where zone_id = ${downstairsZone.rows[0]!.id}`);
       const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes
-          (location_id, zone_id, category_id, station_id)
+          (id, location_id, zone_id, category_id, station_id)
         values
-          (${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${upstairsBar.id}),
-          (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
+          (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id},
+            ${upstairsBar.id}),
+          (${randomUUID()}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id},
+            ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
 
       const upstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Upstairs', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Upstairs', ${zoneId}, ${nowIso()})
+        returning id`);
       const downstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id},
+          ${nowIso()})
+        returning id`);
       const upstairs = await openTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
       const downstairs = await openTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
 
@@ -997,19 +1091,20 @@ describe("openTab service context", () => {
         where location_id = ${cfg.locationId}`);
       await tx.execute(sql`
         insert into preparation_routes
-          (location_id, zone_id, product_id, no_preparation)
-        values (${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
+          (id, location_id, zone_id, product_id, no_preparation)
+        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Deli shelf', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
+        returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
 
       const counts = await tx.execute<{ lines: number; tickets: number }>(sql`
         select
-          (select count(*)::int from working_order_lines where working_order_id = ${tabId}) as lines,
-          (select count(*)::int from ticket_items where working_order_id = ${tabId}) as tickets`);
+          (select cast(count(*) as int) from working_order_lines where working_order_id = ${tabId}) as lines,
+          (select cast(count(*) as int) from ticket_items where working_order_id = ${tabId}) as tickets`);
       expect(counts.rows).toEqual([{ lines: 1, tickets: 0 }]);
     });
   });
@@ -1019,8 +1114,9 @@ describe("openTab service context", () => {
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Counter table', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})
+        returning id`);
       await expect(openTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
         code: "service_zone.mode_incompatible",
         params: { zoneId, expected: "table_tab", actual: "prepay" },
@@ -1100,7 +1196,7 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
     // demands it stay NULL. The BEFORE UPDATE enforce_transition trigger permits open→either.
     if (status === "settled") {
       await tx.execute(
-        sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+        sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${id}`,
       );
     } else {
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
@@ -1119,8 +1215,8 @@ async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db, cfg.locationId);
   await db.execute(sql`
-    insert into working_orders (id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
+    insert into working_orders (id, till_id, node_id, order_number, status, opened_at)
+    values (${id}, ${cfg.tillId}, ${otherNode}, 1, 'open', ${nowIso()})`);
   return id;
 }
 
@@ -1202,8 +1298,9 @@ describe("getHeldOrder", () => {
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const inserted = await tx.execute<{ id: string }>(sql`
-        insert into units (name, abbreviation, precision, hardware_unit)
-        values (${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
+        insert into units (id, name, abbreviation, precision, hardware_unit)
+        values (${randomUUID()}, ${JSON.stringify({ [LOCALE]: "kg" })},
+          ${JSON.stringify({ [LOCALE]: "kg" })}, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;
       const product = await createProduct(tx, {
@@ -1234,22 +1331,30 @@ describe("getHeldOrder", () => {
       lines: [{ menuItemId, quantity: "0.375" }],
     });
     await db.execute(sql`
-      update units set name = ${JSON.stringify({ [LOCALE]: "kilogramo" })}::jsonb
+      update units set name = ${JSON.stringify({ [LOCALE]: "kilogramo" })}
       where id = ${unitId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
     const stored = await db.execute<{
       quantity: string;
       line_total: number;
-      unit_name: Record<string, string>;
+      unit_name: string;
       unit_precision: number;
     }>(sql`
-      select quantity::text as quantity, line_total::int as line_total, unit_name, unit_precision
+      select cast(quantity as text) as quantity, cast(line_total as int) as line_total,
+             unit_name, unit_precision
       from working_order_lines
       where working_order_id = ${id}`);
+    // `unit_name` holds JSON in a TEXT column, and a RAW read returns the stored text — the parse
+    // is drizzle's column mapping, which `db.execute` does not go through. Parsed here so the
+    // assertion still names the map it always named rather than a serialisation.
+    const storedRows = stored.rows.map((row) => ({
+      ...row,
+      unit_name: JSON.parse(row.unit_name) as Record<string, string>,
+    }));
     // `quantity` counts whole THOUSANDTHS, so 375 grams is stored as 375 — read as text so the
     // assertion pins the stored count rather than a driver's rendering of an eight-byte integer.
-    expect(stored.rows).toEqual([
+    expect(storedRows).toEqual([
       {
         quantity: "375",
         line_total: 450,
@@ -1331,7 +1436,7 @@ describe("getHeldOrder", () => {
     // Give the product a customer name that DIFFERS from its staff name before parking, so the two
     // frozen halves below cannot be confused for one another.
     await db.execute(sql`
-      update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}::jsonb
+      update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}
       where id = ${cafeId}`);
     await parkOrder({ db }, cfg, {
       id,
@@ -1341,9 +1446,9 @@ describe("getHeldOrder", () => {
     await db.execute(sql`
       update products
       set name = 'Renamed café',
-          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })}::jsonb,
+          customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })},
           pricing_unit = 'weight', vat_class = 'reduced',
-          allergens = ${JSON.stringify({ milk: { presence: "contains" } })}::jsonb
+          allergens = ${JSON.stringify({ milk: { presence: "contains" } })}
       where id = ${cafeId}`);
     await db.execute(sql`
       update menu_items set active = false where id = ${premiumCafeOfferId}`);
@@ -1474,7 +1579,7 @@ describe("updateHeldOrder", () => {
       parent_line_id: string | null;
       unit_price_gross: number;
     }>(sql`
-      select id, parent_line_id, unit_price_gross::int as unit_price_gross
+      select id, parent_line_id, cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines
       where working_order_id = ${id} order by line_no`);
 
@@ -1501,8 +1606,8 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       line_total: number;
     }>(sql`
-      select id, parent_line_id, quantity::text as quantity, unit_price_gross::int as unit_price_gross,
-             line_total::int as line_total
+      select id, parent_line_id, cast(quantity as text) as quantity,
+             cast(unit_price_gross as int) as unit_price_gross, cast(line_total as int) as line_total
       from working_order_lines
       where working_order_id = ${id} order by line_no`);
     // The quantities are counts of whole thousandths: three dishes and their six picks.
@@ -1555,8 +1660,8 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       line_total: number;
     }>(sql`
-      select id, quantity::text as quantity, unit_price_gross::int as unit_price_gross,
-             line_total::int as line_total
+      select id, cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross,
+             cast(line_total as int) as line_total
       from working_order_lines
       where working_order_id = ${id}`);
     // Two units, as a count of whole thousandths.
@@ -1588,7 +1693,8 @@ describe("updateHeldOrder", () => {
       unit_price_gross: number;
       menu_item_id: string;
     }>(sql`
-      select l.quantity::text as quantity, l.unit_price_gross::int as unit_price_gross, c.menu_item_id
+      select cast(l.quantity as text) as quantity, cast(l.unit_price_gross as int) as unit_price_gross,
+             c.menu_item_id
       from working_order_lines l
       join working_line_contexts c on c.working_order_line_id = l.id
       where l.working_order_id = ${id}`);
@@ -1808,7 +1914,7 @@ describe("abandonHeldOrder", () => {
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
- *  stored, never joined; mirrors working-order.pg.test.ts's OPERATOR). */
+ *  stored, never joined; mirrors working-order.pay-and-dispatch.test.ts's OPERATOR). */
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 /** A trusted-clock stub: placeOrder reads only `now()` for its amendment's wall-clock. */
@@ -1867,8 +1973,9 @@ async function attachedPrinter(
 /** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
 async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (location_id, label)
-    values (${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+    insert into dining_tables (id, location_id, label, created_at)
+    values (${randomUUID()}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}, ${nowIso()})
+    returning id`);
   return rows[0]!.id;
 }
 
@@ -2376,11 +2483,12 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where id = ${cafeId}`);
       await tx.execute(sql`
-        insert into preparation_routes (location_id, zone_id, category_id, station_id)
-        values (${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
+        insert into preparation_routes (id, location_id, zone_id, category_id, station_id)
+        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id},
+          ${bar.id})`);
       await tx.execute(sql`
-        insert into preparation_routes (location_id, zone_id, product_id, station_id)
-        values (${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
+        insert into preparation_routes (id, location_id, zone_id, product_id, station_id)
+        values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
       const section = await createMenuSection(tx, {
         menuId: catalogueId,
         name: { [LOCALE]: "Agua" },
@@ -2392,8 +2500,9 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         grossPrice: "2.00",
       });
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label, zone_id)
-        values (${cfg.locationId}, 'Two of a kind', ${zoneId}) returning id`);
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
+        returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
@@ -2459,7 +2568,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. PGlite proves the transition logic, the whole-ticket fan-out and the
 // grouping/exclusion filters — plain SQL a single backend proves; the NODE scoping is real-Postgres's
-// job (working-order.pg.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
+// job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`, so the app
 // role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
@@ -2618,7 +2727,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Collecting order 1 (handover marker) drops it from the station queue.
       await tx
         .update(workingOrders)
-        .set({ collectedAt: sql`now()` })
+        .set({ collectedAt: nowIso() })
         .where(eq(workingOrders.id, order1));
       expect((await listStationQueue(tx, cocina.id)).map((g) => g.orderId)).toEqual([order2]);
 
@@ -3028,7 +3137,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Backdate item[0] past the station's default overdue threshold (10) but under forgotten (15);
       // item[1] stays fresh.
       await tx.execute(
-        sql`update ticket_items set queued_at = now() - interval '12 minutes' where id = ${items[0]!.id}`,
+        sql`update ticket_items set queued_at = ${minutesAgo(12)} where id = ${items[0]!.id}`,
       );
 
       const [group] = await listStationQueue(tx, cocina.id);
@@ -3309,7 +3418,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. PGlite proves the update + the guards —
 // plain SQL a single backend proves; the two-backend serialisation of a concurrent send/recall/fire is
-// real-Postgres's job (working-order.pg.test.ts). Every write runs through `withTransaction` + `asAppUser`,
+// real-Postgres's job (working-order.pay-and-dispatch.test.ts). Every write runs through `withTransaction` + `asAppUser`,
 // so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
@@ -4036,7 +4145,7 @@ describe("addTabRound hold-on-send (A3)", () => {
 // by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
 // station, no station name) it joins `kitchen_stations` to label each item's station. PGlite proves the
 // join, the collected/abandoned/fully-away exclusions, the course grouping and the roll-ups — plain SQL a
-// single backend proves; the NODE scoping is real-Postgres's job (working-order.pg.test.ts).
+// single backend proves; the NODE scoping is real-Postgres's job (working-order.pay-and-dispatch.test.ts).
 // Every read/write runs through `withTransaction` + `asAppUser`, so the app role's grants are in force.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
@@ -4085,7 +4194,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const { id: collected } = await placeOrderWith(tx, cfg, [line(soup)]);
       await tx
         .update(workingOrders)
-        .set({ collectedAt: sql`now()` })
+        .set({ collectedAt: nowIso() })
         .where(eq(workingOrders.id, collected));
       const { id: abandoned } = await placeOrderWith(tx, cfg, [line(soup)]);
       await tx
@@ -4125,10 +4234,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       await fireCourse(tx, cfg, orderId, pri.id);
       const items = await courseItemsFor(tx, orderId);
       const entItem = items.find((i) => i.courseId === ent.id)!;
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: sql`now()` })
-        .where(eq(ticketItems.id, entItem.id));
+      await tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, entItem.id));
 
       const after = await listExpoQueue(tx, cfg);
       expect(after).toHaveLength(1);
@@ -4158,14 +4264,14 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       // One item away → the order stays (a not-yet-away item remains).
       await tx
         .update(ticketItems)
-        .set({ awayAt: sql`now()` })
+        .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[0]!.id));
       expect((await listExpoQueue(tx, cfg)).map((o) => o.orderId)).toEqual([orderId]);
 
       // The last item away → the whole order is fully dispatched and leaves the pass.
       await tx
         .update(ticketItems)
-        .set({ awayAt: sql`now()` })
+        .set({ awayAt: nowIso() })
         .where(eq(ticketItems.id, items[1]!.id));
       expect(await listExpoQueue(tx, cfg)).toEqual([]);
     });
@@ -4180,8 +4286,9 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (location_id, label)
-        values (${cfg.locationId}, 'Mesa 5') returning id`);
+        insert into dining_tables (id, location_id, label, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${nowIso()})
+        returning id`);
       const tableId = rows[0]!.id;
       const { tabId } = await openTab(tx, cfg, { tableId });
       await addTabRound(tx, cfg, tabId, [line(cafe)]);
@@ -4223,7 +4330,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // Backdate the Barra item past ITS OWN overdue threshold (4) but nowhere near Cocina's (10).
       await tx.execute(
-        sql`update ticket_items set queued_at = now() - interval '5 minutes' where id = ${oliveItem.id}`,
+        sql`update ticket_items set queued_at = ${minutesAgo(5)} where id = ${oliveItem.id}`,
       );
 
       const order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === orderId)!;
@@ -4265,7 +4372,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const rows = await ticketItemRows(tx, tabId);
       // Backdate line 1 past overdue (10); line 2 stays fresh.
       await tx.execute(
-        sql`update ticket_items set queued_at = now() - interval '12 minutes' where id = ${rows[0]!.id}`,
+        sql`update ticket_items set queued_at = ${minutesAgo(12)} where id = ${rows[0]!.id}`,
       );
 
       let order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === tabId)!;
@@ -4287,7 +4394,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. PGlite proves the set-based logic, the held-skip and the ready-only
 // dispatch — plain SQL a single backend proves; the NODE scoping is real-Postgres's job
-// (working-order.pg.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
+// (working-order.pay-and-dispatch.test.ts's `listExpoQueue` node-symmetry case). Every write runs through
 // `withTransaction` + `asAppUser`, so the app role's grants are in force, not bypassed.
 // ---------------------------------------------------------------------------------------------------
 
@@ -4465,7 +4572,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     return { listId: list.id, productId: offered.id };
   }
 
-  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab (`lockOpenTab`
+  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab (`assertAnchoredTabOpen`
    *  needs the `dining_tables.tab_id` back-pointer). Skips firing, so no station is required. */
   async function openExtrasTab(
     tx: Transaction,
@@ -4988,10 +5095,16 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       // A second venue in the same database, and a course that lives there. The by-id FK on
       // working_order_lines.course_id would ACCEPT it, but requireLiveCourse is
       // location-scoped, so the cross-venue override is refused — the exact silent-accept bug A1 closes.
-      const loc2 = await tx.execute<{ id: string }>(sql`
-        insert into locations (name, invoice_locales, operation_description)
-        values ('Barra 2', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-      const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(loc2.rows[0]!.id) };
+      // Through the table definition: `invoice_locales` is a JSON array in a text column here, so
+      // there is no array constructor to write, and `id` is a `$defaultFn` a raw insert misses.
+      const location2Id = randomUUID();
+      await tx.insert(locations).values({
+        id: location2Id,
+        name: "Barra 2",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      });
+      const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(location2Id) };
       const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
       await expect(
         addTabRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),

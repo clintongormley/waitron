@@ -1,35 +1,40 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
-import { type Database, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { hashPassword, hashPin, verifyPassword } from "@waitron/identity";
+import { describe, expect, it } from "vitest";
+import { nowIso, type Database } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  hashPassword,
+  hashPin,
+  persons,
+  verifyPassword,
+  webauthnCredentials,
+} from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { runBreakGlassReset } from "./break-glass-command.js";
 import { ALL_MODULES } from "./modules.js";
 
-// Exercise the reset through an app_login connection inheriting app_user on PostgreSQL.
+// One migrated venue directory for the suite; `useVenueDb` empties the data after every test, so
+// each case provisions its own venue and the "no admin on this box" case sees a genuinely empty one.
 const LOCALE = "es-ES";
 const OLD_PASSWORD = "dashPass123"; // ≥ MIN_PASSWORD_LENGTH; the seeded admin's original password.
 const NEW_PASSWORD = "brandNewSecret"; // what break-glass sets.
+const NIF = "73000001K";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF — the per-suite counter the siblings use.
-let nifCounter = 0;
-function nextNif(): string {
-  nifCounter += 1;
-  return `${String(73_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
-/** Stand up a fresh provisioned venue (as the owner). Provisioning seeds exactly one ADMIN with the
- * given password; returns the tenant plus that admin's id. */
+/** Stand up a fresh provisioned venue. Provisioning seeds exactly one ADMIN with the given
+ * password; returns that admin's id. */
 async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ adminId: string }> {
   await applyVenue(
     planVenue(
       {
         country: "ES",
-        taxId: nextNif(),
+        taxId: NIF,
         legalName: "Deli Test SL",
         location: {
           name: "Sala principal",
@@ -56,81 +61,77 @@ async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ admi
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
-  const adminId = await readSoleAdminId();
-  return { adminId };
-}
-
-/** Open a fresh `app_login` (member of app_user) pool, run `fn`, and always close it — the house
- * per-test connectAs pattern (a try/finally closer is outside guarded-teardowns' remit). */
-async function withAppUserDb<T>(fn: (db: Database) => Promise<T>): Promise<T> {
-  const db = await suite.pg.connectAs("app_login", "app_pw");
-  try {
-    return await fn(db);
-  } finally {
-    await db.close();
-  }
+  return { adminId: await readSoleAdminId() };
 }
 
 async function readSoleAdminId(): Promise<string> {
-  return withAppUserDb((db) =>
-    withTransaction(db, async (tx) => {
-      const rows = await tx.execute<{ id: string }>(
-        sql`select id from persons where role = 'admin'`,
-      );
-      return rows.rows[0]!.id;
-    }),
+  const rows = await suite.db.execute<{ id: string }>(
+    sql`select id from persons where role = 'admin'`,
   );
+  return rows.rows[0]!.id;
 }
 
-/** Read one person's password_hash + status back as the app role under the tenant. */
+/** Read one person's password_hash + status back. */
 async function readPerson(
   personId: string,
 ): Promise<{ passwordHash: string | null; status: string } | undefined> {
-  return withAppUserDb((db) =>
-    withTransaction(db, async (tx) => {
-      const rows = await tx.execute<{ password_hash: string | null; status: string }>(
-        sql`select password_hash, status from persons where id = ${personId}`,
-      );
-      const row = rows.rows[0];
-      return row === undefined
-        ? undefined
-        : { passwordHash: row.password_hash, status: row.status };
-    }),
+  const rows = await suite.db.execute<{ password_hash: string | null; status: string }>(
+    sql`select password_hash, status from persons where id = ${personId}`,
   );
+  const row = rows.rows[0];
+  return row === undefined ? undefined : { passwordHash: row.password_hash, status: row.status };
 }
 
-/** Run the command with a `connect` that hands back a real app_login pool (the URL is ignored — the
- * container is fixed for the suite). Collects `out` lines. */
+/**
+ * Run the command with an `openDb` that hands back the suite's own migrated venue handle.
+ *
+ * The stub's `close` does NOT close that handle — the suite owns it for the whole file — but it is
+ * COUNTED, because releasing the venue files is the command's own obligation: `openVenueDatabase`
+ * holds two open SQLite files, and a CLI that exits without closing leaves them to the process
+ * teardown. `directories` records what the command asked to open, which is what pins the env-to-
+ * directory resolution below.
+ */
 async function run(
   env: Record<string, string | undefined>,
   argv: string[] = [],
-): Promise<{ code: number; out: string[] }> {
+): Promise<{ code: number; out: string[]; directories: string[]; closes: number }> {
   const out: string[] = [];
+  const directories: string[] = [];
+  let closes = 0;
   const code = await runBreakGlassReset({
     argv,
     env,
     out: (line) => out.push(line),
-    connect: () => suite.pg.connectAs("app_login", "app_pw"),
+    openDb: (directory: string) => {
+      directories.push(directory);
+      return Promise.resolve({
+        db: suite.db as Database,
+        close: () => {
+          closes += 1;
+          return Promise.resolve();
+        },
+      });
+    },
   });
-  return { code, out };
+  return { code, out, directories, closes };
 }
 
 // `null` (not `undefined`) means "omit the password env var" — an explicit `undefined` argument
 // would trigger the `= NEW_PASSWORD` default and defeat the very test that wants it absent.
 function baseEnv(password: string | null = NEW_PASSWORD) {
   return {
-    DATABASE_URL: "postgres://ignored-in-test",
+    WAITRON_VENUE_DIR: "/tmp/break-glass-venue-dir-is-ignored-by-the-stub",
     ...(password === null ? {} : { WAITRON_BREAKGLASS_PASSWORD: password }),
   };
 }
 
-describe("runBreakGlassReset (real postgres, app role)", () => {
+describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("resets the admin's password: the new one verifies, the old one fails (login restored)", async () => {
     const { adminId } = await setupTenant();
 
-    const { code, out } = await run(baseEnv());
+    const { code, out, closes } = await run(baseEnv());
 
     expect(code).toBe(0);
     const person = await readPerson(adminId);
@@ -142,6 +143,28 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     // Success line names the admin, never the secret.
     expect(out.join("\n")).toMatch(adminId);
     expect(out.join("\n")).not.toMatch(NEW_PASSWORD);
+    // The venue files are released on the way out.
+    expect(closes).toBe(1);
+  });
+
+  it("opens the directory WAITRON_VENUE_DIR names, and an EMPTY value takes <stateDir>/venue", async () => {
+    await setupTenant();
+
+    const named = await run({ ...baseEnv(), WAITRON_VENUE_DIR: "/tmp/break-glass-named-venue" });
+    expect(named.code).toBe(0);
+    expect(named.directories).toEqual(["/tmp/break-glass-named-venue"]);
+
+    // An operator's `WAITRON_VENUE_DIR=` line must fall back to the default under the state root,
+    // never to `resolve("")` — the working directory ("an empty value is a valid value",
+    // CLAUDE.md §3). Same rule for the state root itself, so both are exercised here.
+    await setupTenant();
+    const empty = await run({
+      ...baseEnv(),
+      WAITRON_STATE_DIR: "/tmp/break-glass-state",
+      WAITRON_VENUE_DIR: "",
+    });
+    expect(empty.code).toBe(0);
+    expect(empty.directories).toEqual(["/tmp/break-glass-state/venue"]);
   });
 
   it("optionally resets the PIN when WAITRON_BREAKGLASS_PIN is set", async () => {
@@ -152,14 +175,10 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     expect(code).toBe(0);
 
     // Read the pin_hash directly and confirm it changed to the new PIN's hash-verifiable value.
-    const after = await withAppUserDb((db) =>
-      withTransaction(db, async (tx) => {
-        const rows = await tx.execute<{ pin_hash: string }>(
-          sql`select pin_hash from persons where id = ${adminId}`,
-        );
-        return rows.rows[0]!.pin_hash;
-      }),
+    const rows = await suite.db.execute<{ pin_hash: string }>(
+      sql`select pin_hash from persons where id = ${adminId}`,
     );
+    const after = rows.rows[0]!.pin_hash;
     expect(before).toBeDefined();
     // A new hash was written (salted scrypt, so it differs from the seed's) and it verifies "9999".
     const { verifyPin } = await import("@waitron/identity");
@@ -169,10 +188,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 
   it("reactivates a suspended admin (status → active)", async () => {
     const { adminId } = await setupTenant();
-    // Suspend the admin as the owner (the app role holds UPDATE too, but the owner is simplest here).
-    await withTransaction(suite.admin, async (tx) => {
-      await tx.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
-    });
+    await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     expect((await readPerson(adminId))!.status).toBe("suspended");
 
     const { code } = await run(baseEnv());
@@ -182,28 +198,35 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 
   it("clears second factors and linked login methods so the replacement password restores access", async () => {
     const { adminId } = await setupTenant();
-    await withTransaction(suite.admin, async (tx) => {
-      await tx.execute(
-        sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
-      );
-      await tx.execute(
-        sql`insert into webauthn_credentials (person_id, credential_id, public_key) values (${adminId}, 'credential', 'key')`,
-      );
-      await tx.execute(
-        sql`insert into recovery_codes (person_id, code_hash) values (${adminId}, ${"a".repeat(64)})`,
-      );
-    });
+    await suite.db.execute(
+      sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
+    );
+    // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
+    // engine that a raw insert never reaches while both columns are NOT NULL (the trap
+    // `apps/server/src/testing/fiscal-fixtures.ts` records) — measured here as
+    // `NOT NULL constraint failed: webauthn_credentials.id`.
+    await suite.db
+      .insert(webauthnCredentials)
+      .values({ personId: adminId, credentialId: "credential", publicKey: "key" });
+    // `recoveryCodes` is NOT exported from `@waitron/identity`'s barrel (only `webauthnCredentials`
+    // is), so this one stays raw and supplies both generated columns itself.
+    await suite.db.execute(
+      sql`insert into recovery_codes (id, person_id, code_hash, created_at)
+          values (${randomUUID()}, ${adminId}, ${"a".repeat(64)}, ${nowIso()})`,
+    );
 
     expect((await run(baseEnv())).code).toBe(0);
 
-    const state = await suite.admin.execute<{
+    const state = await suite.db.execute<{
       totp_secret: string | null;
       google_subject: string | null;
       passkeys: number;
       recovery_codes: number;
     }>(sql`select p.totp_secret, p.google_subject,
-      (select count(*)::int from webauthn_credentials w where w.person_id=p.id) as passkeys,
-      (select count(*)::int from recovery_codes r where r.person_id=p.id) as recovery_codes
+      -- cast(x as int) rather than the PostgreSQL cast operator, which this engine refuses with
+      -- unrecognized token ":" -- the same rewrite working-order.ts took.
+      (select cast(count(*) as int) from webauthn_credentials w where w.person_id=p.id) as passkeys,
+      (select cast(count(*) as int) from recovery_codes r where r.person_id=p.id) as recovery_codes
       from persons p where p.id=${adminId}`);
     expect(state.rows[0]).toEqual({
       totp_secret: null,
@@ -213,12 +236,14 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     });
   });
 
-  it("missing new-password env → returns 2 (usage) and does NOT touch the row", async () => {
+  it("missing new-password env → returns 2 (usage), opens nothing and does NOT touch the row", async () => {
     const { adminId } = await setupTenant();
     const before = await readPerson(adminId);
 
-    const { code } = await run(baseEnv(null));
+    const { code, directories } = await run(baseEnv(null));
     expect(code).toBe(2);
+    // A usage error refuses BEFORE the venue is opened.
+    expect(directories).toEqual([]);
 
     const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
@@ -249,11 +274,6 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
-  it("missing DATABASE_URL → returns 2", async () => {
-    const noUrl = await run({ WAITRON_BREAKGLASS_PASSWORD: NEW_PASSWORD });
-    expect(noUrl.code).toBe(2);
-  });
-
   it("no admin on the box → returns 1, and the message says so", async () => {
     const { code, out } = await run(baseEnv());
     expect(code).toBe(1);
@@ -262,16 +282,17 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 
   it("two admins, no --person → returns 1 and lists both ids; --person resets exactly one", async () => {
     const { adminId } = await setupTenant();
-    // Insert a second admin as the app role (app_user holds INSERT on persons).
-    const secondId = await withAppUserDb((db) =>
-      withTransaction(db, async (tx) => {
-        const rows = await tx.execute<{ id: string }>(sql`
-          insert into persons (display_name, pin_hash, password_hash, role)
-          values ('Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')
-          returning id`);
-        return rows.rows[0]!.id;
-      }),
-    );
+    // Through the table definition, for the `$defaultFn` reason above (`persons.id`).
+    const [inserted] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: "Second Admin",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(OLD_PASSWORD),
+        role: "admin",
+      })
+      .returning({ id: persons.id });
+    const secondId = inserted!.id;
 
     const ambiguous = await run(baseEnv());
     expect(ambiguous.code).toBe(1);
@@ -318,12 +339,4 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
-});
-
-afterEach(async () => {
-  await suite.admin.execute(sql`delete from management_sessions`);
-  await suite.admin.execute(sql`delete from sessions`);
-  await suite.admin.execute(sql`delete from webauthn_credentials`);
-  await suite.admin.execute(sql`delete from recovery_codes`);
-  await suite.admin.execute(sql`delete from persons`);
 });

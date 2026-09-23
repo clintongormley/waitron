@@ -28,7 +28,7 @@ describe("the migration manifest", () => {
       mkdirSync(join(root, "core", "meta"), { recursive: true });
       writeFileSync(join(root, "core", "meta", "_journal.json"), "{}");
       const options = migrationOptionsFor(
-        [{ name: "core", table: "t", from: "../../packages/db/drizzle" }],
+        [{ name: "core", table: "t", from: "../../packages/db/drizzle", appendOnlyTables: [] }],
         root,
       );
       expect(options[0]?.migrationsFolder).toBe(join(root, "core"));
@@ -51,7 +51,10 @@ describe("the migration manifest", () => {
     // this test as pinning `packages/migrations` for the shipped form.
     const error = await captureError(() =>
       Promise.resolve(
-        migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "relative-migrations-root"),
+        migrationOptionsFor(
+          [{ name: "core", table: "t", from: "x", appendOnlyTables: [] }],
+          "relative-migrations-root",
+        ),
       ),
     );
     expect(isAppError(error) && error.code).toBe("migrations.set_missing");
@@ -67,7 +70,10 @@ describe("the migration manifest", () => {
     // THIS function's own check.
     const error = await captureError(() =>
       Promise.resolve(
-        migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "/nonexistent-root"),
+        migrationOptionsFor(
+          [{ name: "core", table: "t", from: "x", appendOnlyTables: [] }],
+          "/nonexistent-root",
+        ),
       ),
     );
     expect(isAppError(error) && error.code).toBe("migrations.set_missing");
@@ -85,7 +91,12 @@ describe("the migration manifest", () => {
     try {
       mkdirSync(join(root, "core"), { recursive: true });
       const error = await captureError(() =>
-        Promise.resolve(migrationOptionsFor([{ name: "core", table: "t", from: "x" }], root)),
+        Promise.resolve(
+          migrationOptionsFor(
+            [{ name: "core", table: "t", from: "x", appendOnlyTables: [] }],
+            root,
+          ),
+        ),
       );
       expect(isAppError(error) && error.code).toBe("migrations.set_missing");
       expect(isAppError(error) && error.params).toMatchObject({ name: "core" });

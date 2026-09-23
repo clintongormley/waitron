@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/pg-core";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menuItems } from "@waitron/catalogue";
 import {
   catalogues,
@@ -13,6 +14,8 @@ import {
   kitchenStations,
   label,
   locations,
+  newId,
+  nowIso,
   products,
   table,
   timeOfDay,
@@ -24,7 +27,7 @@ import {
 export const departments = table(
   "departments",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
@@ -38,10 +41,15 @@ export const departments = table(
     defaultServiceMode: label("default_service_mode").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     unique("departments_location_name_key").on(t.locationId, t.name),
+    // At most one default department per location. Partial, so every non-default department at
+    // that location is outside the index and unconstrained by it.
+    uniqueIndex("departments_one_default_per_location_key")
+      .on(t.locationId)
+      .where(sql`${t.isDefault}`),
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],
@@ -88,6 +96,25 @@ export const zoneServicePolicies = table(
       foreignColumns: [catalogues.id],
       name: "zone_service_policies_default_menu_fk",
     }),
+    // A default menu must also be an allowed menu for that zone. `default_menu_id` is nullable and
+    // a null satisfies the key, so a draft policy a manager has not finished configuring is still
+    // insertable. What does NOT carry from PostgreSQL is the DEFERRABLE INITIALLY DEFERRED this
+    // key was declared with — sqlite-core has no deferrable option, so the check lands at the
+    // statement and the zone_menus row must exist BEFORE the policy names it as its default.
+    // Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/zone-default.mjs, against
+    // this generated schema: the null default accepted; naming cat-1 with no zone_menus row
+    // refused (787); the zone_menus row then the same update accepted; and naming a catalogue
+    // allowed in no zone refused.
+    foreignKey({
+      columns: [t.zoneId, t.defaultMenuId],
+      foreignColumns: ZONE_MENU_KEY,
+      name: "zone_service_policies_default_allowed_fk",
+    }),
+    // At most one counter-default zone per location. Partial, so every zone that is not the
+    // counter default is outside the index.
+    uniqueIndex("zone_service_policies_one_counter_default_key")
+      .on(t.locationId)
+      .where(sql`${t.isCounterDefault}`),
     check(
       "zone_service_policies_mode_ck",
       sql`${t.serviceMode} is null or ${t.serviceMode} in ('table_tab','prepay','invoice_first','ticket_then_pay')`,
@@ -118,6 +145,16 @@ export const zoneMenus = table(
   ],
 );
 
+/**
+ * `zone_menus`'s primary key, as the pair `zone_service_policies`'s composite foreign key points
+ * at. It is a separately declared constant with an EXPLICIT type, and the type is what it is for:
+ * the two tables reference each other, and TypeScript refuses to infer either table's type from an
+ * initializer that reaches back into the other (TS7022). Naming the pair's type here means the
+ * policy table's declaration no longer depends on `zoneMenus`'s inferred type. Evaluated at module
+ * load, AFTER `zoneMenus` above; the table callbacks that read it run later still.
+ */
+const ZONE_MENU_KEY: [AnySQLiteColumn, AnySQLiteColumn] = [zoneMenus.zoneId, zoneMenus.menuId];
+
 export const deviceZoneDefaults = table(
   "device_zone_defaults",
   {
@@ -142,7 +179,7 @@ export const deviceZoneDefaults = table(
 export const preparationRoutes = table(
   "preparation_routes",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     locationId: id("location_id").notNull(),
     zoneId: id("zone_id"),
     categoryId: id("category_id"),
@@ -176,19 +213,48 @@ export const preparationRoutes = table(
       foreignColumns: [kitchenStations.id],
       name: "preparation_routes_station_fk",
     }),
-    check("preparation_routes_subject_ck", sql`num_nonnulls(${t.categoryId}, ${t.productId}) = 1`),
+    // Until 2026-09-21 both of these counted with `num_nonnulls(...)`, which SQLite does not have
+    // (`no such function: num_nonnulls`, measured at CREATE TABLE time). A comparison is either
+    // true or false and SQLite spells those 1 and 0, so adding them counts the same thing.
+    // Measured on node:sqlite (Node v26.7.0), probe /tmp/f1-ddl-probe/nonnulls.mjs, against tables
+    // carrying exactly these bodies: exactly one of the pair accepted, both refused, neither
+    // refused. The `nullif(no_preparation, false)` half survives unchanged — `flag` stores 0 or 1
+    // and SQLite reads `false` as 0, so a false flag still becomes NULL and stops counting: with a
+    // station and the flag false accepted, with a station and the flag true refused, with no
+    // station and the flag true accepted, and with neither refused.
+    check(
+      "preparation_routes_subject_ck",
+      sql`(${t.categoryId} is not null) + (${t.productId} is not null) = 1`,
+    ),
     check(
       "preparation_routes_target_ck",
-      sql`num_nonnulls(${t.stationId}, nullif(${t.noPreparation}, false)) = 1`,
+      sql`(${t.stationId} is not null) + (nullif(${t.noPreparation}, false) is not null) = 1`,
     ),
     index("preparation_routes_lookup_idx").on(t.locationId, t.zoneId, t.productId, t.categoryId),
+    // A null zone means venue-wide routing, so the four specificities are four separate partial
+    // uniques rather than one key: a venue-wide route and a zone route for the same subject are
+    // different rows, and each specificity is unambiguous on its own. A route the predicate
+    // excludes is outside its index entirely — the venue keys constrain no zone route, and the
+    // zone keys constrain no venue-wide one.
+    uniqueIndex("preparation_routes_zone_product_key")
+      .on(t.locationId, t.zoneId, t.productId)
+      .where(sql`${t.zoneId} is not null and ${t.productId} is not null`),
+    uniqueIndex("preparation_routes_zone_category_key")
+      .on(t.locationId, t.zoneId, t.categoryId)
+      .where(sql`${t.zoneId} is not null and ${t.categoryId} is not null`),
+    uniqueIndex("preparation_routes_venue_product_key")
+      .on(t.locationId, t.productId)
+      .where(sql`${t.zoneId} is null and ${t.productId} is not null`),
+    uniqueIndex("preparation_routes_venue_category_key")
+      .on(t.locationId, t.categoryId)
+      .where(sql`${t.zoneId} is null and ${t.categoryId} is not null`),
   ],
 );
 
 export const departmentHours = table(
   "department_hours",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     departmentId: id("department_id").notNull(),
     weekday: count("weekday").notNull(),
     opensAt: timeOfDay("opens_at").notNull(),

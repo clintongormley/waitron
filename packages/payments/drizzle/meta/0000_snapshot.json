@@ -1,97 +1,101 @@
 {
-  "id": "22b41854-cc7e-4a78-83a0-de3e5b56d6c8",
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "7a151f34-c17b-4603-be27-ebad425a39b2",
   "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "7",
-  "dialect": "postgresql",
   "tables": {
-    "public.card_readers": {
+    "card_readers": {
       "name": "card_readers",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "provider": {
           "name": "provider",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "provider_ref": {
           "name": "provider_ref",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "active": {
           "name": "active",
-          "type": "boolean",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false,
           "default": true
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "disabled_at": {
           "name": "disabled_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "unpaired_at": {
           "name": "unpaired_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
+      "indexes": {
         "card_readers_provider_ref_key": {
           "name": "card_readers_provider_ref_key",
-          "nullsNotDistinct": false,
           "columns": [
             "provider",
             "provider_ref"
-          ]
+          ],
+          "isUnique": true
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
-    "public.device_card_readers": {
+    "device_card_readers": {
       "name": "device_card_readers",
-      "schema": "",
       "columns": {
         "device_id": {
           "name": "device_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
         },
         "reader_id": {
           "name": "reader_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -123,62 +127,54 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {
-        "device_card_readers_device_id_pk": {
-          "name": "device_card_readers_device_id_pk",
-          "columns": [
-            "device_id"
-          ]
-        }
-      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
+      "checkConstraints": {}
     },
-    "public.payment_policy": {
+    "payment_policy": {
       "name": "payment_policy",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
           "type": "integer",
           "primaryKey": true,
           "notNull": true,
+          "autoincrement": false,
           "default": 1
         },
         "offline_mode": {
           "name": "offline_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "offline_amount_cap": {
           "name": "offline_amount_cap",
-          "type": "numeric(12, 2)",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "payment_policy_singleton_ck": {
           "name": "payment_policy_singleton_ck",
@@ -192,80 +188,75 @@
           "name": "payment_policy_cap_ck",
           "value": "\"payment_policy\".\"offline_amount_cap\" >= 0"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.payment_refunds": {
+    "payment_refunds": {
       "name": "payment_refunds",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "payment_id": {
           "name": "payment_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "provider": {
           "name": "provider",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "payment_ref": {
           "name": "payment_ref",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "amount": {
           "name": "amount",
-          "type": "numeric(12, 2)",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "state": {
           "name": "state",
-          "type": "payment_refund_state",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "authorized_by": {
           "name": "authorized_by",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
         "payment_refunds_payment_idx": {
           "name": "payment_refunds_payment_idx",
           "columns": [
-            {
-              "expression": "payment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "payment_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -285,183 +276,186 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
       "checkConstraints": {
         "payment_refunds_amount_ck": {
           "name": "payment_refunds_amount_ck",
           "value": "\"payment_refunds\".\"amount\" > 0"
+        },
+        "payment_refunds_state_ck": {
+          "name": "payment_refunds_state_ck",
+          "value": "\"payment_refunds\".\"state\" in ('succeeded', 'failed')"
         }
-      },
-      "isRLSEnabled": false
+      }
     },
-    "public.payments": {
+    "payments": {
       "name": "payments",
-      "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "autoincrement": false
         },
         "working_order_id": {
           "name": "working_order_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "sale_id": {
           "name": "sale_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "node_id": {
           "name": "node_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "reader_id": {
           "name": "reader_id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "provider": {
           "name": "provider",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "payment_ref": {
           "name": "payment_ref",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "external_ref": {
           "name": "external_ref",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "card_scheme": {
           "name": "card_scheme",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "card_last4": {
           "name": "card_last4",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "card_entry_mode": {
           "name": "card_entry_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "card_auth_code": {
           "name": "card_auth_code",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "amount": {
           "name": "amount",
-          "type": "numeric(12, 2)",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "state": {
           "name": "state",
-          "type": "payment_state",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "autoincrement": false
         },
         "settled_at": {
           "name": "settled_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "reconcile_remediated_at": {
           "name": "reconcile_remediated_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "autoincrement": false
         }
       },
       "indexes": {
+        "payments_provider_external_ref_key": {
+          "name": "payments_provider_external_ref_key",
+          "columns": [
+            "provider",
+            "external_ref"
+          ],
+          "isUnique": true,
+          "where": "\"payments\".\"external_ref\" is not null and \"payments\".\"provider\" <> 'manual'"
+        },
         "payments_working_order_idx": {
           "name": "payments_working_order_idx",
           "columns": [
-            {
-              "expression": "working_order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "working_order_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         },
         "payments_sale_idx": {
           "name": "payments_sale_idx",
           "columns": [
-            {
-              "expression": "sale_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "sale_id"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
         },
         "payments_reconcile_idx": {
           "name": "payments_reconcile_idx",
           "columns": [
-            {
-              "expression": "provider",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "settled_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
+            "provider",
+            "settled_at"
           ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "isUnique": false
+        },
+        "payments_provider_ref_key": {
+          "name": "payments_provider_ref_key",
+          "columns": [
+            "provider",
+            "payment_ref"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -519,17 +513,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payments_provider_ref_key": {
-          "name": "payments_provider_ref_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "payment_ref"
-          ]
-        }
-      },
-      "policies": {},
+      "uniqueConstraints": {},
       "checkConstraints": {
         "payments_amount_ck": {
           "name": "payments_amount_ck",
@@ -542,45 +526,22 @@
         "payments_card_entry_mode_ck": {
           "name": "payments_card_entry_mode_ck",
           "value": "\"payments\".\"card_entry_mode\" is null or \"payments\".\"card_entry_mode\" in ('contactless','chip','swipe','unknown')"
+        },
+        "payments_state_ck": {
+          "name": "payments_state_ck",
+          "value": "\"payments\".\"state\" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'accepted_offline', 'settled', 'declined', 'initiated')"
         }
-      },
-      "isRLSEnabled": false
+      }
     }
   },
-  "enums": {
-    "public.payment_refund_state": {
-      "name": "payment_refund_state",
-      "schema": "public",
-      "values": [
-        "succeeded",
-        "failed"
-      ]
-    },
-    "public.payment_state": {
-      "name": "payment_state",
-      "schema": "public",
-      "values": [
-        "attempting",
-        "captured",
-        "voided",
-        "refunded",
-        "partially_refunded",
-        "failed",
-        "accepted_offline",
-        "settled",
-        "declined",
-        "initiated"
-      ]
-    }
-  },
-  "schemas": {},
-  "sequences": {},
-  "roles": {},
-  "policies": {},
   "views": {},
+  "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
   }
 }

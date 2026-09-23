@@ -32,7 +32,13 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS]
 
 // Listing reads the whole vault, so each case starts with an empty credential table.
 beforeEach(async () => {
-  await suite.db.execute(sql`truncate tenant_credentials`);
+  // `delete`, not TRUNCATE: this engine has no TRUNCATE at all, and the statement did not even
+  // reach execution — running this suite before the change printed `Error: near "truncate": syntax
+  // error` from `packages/store/src/node-sqlite-adapter.ts:64`, which killed every case in the
+  // file in its `beforeEach`. `tenant_credentials` is classified `local` (`./classification.ts`),
+  // so it carries no append-only trigger to refuse the delete — the same reasoning as
+  // `packages/fiscal-verifactu/src/acks.test.ts:123`.
+  await suite.db.execute(sql`delete from tenant_credentials`);
 });
 
 interface Harness {
@@ -69,8 +75,11 @@ describe("waitron-credentials set", () => {
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--purpose", "payments.stripe"], h.deps);
     expect(code).toBe(0);
+    // No `::int`: the cast only flattened PostgreSQL's bigint `count` to a JavaScript number, and
+    // this engine returns one already — measured on node v26.7.0, `select count(*) as n` over a
+    // one-row table gives `{ n: 1 }` with `typeof n === "number"`.
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials`);
+      select count(*) as n from tenant_credentials`);
     expect(rows.rows[0]!.n).toBe(1);
   });
 
@@ -233,7 +242,13 @@ describe("waitron-credentials set", () => {
     // an ordinary, expected rejection.
     const h = harness(STRIPE_JSON);
     const failing = new Error("connection lost");
-    h.deps.db = { transaction: () => Promise.reject(failing) } as unknown as CliDeps["db"];
+    // The fake stubs `withWriteLock`, not `transaction`: `withTransaction` now opens its
+    // transaction by handing the body to the file's write lock
+    // (`packages/db/src/tenancy.ts:44`) rather than by calling `db.transaction`. Stubbing the old
+    // seam left the real `withWriteLock` missing from the fake, and the case failed with
+    // `TypeError: db.withWriteLock is not a function` instead of the error it is about. Only the
+    // fake moved — the assertion below is unchanged.
+    h.deps.db = { withWriteLock: () => Promise.reject(failing) } as unknown as CliDeps["db"];
     await expect(runCli(["set", "--purpose", "payments.stripe"], h.deps)).rejects.toBe(failing);
   });
 });
@@ -288,7 +303,7 @@ describe("waitron-credentials delete", () => {
     const h = harness();
     expect(await runCli(["delete", "--purpose", "payments.stripe"], h.deps)).toBe(0);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials`);
+      select count(*) as n from tenant_credentials`);
     expect(rows.rows[0]!.n).toBe(0);
   });
 

@@ -1,8 +1,8 @@
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { CORE_MIGRATIONS, locations, printAgents, printJobs, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { esc } from "./escpos.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
@@ -10,42 +10,47 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import type { PrintConfig } from "./printers.js";
 
-// Real PostgreSQL, NOT PGlite: eligibility is derived at claim time from the venue (network_tcp) and
-// the agent's reported visible device keys (usb/bluetooth) — schema-only logic that PGlite runs fine,
-// but this suite shares the claim path with the race suite and runs as the real deployment role
-// (SET ROLE app_user) so the grant the claim/report needs is exercised, not bypassed by PGlite's
-// superuser connection (CLAUDE.md §4).
-const suite = useTemplateDb({ template: "core" });
+// Eligibility is derived at claim time from the venue (network_tcp) and the agent's reported visible
+// device keys (usb/bluetooth) — schema-only logic, which is what every case below asserts.
+//
+// WHAT THIS SUITE NO LONGER SHOWS. Its header used to say it ran as the real deployment role
+// (`set local role app_user` inside a real PostgreSQL transaction) so the grants the claim and the
+// report need were exercised rather than bypassed. This engine has no roles and `asAppUser` is an
+// empty body (`packages/db/src/testing/roles.ts`), so that half is gone and nothing replaces it.
+//
+// The empty-visibleKeys guard is proven by deletion on this engine, 2026-09-22 on Node v26.7.0:
+// with the `sql`false`` arm in `claimPrintJobs` (`packages/printing/src/runtime.ts`) widened to
+// `sql`p.transport in ('usb','bluetooth')`` and nothing else changed, the usb case and the
+// bluetooth case below FAILED and the other three passed; restored, all five pass.
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
-  await seedTenant(suite.admin);
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { locationId: rows[0]!.id };
-}
-
-/** Run `fn` as the real deployment role — one tx that switches to `app_user` first, the
- * shape the Task-6 route wraps every runtime call in. */
-function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
-    return fn(tx);
-  });
+  await seedTenant(suite.db);
+  // Through the table definition, not raw SQL: `locations.id` comes from `$defaultFn(newId)` in
+  // JavaScript, so a raw insert naming no id is refused `NOT NULL constraint failed: locations.id`,
+  // and `invoiceLocales` reaches its column's JSON mapping where `array['es-ES']` used to be SQL.
+  const [row] = await suite.db
+    .insert(locations)
+    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
+    .returning({ id: locations.id });
+  return { locationId: row!.id };
 }
 
 async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(printAgents)
+    .values({ locationId: cfg.locationId, name, tokenHash: "scrypt$fixture" })
+    .returning({ id: printAgents.id });
+  return row!.id;
 }
 
-describe("claim eligibility (real Postgres) — derived from venue + visible keys", () => {
+describe("claim eligibility — derived from venue + visible keys", () => {
   it("claims a network_tcp job for any agent in the venue", async () => {
     const cfg = await setup();
     // An agent that registered NOTHING — printers carry no agent binding now, so venue membership
     // (the locationId the agent reports) is the whole eligibility test for a network printer.
     const otherAgentId = await seedAgent(cfg, "Other");
-    await asApp(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",
@@ -70,10 +75,16 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     const agentId = await seedAgent(cfg, "Kitchen");
     // A second venue in the same tenant; the printer lives in `cfg.locationId`, the agent reports the
     // other one — the venue conjunct (`p.location_id = ctx.locationId`) must exclude it.
-    const { rows } = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description) values ('Terrace', array['es-ES'], 'Sale on premises') returning id`);
-    const otherLocationId = rows[0]!.id;
-    await asApp(suite.admin, async (tx) => {
+    const [other] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Terrace",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Sale on premises",
+      })
+      .returning({ id: locations.id });
+    const otherLocationId = other!.id;
+    await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",
@@ -91,7 +102,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
   it("claims a usb job only for an agent that reports its serial", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
-    await asApp(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, { name: "USB", transport: "usb", localKey: "SN-9" });
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
       // The agent that does NOT see SN-9 claims nothing — the empty-visibleKeys guard degenerates the
@@ -101,10 +112,14 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
       expect(
         await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
       ).toHaveLength(0);
-      const afterMiss = await tx.execute<{ status: string }>(
-        sql`select status from print_jobs where id = ${jobId}`,
-      );
-      expect(afterMiss.rows[0]!.status).toBe("queued");
+      // Read through the table rather than raw SQL: `status` is a plain text column either way, but a
+      // raw select skips drizzle's read mapping, and going through the table is what the rest of this
+      // package now does.
+      const [afterMiss] = await tx
+        .select({ status: printJobs.status })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect(afterMiss!.status).toBe("queued");
       // The agent that reports SN-9 claims it, and the RETURNING carries the device key.
       const claimed = await claimPrintJobs(tx, agentId, {
         locationId: cfg.locationId,
@@ -118,7 +133,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
   it("claims a bluetooth job by its visible key too (usb/bluetooth share the branch)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
-    await asApp(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, {
         name: "BT",
         transport: "bluetooth",
@@ -141,7 +156,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
     const otherAgentId = await seedAgent(cfg, "Other");
-    await asApp(suite.admin, async (tx) => {
+    await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",

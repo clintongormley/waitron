@@ -74,8 +74,14 @@ jobs:
           retention-days: 30
 
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
-  # database-backed mutants (every test here boots a Postgres and applies a schema), which on ONE
-  # 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed. Treat
+  # database-backed mutants (every suite here opens a venue database and applies a schema), which on
+  # ONE 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed.
+  #
+  # EVERY TIMING IN THIS NOTE, and the shard count they argue for, was measured while that database
+  # was PGlite — a WASM PostgreSQL booted per suite. The storage switch replaced it with SQLite
+  # files on disk, and NOTHING here has been re-measured since: the run ids below are still real
+  # runs, but they are evidence about the old engine. Ten shards may now be more than the work
+  # needs. Read the next weekly run's shard durations before treating any figure below as current. Treat
   # ~10h as a FLOOR, not a current figure: it was Stryker's own ETA at 749 mutants, and the set
   # has grown a great deal since (a whole-package `--dryRunOnly` read 2649 on 2026-09-19). That
   # is why the count lives in dated receipts rather than in this sentence.
@@ -105,8 +111,10 @@ jobs:
   # No thresholds.break is configured HERE, and that is on purpose: a break in
   # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
   # well-tested files passes while the package as a whole sits far below the bar. The package is
-  # gated once, on the merged score, by the `mutation-db-aggregate` job below. Docker is present on
-  # ubuntu-latest, so the real-Postgres target runs here too.
+  # gated once, on the merged score, by the `mutation-db-aggregate` job below. The REQUIRE_DOCKER
+  # set below is unread — no suite in this package starts a container any more (on 2026-09-23
+  # `grep -rn 'from "testcontainers"' packages apps` returns no line at all) — and is left in place
+  # for the same reason as its twin in ci.yml, where the note on test-heavy explains it.
   mutation-db:
     strategy:
       fail-fast: false

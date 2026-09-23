@@ -10,19 +10,20 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
 /**
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
  * next boot so the box enters TRADING mode. The four *Id fields become the `WAITRON_TILL_*_ID`
- * config the till reads; `databaseUrl`/`migrationsDatabaseUrl` and `environment` are the same
- * connections + `WAITRON_ENV` the running server expects. There is no per-mirror sync-pool URL: a
- * mirror takes in no rows at all today — the PostgreSQL replication that fed it is deleted and its
- * replacement has not landed (`mirror-bundle.ts`'s header states the same open question) — so it
- * needs no second connection of its own.
+ * config the till reads, and `environment` the `WAITRON_ENV` the running server expects.
+ *
+ * **Nothing here names a database.** The storage is a directory of SQLite files, and boot derives
+ * it from the state root (`config.ts`'s `venueDir`, defaulting under `stateDir`) — the same state
+ * root the supervisor hands BOTH the setup process that writes this file and the trading process
+ * that sources it. An explicit `WAITRON_VENUE_DIR` reaches both the same way, through the
+ * supervisor's own environment. So the location is never a value setup has to hand forward, and
+ * writing an absolute path here would pin one that a moved state root could not correct.
  */
 export interface TradingConfig {
   tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
-  databaseUrl: string;
-  migrationsDatabaseUrl: string;
   environment: "production" | "preproduction";
   /** Persist WAITRON_ENV=dev while exercising a Live-shaped onboarding in development. */
   developmentMode?: boolean;
@@ -34,8 +35,8 @@ export interface TradingConfig {
 
 /**
  * Atomically write `<stateDir>/trading.env` (`KEY=value\n`, 0600) — the file the supervisor sources
- * on the next boot so the four `WAITRON_TILL_*_ID` + `DATABASE_URL`(+migrations) + `WAITRON_ENV` are
- * present and the box boots in TRADING mode. Sibling to 2a's secrets.env (left untouched). Returns the
+ * on the next boot so the four `WAITRON_TILL_*_ID` + `WAITRON_ENV` are present and the box boots in
+ * TRADING mode. Sibling to 2a's secrets.env (left untouched). Returns the
  * path written.
  */
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
@@ -45,8 +46,6 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
     WAITRON_TILL_NODE_ID: cfg.nodeId,
     WAITRON_TILL_SERIES_ID: cfg.seriesId,
     WAITRON_TILL_LOCATION_ID: cfg.locationId,
-    DATABASE_URL: cfg.databaseUrl,
-    WAITRON_MIGRATIONS_DATABASE_URL: cfg.migrationsDatabaseUrl,
     WAITRON_ENV: cfg.developmentMode === true ? "dev" : cfg.environment,
     ...(cfg.onboardingIntent === undefined
       ? {}

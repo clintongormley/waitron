@@ -76,7 +76,7 @@ describe("staged restore requests", () => {
       await runStagedRestore(
         {
           stateDir,
-          databaseUrl: "postgres://migrator",
+          venueDir: "/var/lib/waitron/venue",
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },
@@ -90,7 +90,7 @@ describe("staged restore requests", () => {
         artifact: Buffer.from([4, 5]),
         recoveryKey: "recovery",
         environment: "preproduction",
-        databaseUrl: "postgres://migrator",
+        venueDir: "/var/lib/waitron/venue",
       }),
     );
     await expect(readFile(join(stateDir, "setup-operation.json"))).rejects.toMatchObject({
@@ -112,7 +112,7 @@ describe("staged restore requests", () => {
       runStagedRestore(
         {
           stateDir,
-          databaseUrl: "postgres://migrator",
+          venueDir: "/var/lib/waitron/venue",
           migrationsRoot: "/migrations",
           log: vi.fn(),
         },

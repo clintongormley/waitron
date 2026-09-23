@@ -1,17 +1,23 @@
 # Running a Waitron node
 
-A node is a few containers: the Waitron app, its Postgres, a local mail capture, and the print agent.
-Everything the node keeps lives in the named Docker volumes below, so `docker volume` is the whole of
-a box's life — back those up and you have backed up the box.
+A node is a few containers: the Waitron app, a local mail capture, the print agent, and a database
+container the app no longer talks to (see `db` below). Everything the node keeps lives in the named
+Docker volumes below, so `docker volume` is the whole of a box's life — back those up and you have
+backed up the box.
 
-| volume        | mounted at                     | holds                                                                                                  |
-| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `db`          | `/var/lib/postgresql`          | the cluster                                                                                            |
-| `state`       | `/var/lib/waitron/state`       | the box's identity: `secrets.env`, `instance.env`, `trading.env`, `modules.json`, the CA and leaf PEMs |
-| `logs`        | `/var/lib/waitron/logs`        | the rotating log file                                                                                  |
-| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                             |
-| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)               |
-| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                    |
+**The venue's own database is a folder inside the `state` volume.** The app opens
+`/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars and
+the `migrations.lock` file two migrating processes queue on. There is no database server in the
+app's path, no connection string and no database password.
+
+| volume        | mounted at                     | holds                                                                                                                           |
+| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `db`          | `/var/lib/postgresql`          | a PostgreSQL cluster nothing reads any more — compose still starts the service; a later change retires it                       |
+| `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, the CA and leaf PEMs |
+| `logs`        | `/var/lib/waitron/logs`        | the rotating log file                                                                                                           |
+| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                      |
+| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                        |
+| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                             |
 
 ## Setting up a box
 
@@ -31,9 +37,10 @@ from the same commit — generates the box's `POSTGRES_PASSWORD` into `.env` the
 the box's images — the two Waitron images from GHCR and the database and mail-catcher images from
 Docker Hub — stopping with an error if any of them fails to download, and starts the containers. It is
 non-interactive and idempotent: running it again later (to update, say) does nothing destructive,
-and in particular it never mints a second
-`POSTGRES_PASSWORD` — the cluster keeps the first one, so a regenerated `.env` would lock the app out
-of its own database.
+and in particular it never mints a second `POSTGRES_PASSWORD` — the cluster consumes it only at its
+first start and keeps it thereafter, so a regenerated `.env` would leave the two disagreeing. The
+venue's own databases are unaffected by any of this: they are files in the `state` volume, and no
+password opens them.
 
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
@@ -91,9 +98,9 @@ cd /opt/waitron
 docker compose logs app | tail -50    # the failed boot's error, its cause chain, and its stack
 ```
 
-That output is the caught error's own words — a missing column, a refused connection, the counts
-behind `migrations.incomplete`, the migration hashes behind `provisioning.database_ahead` — with any
-credentials embedded in a URL masked before it is written. `docker compose logs` keeps it across the
+That output is the caught error's own words — a missing column, a database file that would not
+open, the counts behind `migrations.incomplete`, the migration hashes behind
+`provisioning.database_ahead` — with any credentials embedded in a URL masked before it is written. `docker compose logs` keeps it across the
 container's own restart loop, so read it before pulling a new image: `docker compose up -d` on a
 fresh image starts a new container and the previous boot's output goes with the old one.
 
@@ -147,9 +154,10 @@ inside the box's `state` volume, which holds the certificate authority the phone
 the box's own certificate signed by it. Because that folder survives, a phone that has already been
 told to trust this box does not need to trust it again after a plain `reset`. `reset --all` throws
 `tls/` away too, so the box mints a brand-new certificate authority on its next boot and every phone
-has to go through the trust step again. Neither form touches `.env`, so the box's Postgres password
-and whichever image `install` last selected both survive a reset — only the data inside the
-containers is wiped.
+has to go through the trust step again. Neither form touches `.env`, so whatever it holds — the
+generated `POSTGRES_PASSWORD` and whichever image `install` last selected — survives a reset. Only
+the data in the volumes is wiped, and that includes the venue's databases, because they live in the
+`state` volume.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
@@ -158,7 +166,11 @@ without a terminal (an unattended script) it needs `--yes` instead.
 filed with the Spanish tax agency that cannot be recreated, and `reset` would destroy them — see
 `CLAUDE.md` §5 on why that data is unrecoverable. A box that has never been set up, or is still in
 demo/test mode, is not stamped and resets freely with no extra flag; that is the normal demo
-workflow. The only way past the refusal on a genuinely production box is deliberate: pass
+workflow. A half-finished box counts as never set up: the server creates the venue database file
+before it runs its migrations, so a box that failed partway through setup has the file with no
+stamp table in it, and that reads as unstamped rather than as a read that failed. What is still
+refused is a box whose venue file cannot be read at all, because nothing about it can be
+established. The only way past the refusal on a genuinely production box is deliberate: pass
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
 Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §4.
 
@@ -173,13 +185,12 @@ middle of a cold restore, so it is worth reading twice:
   ```bash
   # break-glass resets the first admin's dashboard password (the lockout IS the password). Its
   # secrets come from the ENVIRONMENT, never argv (an argv element leaks into `ps`): the new password
-  # is WAITRON_BREAKGLASS_PASSWORD, and it needs the box's own DATABASE_URL, which is in the state
-  # volume's trading.env. `--person <id>` only disambiguates a venue with more than one admin;
-  # WAITRON_BREAKGLASS_PIN also resets the PIN.
-  docker compose exec app sh -c '
-    set -a; . /var/lib/waitron/state/trading.env; set +a
-    WAITRON_BREAKGLASS_PASSWORD="a-new-dashboard-password" node /app/bin-break-glass.js
-  '
+  # is WAITRON_BREAKGLASS_PASSWORD. It needs no connection setting at all — it finds the venue
+  # directory the way the server does, from WAITRON_VENUE_DIR or `venue` under WAITRON_STATE_DIR,
+  # and the image already sets the latter. `--person <id>` only disambiguates a venue with more than
+  # one admin; WAITRON_BREAKGLASS_PIN also resets the PIN.
+  docker compose exec -e WAITRON_BREAKGLASS_PASSWORD="a-new-dashboard-password" \
+    app node /app/bin-break-glass.js
   ```
 
 - **`docker compose run` APPENDS its arguments to the entrypoint.** The commands that need the
@@ -198,11 +209,12 @@ middle of a cold restore, so it is worth reading twice:
 
 `.env.example` documents every line. Two are worth calling out here.
 
-**`POSTGRES_PASSWORD`** is the one secret a box needs before anything runs: the `db` container
-consumes it at first start, and compose derives the app's `WAITRON_BOOTSTRAP_DATABASE_URL` from it.
-`waitron.sh install` generates it and never prints it. Everything else the box holds — the vault key ring,
-the CA and leaf certificates, the node's own secrets — is minted on the first setup boot into the
-`state` volume.
+**`POSTGRES_PASSWORD`** is the `db` container's own password, consumed at its first start.
+`waitron.sh install` generates it and never prints it, and compose still refuses to start without
+it. **The app no longer reads it, directly or derived:** a venue is a directory of SQLite files
+under the `state` volume, so the server opens no database server and holds no database credentials
+at all. The `db` service itself is retired by a later change. Everything else the box holds — the vault key ring, the CA and leaf certificates, the
+node's own secrets — is minted on the first setup boot into the `state` volume.
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,
@@ -251,10 +263,6 @@ services:
     network_mode: bridge
     ports:
       - "443:443"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      WAITRON_BOOTSTRAP_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@host.docker.internal:5432/postgres
 ```
 
 ```bash

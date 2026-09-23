@@ -1,9 +1,16 @@
-// Real PostgreSQL exercises sale writes and receipt reads after SET ROLE app_user.
+// Sale writes and receipt reads through the real device-authenticated sale route, against a real
+// migrated venue database.
+//
+// It reached this engine as `useTemplateDb({ template: "manifest" })`, a per-file clone of a shared
+// PostgreSQL template; the `asAppUser(tx)` calls below are now inert
+// (`packages/db/src/testing/roles.ts`) and are left for Task T1 to sweep, so nothing here says
+// anything about what the deployment role, which no longer exists, may read or write.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTransaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { asAppUser, deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -16,9 +23,10 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
+import { preparationRoutes } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -35,20 +43,23 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 
 /**
- * Exercise device authentication through the sale route to a fiscal record on PostgreSQL.
+ * Exercise device authentication through the sale route to a fiscal record.
  * till_id comes from the enrolled device; node_id and series_id remain the configured chain keys.
  * The fiscal write-path suite separately checks that changing only till_id preserves the huella.
  */
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock reported as already anchored — the identical stub shape `till-api.pg.test.ts`
+/** The wall clock reported as already anchored — the identical stub shape `till-api.fiscal-sale-paths.test.ts`
  *  documents. `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`. */
 function systemClock(): TrustedClock {
   return {
@@ -69,9 +80,9 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is
-// unique, so each provisioned venue needs its own NIF — the same local counter `till-api.pg.test.ts`
-// uses for the same reason.
+// A fresh NIF per provisioned venue. `tenants_country_tax_id_key` is unique, and a case that
+// provisions twice inside one test keeps its own rows distinct — the per-test reset empties the
+// data between tests, so the counter is what keeps a repeated call inside one test apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -132,11 +143,11 @@ async function setupVenue(): Promise<{
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db: suite.db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { product, operatorId } = await withTransaction(suite.admin, async (tx) => {
+  const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -169,20 +180,28 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    await tx.execute(sql`
-      insert into preparation_routes
-        (location_id, category_id, station_id, no_preparation)
-      values (${cfg.locationId}, ${bebidas.id}, null, true)`);
-    const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
+    // Through the table definition: `preparation_routes.id` is a `$defaultFn` generator
+    // (`packages/venue-service/src/schema/service.ts:180`), which a raw statement never reaches.
+    await tx.insert(preparationRoutes).values({
+      locationId: cfg.locationId,
+      categoryId: bebidas.id,
+      stationId: null,
+      noPreparation: true,
+    });
+    // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are
+    // NOT NULL columns whose values come from `$defaultFn` generators
+    // (`packages/identity/src/schema/persons.ts:26,:67`), and a raw statement reaches no generator.
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
     return {
       product: {
         ...available.find((p) => p.pricingUnit === "each")!,
         menuItemId: menuItem.id,
       },
-      operatorId: person.rows[0]!.id,
+      operatorId: person!.id,
     };
   });
   return { cfg, locationId: venue.locationId, product, operatorId };
@@ -192,10 +211,13 @@ async function setupVenue(): Promise<{
  *  re-homed / second device would ring against. Inserted on the owner connection directly (fixture
  *  setup, not the code under test), returning its id. */
 async function insertTill(locationId: string, name: string): Promise<string> {
-  const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name)
-    values (${locationId}, ${name}) returning id`);
-  return till.rows[0]!.id;
+  // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
+  // (`packages/db/src/schema/tenants.ts:232,:246`), which a raw statement never reaches.
+  const [till] = await suite.db
+    .insert(tills)
+    .values({ locationId, name })
+    .returning({ id: tills.id });
+  return till!.id;
 }
 
 /** Seed a `phone-portrait` (handheld) `device_profiles` row — the sale-capable form factor that
@@ -204,10 +226,13 @@ async function insertTill(locationId: string, name: string): Promise<string> {
 let profileCounter = 0;
 async function seedHandheldProfile(): Promise<string> {
   profileCounter += 1;
-  const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (name, form_factor)
-    values (${`Handheld ${profileCounter}`}, 'phone-portrait') returning id`);
-  return rows[0]!.id;
+  // Through the table definition: `device_profiles.id` and `.created_at` are `$defaultFn`
+  // generators (`packages/db/src/schema/device-profiles.ts:42,:54`), unreachable from raw SQL.
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: `Handheld ${profileCounter}`, formFactor: "phone-portrait" })
+    .returning({ id: deviceProfiles.id });
+  return profile!.id;
 }
 
 /** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
@@ -218,7 +243,7 @@ async function seedHandheldProfile(): Promise<string> {
  *  from THIS device (`requireSaleTillId`) either way. */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Counter device",
     profileId,
     registerId: boundTillId,
@@ -231,7 +256,7 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
  *  join-and-accept enrol path as {@link enrolTillCookie}. */
 async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
-  const dev = await enrolDeviceForTest(suite.admin, cfg, {
+  const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Dev-override device",
     profileId,
     registerId: boundTillId,
@@ -241,7 +266,7 @@ async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<
 
 function apiDeps(cfg: TillConfig): TillApiDeps {
   return {
-    db: suite.admin,
+    db: suite.db,
     backend,
     clock,
     cfg,
@@ -297,7 +322,7 @@ interface Registro {
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({
@@ -318,7 +343,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
  *  lines up with the registros ordered by `secuencia`. */
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
   void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
@@ -331,7 +356,7 @@ beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
     clock,
-    db: suite.admin,
+    db: suite.db,
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>

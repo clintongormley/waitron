@@ -2,28 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
 // The REAL Veri*Factu slot contribution, so the venue-field cases below run the regime's own rules
 // rather than a stub of them. A test file may name a regime package — `scripts/module-seams.test.ts`
 // scans shipped source only, and this package already declares it as a devDependency for
 // `venue-apply.e2e.test.ts`.
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
-import type { Database, DeploymentEnvironment } from "@waitron/db";
-import { manifestSets } from "@waitron/migrations";
+import type { DeploymentEnvironment, VenueDatabase } from "@waitron/db";
 import { verifyPassword, verifyPin } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
-import { withRole } from "./identifiers.js";
-import { withDatabase } from "./instance-apply.js";
-import type { InstanceState, RoleFacts } from "./instance-state.js";
 import type { VenueAction } from "./venue-plan.js";
 import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
 
-const DATABASE = "waitron_demo";
-const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
-/** The connection every command opens to the target database: re-pointed at `waitron_demo` and
- * carrying the role option so the session runs AS `waitron_migrator`, the table owner. */
-const TARGET_URI = withRole(withDatabase(ADMIN_URI, DATABASE), "waitron_migrator");
+/** The venue directory `venue` opens — the two SQLite files this node stores everything in, the
+ * same directory `apps/server` reads from `WAITRON_VENUE_DIR`. */
+const VENUE_DIR = "/var/lib/waitron/venue";
 
 /** What the injected `applyVenue` hands back — the ids and seed reports `venue` prints in its result
  * summary. */
@@ -53,8 +47,8 @@ const MODULES: readonly WaitronModule[] = [
  * is the one implemented set (fiscal-modules.ts); tests that need a refusal swap it out. */
 const VENUE_ARGS = [
   "venue",
-  "--database",
-  DATABASE,
+  "--venue-dir",
+  VENUE_DIR,
   "--country",
   "ES",
   "--tax-id",
@@ -95,55 +89,15 @@ const VENUE_ARGS = [
   "owner@example.test",
 ];
 
-/** The three secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
- * admin connection string (WAITRON_ADMIN_DATABASE_URL), the admin PIN (WAITRON_ADMIN_PIN) and the
- * admin dashboard PASSWORD (WAITRON_ADMIN_PASSWORD). Most venue tests supply all three from the env so
- * no prompt fires; the ones that exercise the prompt path omit WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD
+/** The two secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
+ * admin PIN (WAITRON_ADMIN_PIN) and the admin dashboard PASSWORD (WAITRON_ADMIN_PASSWORD). Most venue
+ * tests supply both from the env so no prompt fires; the ones that exercise the prompt path omit them
  * and answer through `secrets` instead. The PIN is `4321` and the password `dashPass123` throughout, so
  * a seeded admin's hashes are checkable with `verifyPin("4321", …)` / `verifyPassword("dashPass123", …)`. */
 const VENUE_ENV = {
-  WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
   WAITRON_ADMIN_PIN: "4321",
   WAITRON_ADMIN_PASSWORD: "dashPass123",
 };
-
-function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
-  return {
-    canLogin: true,
-    createRole: false,
-    superuser: false,
-    memberOf: ["app_user"],
-    adminCanSetRole: true,
-    ...overrides,
-  };
-}
-
-function stateOf(overrides: Partial<InstanceState> = {}): InstanceState {
-  return {
-    database: DATABASE,
-    databaseExists: false,
-    databaseOwner: null,
-    roles: {},
-    inside: null,
-    ...overrides,
-  };
-}
-
-/** Nothing exists: no database, no roles. The first-provision case. */
-const BLANK = stateOf();
-
-/** Everything exists and agrees. `migratedSets` is built from the manifest rather than spelled
- * out so it tracks a newly added migration package — but note the plan still carries a `migrate`
- * regardless, because `planInstance` no longer gates on journal presence. */
-const PROVISIONED = stateOf({
-  databaseExists: true,
-  databaseOwner: "waitron_migrator",
-  roles: {
-    waitron_migrator: facts({ createRole: true }),
-    waitron_app: facts(),
-  },
-  inside: { migratedSets: manifestSets().map((set) => set.name), stamp: "preproduction" },
-});
 
 interface Harness {
   deps: CliDeps;
@@ -154,13 +108,13 @@ interface Harness {
   /** Only the echo-OFF prompts. */
   askedSecretly: string[];
   cleared: () => number;
-  apply: ReturnType<typeof vi.fn>;
-  readState: ReturnType<typeof vi.fn>;
   applyVenue: ReturnType<typeof vi.fn>;
   writeModuleConfig: ReturnType<typeof vi.fn>;
   readEnvironment: ReturnType<typeof vi.fn>;
+  readDeploymentTable: ReturnType<typeof vi.fn>;
+  stampEnvironment: ReturnType<typeof vi.fn>;
   readTenants: ReturnType<typeof vi.fn>;
-  connect: ReturnType<typeof vi.fn>;
+  openVenue: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
 
@@ -169,36 +123,47 @@ function harness(
     answers?: string[];
     secrets?: string[];
     env?: Record<string, string | undefined>;
-    state?: InstanceState;
-    apply?: CliDeps["apply"];
-    readState?: () => Promise<InstanceState>;
     applyVenue?: CliDeps["applyVenue"];
     writeModuleConfig?: CliDeps["writeModuleConfig"];
     modules?: readonly WaitronModule[];
     readEnvironment?: () => Promise<DeploymentEnvironment | null>;
+    readDeploymentTable?: () => Promise<boolean>;
+    stampEnvironment?: CliDeps["stampEnvironment"];
     readTenants?: () => Promise<{ country: string; taxId: string }[]>;
-    connect?: (uri: string) => Promise<Database>;
+    openVenue?: (directory: string) => Promise<VenueDatabase>;
   } = {},
 ): Harness {
   const lines: string[] = [];
   const asked: string[] = [];
   const askedSecretly: string[] = [];
   const answers = [...(options.answers ?? [])];
-  const secrets = [...(options.secrets ?? [ADMIN_URI])];
+  const secrets = [...(options.secrets ?? [])];
   let cleared = 0;
   let closes = 0;
 
-  const db = { close: async () => void (closes += 1) } as unknown as Database;
-  const connect = vi.fn(options.connect ?? (async () => db));
-  const readState = vi.fn(options.readState ?? (async () => options.state ?? BLANK));
-  const apply = vi.fn(options.apply ?? (async () => {}));
-  // The two venue seams, injected exactly like `readState`/`apply`: their real implementations need
-  // a live target database and what `venue` DECIDES — what it prompts, prints, refuses — does not.
+  // The two handles one venue directory holds. `venue` writes through the VENUE one and closes the
+  // store, which owns both files — so `closes` counts stores, not handles.
+  const store = {
+    venue: { name: "venue file" },
+    node: { name: "node file" },
+    close: async () => void (closes += 1),
+  } as unknown as VenueDatabase;
+  const openVenue = vi.fn(options.openVenue ?? (async () => store));
+  // The venue seams, injected because their real implementations need a live target database and
+  // what `venue` DECIDES — what it prompts, prints, refuses — does not.
   const applyVenue = vi.fn(options.applyVenue ?? (async () => VENUE_RESULT));
   const writeModuleConfig = vi.fn(options.writeModuleConfig ?? (async () => {}));
   const readEnvironment = vi.fn(
     options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
   );
+  // Migrated by default: the `deployment` table is there, which is what tells an unstamped
+  // directory `venue` may stamp from a virgin one it must refuse.
+  const readDeploymentTable = vi.fn(options.readDeploymentTable ?? (async () => true));
+  // A RECORDER, not a second copy of `stampDeployment`'s rule. What this file checks is WHETHER
+  // `venue` stamps, WITH what, and in what order relative to the prompt and the apply. Whether the
+  // real primitive writes, no-ops or refuses is proven against a real migrated venue database in
+  // `cli.stamp.test.ts`, which injects `stampDeployment` itself.
+  const stampEnvironment = vi.fn(options.stampEnvironment ?? (async () => {}));
   // Empty by default: a fresh, single-tenant database, so the foreign-tenant guard proceeds. Tests
   // exercising the refusal supply an existing identity.
   const readTenants = vi.fn(options.readTenants ?? (async () => []));
@@ -209,13 +174,13 @@ function harness(
     askedSecretly,
     cleared: () => cleared,
     closes: () => closes,
-    apply,
-    readState,
     applyVenue,
     writeModuleConfig,
     readEnvironment,
+    readDeploymentTable,
+    stampEnvironment,
     readTenants,
-    connect,
+    openVenue,
     deps: {
       io: {
         stdout: (line) => void lines.push(line),
@@ -231,22 +196,16 @@ function harness(
         clearScreen: () => void (cleared += 1),
       },
       env: options.env ?? {},
-      connect: connect as unknown as CliDeps["connect"],
-      migrationsRoot: null,
-      readState: readState as unknown as CliDeps["readState"],
-      apply: apply as unknown as CliDeps["apply"],
+      openVenue: openVenue as unknown as CliDeps["openVenue"],
       applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
       modules: options.modules ?? MODULES,
       writeModuleConfig: writeModuleConfig as unknown as CliDeps["writeModuleConfig"],
       readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
+      readDeploymentTable: readDeploymentTable as unknown as CliDeps["readDeploymentTable"],
+      stampEnvironment: stampEnvironment as unknown as CliDeps["stampEnvironment"],
       readTenants: readTenants as unknown as CliDeps["readTenants"],
     },
   };
-}
-
-/** Every `postgres://` URI printed, in order. */
-function printedUris(lines: string[]): string[] {
-  return lines.join("\n").match(/postgres:\/\/\S+/g) ?? [];
 }
 
 describe("runCli", () => {
@@ -272,11 +231,11 @@ describe("runCli", () => {
     // `allowPositionals: false` rejects independently of `strict`. `--flag=value` binds the value to
     // the flag regardless of whether the flag is known, so `strict: true` is the only thing
     // standing between it and an accepted secret.
-    // ALL THREE commands, not the two that take options: `keyring` takes none and used to discard
+    // BOTH commands, not only the one that takes options: `keyring` takes none and used to discard
     // its argv entirely, so `keyring --password hunter2` printed the key ring and exited 0 while
     // USAGE and README both promised such a flag was a parse error.
     for (const flag of ["--password", "--key", "--admin-password"]) {
-      for (const command of ["keyring", "instance", "status", "venue"]) {
+      for (const command of ["keyring", "venue"]) {
         expect(await runCli([command, flag, "hunter2"], harness().deps)).toBe(2);
         expect(await runCli([command, `${flag}=hunter2`], harness().deps)).toBe(2);
       }
@@ -284,25 +243,26 @@ describe("runCli", () => {
   });
 
   it("refuses --admin-url as a flag, in both argv forms", async () => {
-    // The admin connection string carries a password, so it is NOT an option — it comes from
-    // WAITRON_ADMIN_DATABASE_URL or an echo-off prompt and from nowhere else. Pinned separately
-    // from the loop above because `--admin-url` is the one an operator is most likely to try:
-    // earlier drafts of this tool's own usage text advertised it.
-    for (const command of ["keyring", "instance", "status", "venue"]) {
+    // There is no admin connection string any more — this tool opens a venue DIRECTORY — but the
+    // flag an operator is most likely to reach for is still the one earlier drafts of this tool's
+    // own usage text advertised, and it carried a password. It must meet a parse error, not a
+    // silently ignored flag that leaves the string in their shell history for nothing.
+    const URL_SHAPED = "postgres://admin:adminsecret@db.example:5432/postgres";
+    for (const command of ["keyring", "venue"]) {
       const h = harness();
-      expect(await runCli([command, "--admin-url", ADMIN_URI], h.deps)).toBe(2);
-      expect(h.connect).not.toHaveBeenCalled();
+      expect(await runCli([command, "--admin-url", URL_SHAPED], h.deps)).toBe(2);
+      expect(h.openVenue).not.toHaveBeenCalled();
 
       const g = harness();
-      expect(await runCli([command, `--admin-url=${ADMIN_URI}`], g.deps)).toBe(2);
-      expect(g.connect).not.toHaveBeenCalled();
+      expect(await runCli([command, `--admin-url=${URL_SHAPED}`], g.deps)).toBe(2);
+      expect(g.openVenue).not.toHaveBeenCalled();
     }
   });
 
   it("rejects a stray positional after the command", async () => {
     const h = harness();
-    expect(await runCli(["status", "waitron_demo"], h.deps)).toBe(2);
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(await runCli(["venue", "waitron_demo"], h.deps)).toBe(2);
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("rejects a stray positional after keyring, which takes no options at all", async () => {
@@ -314,771 +274,23 @@ describe("runCli", () => {
     expect(h.lines.join("\n")).not.toContain("WAITRON_CREDENTIALS_KEY=");
   });
 
-  it("keyring needs no database and no admin connection", async () => {
+  it("keyring opens no venue directory at all", async () => {
     const h = harness();
     expect(await runCli(["keyring"], h.deps)).toBe(0);
-    expect(h.connect).not.toHaveBeenCalled();
-    expect(h.readState).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.lines.join("\n")).toContain("WAITRON_CREDENTIALS_KEY=");
   });
 
   it("prompts for what a flag did not supply", async () => {
-    const h = harness({
-      answers: [DATABASE, "n"],
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    await runCli(["instance", "--environment", "preproduction"], h.deps);
-    // --database was not supplied, so it is asked for; --environment was, so it is not.
-    expect(h.asked.join(" ")).toMatch(/database/i);
-    expect(h.asked.join(" ")).not.toMatch(/environment/i);
-  });
-
-  it("reads the admin connection string from the environment rather than asking", async () => {
-    const h = harness({
-      answers: ["n"],
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.askedSecretly).toEqual([]);
-    expect(h.connect).toHaveBeenCalledWith(ADMIN_URI);
-  });
-
-  it("asks for the admin connection string with the echo off when nothing supplied it", async () => {
-    const h = harness({ answers: ["n"], secrets: [ADMIN_URI] });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    // Read through `promptSecret`, never `prompt`: the difference is whether it appears on screen.
-    expect(h.askedSecretly).toHaveLength(1);
-    expect(h.asked.join(" ")).not.toContain("connection");
-    expect(h.connect).toHaveBeenCalledWith(ADMIN_URI);
-  });
-
-  it("refuses an empty admin connection string on both paths that take one", async () => {
-    // `pg` does not refuse one either, which is the whole hazard. Run against this repo's
-    // `pg@8.23.0`: `new Client({ connectionString: "" })` came back as
-    // `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0`
-    // builds every client with `new this.Client(this.options)` (`index.js:241`) off the same
-    // options object. So an unset or misspelled WAITRON_ADMIN_DATABASE_URL plus a stdin that
-    // answers nothing — the non-interactive shape README.md documents for CI, where `bin.ts`'s
-    // `ask` returns `""` on an exhausted stream or Ctrl+D — would have had `instance` create,
-    // migrate and STAMP a database on whatever cluster answers on localhost:5432. One database per
-    // environment is a fiscal invariant and a stamp is not undoable.
-    for (const command of [
-      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-      ["status", "--database", DATABASE],
-    ]) {
-      const h = harness({ env: {}, secrets: [""] });
-      expect(await runCli(command, h.deps)).toBe(1);
-      expect(h.lines.join("\n")).toContain(
-        'provisioning.admin_uri_missing {"variable":"WAITRON_ADMIN_DATABASE_URL"}',
-      );
-      // Nothing was opened, so nothing could be written. The exit code alone would pass against a
-      // version that connected first and complained afterwards.
-      expect(h.connect).not.toHaveBeenCalled();
-      expect(h.apply).not.toHaveBeenCalled();
-    }
-  });
-
-  it("counts an empty env var and a blank answer as nothing supplied, not as a value", async () => {
-    for (const options of [
-      // Set but empty: `resolveAdminUri` falls through to the prompt, which also answers nothing.
-      { env: { WAITRON_ADMIN_DATABASE_URL: "" }, secrets: [""] },
-      // Whitespace only, from the prompt: `.trim()` makes it the same case.
-      { env: {}, secrets: ["   "] },
-    ]) {
-      const h = harness(options);
-      expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
-      expect(h.lines.join("\n")).toContain("provisioning.admin_uri_missing");
-      expect(h.connect).not.toHaveBeenCalled();
-    }
-  });
-
-  it("never echoes the admin connection string back, from either source", async () => {
-    for (const h of [
-      harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } }),
-      harness({ answers: ["n"], secrets: [ADMIN_URI] }),
-    ]) {
-      await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-      expect(h.lines.join("\n")).not.toContain("adminsecret");
-    }
-  });
-});
-
-describe("runCli instance", () => {
-  it("prints a plan summary and applies NOTHING when the operator declines", async () => {
-    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    const code = await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction"],
-      h.deps,
-    );
-
-    const printed = h.lines.join("\n");
-    expect(printed).toContain(`create database ${DATABASE}`);
-    expect(printed).toContain("waitron_migrator");
-    expect(printed).toContain("preproduction");
-    // The assertion that matters is that nothing was WRITTEN, not merely that the code was
-    // non-zero: a version that applied the plan and then returned 1 would pass an exit-code-only
-    // test while having created a database.
-    expect(h.apply).not.toHaveBeenCalled();
-    expect(code).not.toBe(0);
-  });
-
-  it("shows a migrate in the plan for an already-provisioned deployment", async () => {
-    // The operator-facing half of the gate removal. `PROVISIONED` has every manifest set journalled
-    // and the stamp already correct, which is the state that used to plan nothing but two grants.
-    // The wording is asserted verbatim because it is what an operator reads before typing `y`
-    // against a live cluster: "apply every migration set" invited the reading that the tool was
-    // about to re-run all of them.
-    const h = harness({
-      answers: ["n"],
-      state: PROVISIONED,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).toContain("apply any pending migrations, in every set");
-  });
-
-  it("names the cluster it is about to write to, and never the admin's password", async () => {
-    // A confirmation that cannot reveal the mistake it exists to catch is a weak confirmation. The
-    // summary named a database and an environment and nothing else, so an admin URI pointing at the
-    // WRONG cluster looked exactly like the right one — and that is the fiscally expensive mistake,
-    // because one database per environment is an invariant and `instance` STAMPS whatever it is
-    // pointed at.
-    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    const printed = h.lines.join("\n");
-    expect(printed).toContain("Cluster: admin@db.example:5432");
-    // Host, port and username. Never the password, and never the whole string.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
-  });
-
-  it("names a cluster whose connection string carries no user by host alone", async () => {
-    const h = harness({
-      answers: ["n"],
-      env: { WAITRON_ADMIN_DATABASE_URL: "postgres://db.example:5432/postgres" },
-    });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).toContain("Cluster: db.example:5432");
-  });
-
-  it("refuses an admin connection string that is not a URL, from either source", async () => {
-    // `pg` accepts connection-string forms `new URL` rejects, and at least one of them WORKS. Run
-    // inside a `postgres:18-alpine` container (PostgreSQL 18.4) with `pg@8.22.0`, over
-    // the connection string `/var/run/postgresql`: pg parsed it to
-    // `{host:"/var/run/postgresql",port:5432}`, `connect()` succeeded, and
-    // `select inet_server_addr() is null` returned `t` — a live connection over the cluster's Unix
-    // socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process.
-    // The keyword form is the same disagreement without a working connection: pg parsed
-    // `host=db.example port=5433 user=adm` to `{host:"base"}` and `new URL` threw.
-    //
-    // This tool RE-POINTS that string at another database in three places — `withDatabase` for the
-    // state read and for the migrator's URL (`instance-apply.ts`), `roleUri` for each printed
-    // connection string — and every one of them is a `new URL`. Verified directly: with the socket
-    // path as the argument, both `withDatabase(uri, "waitron_prod")` and
-    // `roleUri(uri, "waitron_app", "pw", "waitron_prod")` threw `TypeError: Invalid URL`. So the
-    // socket form used to reach `withDatabase` as a WORKING admin connection and leave as
-    // `unexpected failure (TypeError)` (`bin.ts`'s catch-all) — on the `instance` path, after
-    // `create database`, `migrate` and `stamp` had already run.
-    //
-    // Refused up front instead of half-supported: see `resolveAdminUri`.
-    for (const uri of ["/var/run/postgresql", "host=db.example port=5433 user=adm"]) {
-      for (const source of [
-        { env: { WAITRON_ADMIN_DATABASE_URL: uri } },
-        { env: {}, secrets: [uri] },
-      ]) {
-        for (const command of [
-          ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-          ["status", "--database", DATABASE],
-        ]) {
-          const h = harness(source);
-          expect(await runCli(command, h.deps)).toBe(1);
-          expect(h.lines.join("\n")).toContain(
-            'provisioning.admin_uri_not_a_url {"variable":"WAITRON_ADMIN_DATABASE_URL"}',
-          );
-          // Nothing was opened and nothing was applied. The exit code alone would pass against a
-          // version that connected, created and migrated first and threw on the way out.
-          expect(h.connect).not.toHaveBeenCalled();
-          expect(h.apply).not.toHaveBeenCalled();
-        }
-      }
-    }
-  });
-
-  it("never echoes a refused non-URL connection string back", async () => {
-    // The refusal above prints a CODE and the variable's NAME. The string itself can carry a
-    // password in every form pg accepts — `host=db.example password=hunter2` is one — so it is
-    // withheld for the same reason `provisioning.admin_uri_missing` withholds it.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: "host=db.example password=hunter2" } });
-    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
-    expect(h.lines.join("\n")).not.toContain("hunter2");
-    expect(h.lines.join("\n")).not.toContain("db.example");
-  });
-
-  it("never puts a generated password in the plan summary", async () => {
-    // Written as "appears exactly once in the whole transcript" rather than "does not appear in
-    // these lines", because the passwords are generated inside `planInstance` and this test cannot
-    // know them in advance. The connection strings at the END are the one legitimate occurrence,
-    // so a count of one per password proves the summary above them carried none.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-
-    const transcript = h.lines.join("\n");
-    const uris = printedUris(h.lines);
-    expect(uris).toHaveLength(2);
-    for (const uri of uris) {
-      const password = new URL(uri).password;
-      expect(password).not.toBe("");
-      expect(transcript.split(password)).toHaveLength(2);
-    }
-  });
-
-  it("--yes applies without asking for confirmation", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-    expect(h.apply).toHaveBeenCalledTimes(1);
-    // The acknowledgement of the printed connection strings is NOT the plan confirmation, and
-    // --yes does not skip it: two passwords are about to be wiped off the screen.
-    expect(h.asked.join(" ")).not.toMatch(/apply/i);
-  });
-
-  it("applies when the operator answers y", async () => {
-    const h = harness({ answers: ["y"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    expect(
-      await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps),
-    ).toBe(0);
-    expect(h.apply).toHaveBeenCalledTimes(1);
-  });
-
-  it("prints each created role's connection string once, then clears the screen", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-      h.deps,
-    );
-
-    const uris = printedUris(h.lines);
-    expect(uris.map((uri) => new URL(uri).username).sort()).toEqual([
-      "waitron_app",
-      "waitron_migrator",
-    ]);
-    // The target database, not the admin's own: a connection string that pointed at `postgres`
-    // would be one the host cannot boot on.
-    for (const uri of uris) expect(new URL(uri).pathname).toBe(`/${DATABASE}`);
-    expect(h.lines.join("\n")).toMatch(/ONCE/);
-    expect(h.cleared()).toBe(1);
-  });
-
-  it("waits for the operator before clearing the connection strings away", async () => {
-    // The mutant this rules out is real, not hypothetical: the first draft of `reportRoles` ended
-    // with `void deps.io.prompt(...).then(() => clearScreen())`, which wipes two unrecoverable
-    // passwords off the screen before the operator has copied them. A test that only checked
-    // "clearScreen was called once" passes against that draft — the marker order is identical,
-    // because both are pushed before any await boundary. Holding the answer open is what
-    // distinguishes them. Same shape as `keyring-command.test.ts`'s equivalent.
-    const order: string[] = [];
-    let answer: () => void = () => {};
-    const answered = new Promise<void>((resolve) => {
-      answer = resolve;
-    });
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    const deps: CliDeps = {
-      ...h.deps,
-      io: {
-        stdout: () => order.push("print"),
-        stderr: () => order.push("print"),
-        prompt: async () => {
-          order.push("prompt");
-          await answered;
-          return "";
-        },
-        promptSecret: async () => ADMIN_URI,
-        clearScreen: () => order.push("clear"),
-      },
-    };
-
-    const running = runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-      deps,
-    );
-    // Nothing here is timer-based, so if the clear were not gated on the answer it would already
-    // have happened by the time these microtasks drain.
-    for (let i = 0; i < 10; i += 1) await Promise.resolve();
-    expect(order).toContain("prompt");
-    expect(order).not.toContain("clear");
-
-    answer();
-    expect(await running).toBe(0);
-    expect(order.indexOf("prompt")).toBeLessThan(order.indexOf("clear"));
-  });
-
-  it("says a pre-existing role already existed and shows NO connection string for it", async () => {
-    // This tool cannot know the password of a role it did not just generate one for, and printing
-    // a wrong connection string is worse than printing none.
-    const h = harness({ state: PROVISIONED, env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-
-    const printed = h.lines.join("\n");
-    expect(printedUris(h.lines)).toEqual([]);
-    expect(printed).toMatch(/waitron_migrator.*already exist/i);
-    expect(printed).toMatch(/waitron_app.*already exist/i);
-    // Nothing secret was printed, so there is nothing to wipe — and wiping would take the plan
-    // summary with it for no reason.
-    expect(h.cleared()).toBe(0);
-  });
-
-  it("warns in the PLAN that no connection string will be printed, before asking", async () => {
-    // The second-database-on-one-cluster case: every `waitron_*` role already exists, so `instance`
-    // creates none and prints no connection string for any of them. That was disclosed only in
-    // `reportRoles`, i.e. after create/migrate/stamp had run — by which point declining is not an
-    // option. `created.length === 0` is knowable from the PLAN, which is pure, so the operator gets
-    // it while "Apply this plan? [y/N]" is still unanswered.
-    const h = harness({ state: PROVISIONED, env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    // Snapshotted at the moment the question is asked, not scanned afterwards: the prompt goes
-    // through `io.prompt` and never reaches the transcript, so "before the prompt" cannot be read
-    // off the finished output — and a warning printed after it is one the operator could not act
-    // on.
-    let seenWhenAsked: string[] | undefined;
-    const deps: CliDeps = {
-      ...h.deps,
-      io: {
-        ...h.deps.io,
-        prompt: async (question) => {
-          if (question.includes("Apply this plan?")) seenWhenAsked = [...h.lines];
-          return "n";
-        },
-      },
-    };
-    expect(
-      await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], deps),
-    ).toBe(1);
-
-    expect(seenWhenAsked?.join("\n")).toMatch(/No connection strings will be printed/i);
-    expect(h.apply).not.toHaveBeenCalled();
-  });
-
-  it("does not warn about connection strings when the run will print some", async () => {
-    // The negative control: on a first provision both roles are created, so the warning would
-    // be false. Without this, a version that printed it unconditionally passes the test above.
-    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).not.toMatch(/No connection strings will be printed/i);
-  });
-
-  it("summarises a membership repair", async () => {
-    // The `grant-membership` action reaches the summary only from a DRIFTED state — every role in
-    // BLANK gets its memberships from `CREATE ROLE ... IN ROLE` instead — so it needs its own
-    // fixture or the summary's branch for it is never rendered.
-    const drifted = stateOf({
-      databaseExists: true,
-      databaseOwner: "waitron_migrator",
-      roles: {
-        ...PROVISIONED.roles,
-        waitron_app: facts({ memberOf: [] }),
-      },
-      inside: PROVISIONED.inside,
-    });
-    const h = harness({
-      answers: ["n"],
-      state: drifted,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).toContain("grant app_user to waitron_app");
-  });
-
-  it("opens a connection to the target database only when it already exists", async () => {
-    const blank = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction"],
-      blank.deps,
-    );
-    expect(blank.connect).toHaveBeenCalledTimes(1);
-
-    const existing = harness({
-      answers: ["n"],
-      state: PROVISIONED,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction"],
-      existing.deps,
-    );
-    expect(existing.connect).toHaveBeenCalledTimes(2);
-    expect(existing.connect).toHaveBeenLastCalledWith(TARGET_URI);
-    // Both connections closed, whichever way the run ended.
-    expect(existing.closes()).toBe(2);
-  });
-
-  it("refuses an environment that is not a deployment environment", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    const code = await runCli(
-      ["instance", "--database", DATABASE, "--environment", "staging"],
-      h.deps,
-    );
-    expect(code).toBe(1);
-    // The structured code, not merely a non-zero exit: USAGE also names both environments, so a
-    // version that printed usage and returned 2 would pass a looser assertion.
-    expect(h.lines.join("\n")).toContain("deployment.unknown_environment");
-    expect(h.connect).not.toHaveBeenCalled();
-  });
-
-  it("refuses a database name outside the identifier rule before connecting", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    const code = await runCli(
-      ["instance", "--database", "Waitron Prod", "--environment", "preproduction"],
-      h.deps,
-    );
-    expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
-    expect(h.connect).not.toHaveBeenCalled();
-  });
-
-  it("reports an AppError from the apply as code + params, and says roles may be orphaned", async () => {
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: () =>
-        Promise.reject(
-          new AppError("provisioning.membership_grant_failed", {
-            role: "waitron_app",
-            memberOf: "app_user",
-            sqlState: "42501",
-          }),
-        ),
-    });
-    const code = await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-      h.deps,
-    );
-
-    expect(code).toBe(1);
-    const printed = h.lines.join("\n");
-    expect(printed).toContain("provisioning.membership_grant_failed");
-    expect(printed).toContain('"sqlState":"42501"');
-    // A half-applied plan can leave a role created with a password this run never printed. Saying
-    // so is the difference between a recoverable state and an unusable one: there is no way to
-    // learn that password afterwards, so the operator must drop the role and re-run.
-    expect(printed).toMatch(/drop/i);
-    // NAMED, not described. `created` is in scope at the point this is printed and holds exactly
-    // the roles this run minted, so telling the operator to run `status` and work out which
-    // `waitron_*` roles to drop asked them to re-derive something already on hand — and to do it
-    // under the one condition where the tool has just failed. BLANK is the fixture, so both
-    // were created.
-    expect(printed).toContain("DROP ROLE waitron_migrator");
-    expect(printed).toContain("DROP ROLE waitron_app");
-    expect(printedUris(h.lines)).toEqual([]);
-  });
-
-  it("names only the roles THIS run created, not every role the deployment has", async () => {
-    // The drifted fixture creates one role and leaves the other alone. Naming both would send the
-    // operator to drop a role whose password this tool never generated and whose owner still uses it.
-    const drifted = stateOf({
-      databaseExists: true,
-      databaseOwner: "waitron_migrator",
-      roles: {
-        waitron_migrator: facts({ createRole: true }),
-      },
-      inside: PROVISIONED.inside,
-    });
-    const h = harness({
-      state: drifted,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: () =>
-        Promise.reject(
-          new AppError("provisioning.grant_ineffective", { database: DATABASE, missing: [] }),
-        ),
-    });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(1);
-
-    const printed = h.lines.join("\n");
-    expect(printed).not.toContain("DROP ROLE waitron_migrator");
-    expect(printed).toContain("DROP ROLE waitron_app");
-  });
-
-  it("hands the apply an openTarget pointing at the target database, not the admin's own", async () => {
-    // `applyInstance` needs its own connection to the target for the schema-level grants and the
-    // stamp, and cannot open one itself. A version that passed the ADMIN connection string through
-    // unchanged would grant `create on schema public` in the WRONG database — silently, since both
-    // statements succeed.
-    let opened: Database | undefined;
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: async (_actions, applyDeps) => {
-        opened = (await applyDeps.openTarget()).db;
-        expect(applyDeps.database).toBe(DATABASE);
-        expect(applyDeps.adminUri).toBe(ADMIN_URI);
-        expect(applyDeps.migrationsRoot).toBeNull();
-      },
-    });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-    expect(opened).toBeDefined();
-    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
-  });
-
-  it("opens the target database ONCE on a re-run, not once per consumer", async () => {
-    // On every run after the first, `withState` opens a connection to the target to read the
-    // deployment's state, and `applyInstance` then wants one too — on EVERY run, because the
-    // migrator's schema grant is re-issued unconditionally (`instance-plan.ts`). Those used to be
-    // two separate dials of the same database. `createPostgresDb` connects and releases up front,
-    // so the second was a real TCP connect and auth handshake per run, not a cheap object.
-    //
-    // The exact URIs, in order, rather than a count: a count alone would pass against a version
-    // that dialled the ADMIN string twice and never reached the target at all.
-    const h = harness({
-      state: PROVISIONED,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: async (_actions, applyDeps) => {
-        const first = await applyDeps.openTarget();
-        expect(first.db).toBeDefined();
-        await first.release();
-      },
-    });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-
-    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([ADMIN_URI, TARGET_URI]);
-    // And both are closed exactly once — `release` is a no-op precisely because `withState`'s
-    // `finally` is the single place either handle dies. A version that closed in both would run
-    // this to 3 and, against a real `pg` pool, throw.
-    expect(h.closes()).toBe(2);
-  });
-
-  it("opens the target ONCE on a first provision too, when the apply is what needs it", async () => {
-    // The other half: the database does not exist, so `withState` opens nothing for the state read
-    // and the apply's own request is the first. It must still be one connection, and `withState`
-    // must still be the thing that closes it — the accessor caches into the same slot the `finally`
-    // reads.
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: async (_actions, applyDeps) => {
-        await (await applyDeps.openTarget()).release();
-        await (await applyDeps.openTarget()).release();
-      },
-    });
-    expect(
-      await runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).toBe(0);
-
-    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([ADMIN_URI, TARGET_URI]);
-    expect(h.closes()).toBe(2);
-  });
-
-  it("lets an unrecognised failure from the apply escape to bin.ts", async () => {
-    // `reportFailure` formats an AppError and RETHROWS anything else — a database fault, a bug —
-    // rather than flattening it into an exit code that claims the tool understood it.
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      apply: () => Promise.reject(new TypeError("undefined is not a function")),
-    });
-    await expect(
-      runCli(
-        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-        h.deps,
-      ),
-    ).rejects.toThrow("undefined is not a function");
-    expect(h.closes()).toBe(1);
-  });
-
-  it("turns a read that the database refused into a structured code", async () => {
-    // The case a real operator hits, reproduced end to end against a container before this code
-    // existed: a SECOND `login createdb createrole` admin — one that did not create the target
-    // database — cannot read the tables inside it, so `readInstanceState`'s stamp read fails with
-    // `permission denied for table deployment`. Through the bundle that printed exactly
-    // `unexpected failure (Error)`, with no database named, no code and no remedy.
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      readState: () =>
-        Promise.reject(
-          Object.assign(
-            new Error("Failed query: select environment from deployment where id = 1"),
-            {
-              cause: Object.assign(new Error("permission denied for table deployment"), {
-                code: "42501",
-              }),
-            },
-          ),
-        ),
-    });
-    const code = await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction"],
-      h.deps,
-    );
-    expect(code).toBe(1);
-    const printed = h.lines.join("\n");
-    expect(printed).toContain("provisioning.state_unreadable");
-    expect(printed).toContain('"sqlState":"42501"');
-    expect(printed).toContain(`"database":"${DATABASE}"`);
-    // The driver's own message quotes the failed query back. Never printed.
-    expect(printed).not.toContain("Failed query");
-    expect(h.apply).not.toHaveBeenCalled();
-    expect(h.closes()).toBe(1);
-  });
-
-  it("reports a refused read from status too", async () => {
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      readState: () => Promise.reject(Object.assign(new Error("nope"), { code: "42501" })),
-    });
-    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"42501"}',
-    );
-  });
-
-  it("maps a SET-ROLE failure at the target connect to role_unusable, not state_unreadable", async () => {
-    // A second admin that did not create the migrator holds no SET-membership on it, so the
-    // role-option connect to the target fails at session start. The plain-admin probe already read
-    // `adminCanSetRole: false`, so the failure is named as the SET-ROLE gap (I1) — the operator
-    // learns to be granted the migrator with SET, not to hunt a missing database.
-    const unsettable = stateOf({
-      databaseExists: true,
-      databaseOwner: "waitron_migrator",
-      roles: {
-        waitron_migrator: facts({ createRole: true, adminCanSetRole: false }),
-        waitron_app: facts(),
-      },
-      inside: { migratedSets: manifestSets().map((s) => s.name), stamp: "preproduction" },
-    });
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      state: unsettable,
-      connect: async (uri) => {
-        if (uri === TARGET_URI) {
-          throw Object.assign(new Error('permission denied to set role "waitron_migrator"'), {
-            code: "42501",
-          });
-        }
-        return { close: async () => {} } as unknown as Database;
-      },
-    });
-    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
-    const printed = h.lines.join("\n");
-    expect(printed).toContain("provisioning.role_unusable");
-    expect(printed).toContain('"role":"waitron_migrator"');
-    expect(printed).toContain('"missing":["SET ROLE"]');
-    expect(printed).not.toContain("state_unreadable");
-  });
-
-  it("reports a refused CONNECT, not only a refused read", async () => {
-    // 28P01 is `invalid_password`, and it arrives at `connect` — `pg` authenticates when the pool
-    // hands out its first connection, not at the first query. Verified through the built bundle
-    // against a container: with the connect outside the guard the operator saw
-    // `unexpected failure (error)` for a mistyped password, which is the single likeliest thing to
-    // get wrong about a pasted connection string.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    h.connect.mockRejectedValue(
-      Object.assign(new Error('password authentication failed for user "admin"'), {
-        code: "28P01",
-      }),
-    );
-    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
-    expect(h.lines.join("\n")).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"28P01"}',
-    );
-    expect(h.readState).not.toHaveBeenCalled();
-  });
-
-  it("lets a connect failure with no SQLSTATE escape unchanged", async () => {
-    // A refused socket is not the database's verdict on anything, so it is not dressed up as one.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    h.connect.mockRejectedValue(
-      Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
-    );
-    await expect(runCli(["status", "--database", DATABASE], h.deps)).rejects.toThrow(
-      "connect ECONNREFUSED",
-    );
-  });
-
-  it("lets an error nobody here recognises escape to bin.ts", async () => {
-    const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-      readState: () => Promise.reject(new Error("the pool is closed")),
-    });
-    await expect(
-      runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps),
-    ).rejects.toThrow("the pool is closed");
-    // Still closed, even on the path that rethrows.
-    expect(h.closes()).toBe(1);
-  });
-
-  it("reports the planner's own refusal rather than throwing out of runCli", async () => {
-    const h = harness({
-      state: stateOf({
-        databaseExists: true,
-        databaseOwner: "waitron_migrator",
-        roles: { waitron_migrator: facts({ superuser: true }) },
-        inside: { migratedSets: manifestSets().map((set) => set.name), stamp: "preproduction" },
-      }),
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    const code = await runCli(
-      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
-      h.deps,
-    );
-    expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain("provisioning.role_over_privileged");
-    expect(h.apply).not.toHaveBeenCalled();
-  });
-});
-
-describe("runCli status", () => {
-  it("prints the formatted state and returns 0", async () => {
-    const h = harness({ state: PROVISIONED, env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(0);
-    const printed = h.lines.join("\n");
-    expect(printed).toContain(`database ${DATABASE}: present`);
-    expect(printed).toContain("role waitron_migrator: present");
-    expect(printed).toContain("deployment stamp: preproduction");
-    expect(h.apply).not.toHaveBeenCalled();
-  });
-
-  it("prompts for the database name when no flag gave one", async () => {
-    const h = harness({
-      answers: [DATABASE],
-      state: BLANK,
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
-    });
-    expect(await runCli(["status"], h.deps)).toBe(0);
-    expect(h.asked.join(" ")).toMatch(/database/i);
-    expect(h.lines.join("\n")).toContain(`database ${DATABASE}: absent`);
-  });
-
-  it("reports a bad database name as a structured code", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    const code = await runCli(["status", "--database", "Waitron Prod"], h.deps);
-    expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
+    // `--legal-name` dropped from an otherwise complete argv, so the run turns on exactly one
+    // missing flag: it is asked for, and a flag that WAS supplied (`--city`) is not.
+    const dropped = VENUE_ARGS.indexOf("--legal-name");
+    const args = [...VENUE_ARGS.slice(0, dropped), ...VENUE_ARGS.slice(dropped + 2)];
+    const h = harness({ answers: ["Acme SL", "n"], env: VENUE_ENV });
+    await runCli(args, h.deps);
+    expect(h.asked.join(" ")).toMatch(/legal name/i);
+    expect(h.asked.join(" ")).not.toMatch(/city/i);
   });
 });
 
@@ -1092,10 +304,9 @@ describe("runCli venue", () => {
     // (see the next test), and the plan summary names the environment it read.
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
 
-    // Applied ONCE, with the plan `planVenue` produced, against the TARGET connection (the
-    // owner-admin that owns the tables, Task C1) — never the instance apply path.
+    // Applied ONCE, with the plan `planVenue` produced, against the VENUE file of the directory
+    // that was opened.
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
-    expect(h.apply).not.toHaveBeenCalled();
     const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
     expect(actions.map((action) => action.kind)).toEqual([
       "ensure-tenant",
@@ -1119,18 +330,17 @@ describe("runCli venue", () => {
     expect(
       seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
     ).toBe(true);
-    // The PIN and password came from the env (VENUE_ENV) — the env-var half of the same discipline the
-    // admin connection string follows — so no echo-off prompt fired for either, and neither was read
-    // from argv (VENUE_ARGS carries no PIN/password flag).
+    // The PIN and password came from the env (VENUE_ENV), so no echo-off prompt fired for either,
+    // and neither was read from argv (VENUE_ARGS carries no PIN/password flag).
     expect(h.askedSecretly).toEqual([]);
 
-    // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
-    // the apply. Every insert must reach that database through the same connection.
-    expect(h.connect).toHaveBeenCalledTimes(1);
-    // `venue` opens the target AS the migrator (the role option), because `applyVenue` inserts as the
-    // table owner and a plain admin connection cannot CREATE TABLE in a migrator-owned database.
-    expect(h.connect).toHaveBeenCalledWith(TARGET_URI);
-    expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
+    // One open of the venue directory, and the apply writes through its VENUE handle — the file
+    // that holds every `ledger` and `state` table. The node file holds this node's own identity and
+    // is not what a venue plan writes.
+    expect(h.openVenue).toHaveBeenCalledTimes(1);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
+    const opened = (await h.openVenue.mock.results[0].value) as VenueDatabase;
+    expect(applyDeps.db).toBe(opened.venue);
     // The same (fiscal-slot-resolved) module list the plan was built from reaches the apply, so a
     // seed-module action always names a module the runner holds. The fake MODULES carries no fiscal-slot
     // member, so the selection leaves the set unchanged — hence content-equal to MODULES.
@@ -1139,9 +349,7 @@ describe("runCli venue", () => {
     expect(h.writeModuleConfig).toHaveBeenCalledTimes(1);
 
     const printed = h.lines.join("\n");
-    expect(printed).toContain("Plan for a venue in waitron_demo (preproduction):");
-    // The cluster the operator is about to write to — host, port, user; never the password.
-    expect(printed).toContain("Cluster: admin@db.example:5432");
+    expect(printed).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
     expect(printed).toContain("ensure tenant ES/B12345678");
     // The admin is named in the plan the operator confirms — but the PIN is a secret and never
     // appears, neither in plaintext nor as a hash.
@@ -1153,14 +361,12 @@ describe("runCli venue", () => {
       "seeded:   fiscal-verifactu — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
     );
 
-    // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,
-    // the admin dashboard password never appears, and venue mints no connection strings.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
+    // No secret anywhere: the admin PIN never appears, neither in plaintext nor as a hash, and
+    // neither does the admin dashboard password.
     expect(printed).not.toContain("4321");
     expect(printed).not.toContain("dashPass123");
-    expect(printedUris(h.lines)).toEqual([]);
-    // The target connection was closed, whichever way the run ended.
+    // The venue directory was closed, whichever way the run ended. Closing the STORE closes both
+    // files.
     expect(h.closes()).toBe(1);
   });
 
@@ -1229,10 +435,10 @@ describe("runCli venue", () => {
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"seriesCode"}');
     // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so what
-    // matters is that the mint was never reached — and that no admin credential was spent getting
-    // there, which is why the seat runs before `resolveAdminUri`.
+    // matters is that the mint was never reached — and that nothing was opened getting there, which
+    // is why the seat runs before the venue directory is resolved.
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("names the OTHER series code when that is the bad one", async () => {
@@ -1268,7 +474,7 @@ describe("runCli venue", () => {
     // plan/apply and the plaintext appears nowhere in what the operator saw. The PIN is NOT a flag
     // (see the argv-refusal test), so VENUE_ARGS carries no PIN — the prompt is the only source left.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: {},
       secrets: ["4321", "dashPass123"],
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
@@ -1368,7 +574,7 @@ describe("runCli venue", () => {
     ]) {
       const h = harness();
       expect(await runCli(args, h.deps)).toBe(2);
-      expect(h.connect).not.toHaveBeenCalled();
+      expect(h.openVenue).not.toHaveBeenCalled();
       expect(h.applyVenue).not.toHaveBeenCalled();
     }
   });
@@ -1379,7 +585,7 @@ describe("runCli venue", () => {
     // applies the same `MIN_PIN_LENGTH` floor `createPerson` does. `999` (length 3) is below it and
     // is a distinctive string absent from every other arg, so the leak-safety assertion is real.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI, WAITRON_ADMIN_PIN: "999" },
+      env: { WAITRON_ADMIN_PIN: "999" },
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
@@ -1388,7 +594,7 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).not.toContain("999");
     // Refused before the plan is built and before any connection — nothing is applied.
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a too-short admin password and applies nothing — the floor loginManager needs", async () => {
@@ -1398,7 +604,6 @@ describe("runCli venue", () => {
     // distinctive string absent from every other arg, so the leak-safety assertion is real.
     const h = harness({
       env: {
-        WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
         WAITRON_ADMIN_PIN: "4321",
         WAITRON_ADMIN_PASSWORD: "shortpw",
       },
@@ -1408,7 +613,7 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).toContain('password.too_short {"min":8}');
     expect(h.lines.join("\n")).not.toContain("shortpw");
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses an unimplemented territory and applies nothing", async () => {
@@ -1420,7 +625,7 @@ describe("runCli venue", () => {
     expect(h.applyVenue).not.toHaveBeenCalled();
     // Refused by the PURE planner, before the admin credential is asked for or any connection is
     // opened (venue-plan.ts / errors.ts: "no admin connection is spent on a malformed request").
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a territory that does not belong to the country, before connecting", async () => {
@@ -1436,23 +641,105 @@ describe("runCli venue", () => {
       'provisioning.territory_country_mismatch {"country":"PT","fiscalTerritory":"ES-common"}',
     );
     expect(h.applyVenue).not.toHaveBeenCalled();
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
-  it("refuses an unstamped database before applying", async () => {
+  it("stamps a MIGRATED directory that carries no stamp, then applies", async () => {
+    // The gap this closes: an automated deployment has no setup wizard, and the wizard's handler was
+    // the only path that stamped. `WAITRON_ENV` is unset here, so the derivation's one irreversible
+    // default decides — preproduction (CLAUDE.md §5).
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => null });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.stampEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("preproduction");
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+    // The plan the operator confirms names the stamp, because a stamp cannot be taken back.
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
+    expect(h.lines.join("\n")).toContain(
+      "stamp this venue directory preproduction — permanent, from WAITRON_ENV",
+    );
+  });
+
+  it("stamps production when WAITRON_ENV is production", async () => {
+    const h = harness({
+      env: { ...VENUE_ENV, WAITRON_ENV: "production" },
+      readEnvironment: async () => null,
+    });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("production");
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (production):`);
+  });
+
+  it("stamps AFTER the operator confirms, never before", async () => {
+    // Declining must leave the directory exactly as it was found, and a stamp is permanent. No
+    // `--yes`, and the prompt is answered `n`.
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => null, answers: ["n"] });
+    expect(await runCli(VENUE_ARGS, h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain("Nothing was applied.");
+    expect(h.stampEnvironment).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("hands the stamp the value WAITRON_ENV resolved to even when the directory is stamped", async () => {
+    // The stamp call is unconditional, exactly as the wizard's handler makes it: the primitive
+    // itself decides between no-op and refusal, so this file never compares two environments.
+    const h = harness({ env: VENUE_ENV, readEnvironment: async () => "production" });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.stampEnvironment.mock.calls[0]![1]).toBe("preproduction");
+    // The header shows what is STAMPED, not what was requested — it must not announce a value the
+    // stamp is about to refuse.
+    expect(h.lines.join("\n")).toContain(`Plan for a venue in ${VENUE_DIR} (production):`);
+    expect(h.lines.join("\n")).not.toContain("stamp this venue directory");
+    // A stamp is itself proof the table is there, so the probe is skipped.
+    expect(h.readDeploymentTable).not.toHaveBeenCalled();
+  });
+
+  it("propagates the stamp's own refusal, applying nothing", async () => {
+    const h = harness({
+      env: VENUE_ENV,
+      readEnvironment: async () => "production",
+      stampEnvironment: async () => {
+        throw new AppError("deployment.already_stamped", {
+          stamped: "production",
+          requested: "preproduction",
+        });
+      },
+    });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'deployment.already_stamped {"stamped":"production","requested":"preproduction"}',
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a venue directory nothing has migrated, before stamping", async () => {
+    // No stamp AND no `deployment` table. Opening a virgin directory SUCCEEDS — the store creates
+    // it — so this, not a failed open, is what a mistyped path meets.
     const h = harness({
       env: VENUE_ENV,
       readEnvironment: async () => null,
+      readDeploymentTable: async () => false,
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain(
-      'provisioning.database_unstamped {"database":"waitron_demo"}',
+      `provisioning.database_unmigrated {"database":"${VENUE_DIR}"}`,
     );
-    // The stamp was read — that is how the emptiness was learnt — and nothing was applied.
-    expect(h.readEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.stampEnvironment).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a WAITRON_ENV that is neither environment, before opening the directory", async () => {
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_ENV: "prod" } });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'provisioning.invalid_environment {"variable":"WAITRON_ENV","value":"prod"}',
+    );
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
@@ -1468,7 +755,7 @@ describe("runCli venue", () => {
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain('provisioning.foreign_tenant {"database":"waitron_demo"}');
+    expect(h.lines.join("\n")).toContain(`provisioning.foreign_tenant {"database":"${VENUE_DIR}"}`);
     // The identities were read — that is how the foreign tenant was learnt — and nothing was
     // applied: no second tenant can be written.
     expect(h.readTenants).toHaveBeenCalledTimes(1);
@@ -1495,7 +782,7 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('provisioning.invalid_country {"value":"ESP"}');
-    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.openVenue).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
   });
 
@@ -1564,13 +851,46 @@ describe("runCli venue", () => {
     expect(location?.kind === "create-location" && location.invoiceLocales).toEqual(["es-ES"]);
   });
 
-  it("refuses a database name outside the identifier rule before connecting", async () => {
-    const args = VENUE_ARGS.map((arg) => (arg === DATABASE ? "Waitron Prod" : arg));
-    const h = harness({ env: VENUE_ENV });
-    const code = await runCli([...args, "--yes"], h.deps);
-    expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
-    expect(h.connect).not.toHaveBeenCalled();
+  it("refuses a venue directory nothing supplied, rather than opening the working directory", async () => {
+    // The same hazard an empty connection string carried, moved to the new seam: every path
+    // `openVenueStore` builds is `join(directory, …)`, and `join("", "venue.db")` is `venue.db` —
+    // a relative path, so an empty value stands a venue up wherever the process happens to be
+    // running, and a chain and a series number cannot be taken back (CLAUDE.md §5). The
+    // non-interactive shape is where it bites: `bin.ts`'s `ask` returns `""` for an exhausted
+    // stdin or a Ctrl+D, so nothing supplies the directory and nothing answers the prompt.
+    for (const args of [
+      // Neither flag nor variable, and the prompt answers nothing.
+      ["venue", ...VENUE_ARGS.slice(3)],
+      // A whitespace-only flag counts as absent, falls through to the same prompt.
+      VENUE_ARGS.map((arg) => (arg === VENUE_DIR ? "   " : arg)),
+    ]) {
+      const h = harness({ env: VENUE_ENV });
+      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+      expect(h.lines.join("\n")).toContain(
+        'provisioning.venue_dir_missing {"variable":"WAITRON_VENUE_DIR"}',
+      );
+      // Nothing was opened, so nothing could be written. The exit code alone would pass against a
+      // version that opened something first and complained afterwards.
+      expect(h.openVenue).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+    }
+  });
+
+  it("takes the venue directory from WAITRON_VENUE_DIR when no flag supplies it", async () => {
+    // The variable `apps/server` reads for the same directory (`config.ts`'s `venueDir`). An
+    // operator who typed a DIFFERENT path at the prompt would stand a venue up in a directory the
+    // server never opens, so the box's own setting is preferred over asking.
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_VENUE_DIR: VENUE_DIR } });
+    expect(await runCli(["venue", ...VENUE_ARGS.slice(3), "--yes"], h.deps)).toBe(0);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
+    // Read from the environment, so the operator was not asked for it.
+    expect(h.asked.join(" ")).not.toMatch(/venue directory/i);
+  });
+
+  it("prefers the flag over WAITRON_VENUE_DIR", async () => {
+    const h = harness({ env: { ...VENUE_ENV, WAITRON_VENUE_DIR: "/somewhere/else" } });
+    expect(await runCli([...VENUE_ARGS, "--yes"], h.deps)).toBe(0);
+    expect(h.openVenue).toHaveBeenCalledWith(VENUE_DIR);
   });
 
   it("applies when the operator confirms with y", async () => {
@@ -1595,20 +915,36 @@ describe("runCli venue", () => {
     const printed = h.lines.join("\n");
     expect(printed).toContain("Nothing was applied.");
     // The plan was still shown before the decline, and the connection closed.
-    expect(printed).toContain("Plan for a venue in waitron_demo");
+    expect(printed).toContain(`Plan for a venue in ${VENUE_DIR}`);
     expect(h.closes()).toBe(1);
   });
 
   it("maps a concurrent unique-violation from the apply to provisioning.venue_conflict", async () => {
+    // The crafted refusal carries the `errcode` + `message` pair `isUniqueViolation` reads
+    // (`packages/db/src/constraint-target.ts`'s `refusalCode`, `packages/db/src/sql-state.ts`'s
+    // `UNIQUE_VIOLATION`); the PostgreSQL SQLSTATE this used to carry is not a thing this engine
+    // reports. Both values are copied from a real refusal on this index shape, measured on
+    // node:sqlite / Node v26.7.0 — `persons_tenant_email_uq` is over `lower(email)`, and SQLite
+    // names the INDEX rather than the columns when the index is over an expression, which is why
+    // the message has that shape. A plain-column unique reads `UNIQUE constraint failed:
+    // <table>.<column>` instead; both were run, with a succeeding insert as the control.
     const h = harness({
       env: VENUE_ENV,
-      applyVenue: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+      applyVenue: () =>
+        Promise.reject(
+          Object.assign(new Error("UNIQUE constraint failed: index 'persons_tenant_email_uq'"), {
+            cause: {
+              errcode: 2067,
+              message: "UNIQUE constraint failed: index 'persons_tenant_email_uq'",
+            },
+          }),
+        ),
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
-    expect(h.lines.join("\n")).toContain('provisioning.venue_conflict {"database":"waitron_demo"}');
+    expect(h.lines.join("\n")).toContain(`provisioning.venue_conflict {"database":"${VENUE_DIR}"}`);
     // The driver's own message can quote the failing statement; it is never printed.
-    expect(h.lines.join("\n")).not.toContain("dup");
+    expect(h.lines.join("\n")).not.toContain("UNIQUE constraint failed");
     expect(h.closes()).toBe(1);
   });
 
@@ -1625,64 +961,74 @@ describe("runCli venue", () => {
     expect(h.closes()).toBe(1);
   });
 
-  it("turns a refused CONNECT to the target into a structured code, applying nothing", async () => {
-    // Mirrors `instance`'s "reports a refused CONNECT". `venue` opens ONE connection — the target,
-    // via `withVenueState` — so a SQLSTATE-bearing connect failure (the target database absent,
-    // 3D000, or the admin URI lacking privilege on it) is the refused-CONNECT case. Before this fix
-    // it reached the operator as a raw `unexpected failure`; now it is `provisioning.state_unreadable`
-    // naming the database, exactly as `instance`/`status`. The stamp read and the apply never run.
+  it("turns a refused OPEN of the venue directory into a structured code, applying nothing", async () => {
+    // `venue` opens one thing — the venue directory, through `withVenueState` — so a failure there
+    // is the refused-open case. `ENOTDIR` is what it actually carries when the path runs through a
+    // regular file: measured on Node v26.7.0 against the real `openVenueDatabase`, a directory
+    // under a file gives `Error` with `code: "ENOTDIR"` and a message naming the path, while a
+    // directory holding a `venue.db` that is not a database gives `code: "ERR_SQLITE_ERROR"`,
+    // `errcode: 26`, "file is not a database". A VIRGIN directory opens fine — it is created — so
+    // the common wrong-path mistake is not this case at all; it reaches the unstamped refusal
+    // above. The stamp read and the apply never run.
     const h = harness({ env: VENUE_ENV });
-    h.connect.mockRejectedValue(
-      Object.assign(new Error('database "waitron_demo" does not exist'), { code: "3D000" }),
+    h.openVenue.mockRejectedValue(
+      Object.assign(new Error(`ENOTDIR: not a directory, mkdir '${VENUE_DIR}'`), {
+        code: "ENOTDIR",
+      }),
     );
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"3D000"}',
+      `provisioning.state_unreadable {"database":"${VENUE_DIR}","reason":"ENOTDIR"}`,
     );
     expect(h.readEnvironment).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
-    // No secret and no SQLSTATE-less raw driver text leaked into the operator's terminal.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
     // Nothing was opened, so nothing was closed.
     expect(h.closes()).toBe(0);
   });
 
   it("turns a refused stamp READ into a structured code, applying nothing", async () => {
-    // Mirrors `instance`'s "turns a read that the database refused into a structured code": an admin
-    // that did not create the target holds no privilege on its tables, so the deployment-stamp read
-    // fails 42501. A fact about the database, mapped to `provisioning.state_unreadable` — not the raw
-    // `unexpected failure` it surfaced as before this fix. The apply must NOT run.
-    // VENUE_ENV supplies the PIN and password from the env (like the refused-CONNECT mirror above), so
-    // the boundary secret checks pass and the run reaches the stamp read this test is about.
+    // A venue file that opened and then could not be read — a corrupt or truncated one. The apply
+    // must NOT run, and the reason reaches the operator as the driver's own error CODE rather than
+    // its message, which can quote the failing statement.
     const h = harness({
       env: VENUE_ENV,
       readEnvironment: () =>
         Promise.reject(
-          Object.assign(new Error("permission denied for table deployment"), { code: "42501" }),
+          Object.assign(new Error("file is not a database"), { code: "ERR_SQLITE_ERROR" }),
         ),
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"42501"}',
+      `provisioning.state_unreadable {"database":"${VENUE_DIR}","reason":"ERR_SQLITE_ERROR"}`,
     );
     expect(h.readEnvironment).toHaveBeenCalledTimes(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
-    // The target connection WAS opened for the read, so it is still closed on the way out.
+    // The directory WAS opened for the read, so it is still closed on the way out.
     expect(h.closes()).toBe(1);
-    // No secret and no raw driver text leaked.
-    expect(printed).not.toContain("adminsecret");
-    expect(printed).not.toContain(ADMIN_URI);
+    // The driver's own message is never printed.
+    expect(printed).not.toContain("file is not a database");
   });
 
-  it("prompts for every omitted option, in order, reading the admin URI from the env", async () => {
+  it("lets a failure carrying no code at all escape rather than dressing it as unreadable", async () => {
+    // The other half of the classification: `state_unreadable` is a claim that the DATABASE refused
+    // something. A `TypeError` from a bug carries no `code`, is not the database's verdict on
+    // anything, and reaches `bin.ts` untouched (CLAUDE.md §1).
+    const h = harness({ env: VENUE_ENV });
+    h.openVenue.mockRejectedValue(new TypeError("directory is not a function"));
+    await expect(runCli([...VENUE_ARGS, "--yes"], h.deps)).rejects.toThrow(
+      "directory is not a function",
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("prompts for every omitted option, in order", async () => {
     const h = harness({
       answers: [
-        DATABASE,
+        VENUE_DIR,
         "ES",
         "B12345678",
         "Acme SL",
@@ -1706,10 +1052,10 @@ describe("runCli venue", () => {
         "owner@example.test", // admin email
       ],
       // The admin PIN and dashboard password are the echo-OFF options here: WAITRON_ADMIN_PIN and
-      // WAITRON_ADMIN_PASSWORD are unset (URL-only env), so each is read through `promptSecret`, never
-      // the visible `prompt`, PIN first then password. Only the admin URI is env-fed.
+      // WAITRON_ADMIN_PASSWORD are unset, so each is read through `promptSecret`, never the visible
+      // `prompt`, PIN first then password.
       secrets: ["4321", "dashPass123"],
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: {},
     });
     // `--yes` so the confirmation prompt does not appear amid the option prompts.
     const code = await runCli(["venue", "--yes"], h.deps);
@@ -1717,10 +1063,9 @@ describe("runCli venue", () => {
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
 
     // The exact question sequence — proving both order and wording. The two invoice-locale entries
-    // exercise the repeat-until-blank loop, and the admin URI came from the env (echo-off prompt
-    // never fired).
+    // exercise the repeat-until-blank loop.
     expect(h.asked).toEqual([
-      "database name: ",
+      "venue directory: ",
       "country (ISO-3166 alpha-2, e.g. ES): ",
       "tax id (NIF): ",
       "legal name: ",
@@ -1743,8 +1088,8 @@ describe("runCli venue", () => {
       "admin name: ",
       "admin email: ",
     ]);
-    // The admin PIN and password are the echo-off prompts, in that order (the admin URI came from the
-    // env; WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD are unset here so both fall through to a prompt).
+    // The admin PIN and password are the ONLY echo-off prompts, in that order (WAITRON_ADMIN_PIN and
+    // WAITRON_ADMIN_PASSWORD are unset here, so both fall through to a prompt).
     expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
 
     // The two locales prompted for reach the plan.
@@ -1762,14 +1107,15 @@ describe("runCli venue", () => {
 describe("the error codes this CLI raises", () => {
   it("names the domain concept, never the package", async () => {
     // The house rule (packages/shared/src/errors.ts): `series.not_found`, not
-    // `db.series_not_found`. `deployment.unknown_environment` is about a deployment environment,
-    // which is why it sits beside `deployment.already_stamped` rather than under `provisioning.`
-    // — the provisioning tool is merely where an operator happens to type it.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
-    await runCli(["instance", "--database", DATABASE, "--environment", "staging"], h.deps);
-    const line = h.lines.find((l) => l.startsWith("deployment.unknown_environment"));
+    // `db.series_not_found`. `fiscal.regime_not_implemented` is about a FISCAL regime, which is why
+    // it sits under `fiscal.` even though `venue` is where an operator meets it — the provisioning
+    // tool is merely where the territory happens to be typed.
+    const args = VENUE_ARGS.map((arg) => (arg === "ES-common" ? "ES-canary" : arg));
+    const h = harness({ env: VENUE_ENV });
+    await runCli([...args, "--yes"], h.deps);
+    const line = h.lines.find((l) => l.startsWith("fiscal.regime_not_implemented"));
     expect(line).toBeDefined();
-    expect(line).toContain('"environment":"staging"');
-    expect(line).toContain("preproduction");
+    // `territory`, the name the declaration in `packages/fiscal/src/errors.ts` actually gives it.
+    expect(line).toContain('"territory":"ES-canary"');
   });
 });

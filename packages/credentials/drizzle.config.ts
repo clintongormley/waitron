@@ -1,7 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  dialect: "postgresql",
+  dialect: "sqlite",
   // One config produces exactly one migration folder, which is why this package needs its own
   // rather than an entry in core's. Same reasoning as packages/scheduler/drizzle.config.ts.
   out: "./drizzle",
@@ -10,5 +10,5 @@ export default defineConfig({
   schema: "./src/schema/index.ts",
   // Its own journal table. Sharing core's would make each package's `generate` see the other's
   // applied migrations as unknown and silently re-apply its own from zero.
-  migrations: { table: "__drizzle_migrations_credentials", schema: "public" },
+  migrations: { table: "__drizzle_migrations_credentials" },
 });

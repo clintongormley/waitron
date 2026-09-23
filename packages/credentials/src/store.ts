@@ -1,5 +1,5 @@
-import { eq, sql } from "drizzle-orm";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { eq, exists } from "drizzle-orm";
+import { nowIso, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
@@ -132,11 +132,12 @@ export async function putCredential(
         iv: sealed.iv,
         authTag: sealed.authTag,
         keyVersion: ring.current.version,
-        // The database clock, matching the column's own `defaultNow()` on the INSERT branch —
-        // never the app clock (`new Date()`). Mixing the two would let host clock skew stamp an
-        // update earlier than the original insert. Same idiom as
-        // `packages/fiscal-verifactu/src/registro-sif.ts`'s `actualizadoEn: sql\`now()\``.
-        updatedAt: sql`now()`,
+        // The same clock the column's own `$defaultFn(nowIso)` reads on the INSERT branch, so the
+        // two branches cannot disagree the way a database clock paired with an app clock could.
+        // That pairing is what the PostgreSQL `now()` here used to be: the DATABASE's clock, once
+        // per transaction. This engine has no such function and the statement failed outright with
+        // `no such function: now`.
+        updatedAt: nowIso(),
       },
     });
 }
@@ -165,19 +166,43 @@ export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]
 }
 
 /**
- * Whether this database's taxpayer has a credential provisioned for `purpose`. Calls
- * `credential_tenants` on the supplied database handle, using the caller's privileges, and reports
- * whether it returned the taxpayer or nothing.
+ * Whether this database's taxpayer has a credential provisioned for `purpose`.
+ *
+ * An ordinary query on the supplied handle. It replaces a PostgreSQL function,
+ * `credential_tenants(text)`, which this engine has no counterpart for — SQLite defines no SQL
+ * functions of its own, and the call threw `no such function: credential_tenants`
+ * (`packages/credentials/src/credentials.test.ts`, both `credentialProvisioned` cases, run
+ * 2026-09-22 before this replacement). Nothing about privileges is claimed here any more, because
+ * there is no role to claim it of: `asAppUser` is an empty function on this engine and says why
+ * (`packages/db/src/testing/roles.ts:4-26`).
+ *
+ * Two facts in one statement, exactly as the function it replaces selected them — the taxpayer row
+ * and an `EXISTS` over the vault, so BOTH must hold. Its body, for comparison:
+ * `git show origin/main:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`. The
+ * `ORDER BY id` it carried is gone rather than kept: the caller reads emptiness, and `tenants` is a
+ * singleton (`packages/db/src/schema/tenants.ts`'s `tenants_singleton_ck`), so no ordering is
+ * observable. Pinned from both ends by `credentials.test.ts` — the vault half by a credential for a
+ * DIFFERENT purpose answering false, the taxpayer half by an unseeded `tenants` answering false
+ * while the purpose IS provisioned.
  *
  * This is what tells the host which duties to run, and it has a property worth naming: an
- * unprovisioned purpose enumerates nobody, so the vault IS the enrolment list for that duty — the
+ * unprovisioned purpose matches no row, so the vault IS the enrolment list for that duty — the
  * host needs no separate notion of "is Stripe configured".
  */
 export async function credentialProvisioned(db: Database, purpose: string): Promise<boolean> {
-  const rows = await db.execute(sql`
-    select credential_tenants(${purpose}) as taxpayer
-  `);
-  return rows.rows.length > 0;
+  const rows = await db
+    .select({ taxpayer: tenants.id })
+    .from(tenants)
+    .where(
+      exists(
+        db
+          .select({ purpose: tenantCredentials.purpose })
+          .from(tenantCredentials)
+          .where(eq(tenantCredentials.purpose, purpose)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 export interface RotationResult {

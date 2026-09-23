@@ -16,8 +16,13 @@ describe("the fiscal-none (empty) migration set", () => {
   it("applies as a no-op and creates its own tracking table with zero rows", async () => {
     // The empty journal drives drizzle to create the tracking table but insert no migration rows.
     // A count of 0 proves the set is genuinely empty rather than silently applying something.
+    //
+    // The count was written `count(*)::int` for a PostgreSQL driver that returned a BigInt. Run
+    // against this engine that statement is refused at prepare with `unrecognized token: ":"`
+    // (node v26.7.0, `node:sqlite`), and the cast has nothing to do: `select count(*) as count`
+    // on a two-row table hands back `2` with `typeof === "number"`, measured the same way.
     const result = await suite.db.execute<{ count: number }>(
-      sql`select count(*)::int as count from __drizzle_migrations_fiscal_none`,
+      sql`select count(*) as count from __drizzle_migrations_fiscal_none`,
     );
     expect(result.rows[0]?.count).toBe(0);
   });

@@ -12,6 +12,8 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
+  constraintTarget,
+  isUniqueViolation,
   incidents,
   invoiceSeries,
   pgErrorCode,
@@ -21,7 +23,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
 import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
@@ -54,8 +56,8 @@ const suite = useVenueDb({
 beforeEach(async () => {
   ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
-  // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
-  // Seed directly on the fixture connection.
+  // staff member (holds nothing). Seeded on the suite's own handle, exactly like `seedTenant`
+  // above.
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");
@@ -66,14 +68,18 @@ beforeEach(async () => {
   staffSessionId = await openSession(staffId);
 });
 
-/** A person of `role` whose PIN is "1234", inserted as the superuser owner. The role makes the
- * display name distinct because this fixture creates several live people in one tenant. */
+/** A person of `role` whose PIN is "1234", inserted on the suite's own handle. The role makes the
+ * display name distinct because this fixture creates several live people in one tenant.
+ *
+ * Through the table definition, as `packages/identity/test/fixtures.ts`'s own `seedPerson` is:
+ * `persons.id` and `persons.created_at` are `$defaultFn` generators only the insert BUILDER runs,
+ * so a raw INSERT omitting them is refused `NOT NULL constraint failed: persons.id`. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
-  const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (display_name, pin_hash, role)
-        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
-  );
-  return rows[0]!.id;
+  const [row] = await suite.db
+    .insert(persons)
+    .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
+    .returning({ id: persons.id });
+  return row!.id;
 }
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
@@ -170,11 +176,12 @@ async function voidSale(
   });
 }
 
-/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
- * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
+/** Counts every row in `table`. The suite helper empties every data table between tests
+ * (`resetPerTest`, the default in `@waitron/db/testing/venue-db.js`), so the count is what THIS
+ * test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)}`,
+    sql`select count(*) as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -313,7 +320,13 @@ describe("recordVoid — numbering", () => {
         });
       }),
     );
-    expect(pgErrorCode(error)).toBe("23505");
+    // WHICH key, not a code that means only "something unique" — see record-sale.test.ts's
+    // identical backstop for why this engine cannot be asserted on a code.
+    expect(isUniqueViolation(error)).toBe(true);
+    expect(constraintTarget(error)).toEqual({
+      table: "sales",
+      columns: ["series_id", "invoice_number"],
+    });
   });
 });
 
@@ -408,9 +421,10 @@ describe("recordVoid — error propagation", () => {
     // `packages/fiscal-verifactu/src/chain.test.ts`'s identical "does not retry an error that is
     // not a chain collision" test for the analogous branch in `appendToChain`.
     //
-    // A hand-built `Transaction`-shaped stub, not the real PGlite one: there is no schema-level
-    // constraint on `sale_voids` today other than the unique one this suite already exercises, so
-    // provoking a genuinely different SQLSTATE from the real database would mean inventing one —
+    // A hand-built `Transaction`-shaped stub rather than the suite's real handle: there is no
+    // schema-level constraint on `sale_voids` today other than the unique one this suite already
+    // exercises, so provoking a genuinely different error code from the real database would mean
+    // inventing one —
     // this stub instead asserts on `recordVoid`'s own catch/rethrow logic directly, the same way
     // `chain.test.ts`'s stub asserts on `appendToChain`'s.
     //

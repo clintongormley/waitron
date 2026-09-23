@@ -1,4 +1,4 @@
-import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
+import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { is } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
@@ -278,9 +278,12 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
   // (Coverage isn't run by the pre-push hook — only in CI — so preventing the regression beats
   // catching it.)
   it("forces the extraConfig callback of every owned schema table (new tables can't drop coverage)", () => {
-    // The barrel also exports pgEnums, so cast to unknown[] first to let `is(v, PgTable)` narrow to
-    // the tables only (mirrors schema-ownership.test.ts's filter, but narrowing for getTableConfig).
-    const tables = (Object.values(schema) as unknown[]).filter((v): v is PgTable => is(v, PgTable));
+    // The barrel also exports the enum helpers `paymentState` and `paymentRefundState`, so cast to
+    // unknown[] first to let `is(v, SQLiteTable)` narrow to the tables only (mirrors
+    // schema-ownership.test.ts's filter, but narrowing for getTableConfig).
+    const tables = (Object.values(schema) as unknown[]).filter((v): v is SQLiteTable =>
+      is(v, SQLiteTable),
+    );
     // Positive control: without it the loop below would pass vacuously against an empty set.
     expect(tables.length).toBeGreaterThanOrEqual(3); // payments, payment_refunds, payment_policy
     for (const table of tables) {

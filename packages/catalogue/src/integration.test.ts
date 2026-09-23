@@ -32,12 +32,11 @@ import { seedVenue } from "../test/fixtures.js";
  * imports catalogue (verified: `packages/core/package.json` names no `@waitron/catalogue`), so
  * importing `recordSale` here introduces no cycle.
  *
- * PGlite, not real Postgres: this suite proves the DATA FLOW across three packages, not any
- * PostgreSQL privilege semantics — the catalogue tables' grants are pinned by the privilege matrix
- * (`packages/fiscal-verifactu/src/privileges.expected.ts`) and the write path by `packages/core`'s
- * own suite. A `FakeFiscalBackend` stands in for the regime backend, exactly as `packages/core`'s own
- * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by the runnable demo
- * (`apps/server/scripts/catalogue-demo.ts`) and by `packages/fiscal-verifactu`'s e2e suite.
+ * This suite proves the DATA FLOW across three packages. A `FakeFiscalBackend` stands in for the
+ * regime backend, exactly as `packages/core`'s own
+ * `record-sale.test.ts` does; the real Veri*Factu chain is exercised by
+ * `packages/fiscal-verifactu`'s e2e suite (the runnable `catalogue-demo.ts` that used to be the
+ * other half of that sentence was deleted on 2026-09-22 with the storage swap).
  */
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
@@ -176,14 +175,18 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
     // The staff name reaches `sale_lines.name` (NOT NULL) frozen from the catalogue row, and the
     // customer-facing snapshot falls back to it because this product carries no customer name.
+    // `descriptions` comes back as its stored TEXT here, not as an object: the json codec belongs
+    // to the column declaration (`packages/db/src/schema/orders.ts`) and a raw `execute` never
+    // reaches it. Parsed at the read, the way the other raw-SQL readers of a json column on this
+    // engine do (`packages/fiscal-verifactu/src/canje-columns.test.ts`).
     const { rows } = await suite.db.execute<{
       category: string | null;
       name: string;
-      descriptions: Record<string, string>;
+      descriptions: string;
     }>(sql`select category, name, descriptions from sale_lines where sale_id = ${saleId}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.category).toBe("Food");
     expect(rows[0]!.name).toBe("sliced ham");
-    expect(rows[0]!.descriptions).toEqual({ en: "sliced ham" });
+    expect(JSON.parse(rows[0]!.descriptions)).toEqual({ en: "sliced ham" });
   });
 });

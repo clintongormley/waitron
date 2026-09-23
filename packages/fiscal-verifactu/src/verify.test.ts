@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { createPgliteDb, runMigrations } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { appendToChain } from "./chain.js";
 import type { Entorno } from "./registro-row.js";
@@ -12,9 +12,6 @@ import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./te
 // `seedTill` mints a fresh node per call and every statement below (including `corrupt`'s UPDATE
 // and the deletion in "omits expected and found") is scoped to that node's `node_id`, so an earlier
 // test's rows are out of scope rather than something to clean up.
-//
-// Until 2026-07-31 this was a fresh PGlite per test closed by a single `afterAll` — one close for
-// however many instances the run opened, leaving every one but the last alive for the whole run.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let till: SeededTill;
@@ -34,28 +31,56 @@ async function appendAltas(n: number): Promise<void> {
 }
 
 /**
- * Overwrites one column on one stored registro.
+ * Runs one statement against `registros_facturacion` with its append-only triggers out of the way.
  *
- * This needs the OWNER role and a disabled trigger, which is the point: the fact that corrupting
- * a row takes both is the immutability control working. Nothing the application role can do
- * reaches this code path — which is also why every immutability test must run as app_user, never
- * as the owner (see inmutabilidad.test.ts). PGlite's default connection IS the owner/superuser
- * (that file's own note), so no role switch is needed here to reach the trigger-disable step.
+ * Taking those triggers down is the point: the fact that corrupting a stored record needs the
+ * immutability control removed first is that control working. Nothing on the application's own
+ * write path reaches this code.
  *
- * Trigger name is `registros_facturacion_enforce_immutability`
- * (packages/fiscal-verifactu/drizzle/0001_fiscal_baseline_sql.sql) — NOT
- * `registros_facturacion_immutable` as an earlier draft of this file had it.
+ * `ALTER TABLE … DISABLE TRIGGER`, which this used to issue, answers `near "disable": syntax error`
+ * on this engine — measured on this file before the conversion, `pnpm --filter
+ * @waitron/fiscal-verifactu exec vitest run src/engine-clock-and-floor.test.ts src/verify.test.ts
+ * --reporter=dot` (2026-09-22), where it was the reported failure of every case that reached this
+ * helper. Dropping each trigger and recreating it from the text SQLite stored for it is the way
+ * through, and it is the same one `packages/db/src/testing/venue-db.ts`'s per-test reset takes.
+ *
+ * The drop is not ceremony, and that was measured too, as a control: with both loops below removed
+ * so that only the caller's own statement can fail, every case that reaches this helper fails with
+ * `registros_facturacion is append-only` — the triggers are live and they refuse the corruption.
+ *
+ * The triggers are READ off `sqlite_master` rather than named here, so a rename cannot leave this
+ * helper silently dropping nothing; the empty case throws for the same reason. Both of the table's
+ * triggers come down on every call, which keeps the UPDATE and the DELETE call sites on one path —
+ * `packages/store/src/append-only.ts` installs one per event.
+ *
+ * WHAT WENT: the version before the SQLite flip carried a note that reaching the trigger-disable
+ * step needed the OWNER role, and pointed at inmutabilidad.test.ts for the role side. No assertion
+ * is lost with it — that note documented a dependency, it never tested one — but there are no roles
+ * on this engine at all, so the cross-reference has no subject and is not replaced by anything here.
  */
-async function corrupt(secuencia: number, column: string, value: string): Promise<void> {
-  await pg.db.execute(
-    sql`alter table registros_facturacion disable trigger registros_facturacion_enforce_immutability`,
+async function withoutImmutability(statement: SQL): Promise<void> {
+  const triggers = pg.db.all<{ name: string; sql: string }>(
+    sql`select name, sql from sqlite_master
+        where type = 'trigger' and tbl_name = 'registros_facturacion' order by name`,
   );
-  await pg.db.execute(
+  if (triggers.length === 0) {
+    throw new Error("registros_facturacion carries no append-only trigger to take down");
+  }
+  for (const trigger of triggers) pg.db.run(sql.raw(`drop trigger "${trigger.name}"`));
+  try {
+    await pg.db.execute(statement);
+  } finally {
+    // Replayed verbatim, never rebuilt: `sqlite_master.sql` is the statement the engine itself
+    // kept, so what goes back is what was taken down.
+    for (const trigger of triggers) pg.db.run(sql.raw(trigger.sql));
+  }
+}
+
+/** Overwrites one column on one stored registro. */
+async function corrupt(secuencia: number, column: string, value: string): Promise<void> {
+  await withoutImmutability(
     sql`update registros_facturacion set ${sql.raw(column)} = ${value}
         where node_id = ${till.nodeId} and secuencia = ${secuencia}`,
-  );
-  await pg.db.execute(
-    sql`alter table registros_facturacion enable trigger registros_facturacion_enforce_immutability`,
   );
 }
 
@@ -162,14 +187,8 @@ describe("verifyChain — detection", () => {
     // set to undefined, and a params object serialised into an incident row records those two
     // states differently.
     await appendAltas(2);
-    await pg.db.execute(
-      sql`alter table registros_facturacion disable trigger registros_facturacion_enforce_immutability`,
-    );
-    await pg.db.execute(
+    await withoutImmutability(
       sql`delete from registros_facturacion where node_id = ${till.nodeId} and secuencia = 1`,
-    );
-    await pg.db.execute(
-      sql`alter table registros_facturacion enable trigger registros_facturacion_enforce_immutability`,
     );
     const result = await pg.db.transaction((tx) => verifyChain(tx, till.nodeId));
     const missing = result.issues.find((i) => i.code === "predecessor-missing");
@@ -199,32 +218,41 @@ describe("entorno is not part of the huella", () => {
   // AEAT's, and if it ever reached computeHuella's input every chain written under one environment
   // would become unverifiable under the other.
   //
-  // A DATABASE PER CALL, not two fixtures in one: the two records must be byte-identical except
-  // for `entorno`, and `registros_identidad_uq` — (emisor, num_serie, fecha, tipo), one obligado
-  // per database — refuses a second record carrying the same invoice identity. Each call is
-  // therefore its own database, where the record is also a *first* record (same `null`
-  // predecessor), so any hash difference between the two can only come from entorno.
-  async function appendOne(entorno: Entorno): Promise<{ huella: string; stored: string | null }> {
-    const db = await createPgliteDb();
-    try {
-      for (const migrations of TEST_MIGRATIONS) await runMigrations(db, migrations);
-      const fresh = await seedTill(db);
-      const saleId = await seedSale(db, fresh, 1);
-      const appended = await db.transaction((tx) =>
-        appendToChain(tx, fresh.nodeId, altaFor(fresh.tillId, saleId, 1, 1, entorno)),
-      );
-      const row = await db.execute<{ entorno: string | null }>(
-        sql`select entorno from registros_facturacion where id = ${appended.id}`,
-      );
-      return { huella: appended.huella, stored: row.rows[0]?.entorno ?? null };
-    } finally {
-      await db.close();
-    }
+  // A DATABASE PER RECORD, not two fixtures in one: the two records must be byte-identical except
+  // for `entorno`, and one database will not hold both. Measured — both `appendOne` calls pointed
+  // at `productionDb.db`, the rest of the file unchanged: the second append fails with
+  // `chain.append_contention`, `appendToChain`'s wrapper once its retries are spent on a conflicting
+  // write. A fresh node does not make room for a second record, because the unique index over
+  // (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) does not carry
+  // `node_id` — packages/fiscal-verifactu/drizzle/0000_baseline.sql:126 — and `altaFor` hardcodes
+  // `TEST_NIF` and `A/1` (src/testing/seed.ts), which is exactly why the two records are
+  // byte-identical in the first place. In its own database each record is also a *first* record
+  // (same `null` predecessor), so any hash difference between the two can only come from entorno.
+  //
+  // Two `useVenueDb` calls rather than a database this suite opens and closes itself: the helper
+  // owns the lifecycle (CLAUDE.md §4), and hooks registered inside a `describe` belong to that
+  // describe. The suite-level `pg` above is untouched by either.
+  const productionDb = useVenueDb({ migrations: TEST_MIGRATIONS });
+  const preproductionDb = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  async function appendOne(
+    db: Database,
+    entorno: Entorno,
+  ): Promise<{ huella: string; stored: string | null }> {
+    const fresh = await seedTill(db);
+    const saleId = await seedSale(db, fresh, 1);
+    const appended = await db.transaction((tx) =>
+      appendToChain(tx, fresh.nodeId, altaFor(fresh.tillId, saleId, 1, 1, entorno)),
+    );
+    const row = await db.execute<{ entorno: string | null }>(
+      sql`select entorno from registros_facturacion where id = ${appended.id}`,
+    );
+    return { huella: appended.huella, stored: row.rows[0]?.entorno ?? null };
   }
 
   it("hashes identically regardless of environment, because entorno is ours and not AEAT's", async () => {
-    const a = await appendOne("production");
-    const b = await appendOne("preproduction");
+    const a = await appendOne(productionDb.db, "production");
+    const b = await appendOne(preproductionDb.db, "preproduction");
     expect(a.huella).toBe(b.huella);
 
     // Self-contained, not delegated to chain.test.ts's own "records the environment" test: without

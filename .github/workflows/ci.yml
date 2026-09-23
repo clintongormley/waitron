@@ -350,6 +350,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    # One of the steps below now starts a server that runs until it is killed. Its own `timeout`
+    # bounds it, and this bounds the job if that ever stops working — without it a hung step waits
+    # out GitHub's six-hour default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -372,22 +376,23 @@ jobs:
       - run: pnpm --filter @waitron/credentials build
 
       # A smoke test, not a full run: confirms the BUILT bundle actually executes under Node with no
-      # real database available. DATABASE_URL absent is the cheapest failure to trigger without
-      # provisioning Postgres, and bin.ts's own contract is to fail fast with a specific message and
-      # a non-zero exit code rather than crash with a raw, unformatted stack trace.
-      - name: Smoke-test the credentials CLI bundle (no DATABASE_URL)
+      # venue directory to open. An unset WAITRON_VENUE_DIR is the cheapest failure to trigger, and
+      # bin.ts's contract is to fail fast with a specific message and a non-zero exit code rather
+      # than crash with a raw, unformatted stack trace. The message is asserted rather than the exit
+      # code alone, so a bundle that died for some OTHER reason cannot pass this step.
+      - name: Smoke-test the credentials CLI bundle (no venue directory)
         run: |
           set +e
-          output=$(node packages/credentials/dist/bin.js list 2>&1)
+          output=$(env -u WAITRON_VENUE_DIR node packages/credentials/dist/bin.js list 2>&1)
           code=$?
           set -e
           echo "$output"
           if [ "$code" -eq 0 ]; then
-            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
+            echo "expected a non-zero exit code with no WAITRON_VENUE_DIR set, got 0" >&2
             exit 1
           fi
-          if ! grep -q "DATABASE_URL is not set" <<< "$output"; then
-            echo "expected the 'DATABASE_URL is not set' message, got: $output" >&2
+          if ! grep -q "WAITRON_VENUE_DIR is not set" <<< "$output"; then
+            echo "expected the 'WAITRON_VENUE_DIR is not set' message, got: $output" >&2
             exit 1
           fi
 
@@ -425,25 +430,53 @@ jobs:
             exit 1
           fi
 
-      # Same shape as the credentials smoke test above: DATABASE_URL absent is the cheapest failure
-      # to trigger with no Postgres available, and boot.ts's contract (see its own doc comment) is to
-      # let a boot failure escape and exit non-zero rather than half-start. AppError's message IS the
-      # code (packages/shared/src/errors.ts's own comment), so grepping stderr for the literal code
-      # confirms the bundle failed for THIS reason and not, say, a dependency the bundler forgot to
-      # inline.
-      - name: Smoke-test the server bundle (no DATABASE_URL)
+      # The server bundle is smoke-tested by STARTING it, not by making it fail.
+      #
+      # It used to be made to fail: with no DATABASE_URL there was no database to reach, boot threw
+      # `server.config_missing`, and the step grepped stderr for that code. Neither half survives
+      # the storage switch. There is no connection string, and `server.config_missing` is thrown
+      # only by `requiredInProduction` (apps/server/src/config.ts), which returns early unless
+      # WAITRON_ENV is `production` — so an empty environment cannot reach it. `venueDir` falls back
+      # to a directory under the state root, the box opens it, and the bundle SERVES. Measured on
+      # this tree in an empty environment: it logs `server.listening` on port 8080 and then runs
+      # until killed, so the old step would not have failed — it would have HUNG, for as long as the
+      # job's own limit allowed.
+      #
+      # Starting it is also the stronger check for what this job is for. The break it exists to
+      # catch is a bundling break — a dependency esbuild did not inline, or one of the five
+      # `import.meta.url` migration folders collapsed onto the wrong path — and a bundle that
+      # reaches `server.listening` has resolved every one of them, where a bundle that threw early
+      # had not.
+      #
+      # The port and the venue directory are pinned rather than left to their defaults, so that a
+      # failure here means the BUNDLE and not the runner: on a default port an already-bound 8080,
+      # or a state root the runner will not let it write, fail with the same line as a dependency
+      # esbuild did not inline, and the step this replaced was deliberately specific about which
+      # reason it had established.
+      #
+      # It stops at the line rather than waiting out the timeout — the bundle serves until killed,
+      # so reading to completion would spend the full sixty seconds on every code pull request, and
+      # a cheap job can still be the critical path (CLAUDE.md §2).
+      - name: Smoke-test the server bundle (it must start and listen)
+        env:
+          WAITRON_HTTP_PORT: "18080"
+          WAITRON_VENUE_DIR: "${{ runner.temp }}/smoke-venue"
         run: |
           set +e
-          output=$(node apps/server/dist/server.js 2>&1)
-          code=$?
+          timeout 60s node apps/server/dist/server.js > smoke.log 2>&1 &
+          bundle=$!
+          found=1
+          for _ in $(seq 1 60); do
+            if grep -q '"event":"server.listening"' smoke.log; then found=0; break; fi
+            kill -0 "$bundle" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$bundle" 2>/dev/null
+          wait "$bundle" 2>/dev/null
           set -e
-          echo "$output"
-          if [ "$code" -eq 0 ]; then
-            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
-            exit 1
-          fi
-          if ! grep -q "server.config_missing" <<< "$output"; then
-            echo "expected the 'server.config_missing' code in output, got: $output" >&2
+          cat smoke.log
+          if [ "$found" -ne 0 ]; then
+            echo "expected the bundle to reach server.listening on port 18080" >&2
             exit 1
           fi
 
@@ -462,21 +495,38 @@ jobs:
       # portable and self-describing going forward — a regression here (the write silently dropped,
       # or a future esbuild option this detection cannot sniff) would otherwise only surface off
       # this specific Node version, in whatever environment an operator's Dockerfile happens to run.
+      #
+      # Like the step above, this one STARTS the bundle rather than making it fail, and for the same
+      # reason: it used to capture `node server.js` in a `$(…)` and grep the output for
+      # `server.config_missing`, which no longer happens — the bundle opens a venue directory and
+      # SERVES, so the capture never returned and the step ran until the job's own limit killed it.
+      # That is what it did on this branch's first push (15m14s, cancelled), and the job log's
+      # closing lines name the orphans: a `bash` and a `node-MainThread`.
+      #
+      # Reaching `server.listening` from a directory with no ancestor package.json is also exactly
+      # what this step wants to prove — every import resolved with only `dist/` present.
       - name: Smoke-test dist/ copied out on its own, with no ancestor package.json
+        env:
+          WAITRON_HTTP_PORT: "18081"
+          WAITRON_VENUE_DIR: "${{ runner.temp }}/standalone-venue"
         run: |
           standalone=$(mktemp -d)
           cp -r apps/server/dist/. "$standalone/"
           set +e
-          output=$(node "$standalone/server.js" 2>&1)
-          code=$?
+          timeout 60s node "$standalone/server.js" > standalone.log 2>&1 &
+          bundle=$!
+          found=1
+          for _ in $(seq 1 60); do
+            if grep -q '"event":"server.listening"' standalone.log; then found=0; break; fi
+            kill -0 "$bundle" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$bundle" 2>/dev/null
+          wait "$bundle" 2>/dev/null
           set -e
-          echo "$output"
-          if [ "$code" -eq 0 ]; then
-            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
-            exit 1
-          fi
-          if ! grep -q "server.config_missing" <<< "$output"; then
-            echo "expected the 'server.config_missing' code in output, got: $output" >&2
+          cat standalone.log
+          if [ "$found" -ne 0 ]; then
+            echo "expected the copied-out bundle to reach server.listening on port 18081" >&2
             exit 1
           fi
 
@@ -548,11 +598,9 @@ jobs:
   # a blob captures coverage ONLY when `--coverage` is on (a blob written without it merges to an empty
   # map that passes thresholds vacuously GREEN, so the missing flag is caught by ci-workflow.test.mjs,
   # not at runtime); the shard's own threshold check fires on its partial coverage unless overridden;
-  # and `--merge-reports` re-runs NOTHING — no globalSetup, no container — so the merge job below needs
-  # no Docker.
+  # and `--merge-reports` re-runs NOTHING, so the merge job below needs no Docker.
   #
-  # Each shard boots its OWN shared container (globalSetup runs once per process), so the
-  # install+container overhead is re-paid per shard and the speed-up is sub-linear. maxWorkers: 4 and the
+  # Each shard re-pays the install overhead, so the speed-up is sub-linear. maxWorkers: 4 and the
   # REQUIRE_DOCKER / TESTCONTAINERS_RYUK_DISABLED pair are exactly as the un-sharded job had them; the
   # `heavy` gate is unchanged and now feeds three jobs (these shards plus the merge) rather than one.
   #
@@ -576,9 +624,11 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     env:
-      # packages/db's harness skips its real-Postgres target when Docker is absent. That is right on
-      # a laptop and wrong here: the skipped target is the only one that can observe lock contention
-      # and non-superuser RLS, so a runner without Docker would report green having checked neither.
+      # NOTHING READS THIS ANY MORE. It was read by `packages/db/src/testing/harness.ts`, which this
+      # branch deleted along with the rest of the PostgreSQL test harness;
+      # `grep -rn REQUIRE_DOCKER packages apps scripts bench` on 2026-09-22 returns no line at all.
+      # Left set rather than removed here because retiring the real-Postgres shard layout is its own
+      # piece of work; see `docs/backlog.md`.
       REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
@@ -675,10 +725,14 @@ jobs:
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`
   # contention artifact a runner it has to itself does not have — and each shard has a runner to itself.
   #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy: apps/server's global-setup
-  # (src/testing/global-setup.ts) boots a shared Postgres container its real-PG suites clone from via
-  # useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail loudly instead of skipping those
-  # suites. `test-server-merge` below is the coverage gate.
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, and for the same reason as
+  # test-heavy: NEITHER IS READ ANY MORE. Nothing under apps/server starts a container — on
+  # 2026-09-23 `grep -rn 'from "testcontainers"' packages apps` and the same grep for
+  # `@testcontainers` return no line at all, and apps/server/scripts/dev-setup.test.ts, which used
+  # to be one of the two that did, opens two SQLite files under os.tmpdir() and says so at its own
+  # head. Left set rather than removed here for the same reason as on test-heavy: retiring the
+  # real-Postgres shard layout is its own piece of work; see `docs/backlog.md`.
+  # `test-server-merge` below is the coverage gate.
   test-server:
     timeout-minutes: 15
     needs: changes
@@ -773,8 +827,9 @@ jobs:
   # multi-forks (packages/fiscal-verifactu/vitest.config.ts). See FISCAL_VERIFACTU_PACKAGE in
   # scripts/changed-scope.mjs.
   #
-  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other real-Postgres shards: it clones from
-  # @waitron/db's shared container.
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other shards carry them, and as unread here
+  # as they are there — this package's suites all reach a database through @waitron/db's useVenueDb,
+  # which opens SQLite files under os.tmpdir(). See the note on test-heavy's own REQUIRE_DOCKER.
   test-fiscal-verifactu:
     timeout-minutes: 15
     needs: changes
@@ -822,10 +877,9 @@ jobs:
   # other packages' results down with it — before this, the whole shard reported nothing.
   #
   # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, unlike the other two shards: packages/ui
-  # drives Chromium through Playwright and touches no database. Checked rather than assumed —
-  # `grep -rn REQUIRE_DOCKER packages apps scripts` on 2026-08-01 answers only in packages/db (its
-  # harness, its suites and its README) and in the two workflows that set it, and `packages/ui`'s
-  # only runtime dependency is `lit`.
+  # drives Chromium through Playwright and touches no database. Its only runtime dependency is
+  # `lit`. (On 2026-09-22 `grep -rn REQUIRE_DOCKER packages apps scripts bench` answers nowhere at
+  # all — see the note on test-heavy's own REQUIRE_DOCKER.)
   test-ui:
     timeout-minutes: 15
     needs: changes
@@ -1146,7 +1200,9 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/bookings" test:coverage
 
-  # Media owns real-Postgres and Chromium projects, so its runner installs both test prerequisites.
+  # Media splits into a database project and a Chromium one, so its runner installs both test
+  # prerequisites. The database half opens SQLite files through useVenueDb; the REQUIRE_DOCKER below
+  # is unread, as on test-heavy.
   test-media:
     timeout-minutes: 15
     needs: changes
@@ -1192,9 +1248,10 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/media" test:coverage
 
-  # The Stripe payment module, like bookings, owns both a real-Postgres node project and a Chromium
+  # The Stripe payment module, like bookings, owns both a database-backed node project and a Chromium
   # dashboard-panel project. Its own runner keeps Chromium out of the database bins and gives failures
-  # a package-specific job result.
+  # a package-specific job result. The node half opens SQLite files through useVenueDb; the
+  # REQUIRE_DOCKER below is unread, as on test-heavy.
   test-payments-stripe:
     timeout-minutes: 15
     needs: changes
@@ -1240,7 +1297,7 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/payments-stripe" test:coverage
 
-  # The SumUp payment module, same shape as payments-stripe: a real-Postgres node project plus a
+  # The SumUp payment module, same shape as payments-stripe: a database-backed node project plus a
   # Chromium dashboard-panel project, on a runner of its own for the same reasons.
   test-payments-sumup:
     timeout-minutes: 15
@@ -1434,6 +1491,7 @@ jobs:
           set -- "$@" --filter "!@waitron/shared"
           set -- "$@" --filter "!@waitron/server-kit"
           set -- "$@" --filter "!@waitron/dashboard-modules"
+          set -- "$@" --filter "!@waitron/store"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -1442,8 +1500,11 @@ jobs:
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo, so its break: 90 is checked on a
   # pull request whose resolved scope contains it (the paragraph below), rather than only on a weekly
-  # run the way packages/ui's identical threshold is. Contrast packages/db, where every test boots
-  # PGlite, whose cost puts it on the same weekly footing as packages/ui — and whose bar of 90 is not
+  # run the way packages/ui's identical threshold is. Contrast packages/db, where every suite opens
+  # a real venue database on disk, which puts it on the same weekly footing as packages/ui — the
+  # engine behind that cost was PGlite and is now SQLite, and the cost has NOT been re-measured
+  # since the switch, so treat the footing as inherited rather than as a current measurement. Its
+  # bar of 90 is not
   # in its own stryker config at all, because its run is split into ten shards; it is checked once on
   # the merged score, by the mutation-db-aggregate job in mutation.yml.
   #

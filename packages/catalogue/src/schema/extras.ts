@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
-import { count, flag, id, json, label, money, products, table } from "@waitron/db";
+import { check, foreignKey, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
 import { optionLists } from "./options.js";
 
@@ -9,16 +9,18 @@ import { optionLists } from "./options.js";
  * does NOT carry is anything an item would duplicate from the product it names — no price, VAT,
  * allergens or dietary labels live below. `min_picks`/`max_picks` are the spelling the design asks
  * for (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1) and not a
- * technical necessity: bare `min` and `max` are legal column names. Measured on PGlite 0.5.8
- * (PostgreSQL 18.3) — a table declared with `min integer not null default 0, max integer` took a
- * `check (min >= 0 and (max is null or max >= min))`, refused a bad row with `23514`, selected both
- * columns unqualified and aggregated them as `min(min)` / `max(max)`. The per-menu publication is
+ * technical necessity: bare `min` and `max` are legal column names. Re-measured on this engine
+ * (`node:sqlite`, Node v26.7.0, 2026-09-22) after the storage switch retired the PostgreSQL
+ * reading — a table declared with `min integer not null default 0, max integer` took a
+ * `check (min >= 0 and (max is null or max >= min))`, selected both columns unqualified and
+ * aggregated them as `min(min)` / `max(max)`; the control in the other direction, a row with
+ * `min = 5, max = 2`, came back `CHECK constraint failed`. The per-menu publication is
  * below in this file; the product attachment is `product_modifiers` (`product-modifiers.ts`) and
  * the dashboard editor is `apps/dashboard/src/widgets/extra-list-form.ts`. */
 export const extraLists = table(
   "extra_lists",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     // Staff-facing list name — plain text, like the product's own name.
     name: label("name").notNull(),
     // Customer-facing translated name; null or a blank entry means "use `name`".
@@ -53,7 +55,7 @@ export const extraLists = table(
 export const extraListItems = table(
   "extra_list_items",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     listId: id("list_id").notNull(),
     productId: id("product_id").notNull(),
     sort: count("sort").notNull().default(0),
@@ -196,7 +198,7 @@ export const menuItemExtraItems = table(
 export const productModifiers = table(
   "product_modifiers",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     productId: id("product_id").notNull(),
     // Position in the product's list, written from the body's order by `writeProductModifiers`
     // (packages/catalogue/src/product-modifiers.ts) the way `extra_list_items.sort` is.
@@ -232,9 +234,9 @@ export const productModifiers = table(
     index("product_modifiers_product_sort_idx").on(t.productId, t.sort),
     // One attachment per list per product, and each index constrains only the rows whose reference
     // is present: a unique index treats two nulls as DIFFERENT values, so the options index ignores
-    // every extras-only row and the other way round. Measured on PGlite (PostgreSQL 18.3) rather
-    // than read off the documentation, by "lets one product carry many extras-only rows under the
-    // options-list unique index" (packages/catalogue/src/product-modifiers.test.ts). These are the
+    // every extras-only row and the other way round. That holds on this engine too, and is measured
+    // rather than read off the documentation, by "lets one product carry many extras-only rows under
+    // the options-list unique index" (packages/catalogue/src/product-modifiers.test.ts:151). These are the
     // database backstop under `writeProductModifiers`' own duplicate refusal, the same division
     // `extra_list_items_list_product_uq` makes above.
     uniqueIndex("product_modifiers_product_extra_uq").on(t.productId, t.extraListId),

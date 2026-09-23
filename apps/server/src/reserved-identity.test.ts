@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { locations, withTransaction } from "@waitron/db";
 import { currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -39,10 +39,19 @@ describe("establishReservedStandbyIdentity", () => {
   // NIF via seedTenant's counter.
   beforeEach(async () => {
     await seedTenant(suite.db);
-    const loc = await suite.db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-    locationId = loc.rows[0]!.id as LocationId;
+    // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts`
+    // took: `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL
+    // DEFAULT, so a raw insert omitting it returns nothing to brand — and `array['es-ES']` is
+    // PostgreSQL array syntax the engine refuses at prepare (`near "['es-ES']": syntax error`).
+    const [loc] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    locationId = loc!.id as LocationId;
     const t = await suite.db.execute<{ tax_id: string }>(
       sql`select tax_id from tenants where id = 1`,
     );
@@ -84,7 +93,7 @@ describe("establishReservedStandbyIdentity", () => {
     // reserved series landed for the standby's node
     const series = await withTransaction(suite.db, (tx) =>
       tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from invoice_series where node_id = ${standby.nodeId}`,
+        sql`select cast(count(*) as int) as n from invoice_series where node_id = ${standby.nodeId}`,
       ),
     );
     expect(series.rows[0]!.n).toBe(1);
@@ -137,7 +146,7 @@ describe("establishReservedStandbyIdentity", () => {
     expect(cred?.privateKey).toBe(first.privateKey);
     const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ n: number }>(
-        sql`select count(*)::int as n from registro_sif where node_id = ${second.nodeId}`,
+        sql`select cast(count(*) as int) as n from registro_sif where node_id = ${second.nodeId}`,
       ),
     );
     expect(rows.rows[0]!.n).toBe(0);

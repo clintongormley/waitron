@@ -2,7 +2,7 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 import { playwright } from "@vitest/browser-playwright";
 
 // Separate Node and browser projects share one coverage report. Run Node first so Chromium
-// does not compete with this package's PostgreSQL/PGlite work, and bound browser concurrency.
+// does not compete with this package's database work, and bound browser concurrency.
 export default defineConfig({
   test: {
     projects: [
@@ -19,13 +19,11 @@ export default defineConfig({
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,
-          // Migrate the shared templates once before this project's workers start.
-          globalSetup: ["./src/testing/global-setup.ts"],
           include: ["src/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**"],
-          // The PGlite verb suite boots a WASM PostgreSQL and applies [core, bookings] in a beforeAll;
-          // the real-PG suites clone the shared template. The container boot/pull is in globalSetup,
-          // which vitest does not bound by hookTimeout.
+          // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times
+          // its own beforeAll (packages/db/src/testing/venue-db.ts:174, default 60s), so what this
+          // bounds is that helper's untimed afterEach/afterAll plus any hook a suite writes itself.
           testTimeout: 120_000,
           hookTimeout: 180_000,
           // Keep one worker (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across
@@ -35,8 +33,8 @@ export default defineConfig({
         },
       },
       {
-        // The browser / Lit project — mirrors packages/ui: real headless Chromium via Playwright, NO
-        // globalSetup (a browser test must never boot Docker). Scoped to the `./dashboard` sub-path.
+        // The browser / Lit project — mirrors packages/ui: real headless Chromium via Playwright.
+        // Scoped to the `./dashboard` sub-path.
         test: {
           name: "browser",
           sequence: { groupOrder: 2 },

@@ -236,9 +236,10 @@ async function writeLabels(
  * Nothing here takes a lock of its own on the list or its labels, and that is a decision rather
  * than an omission: the plan's Task 2 Step 6 says "No advisory lock, no order check", and spec §7
  * bars advisory locks from new code because the SQLite switch's single write queue makes them
- * redundant. `setProductVariants` (variants.ts) takes no advisory lock either — its `lockProduct`
- * is a `select … for update` on the product row. The content-language lock `validateNames` reaches
- * through is the existing shared one.
+ * redundant. `setProductVariants` (variants.ts) takes no lock of its own either — the row lock it
+ * used to take on the product went with the engine, and `variants.ts` says why. What
+ * `validateNames` reaches through is no longer a lock at all: `content-languages.ts` records that
+ * the write queue arranges what an advisory lock there used to.
  */
 export async function createOptionList(
   tx: Transaction,

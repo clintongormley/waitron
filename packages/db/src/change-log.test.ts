@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ResourceChange } from "@waitron/shared";
@@ -10,23 +11,26 @@ import type { Transaction } from "./client.js";
 import { asAppUser } from "./testing/roles.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// `locations` is a change source the application role may INSERT into (baseline migration), so one
-// fixture table serves both the ordering cases and the grant case. `operation_description` is
-// Spanish test DATA, not a schema identifier — the same shape the sibling join-requests and
-// dining-table suites use.
+// `locations` is a change source, so one fixture table serves every case here.
+// `operation_description` is Spanish test DATA, not a schema identifier — the same shape the
+// sibling join-requests and dining-table suites use.
+//
+// Two things the statement carries that the PostgreSQL one did not. The id is supplied here,
+// because `id` columns take their default from a JavaScript call now (`newId`,
+// `./schema/columns.ts`) and raw SQL never reaches it. And `invoice_locales` is one TEXT column
+// holding a JSON array, checked by `locations_invoice_locales_len`, where it used to be `text[]`.
 async function insertLocation(tx: Transaction, name: string): Promise<string> {
-  const inserted = await tx.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values (${name}, array['es'], 'Hostelería') returning id`);
-  return inserted.rows[0]!.id;
+  const id = randomUUID();
+  await tx.execute(sql`
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${id}, ${name}, '["es"]', 'Hostelería')`);
+  return id;
 }
 
 describe("the change log", () => {
-  // PGlite rather than a container: nothing here crosses a connection any more. The change trigger
-  // writes a row in the caller's own transaction and `withTransaction` reads it back on the same
-  // connection, so the one thing real PostgreSQL was needed for — a notification travelling to a
-  // second backend — is gone. The application-role case still bites, because `asAppUser` makes the
-  // session assume the non-owner role (CLAUDE.md §4).
+  // One venue file and one handle. The change triggers write their row in the caller's own
+  // transaction and `withTransaction` reads it back on the same connection, so nothing here
+  // crosses a connection and there is no second session to keep in the dark.
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS],
     setup: (db) => installChangeFeed(db, CORE_CHANGE_SOURCES),
@@ -67,10 +71,13 @@ describe("the change log", () => {
     expect(seen).toEqual([]);
   });
 
-  // The three letters themselves — SELECT, INSERT, DELETE and not UPDATE — are pinned once for
-  // every table in the workspace by `packages/fiscal-verifactu/src/privileges.expected.ts`
-  // (`change_log: "SID"`), read back from the live catalogue by its `privileges.test.ts`. This case
-  // exercises all three through the real path instead, under the non-owner role.
+  // THIS CASE NO LONGER SEPARATES ANYTHING, and it is kept rather than deleted only because the
+  // sweep that removes it is its own queue item. It was the grant case: `asAppUser` made the
+  // session assume the non-owner role, and what it proved was that the role held SELECT, INSERT
+  // and DELETE on `change_log`. This engine has no roles — `asAppUser` is an empty body
+  // (`./testing/roles.js`) — so what remains is the first case again under another name. Deleting
+  // the call here and leaving every other one in the tree would be the worse half of both
+  // options; task T1 takes them together.
   it("lets the application role write a change-fed row and drain what the trigger wrote", async () => {
     const seen = collect();
     let id = "";

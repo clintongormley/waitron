@@ -1,22 +1,30 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, locations, tills, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
-import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  WORKFORCE_MIGRATIONS,
+  absences,
+  shiftSwaps,
+  shifts,
+  type ShiftSwapStatus,
+} from "@waitron/workforce";
 import type { Logger } from "./logger.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
-// PGlite, not real Postgres: the schedule routes are LOGIC (session → verb → JSON) over mutable
-// planning rows. Every DB touch runs through `withTransaction` + `asAppUser` exactly as production does, but
-// the app role's grants and — the crux — the "requester is the SESSION's personId, never the
-// body's" identity property need a real non-superuser role to MEAN anything, so they are proven
-// against real Postgres in `schedule-api.pg.test.ts`. Here we prove the route mechanics: the happy
-// paths, the request-shape 400s and the not-logged-in 401.
+// The schedule routes are LOGIC (session → verb → JSON) over mutable planning rows: the route
+// mechanics, the request-shape 400s and the not-logged-in 401.
+//
+// The "requester is the SESSION's personId, never the body's" identity property is proven HERE, by
+// deletion: making `schedule-api.ts`'s swap compose prefer `body.requestedByPersonId` reddens
+// exactly one case, `expected 403 to be 201` (run 2026-09-22 on node:sqlite). It used to be argued
+// that this needed a non-superuser role and so lived in a second real-Postgres suite; there are no
+// roles on this engine, that suite is gone, and the property was never a privilege decision.
 
 const noopLog: Logger = () => {};
 let tillId: string;
@@ -30,22 +38,31 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Counter', array['es-ES'], 'Retail') returning id`);
-    locationId = loc.rows[0]!.id;
-    const till = await db.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Till 1') returning id`);
-    tillId = till.rows[0]!.id;
-    const meRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Me', ${hashPin("1111")}, 'staff') returning id`);
-    me = meRow.rows[0]!.id;
-    const colRow = await db.execute<{ id: string }>(sql`
-      insert into persons (display_name, pin_hash, role)
-      values ('Colleague', ${hashPin("2222")}, 'staff') returning id`);
-    colleague = colRow.rows[0]!.id;
+    // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+    // took: every `id` here (and `tills.created_at`, `persons.created_at`) is a `$defaultFn`
+    // generator on this engine which a raw insert never reaches while the column is NOT NULL, and
+    // `invoice_locales` is a JSON array in a text column, so the `array[...]` constructor that
+    // filled it was refused with `near "['es-ES']": syntax error`.
+    const [loc] = await db
+      .insert(locations)
+      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+      .returning({ id: locations.id });
+    locationId = loc!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId, name: "Till 1" })
+      .returning({ id: tills.id });
+    tillId = till!.id;
+    const [meRow] = await db
+      .insert(persons)
+      .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
+      .returning({ id: persons.id });
+    me = meRow!.id;
+    const [colRow] = await db
+      .insert(persons)
+      .values({ displayName: "Colleague", pinHash: hashPin("2222"), role: "staff" })
+      .returning({ id: persons.id });
+    colleague = colRow!.id;
   },
 });
 
@@ -82,30 +99,45 @@ async function send(
 }
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
-    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(shifts)
+    .values({
+      personId,
+      locationId,
+      startsAt,
+      startsOffsetMinutes: 0,
+      endsAt,
+      endsOffsetMinutes: 0,
+      role: "bar",
+    })
+    .returning({ id: shifts.id });
+  return row!.id;
 }
 
 async function insertSwap(params: {
   requestedBy: string;
   fromShiftId: string;
   toPerson: string;
-  status?: string;
+  status?: ShiftSwapStatus;
 }): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
-    returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(shiftSwaps)
+    .values({
+      requestedByPersonId: params.requestedBy,
+      fromShiftId: params.fromShiftId,
+      toPersonId: params.toPerson,
+      status: params.status ?? "requested",
+    })
+    .returning({ id: shiftSwaps.id });
+  return row!.id;
 }
 
 async function insertAbsence(personId: string, startsOn: string, endsOn: string): Promise<string> {
-  const r = await suite.db.execute<{ id: string }>(sql`
-    insert into absences (person_id, absence_kind, starts_on, ends_on)
-    values (${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
-  return r.rows[0]!.id;
+  const [row] = await suite.db
+    .insert(absences)
+    .values({ personId, kind: "holiday", startsOn, endsOn })
+    .returning({ id: absences.id });
+  return row!.id;
 }
 
 describe("mountScheduleApi — shifts", () => {

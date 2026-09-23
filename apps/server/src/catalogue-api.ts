@@ -225,7 +225,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `extras.translation_required` comes from `validateNames` (extras.ts) alone.
   "extras.invalid": 400,
   "extras.translation_required": 400,
-  // An id naming no list: `getExtraList` on the single read, `lockExtraList` on the update and the
+  // An id naming no list: `getExtraList` on the single read, `assertExtraListForWrite` on the update and the
   // delete, `assertExtraList` on the dependants preview (all extras.ts). The default would make this
   // a 400, so this entry is what makes it a 404.
   "extras.not_found": 404,
@@ -270,10 +270,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "catalogue.failed");
 
 /**
- * Screen a `/…/:id` path param as a UUID before it reaches a `uuid` column, returning it. A
- * malformed id passed straight into a query would `22P02` → an opaque 500; refusing it here as
- * `shared.invalid_id` (the branded-id constructors' own code — `packages/shared/src/ids.ts`)
- * turns that 500 into a clean 400. Shape only: a well-formed id that names no row passes this and
+ * Screen a `/…/:id` path param as a UUID before it reaches a query, returning it. Nothing below
+ * this screen objects to a malformed id — every id column is plain `text`, so the value would simply
+ * match no row (`till-api.ts`'s note on `shared.invalid_id` states it once for this app). Refusing it
+ * here as `shared.invalid_id` (the branded-id constructors' own code — `packages/shared/src/ids.ts`)
+ * makes that silent miss a clean 400. Shape only: a well-formed id that names no row passes this and
  * is handled by the op it reaches. `value` is the caller-supplied uuid-shaped string, safe to
  * echo.
  */
@@ -358,7 +359,7 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
  * unless it names a catalogue present in this database. Runs inside `gated`'s transaction;
  * `catalogueExists` checks by id only. This is the CLEAN-error front: the write targets carry a
  * plain by-id FK on `catalogues(id)` (`locations.catalogue_id`, `location_catalogues.catalogue_id`)
- * which 23503-rejects an ABSENT id at the data layer — the id is all either layer can check, since
+ * which rejects an ABSENT id at the data layer — the id is all either layer can check, since
  * every catalogue in the database belongs to the one taxpayer.
  */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
@@ -372,8 +373,9 @@ async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Pro
  * `undefined` (a no-op: the create route defaults it, the patch route leaves it untouched); a
  * PRESENT value must be an integer NUMBER in int4 range, else `management.request_invalid` naming
  * `displayOrder` (never the value). The `typeof` screen is first so a non-number is REJECTED rather
- * than coerced, and the int4 bound keeps an out-of-range value off the `integer` column (a `22003`
- * opaque 500).
+ * than coerced, and the int4 bound is now the ONLY bound: this engine's INTEGER is 64-bit whatever
+ * the declared type says, so the column itself refuses nothing
+ * (`packages/db/src/schema/columns.ts`).
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
@@ -413,9 +415,8 @@ function screenDietOverride(value: unknown): void {
  * throws the REQUEST code and the catalogue's own parser throws the DOMAIN code
  * (`parseProductEditorInput`, packages/catalogue/src/product-editor-input.ts, throws
  * `product.invalid`). A string that is not uuid-shaped is `shared.invalid_id` instead, exactly as
- * `requireUuidParam` treats a path id and for the same reason: it would otherwise reach the `uuid`
- * column as a `22P02` driver error, which this surface's STATUS map has nothing for, so it would
- * surface as an opaque 500.
+ * `requireUuidParam` treats a path id and for the same reason: the column is plain `text`, so an
+ * un-screened value would be STORED or would match nothing, with no refusal anywhere below.
  *
  * DUPLICATES are NOT collapsed here: `writeProductModifiers`
  * (packages/catalogue/src/product-modifiers.ts) refuses a repeat itself, as `product.invalid`
@@ -917,8 +918,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
   // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
   // protection: BOTH write targets carry a by-id FK on `catalogues(id)`
-  // (`locations.catalogue_id`, `location_catalogues.catalogue_id`) that 23503-rejects an absent id
-  // at the DATA layer even if the guard is skipped; the guard is what turns that into a clean 404.
+  // (`locations.catalogue_id`, `location_catalogues.catalogue_id`) that rejects an absent id
+  // at the DATA layer even if the guard is skipped; the guard is what turns that into a clean 404,
+  // and it is also the only layer that can say WHICH id was wrong — this engine's foreign-key refusal
+  // is the whole message `FOREIGN KEY constraint failed`, naming no table and no column
+  // (`packages/db/src/constraint-target.ts`).
   // Neither layer can check more than the id, because every catalogue in the database belongs to
   // the one taxpayer. DELETE needs no guard: removing a non-member row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
@@ -1030,8 +1034,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
   // Add a whole selection of products to one category in a single transaction. The body screen
-  // checks SHAPE only (an array of uuid-shaped strings, so a malformed id never reaches a `uuid`
-  // column as a 22P02); whether each id names a product of this tenant, and whether the selection
+  // checks SHAPE only (an array of uuid-shaped strings, and that screen is the only thing refusing a
+  // malformed one); whether each id names a product of this tenant, and whether the selection
   // repeats one, is `addProductsToCategory`'s `category.membership_invalid`. An empty selection is
   // a legitimate no-op.
   app.post("/management-api/categories/:id/products", (c) =>

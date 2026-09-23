@@ -6,7 +6,7 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 // browser bundle must not drag `@waitron/db` and Node builtins in. The server shapes stay the source
 // of truth; a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
 
-/** A reservation's lifecycle state — the `booking_status` pgEnum. */
+/** A reservation's lifecycle state — the `booking_status` column. */
 export type BookingStatus = "booked" | "seated" | "completed" | "no_show" | "cancelled";
 
 /**

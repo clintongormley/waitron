@@ -1,1 +1,0 @@
-CREATE INDEX "incidents_handled_idx" ON "incidents" USING btree ("acknowledged_at");

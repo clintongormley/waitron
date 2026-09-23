@@ -1,6 +1,11 @@
-import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  purchaseInvoiceVat,
+  purchaseInvoices,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
@@ -158,20 +163,28 @@ describe("computeInputVat", () => {
     // Written straight to the tables as INTEGERS, past `seedPurchaseInvoice`'s own converters, so
     // this pins what the columns hold rather than what the fixture does with them. Two lines of
     // 2099 cents sum to 4198 = 41.98 at a full proportion; a query that read the columns as euros
-    // — which a `::numeric(12, 2)::text` cast does without error — would report "4198.00". The
-    // rate is 2100 basis points and must be reported as "21.00": read as a decimal it would say
-    // "2100.00", and read with the old `::numeric(5, 2)` cast it would not fit at all.
-    const [invoice] = (
-      await suite.db.execute<{ id: string }>(sql`
-        insert into purchase_invoices
-          (supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total)
-        values ('B00000000', 'Proveedor', 'RAW1', '2026-08-01', '2026-08-05', 24198)
-        returning id`)
-    ).rows;
-    await suite.db.execute(sql`
-      insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind) values
-        (${invoice!.id}, 2100, 10000, 2099, 'ordinary'),
-        (${invoice!.id}, 2100, 10000, 2099, 'ordinary')`);
+    // would report "4198.00". The rate is 2100 basis points and must be reported as "21.00": read
+    // as a decimal it would say "2100.00".
+    //
+    // It writes through the table definitions rather than in raw SQL, which is a conversion and
+    // not a loosening: `purchase_invoices.id` is supplied by `$defaultFn(newId)` in JavaScript on
+    // this engine, so a raw INSERT naming no id is refused `NOT NULL constraint failed`. The
+    // values below are still the raw integer counts, which is what the case is about.
+    const [invoice] = await suite.db
+      .insert(purchaseInvoices)
+      .values({
+        supplierTaxId: "B00000000",
+        supplierName: "Proveedor",
+        supplierInvoiceNumber: "RAW1",
+        issuedOn: "2026-08-01",
+        receivedOn: "2026-08-05",
+        total: 24198,
+      })
+      .returning({ id: purchaseInvoices.id });
+    await suite.db.insert(purchaseInvoiceVat).values([
+      { purchaseInvoiceId: invoice!.id, rate: 2100, base: 10000, tax: 2099, kind: "ordinary" },
+      { purchaseInvoiceId: invoice!.id, rate: 2100, base: 10000, tax: 2099, kind: "ordinary" },
+    ]);
     const ret = await run({ year: 2026, month: 8 });
     expect(ret.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" }]);
     expect(ret).toMatchObject({ baseTotal: "200.00", taxTotal: "41.98" });

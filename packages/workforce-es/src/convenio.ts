@@ -7,8 +7,8 @@ import { convenioConfig } from "./schema/convenio-config.js";
 // against the shared registry (packages/shared reachability rule).
 import "./errors.js";
 
-/** The underscored DB enum → the hyphenated generic `OvertimeModel`. The pgEnum constrains the
- * column to exactly these two, so the lookup is total. */
+/** The underscored stored value → the hyphenated generic `OvertimeModel`. The column's check
+ * constraint admits exactly these two, so the lookup is total. */
 const DB_TO_OVERTIME_MODEL: Record<"daily_accrual" | "period_net", OvertimeModel> = {
   daily_accrual: "daily-accrual",
   period_net: "period-net",

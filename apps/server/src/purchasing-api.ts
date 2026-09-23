@@ -101,9 +101,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Screen the `regime` enum — one of the two `purchase_regime` members, else
- * `management.request_invalid`. A typeof-only pass would let a foreign string reach the pgEnum as a
- * `22P02` → an opaque 500, so the two members are checked here for a clean 400. */
+/** Screen the `regime` value — one of the two `purchase_regime` members, else
+ * `management.request_invalid`. A typeof-only pass would let a foreign string reach the column, where
+ * its check constraint refuses it as an opaque 500, so the two members are checked here for a clean
+ * 400. */
 function requireRegime(v: unknown): PurchaseRegime {
   if (v !== "general" && v !== "equivalence_surcharge") {
     throw new AppError("management.request_invalid", { field: "regime" });

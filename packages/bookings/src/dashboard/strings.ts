@@ -106,7 +106,7 @@ registerCodeMessages(BOOKINGS_CODE_MESSAGES);
  * key is a compile error. Resolution (region-strip, English-degrade) is the kit's. */
 export const t = makeT<keyof typeof en>();
 
-// The five booking lifecycle statuses (the `booking_status` pgEnum), shown on the day-list. English is
+// The five booking lifecycle statuses (the `booking_status` column), shown on the day-list. English is
 // the source of truth; the Spanish agrees feminine ("reserva").
 const BOOKING_STATUS_NAMES: NameTable = {
   booked: { en: "Booked", es: "Reservada" },

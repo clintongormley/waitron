@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index } from "drizzle-orm/pg-core";
-import { count, day, id, smallCount, table, tsString } from "@waitron/db";
+import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
+import { count, day, id, newId, nowIso, smallCount, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
  * A person's STATED availability window on a given weekday — "available Mondays 09:00–17:00 from 1
- * March". PLANNING data, ordinary mutable rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0001_workforce_baseline_sql.sql), no append-only trigger and no chain — a person's stated
- * availability changes freely (design 2026-07-22 §2.1 / plan §2.1).
+ * March". PLANNING data, ordinary mutable rows: no append-only trigger and no chain — a person's
+ * stated availability changes freely (design 2026-07-22 §2.1 / plan §2.1), and nothing in the
+ * database refuses an edit or a delete here; the grant that used to name the permitted writes went
+ * with PostgreSQL.
  *
  * `weekday` is 0–6 (Monday..Sunday is a rendering choice, not fixed here — only the 0–6 domain is).
  * `available_from_minute`/`available_to_minute` are minutes past local midnight in [0, 1440], from <
@@ -17,7 +18,7 @@ import { persons } from "@waitron/identity";
 export const availability = table(
   "availability",
   {
-    id: id("id").primaryKey().defaultRandom(),
+    id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
     /** Day of week, 0–6. */
     weekday: smallCount("weekday").notNull(),
@@ -29,7 +30,7 @@ export const availability = table(
     effectiveFrom: day("effective_from").notNull(),
     /** Last day the window applies, inclusive; null while open-ended. */
     effectiveTo: day("effective_to"),
-    createdAt: tsString("created_at").notNull().defaultNow(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the

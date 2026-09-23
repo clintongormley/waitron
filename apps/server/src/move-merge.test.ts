@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  asAppUser,
+  locations,
+  nowIso,
+  tills,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -12,6 +20,7 @@ import {
   createCategory,
   createExtraList,
   createProduct,
+  units,
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -57,19 +66,39 @@ interface Seeded {
  *  Bacon 0.50, reduced). */
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  await db.execute(sql`
-    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
-      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')`);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Through the table definitions rather than raw SQL, the same change `testing/seed-units.ts`
+  // took: `units.id` and `locations.id`/`tills.id` are `$defaultFn` generators a raw insert never
+  // reaches, the `::jsonb` casts are `unrecognized token: ":"` on this engine, and
+  // `invoice_locales` is a JSON array in a text column (`labelList`), so there is no array
+  // constructor to write. Same two units, same fields.
+  await db.insert(units).values([
+    {
+      seedKey: "each",
+      name: { en: "each" },
+      abbreviation: { en: "ea" },
+      precision: 0,
+      hardwareUnit: null,
+    },
+    {
+      seedKey: "kg",
+      name: { en: "kg" },
+      abbreviation: { en: "kg" },
+      precision: 3,
+      hardwareUnit: "kg",
+    },
+  ]);
+  const locationId = randomUUID();
+  await db.insert(locations).values({
+    id: locationId,
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const tillId = randomUUID();
+  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -177,14 +206,19 @@ async function configureTableZone(
 ): Promise<{ zoneId: string; departmentId: string }> {
   const departmentId = randomUUID();
   const zoneId = randomUUID();
+  // `created_at` is a `$defaultFn` generator on both tables now, not a SQL DEFAULT, and a raw
+  // insert reaches neither — it failed with `NOT NULL constraint failed: departments.created_at`.
+  // One reading bound to both rows, which is what PostgreSQL's transaction-start `now()` default
+  // gave these two statements.
+  const createdAt = nowIso();
   await db.execute(sql`
     insert into departments
-      (id, location_id, name, trading_name, default_service_mode)
+      (id, location_id, name, trading_name, default_service_mode, created_at)
     values
-      (${departmentId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
+      (${departmentId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode}, ${createdAt})`);
   await db.execute(sql`
-    insert into floor_zones (id, location_id, name)
-    values (${zoneId}, ${cfg.locationId}, ${name})`);
+    insert into floor_zones (id, location_id, name, created_at)
+    values (${zoneId}, ${cfg.locationId}, ${name}, ${createdAt})`);
   await db.execute(sql`
     insert into zone_service_policies
       (location_id, zone_id, department_id, service_mode)
@@ -196,10 +230,13 @@ async function configureTableZone(
 
 /** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
 async function seedStatus(label: string): Promise<string> {
-  const { rows } = await db.execute<{ id: string }>(sql`
-    insert into table_service_statuses (label, color)
-    values (${label}, '#ff0000') returning id`);
-  return rows[0]!.id;
+  // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches — it failed with
+  // `NOT NULL constraint failed: table_service_statuses.id`.
+  const statusId = randomUUID();
+  await db.execute(sql`
+    insert into table_service_statuses (id, label, color, created_at)
+    values (${statusId}, ${label}, '#ff0000', ${nowIso()})`);
+  return statusId;
 }
 
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
@@ -277,25 +314,28 @@ describe("moveTabLines", () => {
     const t2 = await seedTable(cfg, "FLOW-2");
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, []);
-    const department = await db.execute<{ id: string }>(sql`
+    // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches, so both are
+    // written here; the ids are minted in JavaScript rather than read back from `returning`, which
+    // also drops the find-by-name step the two-row insert needed to tell the zones apart.
+    const departmentId = randomUUID();
+    const prepayZoneId = randomUUID();
+    const tabZoneId = randomUUID();
+    const createdAt = nowIso();
+    await db.execute(sql`
       insert into departments
-        (location_id, name, trading_name, default_service_mode)
-      values (${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
-      returning id`);
-    const zones = await db.execute<{ id: string; name: string }>(sql`
-      insert into floor_zones (location_id, name)
+        (id, location_id, name, trading_name, default_service_mode, created_at)
+      values (${departmentId}, ${cfg.locationId}, 'Flow test', 'Flow test', 'prepay', ${createdAt})`);
+    await db.execute(sql`
+      insert into floor_zones (id, location_id, name, created_at)
       values
-        (${cfg.locationId}, 'Flow prepay'),
-        (${cfg.locationId}, 'Flow tab')
-      returning id, name`);
-    const prepayZone = zones.rows.find((zone) => zone.name === "Flow prepay")!;
-    const tabZone = zones.rows.find((zone) => zone.name === "Flow tab")!;
+        (${prepayZoneId}, ${cfg.locationId}, 'Flow prepay', ${createdAt}),
+        (${tabZoneId}, ${cfg.locationId}, 'Flow tab', ${createdAt})`);
     await db.execute(sql`
       insert into order_service_contexts
         (working_order_id, location_id, zone_id, department_id, service_mode)
       values
-        (${from}, ${cfg.locationId}, ${prepayZone.id}, ${department.rows[0]!.id}, 'prepay'),
-        (${to}, ${cfg.locationId}, ${tabZone.id}, ${department.rows[0]!.id}, 'table_tab')`);
+        (${from}, ${cfg.locationId}, ${prepayZoneId}, ${departmentId}, 'prepay'),
+        (${to}, ${cfg.locationId}, ${tabZoneId}, ${departmentId}, 'table_tab')`);
 
     await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
       code: "service_zone.mode_incompatible",
@@ -418,7 +458,7 @@ describe("moveTab", () => {
     const oldTab = await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]);
     // Settle dst's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${oldTab}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );
     const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
 
@@ -444,7 +484,7 @@ describe("moveTab", () => {
     });
     // A settled tab cannot be moved.
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     const dst2 = await seedTable(cfg, "G-dst2");
     await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst2))).rejects.toMatchObject({
@@ -506,7 +546,7 @@ describe("joinTable", () => {
     const oldTab = await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
     // Settle t2's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${oldTab}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );
     const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
 
@@ -531,7 +571,7 @@ describe("joinTable", () => {
       params: { tableId: t2 },
     });
     await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
     const t3 = await seedTable(cfg, "JG3");
     await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t3))).rejects.toMatchObject({

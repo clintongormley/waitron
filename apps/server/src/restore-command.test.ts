@@ -14,7 +14,6 @@ import type { RestoreDeps } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
-const DATABASE_URL = "postgres://admin:hunter2@localhost/restore_target";
 
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)";
@@ -53,24 +52,56 @@ describe("waitron-restore restore", () => {
     const out: string[] = [];
     const code = await runRestore({
       argv: ["restore", "/does/not/matter"],
-      env: { WAITRON_RESTORE_DATABASE_URL: DATABASE_URL },
+      env: {},
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
     expect(out).toEqual([expect.stringMatching(/WAITRON_BACKUP_RECOVERY_KEY/)]);
   });
 
-  it("returns 1 and names the variable when the target connection is empty", async () => {
-    // The empty string is a valid-looking value, not an absent one — `isUnset` must catch it
-    // explicitly (CLAUDE.md §3: "an empty connection string is a valid connection string").
-    const out: string[] = [];
+  it("takes the default venue directory when WAITRON_VENUE_DIR is EMPTY, never the working directory", async () => {
+    // The fail-closed rule the retired `WAITRON_RESTORE_DATABASE_URL` carried, in the shape a
+    // DIRECTORY needs it. An empty string is a valid-looking value, not an absent one, and
+    // `resolve("")` is wherever the operator happened to be standing when they ran the CLI — so an
+    // empty value must take `<stateDir>/venue` (CLAUDE.md §3's "empty value is a valid value").
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-empty-venue-"));
+    const artifactPath = await makeArtifact(dir);
+    const stateDir = join(dir, "state");
+    let received: RestoreDeps | undefined;
     const code = await runRestore({
-      argv: ["restore", "/does/not/matter"],
-      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_RESTORE_DATABASE_URL: "" },
-      out: (line) => out.push(line),
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: "",
+      },
+      out: () => {},
+      restore: async (args) => {
+        received = args;
+      },
     });
-    expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/WAITRON_RESTORE_DATABASE_URL/)]);
+    expect(code).toBe(0);
+    expect(received?.venueDir).toBe(join(resolve(stateDir), "venue"));
+    expect(received?.venueDir).not.toBe(resolve(""));
+  });
+
+  it("resolves an OVERRIDDEN venue directory to an absolute path", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-venue-override-"));
+    const artifactPath = await makeArtifact(dir);
+    let received: RestoreDeps | undefined;
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: {
+        WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+        WAITRON_VENUE_DIR: join(dir, "elsewhere"),
+      },
+      out: () => {},
+      restore: async (args) => {
+        received = args;
+      },
+    });
+    expect(code).toBe(0);
+    expect(received?.venueDir).toBe(resolve(join(dir, "elsewhere")));
   });
 
   it("returns 1 and names the path when the artifact file is missing", async () => {
@@ -81,7 +112,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
     });
@@ -98,21 +128,20 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
       restore: async (args) => {
         received = args;
         // Exercise the `log` seam too: `restoreFromArtifact` reports progress through it
-        // (`restore.db.staged`, `restore.secrets.done`, ...), and this confirms those structured
+        // (`restore.db.placed`, `restore.secrets.done`, ...), and this confirms those structured
         // lines actually reach the operator via `out`, formatted, with no secret riding along.
-        args.log("info", "restore.db.staged", { bytes: 123 });
+        args.log("info", "restore.db.placed", { bytes: 123 });
       },
     });
     expect(code).toBe(0);
     expect(received).toBeDefined();
     expect(received?.recoveryKey).toBe(RECOVERY_KEY);
-    expect(received?.databaseUrl).toBe(DATABASE_URL);
+    expect(received?.venueDir).toBe(join(DEFAULT_STATE_ROOT, "venue"));
     expect(received?.stateDir).toBe(DEFAULT_STATE_ROOT);
     expect(received?.stagingDir).toBe(join(DEFAULT_STATE_ROOT, "restore-staging"));
     expect(received?.migrationsRoot).toBe(DEFAULT_MIGRATIONS_ROOT);
@@ -123,22 +152,18 @@ describe("waitron-restore restore", () => {
     );
     expect(out).toEqual([
       COLD_RESTORE_NOTICE,
-      expect.stringContaining("restore.db.staged"),
+      expect.stringContaining("restore.db.placed"),
       `restored ${artifactPath}`,
     ]);
-    // Neither secret ever reaches the operator-facing output.
-    const printed = out.join("\n");
-    expect(printed).not.toContain(RECOVERY_KEY);
-    expect(printed).not.toContain(DATABASE_URL);
-    expect(printed).not.toContain("hunter2");
+    // The recovery key never reaches the operator-facing output.
+    expect(out.join("\n")).not.toContain(RECOVERY_KEY);
   });
 
   it("uses the real restoreFromArtifact when no orchestrator is injected", async () => {
     // No `deps.restore` here — exercises the DEFAULT wiring (`restoreFromArtifact` itself), all
-    // the way through decrypt+unpack+the compatibility gate, WITHOUT ever reaching `pg_restore`:
+    // the way through decrypt+unpack+the compatibility gate, WITHOUT ever placing a venue file:
     // the gate throws first (the target is `production` here, `WAITRON_ENV=production`, and this
-    // artifact's manifest says `preproduction`), so nothing is shelled out and no database is
-    // touched. `WAITRON_MIGRATIONS_DIR` mirrors `boot.test.ts`'s own from-source fixture — the
+    // artifact's manifest says `preproduction`), so no database file is written or touched. `WAITRON_MIGRATIONS_DIR` mirrors `boot.test.ts`'s own from-source fixture — the
     // gate reads each module's EXPECTED version off real, shipped migration folders
     // (`expectedSchemaVersion`), and `boot.ts`'s own default migrations root (`<src>/drizzle`)
     // only exists beside a built bundle, not run from source (see `DEFAULT_MIGRATIONS_ROOT`'s own
@@ -159,7 +184,10 @@ describe("waitron-restore restore", () => {
     };
     const entries: ArchiveEntry[] = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-      { name: "db.dump", bytes: Buffer.from("PGDMP-fake-custom-format-dump") },
+      {
+        name: "db.dump",
+        bytes: Buffer.from("SQLite format 3\u0000 — never opened: the gate refuses first"),
+      },
     ];
     const artifactPath = join(dir, "backup.wrb");
     await writeFile(artifactPath, encryptArtifact(packArchive(entries), RECOVERY_KEY));
@@ -168,7 +196,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ENV: "production",
       },
@@ -190,7 +217,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
         WAITRON_STATE_DIR: stateDir,
         WAITRON_MIGRATIONS_DIR: "/custom/migrations",
         WAITRON_ENV: "production",
@@ -202,6 +228,7 @@ describe("waitron-restore restore", () => {
     });
     expect(code).toBe(0);
     expect(received?.stateDir).toBe(resolve(stateDir));
+    expect(received?.venueDir).toBe(join(resolve(stateDir), "venue"));
     expect(received?.stagingDir).toBe(join(resolve(stateDir), "restore-staging"));
     expect(received?.migrationsRoot).toBe("/custom/migrations");
     expect(received?.environment).toBe("production");
@@ -221,7 +248,6 @@ describe("waitron-restore restore", () => {
         argv: ["restore", artifactPath],
         env: {
           WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-          WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
           WAITRON_ENV: "garbage",
         },
         out: (line) => out.push(line),
@@ -238,7 +264,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
       restore: async () => {
@@ -260,7 +285,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
       restore: async () => {
@@ -288,7 +312,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
       restore: async () => {
@@ -302,31 +325,28 @@ describe("waitron-restore restore", () => {
     expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
   });
 
-  it("never echoes a raw error's .message — a failed pg_restore's message can carry the admin password", async () => {
-    // The exact shape a failed `pg_restore` rejects with: `promisify(execFile)` builds its
-    // `.message` from the argv it ran, and (before `pg-restore.ts`'s own fix) that argv used to
-    // carry the WHOLE connection string, password included. This is `runRestore`'s independent,
-    // second layer of defence: even if some other bug anywhere in the orchestrator's chain threw a
-    // raw error carrying a secret in its message, it must never reach `out`.
+  it("never echoes a raw error's .message, whatever the thrower put in it", async () => {
+    // `runRestore`'s independent second layer: a raw error out of the orchestrator's chain is
+    // reported as the fixed string `restore failed`, never by its message. The message below is a
+    // secret-carrying one on purpose — nothing in the chain composes it, which is the point: this
+    // function cannot know what a thrower wrote, so it prints none of it. A box operator's only
+    // window is this terminal, and what reaches it is curated text chosen by code.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-no-message-leak-"));
     const artifactPath = await makeArtifact(dir);
-    const leakedConnectionString = "postgres://admin:S3CR3T-ADMIN-PASSWORD@db-host:5432/fresh";
+    const secretish = "S3CR3T-ADMIN-PASSWORD";
     const out: string[] = [];
     const code = await runRestore({
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
       },
       out: (line) => out.push(line),
       restore: async () => {
-        throw new Error(`Command failed: pg_restore --dbname ${leakedConnectionString} ...`);
+        throw new Error(`EACCES: permission denied, open '/var/lib/waitron/${secretish}'`);
       },
     });
     expect(code).toBe(1);
-    const printed = out.join("\n");
-    expect(printed).not.toContain("S3CR3T-ADMIN-PASSWORD");
-    expect(printed).not.toContain(leakedConnectionString);
+    expect(out.join("\n")).not.toContain(secretish);
     expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
   });
 
@@ -338,7 +358,6 @@ describe("waitron-restore restore", () => {
       argv: ["restore", artifactPath],
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
-        WAITRON_RESTORE_DATABASE_URL: DATABASE_URL,
         WAITRON_ENV: "preproduction",
       },
       out: (line) => out.push(line),

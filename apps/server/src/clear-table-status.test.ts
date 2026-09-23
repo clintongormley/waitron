@@ -3,23 +3,36 @@
 // changes; `grep -nE 'status_id|statusId|table_service_statuses|tableServiceStatuses'` over those files
 // → empty. The reset is a trigger + an openTab edit; the fiscal pay path is byte-unchanged.
 import { randomUUID } from "node:crypto";
-import { asAppUser, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  diningTables,
+  locations,
+  nowIso,
+  tableServiceStatuses,
+  tills,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import "./errors.js";
 
-// A clone of the CORE-only template. The AFTER-UPDATE trigger fires under the non-superuser
-// app_user, whose UPDATE on `dining_tables` PGlite's superuser connection would hold regardless, so
-// this needs the real cluster the shared container provides; a Docker-absent run fails at the package
-// globalSetup, not here.
-const suite = useTemplateDb({ template: "core", resetPerTest: false });
+// The core migration set alone: the trigger under test, its two tables and the working order are
+// all core. `resetPerTest: false` — the venue, till and node seeded once in `beforeAll` are read by
+// every case, and each case seeds its own tab.
+const suite = useVenueDb({
+  migrations: [CORE_MIGRATIONS],
+  resetPerTest: false,
+  timeoutMs: 60_000,
+});
 
-function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(suite.admin, async (tx) => {
+function asApp<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -30,22 +43,31 @@ let nodeId = "";
 let locationId = "";
 
 async function statusOf(tableId: string): Promise<string | null> {
-  const { rows } = await suite.admin.execute<{ status_id: string | null }>(
+  const { rows } = await suite.db.execute<{ status_id: string | null }>(
     sql`select status_id from dining_tables where id = ${tableId}`,
   );
   return rows[0]!.status_id;
 }
 
 beforeAll(async () => {
-  await seedTenant(suite.admin);
-  const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Loc', array['es'], 'Hostelería') returning id`);
-  locationId = loc.rows[0]!.id;
-  const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'A1') returning id`);
-  tillId = till.rows[0]!.id;
-  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
+  await seedTenant(suite.db);
+  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
+  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
+  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
+  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
+  // a text column, which is what refused the `array[...]` constructor that used to fill it
+  // (`near "['es']": syntax error`).
+  const [location] = await suite.db
+    .insert(locations)
+    .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+    .returning({ id: locations.id });
+  locationId = location!.id;
+  const [till] = await suite.db
+    .insert(tills)
+    .values({ locationId, name: "A1" })
+    .returning({ id: tills.id });
+  tillId = till!.id;
+  nodeId = await seedNode(suite.db, brandLocationId(locationId));
 });
 
 /** Seed a status + an open working order + N tables whose tab_id points at that order, each carrying the
@@ -54,24 +76,27 @@ let orderSeq = 0;
 async function seedJoinedTab(tableCount: number): Promise<{ orderId: string; tableIds: string[] }> {
   orderSeq += 1;
   return asApp(async (tx) => {
-    const statusId = (
-      await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (label, color) values (${"Bill " + randomUUID()}, '#ef4444') returning id`,
-      )
-    ).rows[0]!.id;
-    const orderId = (
-      await tx.execute<{ id: string }>(sql`
-        insert into working_orders (till_id, node_id, order_number, status)
-        values (${tillId}, ${nodeId}, ${orderSeq}, 'open') returning id`)
-    ).rows[0]!.id;
+    // Through the table definitions for the same reason as the venue rows above — every `id` here,
+    // plus `table_service_statuses.created_at`, `working_orders.opened_at` and
+    // `dining_tables.created_at`, is a `$defaultFn` generator filling a NOT NULL column
+    // (`packages/db/drizzle/0000_baseline.sql:517`, `:522`, `:114`, `:120`, `:161`, `:167`).
+    const [status] = await tx
+      .insert(tableServiceStatuses)
+      .values({ label: `Bill ${randomUUID()}`, color: "#ef4444" })
+      .returning({ id: tableServiceStatuses.id });
+    const statusId = status!.id;
+    const [order] = await tx
+      .insert(workingOrders)
+      .values({ tillId, nodeId, orderNumber: orderSeq, status: "open" })
+      .returning({ id: workingOrders.id });
+    const orderId = order!.id;
     const tableIds: string[] = [];
     for (let i = 0; i < tableCount; i += 1) {
-      const t = (
-        await tx.execute<{ id: string }>(sql`
-          insert into dining_tables (location_id, label, tab_id, status_id)
-          values (${locationId}, ${"T-" + randomUUID()}, ${orderId}, ${statusId}) returning id`)
-      ).rows[0]!.id;
-      tableIds.push(t);
+      const [row] = await tx
+        .insert(diningTables)
+        .values({ locationId, label: `T-${randomUUID()}`, tabId: orderId, statusId })
+        .returning({ id: diningTables.id });
+      tableIds.push(row!.id);
     }
     return { orderId, tableIds };
   });
@@ -85,7 +110,7 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
 
     await asApp((tx) =>
       tx.execute(
-        sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
+        sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${orderId}`,
       ),
     );
     expect(await statusOf(tableIds[0]!)).toBeNull();
@@ -109,7 +134,7 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     // placed → settled IS terminal → the broadened WHEN fires and clears the table.
     await asApp((tx) =>
       tx.execute(
-        sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
+        sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${orderId}`,
       ),
     );
     expect(await statusOf(tableIds[0]!)).toBeNull();
@@ -127,20 +152,19 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     // A free table (no tab) carrying a status.
     const { orderId } = await seedJoinedTab(1); // the tab that will settle
     const freeTable = await asApp(async (tx) => {
-      const statusId = (
-        await tx.execute<{ id: string }>(
-          sql`insert into table_service_statuses (label, color) values (${"Clean " + randomUUID()}, '#f59e0b') returning id`,
-        )
-      ).rows[0]!.id;
-      return (
-        await tx.execute<{ id: string }>(sql`
-          insert into dining_tables (location_id, label, status_id)
-          values (${locationId}, ${"Free-" + randomUUID()}, ${statusId}) returning id`)
-      ).rows[0]!.id;
+      const [status] = await tx
+        .insert(tableServiceStatuses)
+        .values({ label: `Clean ${randomUUID()}`, color: "#f59e0b" })
+        .returning({ id: tableServiceStatuses.id });
+      const [row] = await tx
+        .insert(diningTables)
+        .values({ locationId, label: `Free-${randomUUID()}`, statusId: status!.id })
+        .returning({ id: diningTables.id });
+      return row!.id;
     });
     await asApp((tx) =>
       tx.execute(
-        sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
+        sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${orderId}`,
       ),
     );
     // The unrelated free table keeps its status — the trigger clears only tables whose tab_id = the order.

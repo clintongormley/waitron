@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, workingOrderLines } from "@waitron/db";
+import { asAppUser, locations, tills, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -38,7 +38,7 @@ import "./errors.js";
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
 // `moveTabLines` — the split arithmetic, the guards, the line renumbering, the price-lock — all plain
 // SQL a single backend proves. The concurrency race and the per-tab fiscal filing as the app role
-// (which PGlite's superuser single-backend connection CANNOT show) are `transfer-lines.pg.test.ts`'s job.
+// (which PGlite's superuser single-backend connection CANNOT show) are `transfer-lines.filing.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -67,15 +67,21 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (name, invoice_locales, operation_description)
-    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-  const locationId = loc.rows[0]!.id;
-  const till = await db.execute<{ id: string }>(sql`
-    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  // Through the table definitions rather than raw SQL: `invoice_locales` is a JSON array in a text
+  // column on this engine (`labelList`, packages/db/src/schema/columns.ts), so there is no array
+  // constructor to write, and `id` is a `$defaultFn` a raw insert would never reach.
+  const locationId = randomUUID();
+  await db.insert(locations).values({
+    id: locationId,
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const tillId = randomUUID();
+  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till.rows[0]!.id),
+    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -262,9 +268,9 @@ describe("transferLines — whole line", () => {
   // test above passes even with the lock loop deleted, because moveTabLines' own status read throws
   // tab.not_open for a missing working_orders row too. A PARKED walk-up is the discriminating case: it
   // IS an open working order (moveTabLines would happily move lines INTO it), but NO dining_tables row
-  // points at it, so it is not a TAB — only lockOpenTab's back-pointer check rejects it. Delete the lock
-  // loop and THIS test fails (the café line lands in the parked order); keep it and the transfer is
-  // refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
+  // points at it, so it is not a TAB — only assertAnchoredTabOpen's back-pointer check rejects it.
+  // Delete that check loop and THIS test fails (the café line lands in the parked order); keep it and
+  // the transfer is refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
   it("refuses transferring INTO an open order no table points at — a parked walk-up (tab.not_open)", async () => {
     const { cfg, cafeId, aguaId, tableAId } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
@@ -572,7 +578,7 @@ describe("transferLines — extras children (FIX 2 cascade / FIX 4 split)", () =
     return list.id;
   }
 
-  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`lockOpenTab` needs
+  /** Open an OPEN order with extras lines and point `tableId` at it → a real tab (`assertAnchoredTabOpen` needs
    *  the back-pointer). `openTab` does not thread `extras`, so build the tab directly here. No fire. */
   async function openExtrasTab(
     cfg: TillConfig,

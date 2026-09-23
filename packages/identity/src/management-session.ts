@@ -1,8 +1,9 @@
 import "./errors.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
+import { nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
 import type { PersonRoleValue } from "./permissions.js";
@@ -87,7 +88,7 @@ export async function resolveManagementSession(
   if (touch) {
     await tx
       .update(managementSessions)
-      .set({ lastSeenAt: sql`now()` })
+      .set({ lastSeenAt: nowIso() })
       .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
   }
   return {
@@ -105,7 +106,7 @@ export async function resolveManagementSession(
 export async function endManagementSession(tx: Transaction, sessionId: string): Promise<boolean> {
   const updated = await tx
     .update(managementSessions)
-    .set({ endedAt: sql`now()` })
+    .set({ endedAt: nowIso() })
     .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)))
     .returning({ id: managementSessions.id });
   return updated.length > 0;

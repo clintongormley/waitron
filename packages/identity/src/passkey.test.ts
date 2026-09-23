@@ -1,4 +1,10 @@
-import { captureError, CORE_MIGRATIONS, pgErrorCode, withTransaction } from "@waitron/db";
+import {
+  captureError,
+  CORE_MIGRATIONS,
+  NOT_NULL_VIOLATION,
+  refusalOn,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
@@ -421,9 +427,15 @@ describe("passkey registration", () => {
     const begun = await begin(sessionId);
 
     const error = await captureError(() => finish(sessionId, begun.challengeHandle));
-    // pgErrorCode reads the SQLSTATE off the raw driver error; an AppError would carry none, so this
-    // both proves the error is the 23503 FK violation AND that it was not translated into any AppError.
-    expect(pgErrorCode(error)).toBe("23502");
+    // `refusalOn` reads the engine's result code and the key it named off the RAW driver error; an
+    // AppError carries neither, so this both proves the refusal is the NOT NULL on
+    // `credential_id` AND that nothing translated it into an AppError.
+    expect(
+      refusalOn(error, NOT_NULL_VIOLATION, {
+        table: "webauthn_credentials",
+        columns: ["credential_id"],
+      }),
+    ).toBe(true);
   });
 });
 

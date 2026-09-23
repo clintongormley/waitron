@@ -1,9 +1,70 @@
+/**
+ * A `deactivatePrinter` landing at the same moment as a kitchen fire never aborts the fire.
+ *
+ * ## What this file proved on PostgreSQL, and what of it is gone
+ *
+ * Its subject was `kitchen-print.ts`'s `for("share", { of: printers })` on the station→printer
+ * mapping read. Three backends (`suite.pg.connect()` gave one per call), a transaction held open
+ * mid-fire, and a `pg_locks where not granted` poll that waited until the deactivating backend was
+ * seen queued behind that lock.
+ *
+ * **LOST, and replaced by nothing: the proof that the mapping read's lock is what holds the
+ * property.** The clause is deleted rather than translated — SQLite has no row locks and drizzle's
+ * SQLite query builder has no `.for()` — so there is no longer a clause to delete as a control. The
+ * two distinct backends and the `pg_locks` catalogue have no counterpart either, and neither does
+ * the deployment role: every write below used to run after `set local role app_user` on a
+ * non-superuser connection, and `asAppUser` is now an empty body
+ * (`packages/db/src/testing/roles.ts`).
+ *
+ * ## What replaced the lock observation, and the control behind it
+ *
+ * The venue file's write queue. `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
+ * inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues `begin immediate`,
+ * awaits the body, then `commit`, so the next caller's `begin` does not run until that `commit` has
+ * returned — the mechanism stated once on `assertExtraListForWrite`
+ * (`packages/catalogue/src/extras.ts`).
+ *
+ * So the thing observed moved: not "the deactivate is BLOCKED on a lock", but "the deactivate has
+ * not STARTED". {@link parkedThenRelease} below takes that reading — the same shape as
+ * `racePair` (`packages/catalogue/test/fixtures.ts`) and `packages/printing/src/runtime.race.test.ts`.
+ *
+ * Control in the other direction, taken here 2026-09-22 on Node v26.7.0: with `withTransaction`
+ * removed from `parkedThenRelease`'s second body and nothing else changed, the case fails on
+ * `the second transaction started while the first was still open: expected true to be false`;
+ * restored, it passes. So the `false` is not a reading that could never have printed anything else
+ * (CLAUDE.md §1).
+ *
+ * ## The narrower thing this case now asks, stated so nobody assumes the old one
+ *
+ * The PostgreSQL version staged the gap INSIDE the fire — the deactivate was made to contend while
+ * the mapping read's lock was held, before `enqueuePrintJob`'s own `active = true` re-check. There
+ * is no hook to park inside `enqueueKitchenTickets`, so the park point here is AFTER it returns:
+ * the fire's statements have all run and are uncommitted. What is observed is therefore the QUEUE —
+ * a second write transaction cannot start while the first is open, for any pair of bodies — and not
+ * this call path in particular. The control above says the observation discriminates; it does not
+ * say the interleave was reached, because it was not.
+ *
+ * ## What the case still asserts, unchanged
+ *
+ * The fire COMPLETES and enqueues its one job; the deactivation lands only afterwards; the printer
+ * ends up inactive. Those are the outcomes the PostgreSQL version asserted, and they are what a
+ * till operator and an admin each see. What no longer has a receipt is WHY they hold.
+ */
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTransaction, workingOrderLines } from "@waitron/db";
-import type { Database } from "@waitron/db";
-import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
+import { count as countRows, eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import {
+  asAppUser,
+  locations,
+  printJobs,
+  printers,
+  tills,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
@@ -22,34 +83,10 @@ import { enqueueKitchenTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// REAL Postgres, NOT PGlite: this proves a LOCK interaction between two concurrent backends, and PGlite
-// serialises every query onto one backend — it CANNOT reach the race and would be a false pass
-// (CLAUDE.md §4). The fire tx runs at READ COMMITTED: `withTransaction` opens it through
-// `db.transaction()` and asks for no isolation level, so the server's default stands. Without the
-// `FOR SHARE` lock a `deactivatePrinter` committing between enqueueKitchenTickets' mapping read and
-// `enqueuePrintJob`'s own `active = true` re-check would flip the printer inactive and throw
-// `printer.not_found`, aborting the fire (a §5 never-block violation). With the lock, the deactivation
-// must WAIT until the fire commits.
 const LOCALE = "es-ES";
-const suite = useTemplateDb({ template: "manifest" });
-
-// Two racing backends (A fires, B deactivates) plus a read-only probe that watches `pg_locks`. Each
-// needs its OWN backend process — `suite.pg.connect()` promises that per call — so the block below is a
-// real cross-connection wait, not a self-deadlock on one backend. `suite.admin` only seeds.
-let a: Database;
-let b: Database;
-let probe: Database;
-
-beforeAll(async () => {
-  a = await suite.pg.connect();
-  b = await suite.pg.connect();
-  probe = await suite.pg.connect();
-});
-
-afterAll(async () => {
-  if (a !== undefined) await a.close();
-  if (b !== undefined) await b.close();
-  if (probe !== undefined) await probe.close();
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
 });
 
 /** A promise that resolves when `open()` is called — holds a transaction open at an EXACT point rather
@@ -62,41 +99,66 @@ function gate(): { passed: Promise<void>; open: () => void } {
   return { passed, open };
 }
 
-/** Block until some backend is WAITING on a lock it has not been granted — the deterministic barrier
- *  that replaces "sleep and hope". `pg_locks` is readable by any role and an ungranted entry is the
- *  literal fact we need: connection B's deactivate UPDATE is queued behind A's FOR SHARE lock. */
-async function waitForABlockedBackend(): Promise<void> {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    const waiting = await probe.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_locks where not granted`,
+/**
+ * Starts `second` while `first` is parked mid-transaction, and reports that it has not run.
+ *
+ * `parked` resolves the instant the first body reaches the point the test wants held, so the second
+ * transaction is staged with certainty rather than by timing luck. The 20 ms pause is a real one,
+ * not a microtask turn: it has to give the second transaction every chance to run a statement it
+ * must not run. `release` is called in a `finally`, so a failed observation still lets the first
+ * body finish rather than hanging the suite.
+ */
+async function parkedThenRelease<A, B>(
+  first: (tx: Transaction) => Promise<A>,
+  parked: Promise<void>,
+  release: () => void,
+  second: (tx: Transaction) => Promise<B>,
+): Promise<[A, B]> {
+  let secondStarted = false;
+  const one = withTransaction(suite.db, first);
+  await parked;
+  // Started without awaiting `one`. Nothing but the write queue keeps it out.
+  const two = withTransaction(suite.db, (tx: Transaction) => {
+    secondStarted = true;
+    return second(tx);
+  });
+  const settled = Promise.all([one, two]);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondStarted, "the second transaction started while the first was still open").toBe(
+      false,
     );
-    if (Number(waiting.rows[0]!.n) > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+  } finally {
+    release();
   }
-  throw new Error(
-    "no backend ever blocked — the FOR SHARE barrier this test depends on did not engage",
-  );
+  return settled;
 }
 
 function printCfg(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
-  it("a concurrent deactivatePrinter WAITS for the fire to commit instead of aborting it", async () => {
-    // ---- Setup, committed on the admin connection so both racing backends see it ----
-    await seedTenant(suite.admin);
-    await seedLegacySellingUnits(suite.admin);
-    const loc = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (name, invoice_locales, operation_description)
-      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
-    const locationId = loc.rows[0]!.id;
-    const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (location_id, name)
-      values (${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(suite.admin, brandLocationId(locationId));
+describe("print-on-fire concurrency — the write queue around the mapping read", () => {
+  it("a concurrent deactivatePrinter runs only after the fire commits, and never aborts it", async () => {
+    // ---- Setup, committed before the two contending transactions are staged ----
+    await seedTenant(suite.db);
+    await seedLegacySellingUnits(suite.db);
+    const [loc] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Barra",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+      })
+      .returning({ id: locations.id });
+    const locationId = loc!.id;
+    const [till] = await suite.db
+      .insert(tills)
+      .values({ locationId, name: "Caja 1" })
+      .returning({ id: tills.id });
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     const cfg: TillConfig = {
-      tillId: brandTillId(till.rows[0]!.id),
+      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),
@@ -105,83 +167,74 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
       tipsEnabled: false,
       orderFlow: "prepay",
     };
-    const { cocinaId, printerId, orderId, lineId } = await withTransaction(
-      suite.admin,
-      async (tx) => {
-        await asAppUser(tx);
-        const cat = await createCatalogue(tx, { name: "Carta" });
-        await assignCatalogueToLocation(tx, locationId, cat.id);
-        const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-        const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
-          name: "Cocina printer",
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        });
-        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-        const { id: product } = await createProduct(tx, {
-          catalogueId: cat.id,
-          categoryId: null,
-          name: "Chuleton",
-          pricingUnit: "each",
-          unitPrice: "1.50",
-          vatClass: "general",
-        });
-        const orderId = randomUUID();
-        await createOpenOrder(tx, cfg, orderId, [{ productId: product, quantity: "1" }], null);
-        const [line] = await tx
-          .select({ id: workingOrderLines.id })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, orderId));
-        return { cocinaId: cocina.id, printerId, orderId, lineId: line!.id };
-      },
-    );
+    const { cocinaId, printerId, orderId, lineId } = await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
+        name: "Cocina printer",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const { id: product } = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        name: "Chuleton",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, cfg, orderId, [{ productId: product, quantity: "1" }], null);
+      const [line] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      return { cocinaId: cocina.id, printerId, orderId, lineId: line!.id };
+    });
 
     const firedItems = [{ workingOrderLineId: lineId, stationId: cocinaId }];
 
     // ---- The race ----
-    // Connection A: run the REAL enqueueKitchenTickets (takes FOR SHARE on the printer + enqueues) and
-    // then HOLD the transaction open — so the FOR SHARE lock is still held when B tries to deactivate.
+    // The fire runs the REAL enqueueKitchenTickets and then parks with its transaction still open
+    // and uncommitted. The deactivate of the SAME printer is started while it is parked, and must
+    // not run: the printer this fire depends on may not change under it before it commits. The
+    // file header states what this does and does not reach.
     const readDone = gate();
     const releaseA = gate();
-    const firePromise = withTransaction(a, async (txA) => {
-      await asAppUser(txA);
-      await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
-      readDone.open(); // lock taken + job enqueued; tx deliberately NOT committed yet
-      await releaseA.passed;
-    });
-    await readDone.passed; // A now holds FOR SHARE on the printer row
-
-    // Connection B: deactivate the SAME printer. Its UPDATE needs a FOR NO KEY UPDATE row lock, which
-    // conflicts with A's FOR SHARE, so it MUST block until A commits.
     let deactivateDone = false;
-    const deactivatePromise = withTransaction(b, async (txB) => {
-      await asAppUser(txB);
-      await deactivatePrinter(txB, printCfg(cfg), printerId);
-    }).then(() => {
-      deactivateDone = true;
-    });
-
-    // Deterministic proof B is blocked: a backend is waiting on an ungranted lock, and B has not
-    // completed while A holds the FOR SHARE.
-    await waitForABlockedBackend();
-    expect(deactivateDone).toBe(false);
-
-    // Let A commit — the fire SUCCEEDS (no printer.not_found throw despite B's pending deactivation).
-    releaseA.open();
-    await firePromise;
-
-    // Only NOW can B proceed; it completes and the printer ends up inactive.
-    await deactivatePromise;
+    await parkedThenRelease(
+      async (txA) => {
+        await asAppUser(txA);
+        await enqueueKitchenTickets(txA, cfg, orderId, firedItems);
+        readDone.open(); // job enqueued; tx deliberately NOT committed yet
+        await releaseA.passed;
+      },
+      readDone.passed,
+      releaseA.open,
+      async (txB) => {
+        await asAppUser(txB);
+        await deactivatePrinter(txB, printCfg(cfg), printerId);
+        deactivateDone = true;
+      },
+    );
     expect(deactivateDone).toBe(true);
 
-    // The fire enqueued its job (proof it was never aborted), and B's deactivation landed AFTER it.
-    const jobs = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from print_jobs where printer_id = ${printerId}`,
-    );
-    expect(Number(jobs.rows[0]!.n)).toBe(1);
-    const printerRow = await suite.admin.execute<{ active: boolean }>(
-      sql`select active from printers where id = ${printerId}`,
-    );
-    expect(printerRow.rows[0]!.active).toBe(false);
+    // The fire enqueued its job (proof it was never aborted), and the deactivation landed AFTER it.
+    const jobs = await suite.db
+      .select({ n: countRows() })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId));
+    expect(Number(jobs[0]!.n)).toBe(1);
+    // Read through the table definition: `printers.active` is an integer column with a boolean read
+    // mapping on this engine, so a raw `select active` would hand back 0/1 and the assertion below
+    // — unchanged — would be comparing a number with `false`.
+    const printerRow = await suite.db
+      .select({ active: printers.active })
+      .from(printers)
+      .where(eq(printers.id, printerId));
+    expect(printerRow[0]!.active).toBe(false);
   });
 });
