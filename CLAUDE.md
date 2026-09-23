@@ -827,8 +827,10 @@ there is no container to share and no knobs to set.
 
 The commands, the dev stack and the receipts are in
 [workflow-guide.md](docs/developers/workflow-guide.md). **Model selection is not a waitron rule** —
-it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. In short: Opus 4.8 drives,
-Fable is opt-in for brainstorming, dispatched seats run Opus 5, and Codex holds one seat when Claude
+it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. In short: every Claude
+seat — brainstorming, driver, dispatched seats, reviews and the campaign runners — runs on the
+default model, Opus 5.5 with the 1M window at high effort (`xhigh` only when a task needs it), with
+no per-task model pin and no Fable (owner decision 2026-09-23); and Codex holds one seat when Claude
 drives. When CODEX drives, the roles reverse and Codex implements — so establish who is driving
 before treating an implementation as a rule violation.
 
