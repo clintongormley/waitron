@@ -31,14 +31,10 @@ import { headSnapshot, migrationSets } from "../packages/sync-enrolment/src/migr
  *    ungenerated key reaches no database, while a reading taken from the TypeScript would pass the
  *    moment someone deleted a key there, with the key still live in every migrated database.
  * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
- *    the snapshot — and there are such keys: read on 2026-09-19, scanning each
- *    `packages/<pkg>/drizzle/` directory's SQL statement by statement, applying every `ADD
- *    CONSTRAINT … FOREIGN KEY` and subtracting every `DROP CONSTRAINT` and `DROP TABLE`, ends with
- *    MORE keys than the snapshots hold — the extras all declared in the hand-written `*_sql.sql`
- *    files. What that scan agrees with the snapshots about is the answer: no crossing edge, and no
- *    unclassified endpoint, from either reading. Nothing keeps them agreeing. (The directory is
- *    written with a placeholder because a glob's closing `*` followed by a slash would end this
- *    comment.)
+ *    the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the snapshot,
+ *    never with the SQL. None is known today: on 2026-09-23 `git ls-files '*_sql.sql'` printed
+ *    nothing, and no committed migration under a package's `drizzle` directory says `ADD
+ *    CONSTRAINT` outside a comment. Nothing keeps it that way.
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */
