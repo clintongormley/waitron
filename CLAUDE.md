@@ -500,8 +500,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `ledger`/`state` one, in either direction.** A `local` row that needs a venue row keeps the plain id
   and names, at the column, what establishes the target exists — or that nothing does, and where the
   refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it reads
-  drizzle's GENERATED snapshots, so a key declared in TypeScript but not yet generated, or added only
-  in hand-written migration SQL, is invisible to it. Cost of the shape it replaced: six such keys
+  drizzle's GENERATED snapshots, so a key added only in hand-written migration SQL is invisible to
+  it; one declared in TypeScript but not yet generated fails `scripts/migrations-match-schema.test.ts`
+  instead. Cost of the shape it replaced: six such keys
   existed and nothing would have failed at the flip; see
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,

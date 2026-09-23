@@ -860,10 +860,13 @@ key across the two files stops either being restored on its own, in either direc
 snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`
 holds the graph — so a key declared in TypeScript but not yet generated is invisible to it, and so is
 one added by hand-written migration SQL, because a custom migration leaves the snapshot alone. Both
-gaps are stated in the guard's own header with the date they were last compared. The reading was
-chosen over the TypeScript deliberately: a reading taken from the TypeScript passes the moment
-somebody edits a table file, while the constraint is still live in every migrated database, and it
-would have gone silently vacuous at the flip, when `PgTable` stops matching anything.
+gaps are stated in the guard's own header. The first is caught elsewhere:
+`scripts/migrations-match-schema.test.ts` runs `drizzle-kit generate` for every set into a copy and
+fails when anything changes. The second is not, because `generate` compares the TypeScript with the
+snapshot and never reads the SQL. The reading was chosen over the TypeScript deliberately: a reading
+taken from the TypeScript passes the moment somebody edits a table file, while the constraint is still
+live in every migrated database, and it would have gone silently vacuous at the flip, when `PgTable`
+stops matching anything.
 
 **How the six that existed were resolved (task P7, 2026-09-19).** All six were a `local` row naming a
 venue row by id — a person, a till, a location — so neither of the two routes §2.1 named applied: an

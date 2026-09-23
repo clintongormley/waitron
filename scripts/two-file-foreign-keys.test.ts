@@ -25,15 +25,11 @@ import { headSnapshot, migrationSets } from "../packages/sync-enrolment/src/migr
  *
  * Three gaps, stated because a failing test can never restore a missing hedge:
  *
- * 1. **A key declared in TypeScript but not yet generated is invisible to it**, and nothing in the
- *    tree regenerates a migration set and diffs it, so nothing catches the gap either: searched on
- *    2026-09-19 for every file naming drizzle-kit across `packages`, `apps`, `scripts`, `.github`,
- *    `.husky` and `deploy`, the only suites that came back are each package's
- *    `schema-ownership.test.ts`, which assert which tables a set creates, never that a regeneration
- *    is a no-op. The trade is deliberate: an ungenerated key reaches no database, while a key still
- *    live in every migrated box would have passed a reading taken from the TypeScript the moment
- *    someone edited it — which is exactly the state the two `DROP CONSTRAINT` migrations beside this
- *    guard exist to leave behind.
+ * 1. **A key declared in TypeScript but not yet generated is invisible to it.** That state fails
+ *    `migrations-match-schema.test.ts` instead, which regenerates every set into a copy and requires
+ *    nothing to change. Reading the snapshot rather than the TypeScript is deliberate: an
+ *    ungenerated key reaches no database, while a reading taken from the TypeScript would pass the
+ *    moment someone deleted a key there, with the key still live in every migrated database.
  * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
  *    the snapshot — and there are such keys: read on 2026-09-19, scanning each
  *    `packages/<pkg>/drizzle/` directory's SQL statement by statement, applying every `ADD

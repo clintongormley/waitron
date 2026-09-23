@@ -20,9 +20,11 @@ import { defineConfig } from "vitest/config";
 //   source file under either root may write again,
 //   brand-icons pins each app's `index.html` icon
 //   links and `vite.config.ts` publicDir against the one brand directory in `packages/ui`,
-//   and journal-monotonic reads every migration set named by
+//   journal-monotonic reads every migration set named by
 //   `packages/migrations/migrations.manifest.json` for a `when` value at or below one
-//   already recorded, which drizzle's `max(created_at)` watermark skips with no error;
+//   already recorded, which drizzle's `max(created_at)` watermark skips with no error,
+//   and migrations-match-schema runs each package's `drizzle-kit generate` into a copy of its
+//   migration set and fails when that changes anything;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.
 //
