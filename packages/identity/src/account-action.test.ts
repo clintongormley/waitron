@@ -1,7 +1,9 @@
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { CORE_MIGRATIONS, captureError, triggerRaised, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { isAppError, quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -15,7 +17,7 @@ import {
 import { loginManager } from "./manager-login.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { updatePersonDetails } from "./staff.js";
-import { codeOf, seedManager } from "../test/fixtures.js";
+import { codeOf, seedManager, seedPerson } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -395,5 +397,329 @@ describe("management account actions", () => {
         }),
       ),
     ).resolves.toMatchObject({ personId });
+  });
+});
+
+describe("issuing an account action refuses an account that cannot receive one", () => {
+  it("refuses a person id that matches nobody", async () => {
+    const personId = randomUUID();
+    await expect(
+      run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset" })),
+    ).rejects.toMatchObject({ code: "person.not_found", params: { personId } });
+  });
+
+  it("refuses every purpose for a suspended person", async () => {
+    const personId = await seedManager(suite.db, {
+      email: "issue-suspended@x.com",
+      status: "suspended",
+    });
+    for (const purpose of ["password_reset", "invitation", "email_change"] as const) {
+      await expect(
+        run((tx) => issueAccountAction(tx, { personId, purpose, targetEmail: "elsewhere@x.com" })),
+      ).rejects.toMatchObject({ code: "person.suspended", params: { personId } });
+    }
+  });
+
+  it("issues an invitation only to a pending person and an email change only to an active one", async () => {
+    const activeId = await seedManager(suite.db, { email: "issue-active@x.com" });
+    expect(
+      await codeOf(() =>
+        run((tx) => issueAccountAction(tx, { personId: activeId, purpose: "invitation" })),
+      ),
+    ).toBe("person.transition_invalid");
+    const pendingId = await seedManager(suite.db, { email: "issue-pending@x.com" });
+    await makePending(pendingId);
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          issueAccountAction(tx, {
+            personId: pendingId,
+            purpose: "email_change",
+            targetEmail: "issue-pending-next@x.com",
+          }),
+        ),
+      ),
+    ).toBe("person.transition_invalid");
+  });
+
+  it("refuses a person with no login email", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    expect(
+      await codeOf(() =>
+        run((tx) => issueAccountAction(tx, { personId, purpose: "password_reset" })),
+      ),
+    ).toBe("person.email_invalid");
+  });
+
+  it("refuses an email change whose target address is missing or malformed", async () => {
+    const personId = await seedManager(suite.db, { email: "issue-target@x.com" });
+    for (const targetEmail of [undefined, "not-an-address"]) {
+      expect(
+        await codeOf(() =>
+          run((tx) => issueAccountAction(tx, { personId, purpose: "email_change", targetEmail })),
+        ),
+      ).toBe("person.email_invalid");
+    }
+    const rows = await suite.db.execute<{ id: string }>(
+      sql`select id from management_account_actions where person_id = ${personId}`,
+    );
+    expect(rows.rows).toEqual([]);
+  });
+});
+
+describe("inspecting an account action", () => {
+  it("accepts a password-reset proof for an active person without consuming it", async () => {
+    const personId = await seedManager(suite.db, { email: "inspect-reset@x.com" });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    await expect(
+      run((tx) => inspectAccountAction(tx, { token: issued.token, purpose: "password_reset" })),
+    ).resolves.toEqual({ email: "inspect-reset@x.com", purpose: "password_reset" });
+    const row = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
+    );
+    expect(row.rows).toEqual([{ used_at: null }]);
+  });
+
+  it("refuses an unknown token", async () => {
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          inspectAccountAction(tx, { token: "no-such-token", purpose: "password_reset" }),
+        ),
+      ),
+    ).toBe("account_action.invalid");
+  });
+
+  it("refuses a live proof whose person has since lost their login email", async () => {
+    const personId = await seedManager(suite.db, { email: "inspect-no-email@x.com" });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    await suite.db.execute(
+      sql`update persons set email = null, email_folded = null where id = ${personId}`,
+    );
+    expect(
+      await codeOf(() =>
+        run((tx) => inspectAccountAction(tx, { token: issued.token, purpose: "password_reset" })),
+      ),
+    ).toBe("account_action.invalid");
+  });
+
+  it("refuses a live invitation whose person is no longer pending", async () => {
+    const personId = await seedManager(suite.db, { email: "inspect-activated@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) => issueAccountAction(tx, { personId, purpose: "invitation" }));
+    await suite.db.execute(sql`update persons set status = 'active' where id = ${personId}`);
+    expect(
+      await codeOf(() =>
+        run((tx) => inspectAccountAction(tx, { token: issued.token, purpose: "invitation" })),
+      ),
+    ).toBe("account_action.invalid");
+  });
+});
+
+describe("completing an account action whose person changed after it was issued", () => {
+  it("refuses a password reset for a person suspended since, leaving the password and the proof untouched", async () => {
+    const personId = await seedManager(suite.db, { email: "complete-suspended@x.com" });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    const before = await suite.db.execute<{ password_hash: string }>(
+      sql`select password_hash from persons where id = ${personId}`,
+    );
+    await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          completeAccountAction(tx, {
+            token: issued.token,
+            purpose: "password_reset",
+            password: "a replacement secure password",
+          }),
+        ),
+      ),
+    ).toBe("account_action.invalid");
+    const after = await suite.db.execute<{ password_hash: string }>(
+      sql`select password_hash from persons where id = ${personId}`,
+    );
+    expect(after.rows).toEqual(before.rows);
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
+    );
+    expect(action.rows).toEqual([{ used_at: null }]);
+  });
+
+  it("refuses an invitation whose person was activated since", async () => {
+    const personId = await seedManager(suite.db, { email: "complete-activated@x.com" });
+    await makePending(personId);
+    const issued = await run((tx) => issueAccountAction(tx, { personId, purpose: "invitation" }));
+    await suite.db.execute(sql`update persons set status = 'active' where id = ${personId}`);
+    expect(
+      await codeOf(() =>
+        run((tx) =>
+          completeAccountAction(tx, {
+            token: issued.token,
+            purpose: "invitation",
+            password: "a new secure password",
+            pin: "4321",
+          }),
+        ),
+      ),
+    ).toBe("account_action.invalid");
+  });
+
+  it("refuses a claimed proof whose person row does not exist", async () => {
+    // The foreign key refuses this state, so it is built inside ONE transaction with
+    // `defer_foreign_keys` moving the check to commit: the proof is pointed at an id no person has,
+    // completion refuses first, and the rollback means the check never runs.
+    const personId = await seedManager(suite.db, { email: "complete-ghost@x.com" });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    const ghost = randomUUID();
+    expect(
+      await codeOf(() =>
+        run(async (tx) => {
+          await tx.run(sql`pragma defer_foreign_keys = on`);
+          await tx.run(
+            sql`update management_account_actions set person_id = ${ghost} where id = ${issued.id}`,
+          );
+          return completeAccountAction(tx, {
+            token: issued.token,
+            purpose: "password_reset",
+            password: "a replacement secure password",
+          });
+        }),
+      ),
+    ).toBe("account_action.invalid");
+  });
+
+  it("refuses when the person's credential write touches no row", async () => {
+    // Nothing between the status read and the write can remove the row inside one transaction, so
+    // a trigger that silently skips the write stands in for it. Dropped in the `finally`.
+    const personId = await seedManager(suite.db, { email: "complete-no-write@x.com" });
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "password_reset" }),
+    );
+    await suite.db.execute(
+      sql.raw(`create trigger tmp_skip_person_write before update on persons for each row
+          when old.id = ${quoteLiteral(personId)} begin select raise(ignore); end`),
+    );
+    try {
+      expect(
+        await codeOf(() =>
+          run((tx) =>
+            completeAccountAction(tx, {
+              token: issued.token,
+              purpose: "password_reset",
+              password: "a replacement secure password",
+            }),
+          ),
+        ),
+      ).toBe("account_action.invalid");
+    } finally {
+      await suite.db.execute(sql`drop trigger tmp_skip_person_write`);
+    }
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
+    );
+    expect(action.rows).toEqual([{ used_at: null }]);
+  });
+});
+
+describe("confirming an email change by code when the account moved on", () => {
+  const codeKey = Buffer.alloc(32, 23);
+
+  async function requestChange(email: string, target: string) {
+    const personId = await seedManager(suite.db, { email });
+    await suite.db.execute(
+      sql`update persons set pending_email = ${target}, pending_email_folded = ${target} where id = ${personId}`,
+    );
+    const issued = await run((tx) =>
+      issueAccountAction(tx, { personId, purpose: "email_change", codeKey, targetEmail: target }),
+    );
+    return { personId, issued };
+  }
+
+  async function emailsOf(personId: string) {
+    const rows = await suite.db.execute<{ email: string | null; pending_email: string | null }>(
+      sql`select email, pending_email from persons where id = ${personId}`,
+    );
+    return rows.rows[0];
+  }
+
+  it("returns null and changes nothing when the claim on the proof writes no row", async () => {
+    // One write transaction runs at a time, so no other writer can consume the proof between the
+    // read and the claim; a trigger that silently skips the claim stands in for one. Dropped in the
+    // `finally`.
+    const { personId, issued } = await requestChange("claim-lost@x.com", "claim-lost-next@x.com");
+    await suite.db.execute(
+      sql.raw(`create trigger tmp_skip_claim before update of used_at on management_account_actions
+          for each row when old.id = ${quoteLiteral(issued.id)} begin select raise(ignore); end`),
+    );
+    try {
+      await expect(
+        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+      ).resolves.toBeNull();
+    } finally {
+      await suite.db.execute(sql`drop trigger tmp_skip_claim`);
+    }
+    expect(await emailsOf(personId)).toEqual({
+      email: "claim-lost@x.com",
+      pending_email: "claim-lost-next@x.com",
+    });
+  });
+
+  it("consumes the proof but changes nothing when the requested address is no longer pending", async () => {
+    const { personId, issued } = await requestChange("withdrawn@x.com", "withdrawn-next@x.com");
+    await suite.db.execute(
+      sql`update persons set pending_email = null, pending_email_folded = null where id = ${personId}`,
+    );
+    await expect(
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+    ).resolves.toBeNull();
+    expect(await emailsOf(personId)).toEqual({ email: "withdrawn@x.com", pending_email: null });
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
+    );
+    expect(action.rows[0]!.used_at).not.toBeNull();
+  });
+
+  it("refuses with person.email_taken when another person now holds the address", async () => {
+    const { personId, issued } = await requestChange("race-a@x.com", "race-target@x.com");
+    await seedManager(suite.db, { email: "race-target@x.com" });
+    await expect(
+      run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+    ).rejects.toMatchObject({
+      code: "person.email_taken",
+      params: { email: "race-target@x.com" },
+    });
+    expect(await emailsOf(personId)).toEqual({
+      email: "race-a@x.com",
+      pending_email: "race-target@x.com",
+    });
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued.id}`,
+    );
+    expect(action.rows).toEqual([{ used_at: null }]);
+  });
+
+  it("passes any other refusal of the email write through untranslated", async () => {
+    const { personId, issued } = await requestChange("other-refusal@x.com", "other-next@x.com");
+    await suite.db.execute(
+      sql.raw(`create trigger tmp_refuse_email before update of email on persons for each row
+          when old.id = ${quoteLiteral(personId)} begin select raise(abort, 'refused by test trigger'); end`),
+    );
+    try {
+      const error = await captureError(() =>
+        run((tx) => confirmEmailChangeByCode(tx, { personId, code: issued.code!, codeKey })),
+      );
+      expect(isAppError(error)).toBe(false);
+      expect(triggerRaised(error, "refused by test trigger")).toBe(true);
+    } finally {
+      await suite.db.execute(sql`drop trigger tmp_refuse_email`);
+    }
   });
 });

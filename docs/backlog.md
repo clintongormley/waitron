@@ -2101,7 +2101,13 @@ image constraints under *Detail → Box image*.
   office-printer check and a whole tick, a stop during a tick, an enrol that times out, malformed
   join, enrol and job-list replies, and the test fake host's defaults and recording behaviour; its
   two unused setters (`setToken`, `setConfig` in `src/testing/fake-host.ts`) deleted;
-  100/100/100/100).
+  100/100/100/100); `identity` (**PR #IDENTITY_PR**, 2026-09-23 — tests for the refusals in issuing,
+  inspecting and completing an account action and in confirming an email change by code, a
+  Google subject linked to a person who is not active, an MFA secret that does not authenticate,
+  a profile read for a person row that no longer exists, and the refusals and side effects of
+  editing, deactivating, resetting, clearing the PIN of and re-inviting staff; a collision that
+  reaches the write past its availability check is planted by a test-only trigger, since one
+  writer at a time leaves no race to win; no source file changed; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { quoteLiteral } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { seedManager, seedTill } from "../test/fixtures.js";
+import { codeOf, seedManager, seedTill } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
@@ -442,5 +443,104 @@ describe("your profile", () => {
       sql`select google_subject from persons where id = ${f.personId}`,
     );
     expect(rows.rows[0]!.google_subject).toBeNull();
+  });
+
+  it("refuses a live session whose person row no longer exists, as it refuses a signed-out caller", async () => {
+    // `management_sessions` carries no foreign key to `persons`, so the session can outlive the row.
+    const f = await fixture();
+    await suite.db.execute(sql`delete from persons where id = ${f.personId}`);
+    expect(await codeOf(() => withTransaction(suite.db, (tx) => readOwnProfile(tx, f)))).toBe(
+      "management_session.required",
+    );
+  });
+
+  it("labels the authenticator entry with the display name when the person has no email", async () => {
+    const f = await fixture();
+    await suite.db.execute(
+      sql`update persons set email = null, email_folded = null where id = ${f.personId}`,
+    );
+    const { displayName } = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
+    const pending = await withTransaction(suite.db, (tx) =>
+      beginOwnTotpEnrollment(tx, {
+        ...f,
+        currentPassword: "correct horse",
+        keyRing: { current: { version: 1, key: Buffer.alloc(32, 3) } },
+      }),
+    );
+    expect(decodeURIComponent(pending.uri)).toContain(displayName);
+  });
+
+  it("refuses to finish an authenticator enrolment that does not exist", async () => {
+    const f = await fixture();
+    expect(
+      await codeOf(() =>
+        withTransaction(suite.db, (tx) =>
+          finishOwnTotpEnrollment(tx, {
+            ...f,
+            enrollmentId: randomUUID(),
+            code: "000000",
+            keyRing: { current: { version: 1, key: Buffer.alloc(32, 3) } },
+          }),
+        ),
+      ),
+    ).toBe("totp.invalid");
+    expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).hasTotp).toBe(false);
+  });
+
+  it("reports an address claimed between the availability check and the write as person.email_taken", async () => {
+    // One write transaction runs at a time, so no other request can claim the address in that gap;
+    // a trigger that gives it to another person just before this person's write stands in for one.
+    // Dropped in the `finally`.
+    const f = await fixture();
+    const otherId = await seedManager(suite.db, { email: `${randomUUID()}@example.com` });
+    const contested = `${randomUUID()}@example.com`;
+    await suite.db.execute(
+      sql.raw(`create trigger tmp_claim_pending before update on persons for each row
+          when old.id = ${quoteLiteral(f.personId)} and new.pending_email is not null
+          begin update persons set pending_email = new.pending_email,
+            pending_email_folded = new.pending_email_folded where id = ${quoteLiteral(otherId)}; end`),
+    );
+    try {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          saveOwnProfile(tx, {
+            ...f,
+            displayName: "Name",
+            email: contested,
+            locale: "en-GB",
+            currentPassword: "correct horse",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "person.email_taken", params: { email: contested } });
+    } finally {
+      await suite.db.execute(sql`drop trigger tmp_claim_pending`);
+    }
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      pendingEmail: null,
+    });
+  });
+
+  it("withdrawing a requested email change invalidates the proof already sent for it", async () => {
+    const f = await fixture();
+    const details = {
+      ...f,
+      displayName: "Name",
+      locale: "en-GB",
+      currentPassword: "correct horse",
+    };
+    const issued = await withTransaction(suite.db, (tx) =>
+      saveOwnProfile(tx, { ...details, email: `${randomUUID()}@example.com` }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, email: f.email })),
+    ).resolves.toBeNull();
+    const action = await suite.db.execute<{ used_at: string | null }>(
+      sql`select used_at from management_account_actions where id = ${issued!.id}`,
+    );
+    expect(action.rows[0]!.used_at).not.toBeNull();
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      email: f.email,
+      pendingEmail: null,
+    });
   });
 });
