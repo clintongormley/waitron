@@ -104,10 +104,12 @@ formatting; machinery-only changes stop after root guards; deletion-only pushes 
 Unknown ranges keep the full local gate, including workspace typechecking. See
 [ci-and-gates.md](docs/developers/ci-and-gates.md) for commands and scope details.
 
-**Coverage thresholds** are split (owner decision 2026-09-05): `98/98/98/95` in
-`fiscal-verifactu`, `core`, `db` and `payments`; the `90/90/85/85` floor everywhere else,
-browser packages included. Which package holds which bar is pinned by
-`scripts/coverage-thresholds.test.ts`.
+**Coverage thresholds** are split (owner decision 2026-09-05): a high bar of `98/98/98/95` for the
+fiscal core and the data-layer foundations, the `90/90/85/85` floor everywhere else, browser packages
+included. **Which packages hold the high bar is written once**, as `HIGH_BAR_PACKAGES` in
+`scripts/coverage-thresholds.test.ts`, which is also the guard that pins every config against it.
+Prose that re-enumerates the list drifts: the flip added `store` to it and two files went on naming
+four packages until T3 measured them.
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`,
 `shared`, `fiscal` and `db`** (`shared` since July 2026; `fiscal`, `ui` and `db`
@@ -739,6 +741,12 @@ browser test** — most of these rules exist because a test passed while proving
   no trailing slash — so a SIBLING package whose directory name extends this one's lands in this
   package's report. Cost: `packages/sync` read 81.57% statements on files belonging to
   `packages/sync-enrolment`. See [testing-guide.md](docs/developers/testing-guide.md).
+- **Source that lives at the workspace ROOT is counted only where the ROOT config's
+  `coverage.include` names its file type, and having a suite is not the same as being counted.**
+  `scripts/dev-server-proxy.ts` is imported by all three front-ends' `vite.config.ts` and exercised
+  by `scripts/dev-proxy-config.test.ts`, and it appears in no coverage table in the repository: the
+  root `include` names `scripts/**/*.mjs`. Left that way deliberately — two of its branches cannot be
+  covered honestly. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
   Measured both ways on `packages/sync-enrolment/src/migration-tables.ts` under
   `@vitest/coverage-v8@4.1.11`: with the pair the package reads 2 of 2 branches and passes; with the

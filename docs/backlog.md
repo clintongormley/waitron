@@ -3271,7 +3271,7 @@ whose §11 is the build order and whose §12.2 is the one gate still standing �
 failover-loop prototype.
 
 **That prototype gate is DONE — all ten tasks landed (#392, #395, #406, #411, #415, #417, #422,
-#425), and slice 1, the storage swap, is the work in progress**
+#425), and slice 1, the storage swap, is COMPLETE as of 2026-09-23**
 ([spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md),
 [plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md)). Read the gate's own product,
 [the results note](research/2026-09-16-sqlite-failover-prototype.md), rather than re-deriving any of
@@ -3328,8 +3328,31 @@ PostgreSQL from the dependencies and the dev stack, LANDED as #492 on 2026-09-23
 `fc8753a6`). It takes the cluster out of the box and out of the dev stack,
 the client packages out of every manifest that did not import them, the two unread Docker switches out
 of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
-of `@waitron/db`, and the target-choice framing out of the comments. **T3 is what remains**, and it
-depends on T2.
+of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, is the last
+of the sixteen**, and with it slice 1 is done.
+
+**What T3 measured, and why no bar moved.** The whole workspace was run — 46 members green at their
+current bars, 1,065 test files and 13,784 tests, plus the root project's 54 files and 3,255 tests —
+and the answer is that **the storage switch did not shrink the workspace**: non-test source under
+`packages/*/src` and `apps/*/src` went 8,323 KB before the flip to 8,359 KB after it, so a bar that
+was meaningful in September still is. Only `packages/provisioning` shrank materially, by about a
+third, when `waitron-provision instance` went with the per-tenant PostgreSQL cluster, and it still
+clears the floor by 7.7 points. The numbers, the two traps that were checked rather than assumed, and
+the one source file that turns out to be measured by no coverage table at all are in
+[ci-and-gates.md](developers/ci-and-gates.md) → *Coverage thresholds are split by package*.
+
+**Two coverage questions are open for the owner, both deliberately not decided by the runner**,
+because each would change the BASIS of the 2026-09-05 split — which is consequence, the fiscal core
+and the data layer, not how well a package happens to be covered this week:
+
+- **Promote the packages that now clear the high bar?** Roughly half the floor packages clear
+  `98/98/98/95` on all four metrics with at least a point of margin, `ui` and `workforce` among them.
+  Promoting them would ratchet real coverage; it would also gate future work in packages the owner
+  put at the floor on purpose.
+- **Raise the floor's functions bar?** It is 85 and no package in the workspace comes within six
+  points of it — the lowest is 91.46 — so as a gate it is currently doing nothing. The packages
+  nearest it are small ones where one function moves the figure two or three points, which is the
+  argument against.
 
 **What T2's review wave found, and it is the reason the run-it seat keeps its seat — OPEN as a
 lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**. It read the

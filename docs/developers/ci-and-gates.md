@@ -98,19 +98,86 @@ unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds are split by package
 
-Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` in
-`fiscal-verifactu`, `core`, `db` and `payments` — the fiscal core and the data-layer
-foundations — and the `90/90/85/85` floor in every other package, browser packages included. The
-list is the owner's, not a rule that derives it (`apps/server` holds the AEAT transport and
-sits at the floor). `sync` was on it until that package was deleted on 2026-09-19;
-`scripts/coverage-thresholds.test.ts` is what the list is pinned against.
+Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` for the fiscal
+core and the data-layer foundations, and the `90/90/85/85` floor in every other package, browser
+packages included. Which packages hold the high bar is the owner's list rather than a rule that
+derives it (`apps/server` holds the AEAT transport and sits at the floor), and the list is written
+**once**: `HIGH_BAR_PACKAGES` in `scripts/coverage-thresholds.test.ts`, which is also the guard that
+pins every config against it. A hardcoded list is safe there only because the root project is the one
+gate never narrowed away. Moving a package is an edit to that list, with the reason in the commit.
 
-The root project keeps the high bar: its coverage table is the root `scripts/*.mjs` plus the
-vocabulary module, two of them the classifiers that decide what CI and the hook run.
+This file and `CLAUDE.md` used to repeat the names, and both drifted: the flip (#489) added
+`@waitron/store` to the high bar and both went on naming four packages. The enumeration is gone from
+both rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES` away, and a guard
+over prose would fail on rewording that changed nothing.
 
-Which package holds which bar is pinned by `scripts/coverage-thresholds.test.ts` — a hardcoded
-list, safe only because the root project is the one gate never narrowed away; moving a package is
-an edit to that list, with the reason in the commit.
+The root project keeps the high bar. Its coverage table is seven `scripts/*.mjs` files plus
+`packages/db/src/english-only.ts`; the `.ts` files under `scripts/` are all guard SUITES, which
+Vitest leaves out of their own table whatever `coverage.include` says. Two of the seven are the
+classifiers that decide what CI and the hook run.
+
+### What the storage switch did to the bars — measured 2026-09-23 (task T3)
+
+**No bar moved, and the reason is that the workspace did not shrink.** `pnpm -r test:coverage` on
+`c33a4bc11` (T2's backlog pointer) was green in all 46 members that run coverage — 1,065 test files,
+13,784 tests, no threshold failure — and `pnpm vitest run --coverage` at the root was green over its
+eight files, 54 suites and 3,255 tests. Non-test source under `packages/*/src` and `apps/*/src`
+measured 8,323 KB at `320f1dc08`, the commit before the flip, and 8,359 KB after it: the deletions
+and the new code very nearly cancel. One package shrank materially — `packages/provisioning`, down about a
+third, when `waitron-provision instance` went with the per-tenant PostgreSQL cluster — and it still
+clears the floor by 7.7 points on statements. One is new, `packages/store`, at 100% on all four
+metrics against the high bar.
+
+**The high bar is the one doing the work, and which metric binds differs by package** — worth saying
+because it is easy to assume branches always binds, and it does not. Taking each package's smallest
+margin over its own bar: `fiscal-verifactu` 0.85 on STATEMENTS, `db` 0.86 on branches, `payments`
+1.43 on statements, `core` 1.48 on LINES, `venue-service` 1.93 on branches, `store` 2.00 on
+statements, and the root project 1.07 on branches. Four of the six thinnest belong to the five
+high-bar packages; at the floor, `venue-service` is the only package within two points of any bar it
+holds.
+
+**Two traps were checked rather than assumed**, both of them the shape where a passing report is
+measuring the wrong files:
+
+- **The `coverage.include` sibling leak** — Vitest 4 calls a file external only when its absolute
+  path does not `startsWith` the package directory, with no trailing slash, so
+  `packages/sync-enrolment`'s files once landed in `packages/sync`'s report. Every one of the 46
+  `coverage-summary.json` files was read and none holds a path outside its own package directory;
+  four package names prefix a sibling's today — `country`, `fiscal`, `payments` and `workforce`,
+  eight pairs between them — and none of them leaked.
+- **Harness-move inflation** — nine configs exclude `src/testing/**` (eight packages and
+  `apps/server`), so code moved there stops being measured while the percentage rises. Across the same range `src/testing/` shrank or stayed level in
+  every package that has one: the switch deleted harness rather than adding it, which is the safe
+  direction.
+
+**One source file is measured by no coverage table, and it now says so in the one place that could
+mislead.** `scripts/dev-server-proxy.ts` is real source — the three front-ends' `vite.config.ts`
+import it — and the root project's `coverage.include` names `scripts/**/*.mjs`, not `*.ts`. The
+config's comment justified that by claiming every `.ts` under `scripts/` is a guard suite, which is
+false by one file. Widening the include to `scripts/**/*.ts` was tried and measured: the root project
+reads 99.71/95.18/100/100 with it, still green, but only 0.18 over its branch bar — and the two
+branches it adds cannot honestly be covered.
+
+- `resolve(configured)` makes no observable difference, because `existsSync` already resolves a
+  relative path against the working directory. Control run on 2026-09-23: replacing
+  `isAbsolute(configured) ? configured : resolve(configured)` with plain `configured` left all three
+  cases in `scripts/dev-proxy-config.test.ts` green, including one written specifically to catch it.
+  That case was deleted rather than kept — a test whose control does not bite is a false receipt
+  (CLAUDE.md §1).
+- The `WAITRON_STATE_DIR` fallback to `apps/server/src/state` can only be told apart from any other
+  leafless directory by writing a TLS leaf into that directory, which is the box's real state
+  directory in a developer's checkout.
+
+So the include is unchanged and the comment now states the real reason. The alternative worth
+considering, and not taken here because it is a refactor rather than a bar decision, is to move the
+file into a package where its coverage would count.
+
+**Two questions were left for the owner rather than decided here**, because both would change the
+basis of the 2026-09-05 split, which is consequence — the fiscal core, the data layer — and not how
+well a package happens to be covered today. They are in this task's pull request with the
+numbers attached: whether to promote the packages that now clear `98/98/98/95` on all four metrics,
+and whether to raise the floor's functions bar of 85, which no package in the workspace comes within
+six points of.
 
 ## Mutation floors, and where each one actually bites
 
