@@ -131,8 +131,8 @@ during the wait.
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
 document is the contract, and it grows as we go: each screen tends to raise a question the rules do
 not answer yet, and the answer is written down there in the same change rather than left in the
-screen. Owner decision 2026-09-12: **this work runs on Sonnet.** It is screenshot-driven iteration
-with the owner looking at each step, not a write-a-plan-and-dispatch job.
+screen. It is screenshot-driven iteration with the owner looking at each step, not a
+write-a-plan-and-dispatch job.
 
 **Open, and it bites this work first: two documents now state the component rules and they have
 already drifted** (found by the #337 review, not fixed there). `design-system.md` binds the token

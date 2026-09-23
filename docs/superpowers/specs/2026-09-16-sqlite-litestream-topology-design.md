@@ -9,6 +9,10 @@ cold). That read produced nine findings, all folded in; the ones that changed th
 inline "Fable review finding N" marker, and the tail shipper still owes its own Fable read before it
 is built (§5.2, risk 2).
 
+> **Pointer, 2026-09-23.** Fable does no reviews any more (owner decision 2026-09-23). The tail
+> shipper's fresh-context read — here and in the two later places this spec asks for "a Fable read"
+> — runs on the default model, Opus 5.5, like every other review.
+
 **Companion:** [SQLite instead of PostgreSQL — a discussion](2026-09-16-sqlite-instead-of-postgres-discussion.md)
 (2026-09-16) is the feasibility note this builds on. It carries the receipts this spec cites: the
 regulation's own words, Litestream's documented behaviour, and the counts. Read it first.

@@ -46,7 +46,7 @@ carries no sign-off and fails DCO (#160).
 approval; nothing else is.
 
 **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Copilot
-is switched off here (2026-09-06): the second model on the diff is Codex (Sol) in
+is switched off here (2026-09-06): the second model on the diff is Codex (`gpt-6-astra`) in
 `/finish-branch`'s run-it seat, before the PR exists, so its findings are triaged with the others and leave no
 thread. Copilot's lesson stands — its one reliable class was the sibling-file convention the branch
 missed — so the convention reviewer's brief asks for siblings. A thread that does appear is resolved
@@ -239,17 +239,20 @@ they cannot fetch.
 
 ## Model selection
 
-This paragraph is copied verbatim from the source `CLAUDE.md`. It summarises a rule that is defined
-in full in the user's global `~/.claude/CLAUDE.md`, which every repo shares — this copy duplicates
-that file rather than being its own source of truth.
+This paragraph summarises a rule defined in full in the user's global `~/.claude/CLAUDE.md`, which
+every repo shares; it is not its own source of truth.
 
-**Model selection (owner decision 2026-09-06; the Claude half replaced 2026-09-23):** the rule lives
-in the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and Codex are
-separated. Every Claude seat — the driver, every dispatched subagent, every review, and the
-unattended campaign runners — runs on the default model, Opus 5.5 at high effort, with no per-task
-model pin; Fable 5.1 is opt-in for the brainstorm only, does no reviews, and never drives execution
-— a hook denies it. The runners' `claude` must be 2.1.280 or newer: 2.1.278 refused Opus 5.5
-(measured 2026-09-23). Codex
+**Model selection (owner decision 2026-09-06; the Claude seats by owner decision 2026-09-23):**
+the rule lives in the global `~/.claude/CLAUDE.md` so every repo shares it. In short: Claude and
+Codex are separated. Every Claude seat — the driver, every dispatched subagent, every review, and
+the unattended campaign runners — runs on the default model, Opus 5.5 at high effort, with no
+per-task model pin; Fable 5.1 is opt-in for the brainstorm only, does no reviews, and never drives
+execution — a hook denies it. The runners' `claude` has to accept that model. Measured 2026-09-23:
+on 2.1.278, `claude -p --model 'claude-opus-5-5[1m]'` failed with "API Error: 400 Claude Code
+2.1.278 does not support this model; version 2.1.280 or newer is required"; after `claude update`
+to 2.1.280, `claude -p` with no `--model` under the runners' `~/.claude` profile reported
+`claude-opus-5-5[1m]`. What 2.1.278 does with the runners' own call (no `--model`, profile alias
+`opus[1m]`) was not measured. Codex
 (`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
 fewer tokens, and it found the real defect that Sol at low missed)
 holds exactly one seat **in a Claude-driven session** — when Codex drives, the roles reverse and
@@ -260,9 +263,6 @@ Copilot's automatic review is off (its rule was removed from the main ruleset 20
 repository carries no Codex file: the seat script passes the model, the effort, the doc-size cap
 (`CLAUDE.md` exceeds Codex's default and would be silently truncated), the sandbox's network switch
 (the Docker socket and DNS are closed by default; measured 2026-09-05) and the fallback that makes
-Codex read `CLAUDE.md` when there is no `AGENTS.md` (measured 2026-09-06, with a control). What is
-waitron-specific is the yardstick: each slice against the
-previous five PRs on fix rounds before land, false claims found at whole-branch review, and Codex
-tasks that needed a Claude fix round (the last is zero by construction from here on; the SP-3c and
-SP-3d rows in `docs/backlog.md` hold the two data points taken under the earlier rules). The
-seat-by-seat probe that informed this is `docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
+Codex read `CLAUDE.md` when there is no `AGENTS.md` (measured 2026-09-06, with a control). The
+seat-by-seat probe that informed the Codex seat is
+`docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
