@@ -1534,6 +1534,39 @@ it("drops a removed variant that was never saved, since there is nothing to make
   expect(el.currentValue.variants).toEqual([small]);
 });
 
+it("puts focus on Add variant when Remove drops the only variant and the table goes with it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
+  await el.updateComplete;
+  const fresh: EditorVariant = { ...small, name: "Fresh" };
+  delete fresh.id;
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", { detail: { value: fresh }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  const table = variantTable(el)!;
+  await table.updateComplete;
+  // Remove from the row's menu, the way a keyboard user reaches it.
+  table
+    .shadowRoot!.querySelector<HTMLElement & { show(): void }>('[data-test="actions-0"]')!
+    .show();
+  const remove = table.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-0"]')!;
+  remove.focus();
+  remove.click();
+  await el.updateComplete;
+  expect(el.currentValue.variants).toEqual([]);
+  expect(variantTable(el)).toBeNull();
+  await expect
+    .poll(() => el.shadowRoot!.activeElement?.getAttribute("data-test"))
+    .toBe("add-variant");
+});
+
 it("restores an Inactive variant from the variants section", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,

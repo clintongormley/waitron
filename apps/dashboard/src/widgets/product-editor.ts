@@ -185,7 +185,9 @@ function emptyDraft(): ProductEditorDraft {
  *
  * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
  * field the variant may leave blank shows blank, with the parent's value as its hint (spec §4.4,
- * §9.1), and there is no Modifiers or Variants section. The names are never hinted (§15.2).
+ * §9.1), and there is no Modifiers or Variants section. The names are never hinted (§15.2). The
+ * description is hinted only while EVERY language of it is blank, because a variant takes the
+ * parent's description as one value across all languages, never language by language.
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
@@ -679,6 +681,11 @@ export class ProductEditor extends LitElement {
     this.variantOpen = true;
   }
 
+  private async focusAddVariant(): Promise<void> {
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")?.focus();
+  }
+
   private closeVariant(): void {
     this.variantOpen = false;
     this.variantIndex = null;
@@ -1149,6 +1156,8 @@ export class ProductEditor extends LitElement {
                     this.draft.variants.filter((_, i) => i !== index),
                   );
                 else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
+                // With no variant left the table is not drawn, so it cannot keep the focus itself.
+                if (!this.draft.variants.length) void this.focusAddVariant();
               }}
               @wt-restore=${(event: CustomEvent<{ index: number }>) => {
                 event.stopPropagation();
