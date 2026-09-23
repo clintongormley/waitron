@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../apps/server/src/config.js";
+import { workspaceMembers } from "./workspace-members.mjs";
 
 /**
  * The container image's environment, checked against the server that has to boot on it.
@@ -326,42 +327,44 @@ describe("sharp stays outside every bundle and ships beside the server's", () =>
     dependencies?: Record<string, string>;
     scripts?: Record<string, string>;
   };
-  const manifests = new Map<string, Manifest>();
-  for (const root of ["apps", "packages"]) {
-    for (const dir of readdirSync(`${ROOT}${root}`)) {
-      const path = `${root}/${dir}/package.json`;
-      if (!existsSync(`${ROOT}${path}`)) continue;
-      const manifest = JSON.parse(read(path)) as Manifest;
+  /** The workspace's esbuild bundles that can reach `@waitron/media`, listed once per file. */
+  let found: Manifest[] | undefined;
+  const bundlers = (): Manifest[] => {
+    if (found !== undefined) return found;
+    const manifests = new Map<string, Manifest>();
+    for (const { dir } of workspaceMembers()) {
+      const manifest = JSON.parse(read(`${dir}/package.json`)) as Manifest;
       manifests.set(manifest.name, manifest);
     }
-  }
-  const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
-    if (name === "@waitron/media") return true;
-    if (seen.has(name)) return false;
-    seen.add(name);
-    return Object.keys(manifests.get(name)?.dependencies ?? {}).some(
-      (dependency) => manifests.has(dependency) && reachesMedia(dependency, seen),
+    const reachesMedia = (name: string, seen = new Set<string>()): boolean => {
+      if (name === "@waitron/media") return true;
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return Object.keys(manifests.get(name)?.dependencies ?? {}).some(
+        (dependency) => manifests.has(dependency) && reachesMedia(dependency, seen),
+      );
+    };
+    found = [...manifests.values()].filter(
+      (manifest) =>
+        (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
     );
+    return found;
   };
-  const bundlers = [...manifests.values()].filter(
-    (manifest) =>
-      (manifest.scripts?.build ?? "").includes("esbuild ") && reachesMedia(manifest.name),
-  );
 
   it("finds the bundles it is meant to check", () => {
-    expect(bundlers.map((manifest) => manifest.name)).toEqual(
+    expect(bundlers().map((manifest) => manifest.name)).toEqual(
       expect.arrayContaining(["@waitron/server", "@waitron/provisioning"]),
     );
-  });
+  }, 60_000);
 
-  it.each(bundlers.map((manifest) => [manifest.name, manifest.scripts!.build!]))(
-    "%s names --external:sharp on every esbuild command",
-    (_name, build) => {
+  it("names --external:sharp on every esbuild command of each", () => {
+    for (const { name, scripts } of bundlers()) {
+      const build = scripts!.build!;
       const commands = build.split("esbuild ").length - 1;
-      expect(commands).toBeGreaterThan(0);
-      expect(build.split("--external:sharp").length - 1).toBe(commands);
-    },
-  );
+      expect(commands, name).toBeGreaterThan(0);
+      expect(build.split("--external:sharp").length - 1, name).toBe(commands);
+    }
+  }, 60_000);
 
   it("copies sharp beside the bundle in the image, and both CI jobs check it", () => {
     expect(DOCKERFILE).toContain("/sharp-runtime/node_modules/ /app/node_modules/");
