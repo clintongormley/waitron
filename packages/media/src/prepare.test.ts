@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { MAX_INPUT_PIXELS, prepareImage, STORED_LONG_EDGE } from "./prepare.js";
+import {
+  DEFAULT_MAX_UPLOAD_BYTES,
+  MAX_INPUT_PIXELS,
+  prepareImage,
+  STORED_LONG_EDGE,
+} from "./prepare.js";
 import { sampleImage } from "./testing/sample-image.js";
-
-/** The upload limit `MAX_UPLOAD_BYTES` sets (Reconciliation O8). */
-const UPLOAD_LIMIT = 20 * 1024 * 1024;
 
 /** A photo-like JPEG: noise compresses about as badly as a real dish photographed close up. */
 async function noisyPhoto(width: number, height: number): Promise<Uint8Array> {
@@ -28,7 +30,7 @@ async function noisyPhoto(width: number, height: number): Promise<Uint8Array> {
 describe("prepareImage", () => {
   it("shrinks a large photo to the stored long edge as WebP, keeping its shape", async () => {
     const input = await noisyPhoto(4000, 2500);
-    const prepared = await prepareImage(input, { maxUploadBytes: UPLOAD_LIMIT });
+    const prepared = await prepareImage(input, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
     const stored = await sharp(prepared.bytes).metadata();
     expect(STORED_LONG_EDGE).toBe(1600);
     expect({ format: stored.format, width: stored.width, height: stored.height }).toEqual({
@@ -60,7 +62,9 @@ describe("prepareImage", () => {
         before.exif!.includes(Buffer.from([0x25, 0x88])),
     ).toBe(true);
 
-    const prepared = await prepareImage(new Uint8Array(sideways), { maxUploadBytes: UPLOAD_LIMIT });
+    const prepared = await prepareImage(new Uint8Array(sideways), {
+      maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+    });
     const after = await sharp(prepared.bytes).metadata();
     expect([after.width, after.height]).toEqual([1200, 1600]);
     expect(after.orientation).toBeUndefined();
@@ -75,7 +79,9 @@ describe("prepareImage", () => {
     })
       .jpeg()
       .toBuffer();
-    const prepared = await prepareImage(new Uint8Array(small), { maxUploadBytes: UPLOAD_LIMIT });
+    const prepared = await prepareImage(new Uint8Array(small), {
+      maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+    });
     const stored = await sharp(prepared.bytes).metadata();
     expect([stored.width, stored.height]).toEqual([300, 225]);
   });
@@ -91,15 +97,17 @@ describe("prepareImage", () => {
     })
       .png()
       .toBuffer();
-    const prepared = await prepareImage(new Uint8Array(logo), { maxUploadBytes: UPLOAD_LIMIT });
+    const prepared = await prepareImage(new Uint8Array(logo), {
+      maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+    });
     const stored = await sharp(prepared.bytes).metadata();
     expect([stored.width, stored.height, stored.hasAlpha]).toEqual([1600, 800, true]);
   });
 
   it("stores the same bytes for the same upload, so a repeat upload finds the first", async () => {
     const input = await noisyPhoto(2000, 1500);
-    const first = await prepareImage(input, { maxUploadBytes: UPLOAD_LIMIT });
-    const again = await prepareImage(input, { maxUploadBytes: UPLOAD_LIMIT });
+    const first = await prepareImage(input, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
+    const again = await prepareImage(input, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
     expect(again.filename).toBe(first.filename);
     expect(again.bytes).toEqual(first.bytes);
   });
@@ -113,13 +121,15 @@ describe("prepareImage", () => {
 
   it("refuses bytes that are not a JPEG, PNG or WebP", async () => {
     await expect(
-      prepareImage(new Uint8Array([1, 2, 3]), { maxUploadBytes: UPLOAD_LIMIT }),
+      prepareImage(new Uint8Array([1, 2, 3]), { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES }),
     ).rejects.toMatchObject({ code: "media.unsupported_type" });
   });
 
   it("refuses a picture whose header is damaged", async () => {
     await expect(
-      prepareImage(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), { maxUploadBytes: UPLOAD_LIMIT }),
+      prepareImage(new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]), {
+        maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+      }),
     ).rejects.toMatchObject({ code: "image.invalid_file", params: {} });
   });
 
@@ -128,7 +138,9 @@ describe("prepareImage", () => {
     const cut = whole.subarray(0, Math.floor(whole.length / 2));
     // The control: the header still reads, so this reaches the decoder rather than the header check.
     await expect(sharp(cut).metadata()).resolves.toMatchObject({ width: 800, height: 600 });
-    await expect(prepareImage(cut, { maxUploadBytes: UPLOAD_LIMIT })).rejects.toMatchObject({
+    await expect(
+      prepareImage(cut, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES }),
+    ).rejects.toMatchObject({
       code: "image.invalid_file",
     });
   });
@@ -141,7 +153,7 @@ describe("prepareImage", () => {
       .png({ compressionLevel: 9 })
       .toBuffer();
     await expect(
-      prepareImage(new Uint8Array(bomb), { maxUploadBytes: UPLOAD_LIMIT }),
+      prepareImage(new Uint8Array(bomb), { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES }),
     ).rejects.toMatchObject({
       code: "image.too_many_pixels",
       params: { maxPixels: MAX_INPUT_PIXELS },
@@ -162,7 +174,7 @@ describe("prepareImage", () => {
     });
     await expect(sharp(png).metadata()).rejects.toThrow(/pixel limit/);
     await expect(
-      prepareImage(new Uint8Array(png), { maxUploadBytes: UPLOAD_LIMIT }),
+      prepareImage(new Uint8Array(png), { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES }),
     ).rejects.toMatchObject({
       code: "image.too_many_pixels",
       params: { maxPixels: MAX_INPUT_PIXELS },

@@ -17,7 +17,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { seedCatalogues } from "./seed-catalogue.js";
-import { prepareImage, readImageBytes } from "@waitron/media";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
 // The exact regex the public `GET /media/:filename` route accepts — the produced names MUST pass it.
 import { MEDIA_FILENAME } from "@waitron/media";
@@ -107,7 +107,7 @@ describe("seedMedia", () => {
       expect(stored).not.toBe(basename);
 
       const srcBytes = await readFile(join(SRC_DIR, basename));
-      const prepared = await prepareImage(srcBytes, { maxUploadBytes: 20 * 1024 * 1024 });
+      const prepared = await prepareImage(srcBytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
       expect(stored).toBe(prepared.filename);
 
       const storedImage = await withTransaction(suite.db, async (tx) => {
@@ -126,7 +126,7 @@ describe("seedMedia", () => {
           async (basename) =>
             (
               await prepareImage(await readFile(join(SRC_DIR, basename)), {
-                maxUploadBytes: 20 * 1024 * 1024,
+                maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
               })
             ).filename,
         ),

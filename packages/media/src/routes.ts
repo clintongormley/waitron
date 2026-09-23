@@ -22,7 +22,7 @@ import {
   type ImageMetadataInput,
   type ListImagesOptions,
 } from "./images.js";
-import { prepareImage } from "./prepare.js";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage } from "./prepare.js";
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -63,7 +63,7 @@ function metadata(value: unknown): ImageMetadataInput {
 export const MEDIA_ROUTES: ModuleRoutes = {
   mount(app, ctx, log) {
     const fallbackLanguage = ctx.cfg.contentDefaultLanguage ?? FALLBACK_LOCALE;
-    const maxUploadBytes = ctx.maxUploadBytes ?? 20 * 1024 * 1024;
+    const maxUploadBytes = ctx.maxUploadBytes ?? DEFAULT_MAX_UPLOAD_BYTES;
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
       withTransaction(ctx.db, async (tx) => {
         await authorizeManager(tx, {

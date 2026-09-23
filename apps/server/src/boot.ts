@@ -38,6 +38,7 @@ import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
 import type { AlertSource, ModuleRouteContext } from "@waitron/module";
+import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
 import { AppError } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
@@ -297,9 +298,9 @@ export const BOX_HOSTNAME = "waitron.local";
  * A settled constant rather than config: it is a DoS ceiling on an unauthenticated-adjacent write
  * path, not an operator knob. The media upload route (`packages/media/src/routes.ts`) enforces it
  * coarsely (a `bodyLimit` middleware) and precisely (`prepareImage`'s size check,
- * `image.too_large`); exported so that route and this boot agree on one value.
+ * `image.too_large`); set from the route's own fallback, `DEFAULT_MAX_UPLOAD_BYTES`, so the two agree.
  */
-export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES;
 
 /** What `reconcile` reports when the Stripe credential is not provisioned: no runs, nothing
  * deferred, nothing dropped by the horizon, nothing skipped, and no next due time — the same shape
