@@ -1348,6 +1348,6 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
  * What keeps a second drain off these rows is that one writer holds the file at a time and the
  * claim commits with its stamps inside one `withTransaction`; that is
  * `packages/store/src/write-queue.ts`'s subject, and its own cases hold it. There is no
- * `FOR UPDATE`: `claimLockedRows` adds no lock clause — see `claimBatch`'s own paragraph in
- * `./drain.ts`, and `packages/db/src/job-claim.ts`'s doc comment for what replaced it.
+ * `FOR UPDATE` and no clause of any kind doing this: `claimBatch`'s selection is a plain SELECT —
+ * see its own paragraph in `./drain.ts`.
  */

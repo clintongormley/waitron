@@ -4,32 +4,28 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type Database } from "./client.js";
-import { claimLock, claimLockedRows, claimRows } from "./job-claim.js";
-import { count, label, table, ts } from "./schema/columns.js";
+import { claimRows } from "./job-claim.js";
 
 /**
- * The three claim helpers, and the only suite over them. Two siblings stood beside this file until
- * the SQLite flip: job-claim.test.ts, which ran the same six cases on PGlite, and
- * job-claim.pg.test.ts against a real server. Both are deleted — the six cases live here, and what
- * the real-server one held has no successor, so it is named below rather than assumed.
+ * `claimRows`, and the only suite over it. Two siblings stood beside this file until the SQLite
+ * flip: job-claim.test.ts, which ran the same cases on PGlite, and job-claim.pg.test.ts against a
+ * real server. Both are deleted, and what the real-server one held has no successor, so it is named
+ * below rather than assumed.
  *
  * What a case here can and cannot show: with one writer per file there is no second claimer to
  * partition a queue against, so every case is about what ONE claim selects, stamps and returns.
  * The property the deleted `for update … skip locked` bought — that a second claimer skips a row
  * the first holds — has nothing to hold it open on this engine.
  *
- * **One case had no successor at all and is not repeated here.** It was named "locks only the table
+ * **Three cases lost their subject and are not repeated here.** One was named "locks only the table
  * `of` names, so a claim may join one the role may not lock", and it proved why the claim narrowed
- * its lock. There is no lock to narrow, and `of` is gone from `LockedClaimSpec` (`./job-claim.ts`)
- * for the same reason.
+ * its lock; there is no lock to narrow. The other two belonged to the sibling helpers that claimed
+ * by SELECTING and stamped nothing, which are written inline at their one caller each now. What
+ * those two asserted — the selection returns exactly the claimable rows and leaves them unstamped —
+ * is asserted at those callers instead: `claimAcceptedOffline`'s case in
+ * `packages/payments/src/store.test.ts`, and the deployment-environment cases in
+ * `packages/fiscal-verifactu/src/drain.test.ts`.
  */
-const probeJobs = table("probe_jobs", {
-  position: count("position").primaryKey(),
-  status: label("status").notNull(),
-  printerId: count("printer_id"),
-  claimedAt: ts("claimed_at"),
-});
-
 type ClaimedProbe = { position: number; status: string };
 
 const opened: { close: () => Promise<void> }[] = [];
@@ -148,47 +144,6 @@ describe("claiming job rows on SQLite", () => {
     expect(statuses(db)).toEqual([
       { position: 1, status: "claimed" },
       { position: 2, status: "pending" },
-    ]);
-  });
-
-  it("hands back the claimable rows, unchanged, when the claim is the selection alone", async () => {
-    const db = await open();
-    seed(db, [
-      [1, "pending"],
-      [2, "done"],
-    ]);
-
-    const rows = await claimLock(
-      db
-        .select({ position: probeJobs.position })
-        .from(probeJobs)
-        .where(sql`${probeJobs.status} = 'pending'`)
-        .orderBy(probeJobs.position)
-        .limit(5),
-    );
-
-    expect(rows).toEqual([{ position: 1 }]);
-    expect(statuses(db)).toEqual([
-      { position: 1, status: "pending" },
-      { position: 2, status: "done" },
-    ]);
-  });
-
-  it("hands back the claimable rows, unchanged, when the selection is raw SQL", async () => {
-    const db = await open();
-    seed(db, [
-      [1, "pending"],
-      [2, "done"],
-    ]);
-
-    const rows = await claimLockedRows<{ position: number }>(db, {
-      selection: sql`select position from probe_jobs j where j.status = 'pending' order by j.position`,
-    });
-
-    expect(rows).toEqual([{ position: 1 }]);
-    expect(statuses(db)).toEqual([
-      { position: 1, status: "pending" },
-      { position: 2, status: "done" },
     ]);
   });
 });

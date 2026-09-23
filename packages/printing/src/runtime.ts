@@ -110,7 +110,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * mode) still calls this, then pushes+reports in the SAME transaction.
  *
  * ONE statement, built by `claimRows` in `@waitron/db`, which is where this claim's SQL and the
- * receipts for its behaviour under two agents live. Its selection chooses and locks the batch, and
+ * receipts for its behaviour under two agents live. Its selection chooses the batch, and
  * its UPDATE stamps that batch and reads each job's connection facts through a join to `printers`
  * on that table's id, so the push step needs no second read. The join appears in BOTH halves and
  * both are needed — the selection's decides eligibility, the stamp's supplies the columns the agent

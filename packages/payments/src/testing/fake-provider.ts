@@ -96,8 +96,9 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   /**
-   * The offline store-and-forward drain: claim this provider's `accepted_offline` rows (FOR UPDATE
-   * SKIP LOCKED) and advance each. Refs flagged via `declineForwardFor` are declined (→ `declined`,
+   * The offline store-and-forward drain: claim this provider's `accepted_offline` rows and advance
+   * each. The claim is this transaction, not a clause — see `claimAcceptedOffline` in `../store.ts`.
+   * Refs flagged via `declineForwardFor` are declined (→ `declined`,
    * plus one idempotent uncollected-receivable incident for the till); all others settle (→
    * `settled`). No network here, so claim + advance + incident share one transaction; a real adapter
    * (Cycle B) splits them T1/T2. `nextDueAt` is null — the fake has nothing time-scheduled.
