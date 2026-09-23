@@ -447,14 +447,36 @@ jobs:
       # `import.meta.url` migration folders collapsed onto the wrong path — and a bundle that
       # reaches `server.listening` has resolved every one of them, where a bundle that threw early
       # had not.
+      #
+      # The port and the venue directory are pinned rather than left to their defaults, so that a
+      # failure here means the BUNDLE and not the runner: on a default port an already-bound 8080,
+      # or a state root the runner will not let it write, fail with the same line as a dependency
+      # esbuild did not inline, and the step this replaced was deliberately specific about which
+      # reason it had established.
+      #
+      # It stops at the line rather than waiting out the timeout — the bundle serves until killed,
+      # so reading to completion would spend the full sixty seconds on every code pull request, and
+      # a cheap job can still be the critical path (CLAUDE.md §2).
       - name: Smoke-test the server bundle (it must start and listen)
+        env:
+          WAITRON_HTTP_PORT: "18080"
+          WAITRON_VENUE_DIR: "${{ runner.temp }}/smoke-venue"
         run: |
           set +e
-          output=$(timeout 60s node apps/server/dist/server.js 2>&1)
+          timeout 60s node apps/server/dist/server.js > smoke.log 2>&1 &
+          bundle=$!
+          found=1
+          for _ in $(seq 1 60); do
+            if grep -q '"event":"server.listening"' smoke.log; then found=0; break; fi
+            kill -0 "$bundle" 2>/dev/null || break
+            sleep 1
+          done
+          kill "$bundle" 2>/dev/null
+          wait "$bundle" 2>/dev/null
           set -e
-          echo "$output"
-          if ! grep -q '"event":"server.listening"' <<< "$output"; then
-            echo "expected the bundle to reach server.listening, got: $output" >&2
+          cat smoke.log
+          if [ "$found" -ne 0 ]; then
+            echo "expected the bundle to reach server.listening on port 18080" >&2
             exit 1
           fi
 

@@ -2328,13 +2328,37 @@ pair as the control, which WAS still refused. The repair stores a folded key in 
 `case when <folded> is null then lower(<raw>) else <folded> end`.
 
 **The `case` is why this entry exists.** A bare index on the folded column alone would put every row
-that did not carry one OUTSIDE the uniqueness check, which is worse than the defect — and 83 files
-outside `packages/identity` write `persons` directly, three of them real paths (`venue-apply.ts`'s
-admin insert, `mirror-session.ts`, `break-glass-command.ts`). The fallback gives those rows exactly
-the key they had before. So a row written outside the package is still compared ASCII-only.
-**Next action:** decide whether the column becomes mandatory — which means routing all 83 writers
-and breaking them at the compiler rather than silently — or whether the three real paths alone are
-routed and the rest left as test fixtures.
+that did not carry one OUTSIDE the uniqueness check, which is worse than the defect, and most of
+the writers outside `packages/identity` are test fixtures and demo seeds
+(`grep -rln "insert(persons)\|update(persons)" --include='*.ts' apps packages | grep -v
+"^packages/identity/"` finds 78 files, of which 9 are not `*.test.ts`, and 4 of those 9 are demo
+scripts). **The two real paths that create a person are routed** —
+`packages/provisioning/src/venue-apply.ts`'s admin insert and `apps/server/src/mirror-session.ts`
+both call the exported `foldForUniqueness` now; `break-glass-command.ts` writes none of the three
+columns. **What is left open:** every remaining writer is a fixture or a seed, each still folding
+ASCII-only, and the column is still nullable, so nothing at the compiler stops a new writer
+forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
+fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
+
+**CI still carries the shard layout, the Docker switches and the dependencies of a database
+server that is gone — OPEN (found 2026-09-23, task F1's review wave).** Three separate leftovers,
+grouped because they retire together:
+
+- **`REQUIRE_DOCKER: "1"` is set on `test-heavy` and `test-server` and read by nothing.** Its one
+  reader was `packages/db/src/testing/harness.ts`, deleted with the PostgreSQL test harness;
+  `grep -rn REQUIRE_DOCKER packages apps scripts bench` returns no line. `TESTCONTAINERS_RYUK_DISABLED`
+  sits beside it in the same state. Both workflow comments say they are left set rather than removed
+  and point HERE, which is what this entry is for.
+- **The shard counts and their sizing arguments were measured against PGlite and none has been
+  re-measured** — `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose comment now
+  says so explicitly. Read the next weekly run's shard durations before treating any of them as
+  current.
+- **24 `package.json` files still declare `pg`, `@electric-sql/pglite` or `@testcontainers/postgresql`**,
+  and nothing under `packages/` or `apps/` imports one — the only importers are the two bench rigs.
+  The flip removed two of these declarations and left the rest.
+
+**Next action:** task T2, in one pass — drop the dead switches, drop the dead dependencies, then
+re-time the shards and re-cut the matrix from the new numbers rather than from the old ones.
 
 **An append-only trigger can be dropped, or quietly replaced, from the application's own database
 handle — OPEN (found 2026-09-22, task F1).** PostgreSQL protected an append-only table with two

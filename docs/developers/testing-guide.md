@@ -840,7 +840,7 @@ spellings. What still IMPORTS one of them is a much shorter list:
 `grep -rn 'from "testcontainers"\|from "@testcontainers/postgresql"'` over `packages`, `apps`,
 `bench` and `scripts`, taken 2026-09-23, returned `bench/sqlite-failover/src/store.ts` and
 `bench/pglite-throughput/src/bench.ts` and nothing else — nothing under `packages/` or `apps/` at
-all. Neither of those two is a test suite: both benches declare a `bench` script and no `test`
+all. Neither of those two is a test suite: neither bench declares a `test`
 script, so no suite in this repository starts a container by importing them. Every remaining
 declaration is a leftover the flip did not remove.
 

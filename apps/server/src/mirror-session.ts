@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { and, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { nowIso, withTransaction, type Database, type DeploymentMode } from "@waitron/db";
-import { managementSessions, persons } from "@waitron/identity";
+import { foldForUniqueness, managementSessions, persons } from "@waitron/identity";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -48,6 +48,9 @@ export async function ensureMirrorViewer(db: Database): Promise<void> {
       .values({
         id: MIRROR_VIEWER_PERSON_ID,
         displayName: "mirror viewer",
+        // Folded for the same reason the venue plan's admin is: the live-display-name index and
+        // every lookup compare on this key, and a row without it falls back on an ASCII-only one.
+        displayNameFolded: foldForUniqueness("mirror viewer"),
         pinHash: UNUSABLE_PIN_HASH,
         role: "admin",
         status: "active",

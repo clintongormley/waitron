@@ -11,7 +11,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { persons, startManagementSession } from "@waitron/identity";
+import { foldForUniqueness, persons, startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -162,6 +162,12 @@ export async function applyVenue(
               pinHash: action.pinHash,
               passwordHash: action.passwordHash,
               email: action.email,
+              // The login comparison folds accents and case the same way the index does, so a
+              // row stored without its folded twin falls back on an ASCII-only key and an
+              // address with a non-ASCII character would stop matching at sign-in. This is the
+              // admin account, so it is the one row where that matters most.
+              emailFolded: action.email === undefined ? undefined : foldForUniqueness(action.email),
+              displayNameFolded: foldForUniqueness(action.displayName),
               role: "admin",
             });
           }

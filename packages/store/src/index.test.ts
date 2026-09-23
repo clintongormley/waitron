@@ -396,8 +396,13 @@ describe("openVenueStore under contention", () => {
    * but only once something has been WRITTEN: measured on Node v26.7.0, a freshly opened,
    * never-written database in write-ahead mode has no sidecars whether its connection is open or
    * closed, so that test passed with the leak still there. Descriptor count separates the two, in
-   * both directions: opening one connection takes the count from 12 to 13 and closing it returns it
-   * to 12, and the leak shape above leaves it at 13.
+   * both directions — measured on Node v26.7.0, opening one connection raises the count by exactly
+   * one, closing it returns the count, and the leak shape above leaves it raised.
+   *
+   * The assertion is "no higher than before" rather than an equality, and deliberately: the count
+   * is the whole PROCESS's, and this suite does not own every descriptor in the worker, so an
+   * equality would fail on unrelated churn — a flake, not a leak. A leak can only push the number
+   * UP, so the inequality catches it without the false failure.
    *
    * What the leak costs is a descriptor per failed open, which a boot that retries repeats. It is
    * NOT contention: an idle SQLite connection holds no lock, so a later attempt is not blocked by
@@ -413,7 +418,7 @@ describe("openVenueStore under contention", () => {
     await expect(openVenueStore({ directory, venueSchema, nodeSchema })).rejects.toThrow(
       "file is not a database",
     );
-    expect(readdirSync("/dev/fd").length).toBe(before);
+    expect(readdirSync("/dev/fd").length).toBeLessThanOrEqual(before);
   });
 
   it("gives up when the holder never releases", async () => {

@@ -25,6 +25,13 @@ export function createWriteQueue(db: DatabaseSync) {
    * Measured — with a flag, `packages/payments/src/reconcile.concurrency.test.ts` went red, because
    * its two sweeps arrive while the first body is running and are exactly the callers that must be
    * allowed to queue.
+   *
+   * **What it answers precisely is "was this call SPAWNED from inside a body", which stops being
+   * the same question once work outlives the body that started it.** Measured on Node v26.7.0 with
+   * a control: a task detached inside a body and settling after that body returned still reads the
+   * store, so it would be refused with the lock free. No caller does that today — the detached
+   * sites in this tree are an SSE stream's interval and the setup restart timers, none of them
+   * inside a write lock — and whoever writes the first one needs to know this refuses it.
    */
   const inBody = new AsyncLocalStorage<true>();
   return {

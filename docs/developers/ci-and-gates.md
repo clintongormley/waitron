@@ -68,8 +68,8 @@ its two halves. `pnpm reap` (`scripts/reap-testcontainers.mjs`) removes stale co
 separate pass, kills orphaned vitest workers. **The container half no longer has a subject in any
 package suite.** It matches the `com.waitron.reapable` label alone, and
 `grep -rn com.waitron.reapable` over the repository on 2026-09-23 finds exactly one stamp outside
-that script and its own suite — `bench/sqlite-failover/src/store.ts` — in a bench that declares a
-`bench` script and no `test` script at all, so no suite under `packages/` or `apps/` can leave a
+that script and its own suite — `bench/sqlite-failover/src/store.ts` — in a bench that declares
+no `test` script at all, so no suite under `packages/` or `apps/` can leave a
 container for it to find. **The worker half is unchanged and has nothing to do with the storage
 engine:** an interrupted vitest run still reparents its workers to ppid 1, where they spin at ~100%
 CPU until killed. So the occasion to run it is after an interrupted run of ANY suite, not before a

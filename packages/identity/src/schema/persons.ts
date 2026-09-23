@@ -53,7 +53,9 @@ export const persons = table(
      * what makes the live-display-name index below fold an accented letter at all. Every write
      * path in this package sets it in the statement that sets `display_name`. It is nullable
      * because code outside this package writes `persons` rows straight through the table
-     * definition and cannot be asked for it; the index below says what such a row falls back to. */
+     * definition. The two that create a REAL person are asked for it — `foldForUniqueness` is
+     * exported for them — and the rest are fixtures and demo seeds; the index below says what a
+     * row without one falls back to. */
     displayNameFolded: label("display_name_folded"),
     firstNames: label("first_names"),
     lastNames: label("last_names"),

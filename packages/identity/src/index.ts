@@ -1,6 +1,12 @@
 // The entire public surface of @waitron/identity. Re-exports only — no logic here.
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
+// Exported for the writers OUTSIDE this package that create a person: the venue plan's
+// admin (`packages/provisioning/src/venue-apply.ts`) and the mirror viewer
+// (`apps/server/src/mirror-session.ts`). Both compare against the same key at login, so
+// both must fold the same way; `./schema/persons.ts` carries what happens to a row that
+// does not.
+export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endSession, loginWithPin } from "./login.js";
 export type { Session } from "./login.js";
