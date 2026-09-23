@@ -3529,10 +3529,17 @@ What the preparation tasks left, with F1's own answers where it found them:
   (mutate `settled_at` and all 413 tests passed), so T2 added the missing case — and the draft comment
   claiming the write queue serialises two forward passes was false, because that caller opens a bare
   `db.transaction`, which is drizzle's own `begin` and never enters the queue.
-- **Unfixed pre-existing bug —** `packages/printing` reports an out-of-range `character_table` (CHECK
-  `printers_character_table_ck`, SQLSTATE `23514`) to the operator as a `transport_fields` problem,
-  because `printers.ts` translates by CLASS not by key; the fix is a per-constraint `refusalOn` target,
-  now available (from the P10 review, #482).
+- **`packages/printing` reported an out-of-range `character_table` as a `transport_fields` problem —
+  FIXED by #489 (the SQLite switch); nothing left to build.** `translatePrinterWriteError`
+  (`packages/printing/src/printers.ts`) now translates only the refusal that names
+  `printers_transport_fields_ck`, through `checkFailed`, so a `printers_character_table_ck` refusal
+  propagates unchanged. An operator never reaches it: the only product caller of `createPrinter` and
+  `updatePrinter`, `apps/server/src/print-api.ts`, screens the value first with `optionalByte`,
+  which refuses anything outside 0..255 as `management.request_invalid` with `field:
+  "characterTable"`. Both halves measured 2026-09-23 by deletion, each restored: matching every
+  CHECK refusal by its message instead failed two cases in `packages/printing/src/printers.test.ts`
+  with `printer.invalid_config`; dropping `optionalByte`'s upper bound turned the `characterTable:
+  256` PATCH case in `apps/server/src/print-api.test.ts` from 400 into 500.
 - **No guard holds a MODULE migration set to its declared schema — LANDED as PR #491, 2026-09-23,
   for the four named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
   `src/schema/schema-conformance.test.ts` now, calling the shared suite factory
