@@ -23,23 +23,18 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.8",
     "@waitron/membership": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.23.0"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
-    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.0.0",
-    "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
-    "testcontainers": "^12.1.0",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }
