@@ -3999,8 +3999,8 @@ async function readQueueSubItems(
   // Each parent line's OWN allergens and diet — the PARENT line's product (LEFT join: a null base is
   // allowed and yields `pending: true`). No modifier contribution: each dish shows its own
   // recipe-derived figures, and each extra's own list is shown separately.
-  // RAW columns, as above: a variant dish that inherits them would SILENTLY show no allergens or
-  // labels (Task 5).
+  // RAW columns, as above: a variant dish that inherits them would show its allergens as not
+  // reviewed (its null sets `pending` below) and no dietary labels (Task 5).
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,

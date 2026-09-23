@@ -1,6 +1,13 @@
 import { expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, invoiceSeries, locations, tills, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  invoiceSeries,
+  locations,
+  products,
+  tills,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   locationId as brandLocationId,
@@ -20,8 +27,14 @@ import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createUnit } from "../src/units.js";
 import { productUnits, units } from "../src/schema/units.js";
 
-/** The unit a product's OWN `product_units` row names, or null when it has none (it reads as Each). */
+/** The unit a product's OWN `product_units` row names, or null when it has none (it reads as Each).
+ * Throws when no such product exists, so a null always means "no unit row", never "wrong id". */
 export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
+  const [product] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(eq(products.id, productId));
+  if (product === undefined) throw new Error(`storedUnitId: no product with id ${productId}`);
   const [row] = await tx
     .select({ unitId: productUnits.unitId })
     .from(productUnits)

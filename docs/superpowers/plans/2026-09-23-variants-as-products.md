@@ -386,10 +386,11 @@ Task 2's `available`).
 ```sql
 create trigger products_variant_one_level_insert before insert on products
 begin
-  select raise(abort, 'a variant''s parent must be a product with no parent')
+  select raise(abort, 'a variant''s parent must be a product with no parent, and a variant cannot have variants of its own')
   where new.parent_id is not null
     and (new.parent_id = new.id
-      or (select parent_id from products where id = new.parent_id) is not null);
+      or (select parent_id from products where id = new.parent_id) is not null
+      or exists (select 1 from products where parent_id = new.id));
 end;
 --> statement-breakpoint
 create trigger products_variant_parent_fixed_update before update of parent_id on products
@@ -398,6 +399,11 @@ begin
   where new.parent_id is not old.parent_id;
 end;
 ```
+
+  The insert trigger also refuses a new row that already has variants, because deferred foreign keys
+  (as configuration transfer runs them) let a variant be written before the parent it names —
+  `scripts/behavioural-triggers.test.ts`'s case "refuses a product naming a parent when it already
+  has a variant of its own".
 
   Put the two messages in `trigger-refusals.ts` as `VARIANT_ONE_LEVEL_REFUSAL` and
   `VARIANT_PARENT_FIXED_REFUSAL`, exported from `packages/db/src/index.ts`.
