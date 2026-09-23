@@ -252,7 +252,8 @@ export async function recordCorrection(
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
       // A money column stores a count of whole cents, converted here at the row. `vat_breakdown`
-      // above is jsonb holding the decimal literals the fiscal record hashes and stays as it is.
+      // above is JSON text holding the decimal literals the fiscal record hashes and stays as it
+      // is.
       total: stringToCents(input.total),
       locale: original.locale,
       invoiceLocales: original.invoiceLocales,

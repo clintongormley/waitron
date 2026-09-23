@@ -3896,15 +3896,16 @@ What the preparation tasks left, with F1's own answers where it found them:
     from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
     and a `/ 100` puts a second copy of the scale outside the files
     `packages/shared/src/conventions.test.ts` checks.
-    **Found in this branch's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
+    **Found in #531's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
     bound BEFORE it rounds to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
     amount with a third decimal place can round past the bound and is accepted:
     `stringToCents("999999999999.995")` returned 100000000000000 (thirteen integer digits) where
     `"1000000000000"` is refused with `shared.decimal_overflow`, measured 2026-09-23. The quantity
     and rate converters check after rounding (`stringToThousandths("999999999.9995")` is refused).
-    Not changed here: `decimalToCents` also serves the fiscal record builders, so the fix waits
-    for a session the owner attends. The `cents.ts` header's "widest amount this system admits"
-    and `docs/developers/conventions-data.md`'s matching sentence describe two-place input only.
+    Not changed in #531 or since: `decimalToCents` also serves the fiscal record builders, so the
+    fix waits for a session the owner attends. The `cents.ts` header's "widest amount this system
+    admits" and `docs/developers/conventions-data.md`'s matching sentence describe two-place input
+    only.
   - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
     PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money
