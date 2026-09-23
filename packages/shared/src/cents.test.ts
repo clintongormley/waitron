@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
-import { centsToDecimal, decimalToCents, rawCentsToDecimal } from "./cents.js";
+import { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 import { decimal, MAX_MONEY_INTEGER_DIGITS } from "./money.js";
 
 /** The code and params an AppError-throwing call refuses with, so a refusal is checked in full. */
@@ -81,6 +81,33 @@ describe("decimalToCents", () => {
   it("refuses an amount wider than the money scale admits", () => {
     const tooWide = "1" + "0".repeat(MAX_MONEY_INTEGER_DIGITS);
     expect(refusalOf(() => decimalToCents(decimal(tooWide)))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: tooWide, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
+    });
+  });
+});
+
+describe("stringToCents", () => {
+  it("counts the cents in a decimal string, rounding a third place half away from zero", () => {
+    expect(stringToCents("12.34")).toBe(1234);
+    expect(stringToCents("0.005")).toBe(1);
+    expect(stringToCents("-0.005")).toBe(-1);
+    expect(stringToCents("0.004")).toBe(0);
+  });
+
+  it("refuses a malformed string before converting it", () => {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
+      expect(refusalOf(() => stringToCents(bad))).toEqual({
+        code: "shared.invalid_decimal",
+        params: { value: bad },
+      });
+    }
+  });
+
+  it("accepts the widest two-place amount the money scale admits and refuses one digit wider", () => {
+    expect(stringToCents("9".repeat(MAX_MONEY_INTEGER_DIGITS) + ".99")).toBe(99999999999999);
+    const tooWide = "1" + "0".repeat(MAX_MONEY_INTEGER_DIGITS);
+    expect(refusalOf(() => stringToCents(tooWide))).toEqual({
       code: "shared.decimal_overflow",
       params: { value: tooWide, maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS },
     });

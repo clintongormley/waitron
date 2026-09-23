@@ -8,6 +8,8 @@ import {
   decimalToThousandths,
   rawBasisPointsToDecimal,
   rawThousandthsToDecimal,
+  stringToBasisPoints,
+  stringToThousandths,
   thousandthsToDecimal,
 } from "./scales.js";
 
@@ -74,6 +76,37 @@ describe("decimalToThousandths", () => {
   });
 });
 
+describe("stringToThousandths", () => {
+  it("counts the thousandths in a decimal string, rounding a fourth place half away from zero", () => {
+    expect(stringToThousandths("0.005")).toBe(5);
+    expect(stringToThousandths("1.5")).toBe(1500);
+    expect(stringToThousandths("0.0005")).toBe(1);
+    expect(stringToThousandths("-0.0005")).toBe(-1);
+    expect(stringToThousandths("0.0004")).toBe(0);
+  });
+
+  it("refuses a malformed string before converting it", () => {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
+      expect(refusalOf(() => stringToThousandths(bad))).toEqual({
+        code: "shared.invalid_decimal",
+        params: { value: bad },
+      });
+    }
+  });
+
+  it("refuses a quantity wider than the column's nine integer digits", () => {
+    expect(refusalOf(() => stringToThousandths("1000000000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "1000000000", maxIntegerDigits: 9 },
+    });
+    expect(refusalOf(() => stringToThousandths("-1000000000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "-1000000000", maxIntegerDigits: 9 },
+    });
+    expect(stringToThousandths("999999999.999")).toBe(999999999999);
+  });
+});
+
 describe("thousandthsToDecimal", () => {
   it("renders a count of thousandths as a three-place decimal", () => {
     expect(thousandthsToDecimal(1500)).toBe("1.500");
@@ -132,6 +165,32 @@ describe("decimalToBasisPoints", () => {
       params: { value: "1000", maxIntegerDigits: 3 },
     });
     expect(decimalToBasisPoints(decimal("999.99"))).toBe(99999);
+  });
+});
+
+describe("stringToBasisPoints", () => {
+  it("counts the basis points in a decimal string, rounding a third place half away from zero", () => {
+    expect(stringToBasisPoints("10.50")).toBe(1050);
+    expect(stringToBasisPoints("4")).toBe(400);
+    expect(stringToBasisPoints("0.005")).toBe(1);
+    expect(stringToBasisPoints("0.004")).toBe(0);
+  });
+
+  it("refuses a malformed string before converting it", () => {
+    for (const bad of ["abc", "1e3", "+1.00", "01.00", "", " 1.00"]) {
+      expect(refusalOf(() => stringToBasisPoints(bad))).toEqual({
+        code: "shared.invalid_decimal",
+        params: { value: bad },
+      });
+    }
+  });
+
+  it("refuses a rate wider than the column's three integer digits", () => {
+    expect(refusalOf(() => stringToBasisPoints("1000"))).toEqual({
+      code: "shared.decimal_overflow",
+      params: { value: "1000", maxIntegerDigits: 3 },
+    });
+    expect(stringToBasisPoints("999.99")).toBe(99999);
   });
 });
 

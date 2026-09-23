@@ -16,8 +16,8 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
-  decimalToCents,
   rawCentsToDecimal,
+  stringToCents,
   sumDecimals,
 } from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
@@ -136,12 +136,10 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
         input.tenders.map((tender) => ({
           saleId: input.saleId,
           method: tender.method as (typeof tenders.$inferInsert)["method"],
-          amount: decimalToCents(decimal(tender.amount)),
+          amount: stringToCents(tender.amount),
           cashTendered:
-            tender.cashTendered == null
-              ? tender.cashTendered
-              : decimalToCents(decimal(tender.cashTendered)),
-          tipAmount: decimalToCents(decimal(tender.tipAmount)),
+            tender.cashTendered == null ? tender.cashTendered : stringToCents(tender.cashTendered),
+          tipAmount: stringToCents(tender.tipAmount),
           settledAt: tender.settledAt!.toISOString(),
         })),
       );

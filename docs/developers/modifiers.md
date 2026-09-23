@@ -108,7 +108,7 @@ Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras
 the menu offer's `menu_item_extra_items.price`, then the list item's own `price`, then the product's
 `unit_price` (its own, or its parent's where a variant leaves it blank). A null at a rung means "ask
 the next one". Every price on the wire is a GROSS (VAT-inclusive) two-place decimal string; the
-column underneath holds a count of whole cents and the row converts (`decimalToCents` /
+column underneath holds a count of whole cents and the row converts (`stringToCents` /
 `centsToDecimal`, `packages/shared/src/cents.ts`).
 
 The VAT class is never resolved that way — an extra always carries the picked PRODUCT's VAT class,

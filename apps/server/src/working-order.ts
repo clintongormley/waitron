@@ -25,6 +25,9 @@ import {
   rawCentsToDecimal,
   type SaleId,
   type StationThresholds,
+  stringToBasisPoints,
+  stringToCents,
+  stringToThousandths,
   subtractDecimal,
   thousandthsToDecimal,
   type TillId,
@@ -606,8 +609,8 @@ async function priceOrderLines(
       // there are three converters and not one: an amount counts cents, `quantity` counts
       // thousandths (0.005 kg is 5) and `vatRate` counts basis points (21.00% is 2100). The
       // `priced` result this reads is untouched: the walk-up path files from it in decimal.
-      quantity: decimalToThousandths(decimal(line.quantity)),
-      unitPrice: decimalToCents(decimal(line.unitPrice)),
+      quantity: stringToThousandths(line.quantity),
+      unitPrice: stringToCents(line.unitPrice),
       // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
       // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
       // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
@@ -618,7 +621,7 @@ async function priceOrderLines(
       // option's gross unit is its `price_delta`, re-priced from THIS locked column on retrieve exactly
       // as the dish is. This is a durable lock, not a display cache.
       unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
-      vatRate: decimalToBasisPoints(decimal(line.vatRate)),
+      vatRate: stringToBasisPoints(line.vatRate),
       // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
       // `working_order_lines` is the counter's mutable display, and every other total the operator/
       // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
@@ -2681,7 +2684,7 @@ async function carveOffLines(
         // `quantity` is the caller's requested split, already validated as a decimal literal above;
         // the other three were converted out of their columns at the source read and go back in at
         // their own scales.
-        quantity: decimalToThousandths(decimal(quantity)),
+        quantity: stringToThousandths(quantity),
         unitPrice: decimalToCents(line.unitPrice),
         unitPriceGross: decimalToCents(line.unitPriceGross),
         vatRate: decimalToBasisPoints(line.vatRate),
@@ -3351,7 +3354,7 @@ export async function updateHeldOrder(
         await tx
           .update(workingOrderLines)
           .set({
-            quantity: decimalToThousandths(decimal(requested.quantity)),
+            quantity: stringToThousandths(requested.quantity),
             lineTotal: decimalToCents(grossLineTotal(stored.unitPriceGross, requested.quantity)),
           })
           .where(

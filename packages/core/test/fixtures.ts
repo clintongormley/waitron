@@ -3,8 +3,7 @@ import {
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
-  decimal,
-  decimalToCents,
+  stringToCents,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
@@ -132,7 +131,7 @@ export async function seedBareSale(
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
-      total: decimalToCents(decimal(overrides.total ?? "65.00")),
+      total: stringToCents(overrides.total ?? "65.00"),
       // The filed per-rate desglose. Defaults to `[]`: a bare original planted for a
       // correction test carries no line detail here, and the correction's OWN breakdown is what those
       // tests exercise (via recordCorrection). Overridable for a test that needs a specific one.

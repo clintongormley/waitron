@@ -6,10 +6,10 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
   decimal,
-  decimalToBasisPoints,
-  decimalToCents,
-  decimalToThousandths,
   percentOf,
+  stringToBasisPoints,
+  stringToCents,
+  stringToThousandths,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import {
@@ -170,7 +170,7 @@ export async function seedSale(
       invoiceNumber: opts.invoiceNumber,
       issuedAt: opts.issuedAt,
       issuedOffsetMinutes: opts.issuedOffsetMinutes ?? 0,
-      total: decimalToCents(decimal(opts.total)),
+      total: stringToCents(opts.total),
       vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -188,10 +188,10 @@ export async function seedSale(
       descriptions: line.descriptions ?? { "es-ES": "Item" },
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
-      quantity: decimalToThousandths(decimal(line.quantity ?? "1.000")),
-      unitPrice: decimalToCents(decimal(line.lineTotal)),
-      vatRate: decimalToBasisPoints(decimal(line.vatRate)),
-      lineTotal: decimalToCents(decimal(line.lineTotal)),
+      quantity: stringToThousandths(line.quantity ?? "1.000"),
+      unitPrice: stringToCents(line.lineTotal),
+      vatRate: stringToBasisPoints(line.vatRate),
+      lineTotal: stringToCents(line.lineTotal),
     })),
   );
   return saleId;
@@ -205,8 +205,8 @@ export async function seedTender(
   await db.insert(tenders).values({
     saleId: ref.saleId,
     method: opts.method,
-    amount: decimalToCents(decimal(opts.amount)),
-    tipAmount: decimalToCents(decimal(opts.tipAmount ?? "0.00")),
+    amount: stringToCents(opts.amount),
+    tipAmount: stringToCents(opts.tipAmount ?? "0.00"),
     settledAt: opts.settledAt,
   });
 }
@@ -252,21 +252,21 @@ export async function seedPurchaseInvoice(
       supplierInvoiceNumber: opts.supplierInvoiceNumber,
       issuedOn: opts.issuedOn,
       receivedOn: opts.receivedOn,
-      total: decimalToCents(decimal(opts.total)),
+      total: stringToCents(opts.total),
       regime: opts.regime,
       deductibleProportion:
         opts.deductibleProportion === undefined
           ? undefined
-          : decimalToBasisPoints(decimal(opts.deductibleProportion)),
+          : stringToBasisPoints(opts.deductibleProportion),
     })
     .returning({ id: purchaseInvoices.id });
   const id = row!.id;
   await db.insert(purchaseInvoiceVat).values(
     opts.lines.map((l) => ({
       purchaseInvoiceId: id,
-      rate: decimalToBasisPoints(decimal(l.rate)),
-      base: decimalToCents(decimal(l.base)),
-      tax: decimalToCents(decimal(l.tax)),
+      rate: stringToBasisPoints(l.rate),
+      base: stringToCents(l.base),
+      tax: stringToCents(l.tax),
       kind: l.kind,
     })),
   );
@@ -327,7 +327,7 @@ export async function seedFiredLine(
       catalogueId: catalogue!.id,
       name: "Item",
       pricingUnit: "each",
-      unitPrice: decimalToCents(decimal("1.00")),
+      unitPrice: stringToCents("1.00"),
       vatClass: "general",
     })
     .returning({ id: products.id });
@@ -339,11 +339,11 @@ export async function seedFiredLine(
       productId: product!.id,
       name: "Item",
       descriptions: { "es-ES": "Item" },
-      quantity: decimalToThousandths(decimal("1.000")),
-      unitPrice: decimalToCents(decimal("1.00")),
-      unitPriceGross: decimalToCents(decimal("1.00")),
-      vatRate: decimalToBasisPoints(decimal("10.00")),
-      lineTotal: decimalToCents(decimal("1.00")),
+      quantity: stringToThousandths("1.000"),
+      unitPrice: stringToCents("1.00"),
+      unitPriceGross: stringToCents("1.00"),
+      vatRate: stringToBasisPoints("10.00"),
+      lineTotal: stringToCents("1.00"),
       servedAt: opts.served ? firedAt : null,
     })
     .returning({ id: workingOrderLines.id });

@@ -2804,8 +2804,8 @@ refuse — so the ops screen and the constraint are no longer two layers over th
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
 `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
-and ten whole digits; the `decimal()` + `decimalToCents` pair the four screened catalogue writes use
-allows any number of decimals and twelve whole digits, and ROUNDS the excess. Measured 2026-09-21
+and ten whole digits; `stringToCents` (the `decimal()` + `decimalToCents` pair) that the four
+screened catalogue writes use allows any number of decimals and twelve whole digits, and ROUNDS the excess. Measured 2026-09-21
 through the repository's own converters:
 
 ```text
@@ -3818,10 +3818,44 @@ What the preparation tasks left, with F1's own answers where it found them:
   pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
   claim, the slice-1 spec's four unannotated "211" mentions, and what became of
   `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
-- **Deferred cleanups, each with its reason in its PR** — P5's three declined review suggestions;
-  and P7's three (assert `drizzle-kit generate` is a no-op; unify the three root-project schema
-  readers into `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class
-  map).
+- **Deferred cleanups, each with its reason in its PR** — P7's three (assert `drizzle-kit generate`
+  is a no-op; unify the three root-project schema readers into
+  `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
+  - P5's three (#475) — **one DONE, one moot, one still declined, for a restated reason**
+    (2026-09-23, PR #531). **Done:** the two-call write conversion
+    `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
+    other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
+    them since #475), at 50 sites outside `packages/shared`. Two places keep the two calls: the
+    converters' own tests, because they test the converter; and the fiscal record builders —
+    `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
+    which only those three use — seven sites the unattended campaign run may not change without
+    the owner's review. **OPEN:** swap those seven in a session the owner attends; the golden
+    huella test in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` passed unedited with
+    them swapped, before they were put back. #475 declined it because a helper taking a plain string "would hide that
+    validation and invite passing something unchecked"; that does not hold — a helper calling
+    `decimal()` inside refused all six malformed strings tried (`abc`, `1e3`, `+1.00`, `01.00`,
+    the empty string and a leading space) with `shared.invalid_decimal`, the same as the two
+    calls. **Moot:** renaming the new container test to drop its `.pg.` marker — that file,
+    `packages/core/src/list-outstanding-sales.pg.test.ts`, became
+    `list-outstanding-sales.wide-amount.test.ts` in #489, and no `.pg.` file is left in the tree
+    (`git ls-files | grep -c '\.pg\.'` prints 0). **Still declined, reason restated:** writing
+    `moneyNum` in `packages/workforce-es/src/convenio.ts` as `cents / 100`. The value is the same —
+    measured over 6,000,007 counts (every one from −2,000,000 to 2,000,000, two million random
+    ones across the whole twelve-digit range, and the extremes), `cents / 100` equalled
+    `Number(centsToDecimal(cents))` every time, while a control, `cents * 0.01`, differed on 129
+    of the counts 0 to 999. What it would change is where the money scale lives: the conversion
+    from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
+    and a `/ 100` puts a second copy of the scale outside the files
+    `packages/shared/src/conventions.test.ts` checks.
+    **Found in this branch's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
+    bound BEFORE it rounds to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
+    amount with a third decimal place can round past the bound and is accepted:
+    `stringToCents("999999999999.995")` returned 100000000000000 (thirteen integer digits) where
+    `"1000000000000"` is refused with `shared.decimal_overflow`, measured 2026-09-23. The quantity
+    and rate converters check after rounding (`stringToThousandths("999999999.9995")` is refused).
+    Not changed here: `decimalToCents` also serves the fiscal record builders, so the fix waits
+    for a session the owner attends. The `cents.ts` header's "widest amount this system admits"
+    and `docs/developers/conventions-data.md`'s matching sentence describe two-place input only.
   - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
     PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money

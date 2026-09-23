@@ -18,7 +18,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { AppError, saleId as brandSaleId, decimal, decimalToCents } from "@waitron/shared";
+import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
@@ -60,7 +60,7 @@ async function seedSale(
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
-      total: decimalToCents(decimal(overrides.total ?? "65.00")),
+      total: stringToCents(overrides.total ?? "65.00"),
       // The filed per-rate breakdown; `[]` — this file exercises settlement, not the
       // breakdown, and the column just needs a valid NOT NULL jsonb array.
       vatBreakdown: [],
@@ -513,7 +513,7 @@ async function settleDirect(db: Database, saleId: SaleId, amount: string): Promi
       saleId,
       method: "cash",
       // Money columns hold whole cents; `amount` arrives as the decimal amount the case reads as.
-      amount: decimalToCents(decimal(amount)),
+      amount: stringToCents(amount),
       tipAmount: 0,
       settledAt: SETTLED_AT.toISOString(),
     });

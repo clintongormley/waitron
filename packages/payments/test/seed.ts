@@ -1,4 +1,4 @@
-import { decimal, decimalToCents, nodeId as brandNodeId } from "@waitron/shared";
+import { nodeId as brandNodeId, stringToCents } from "@waitron/shared";
 import {
   invoiceSeries,
   locations,
@@ -172,5 +172,5 @@ export async function seedPaymentPolicy(
 ): Promise<void> {
   await db
     .insert(paymentPolicy)
-    .values({ offlineMode: mode, offlineAmountCap: decimalToCents(decimal(cap)) });
+    .values({ offlineMode: mode, offlineAmountCap: stringToCents(cap) });
 }

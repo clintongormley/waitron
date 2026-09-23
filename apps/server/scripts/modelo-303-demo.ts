@@ -83,8 +83,9 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
-  decimalToBasisPoints,
   decimalToCents,
+  stringToBasisPoints,
+  stringToCents,
   subtractDecimal,
   sumDecimals,
   nodeId as brandNodeId,
@@ -431,9 +432,9 @@ async function seedPurchaseInvoices(db: Database): Promise<void> {
       .returning({ id: purchaseInvoices.id });
     await db.insert(purchaseInvoiceVat).values({
       purchaseInvoiceId: inv!.id,
-      rate: decimalToBasisPoints(decimal(p.rate)),
-      base: decimalToCents(decimal(p.base)),
-      tax: decimalToCents(decimal(p.tax)),
+      rate: stringToBasisPoints(p.rate),
+      base: stringToCents(p.base),
+      tax: stringToCents(p.tax),
       kind: p.kind,
     });
   }
