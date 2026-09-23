@@ -3822,7 +3822,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   is a no-op; unify the three root-project schema readers into
   `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
   - P5's three (#475) — **one DONE, one moot, one still declined, for a restated reason**
-    (2026-09-23, branch `chore/slice1-deferred-p5`). **Done:** the two-call write conversion
+    (2026-09-23, PR #531). **Done:** the two-call write conversion
     `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
     other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
     them since #475), at 50 sites outside `packages/shared`. Two places keep the two calls: the
