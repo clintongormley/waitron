@@ -7,7 +7,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { asAppUser, incidents, newId, saleLines, sales, withTransaction } from "@waitron/db";
+import { incidents, newId, saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
@@ -58,7 +58,6 @@ beforeEach(async () => {
 
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
   });
 }
@@ -214,7 +213,6 @@ describe("the write path against the real Veri*Factu backend", () => {
     // would leave all three behind.
     await expect(
       withTransaction(pg.db, async (tx) => {
-        await asAppUser(tx);
         await recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
         throw new Error("simulated crash after the fiscal write");
       }),
@@ -302,7 +300,6 @@ describe("parent_line_id is not part of the huella", () => {
   async function huellaFor(parentLineNo: number | null): Promise<string> {
     let huella: string | undefined;
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
         backend,
@@ -452,7 +449,6 @@ describe("a line's note is not part of the huella", () => {
   async function huellaFor(note: string): Promise<string> {
     let huella: string | undefined;
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
         backend,
@@ -521,7 +517,6 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
   async function recordFor(till: TillId): Promise<RecordSnapshot> {
     let snapshot: RecordSnapshot | undefined;
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
         backend,
@@ -642,7 +637,6 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
     const seeded = await seedTenantWithSif(pg.db, { nif: PINNED_NIF });
 
     const { huella, importe_total, cuota_total } = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
         backend,

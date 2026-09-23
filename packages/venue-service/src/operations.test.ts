@@ -10,7 +10,6 @@ import {
   writeContentLanguages,
 } from "@waitron/catalogue";
 import {
-  asAppUser,
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
@@ -61,7 +60,6 @@ beforeAll(() => {
 
 async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

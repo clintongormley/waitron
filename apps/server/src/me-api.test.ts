@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -135,7 +135,6 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
  * the app role) and return the cookie header that carries it — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;

@@ -18,7 +18,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
-  asAppUser,
   diningTables,
   nodes,
   nowIso,
@@ -236,7 +235,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -282,7 +280,6 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
  *  invoice-first order shows on between placing and collect. */
 async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
   });
@@ -511,7 +508,6 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
 async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }
@@ -756,7 +752,6 @@ describe("payWorkingOrder", () => {
     // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`update products set unit_price = 999 where id = ${cafe.id}`);
     });
 
@@ -916,7 +911,6 @@ describe("payWorkingOrder", () => {
     });
     // Abandon it (open → abandoned), then try to pay.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
     });
 
@@ -2390,7 +2384,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2403,7 +2396,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
     // default station. Nothing has printed yet.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const tableId = await addTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
       await addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1", hold: true }]);
@@ -2425,11 +2417,9 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // other outcome being reached, so the assertion can no longer fail in that direction.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await sendLines(tx, cfg, tabId, [1]);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await recallLines(tx, cfg, tabId, [1]);
       }),
     ]);
@@ -2463,7 +2453,6 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // faithful racer.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2477,7 +2466,6 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
     // it out from under the pass.
     const { postres, otros, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
@@ -2502,11 +2490,9 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // `ticket.already_fired` half can no longer fail.
     const [sc, fc] = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await setLineCourse(tx, cfg, tabId, 1, otros.id);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await fireCourse(tx, cfg, tabId, postres.id);
       }),
     ]);
@@ -2552,7 +2538,6 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
@@ -2565,7 +2550,6 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
     // and `recallLines([1])` targets it. Nothing printed yet.
     const { postres, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
       const tableId = await addTable(tx, cfg);
@@ -2589,11 +2573,9 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // hold; what no longer happens is the other outcome being reached.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await recallLines(tx, cfg, tabId, [1]);
       }),
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await fireCourse(tx, cfg, tabId, postres.id);
       }),
     ]);

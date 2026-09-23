@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -80,7 +80,6 @@ describe("seedFloor", () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await seedFloor(tx, { locationId, locale: LOCALE });
 
       const { rows: zones } = await tx.execute<{ name: string; active: number }>(

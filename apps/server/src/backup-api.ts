@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -201,7 +201,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c); // throws 401 if absent/forged
     await withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
     });
   };

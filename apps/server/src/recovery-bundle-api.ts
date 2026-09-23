@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { collectStateSecrets } from "./state-secrets.js";
@@ -52,7 +52,6 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "system.manage",

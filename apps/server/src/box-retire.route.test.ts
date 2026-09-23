@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
+import { readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -76,7 +76,6 @@ async function setupTenant(): Promise<{ nodeId: string }> {
   );
 
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
     // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
     // statement never reaches, and both columns are NOT NULL.

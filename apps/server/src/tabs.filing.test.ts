@@ -16,7 +16,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
@@ -184,7 +184,6 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -214,7 +213,6 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string, db: Database = suite.db): Promise<string> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createTable(tx, cfg, { label });
     return id;
   });
@@ -305,11 +303,9 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
     });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
     });
 
@@ -344,7 +340,6 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // payWorkingOrder → priceStoredOrder → readLockedLines on a zero-line order — the exact
     // empty-tab-pay flow that used to throw a RAW Error → opaque `server.internal` 500.
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfg, { tableId });
     });
 
@@ -471,7 +466,6 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
-      await asAppUser(tx);
       return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
     });
     await payWorkingOrder(depsB, cfgB, {

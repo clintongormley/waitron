@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, floorZones, kitchenStations, withTransaction } from "@waitron/db";
+import { floorZones, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -100,7 +100,6 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are JavaScript
     // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
     // NOT NULL — the refusal is `NOT NULL constraint failed: persons.id`.
@@ -395,7 +394,6 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   });
   const menu = (await menuResponse.json()) as { id: string };
   const listIds = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const ids: string[] = [];
     for (const label of ["First", "Second"]) {
       const list = await createOptionList(

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -51,7 +51,6 @@ const suite = useVenueDb({
     // on a NOT NULL column (`packages/identity/src/schema/persons.ts`), which a raw insert never
     // reaches — the refusal is `NOT NULL constraint failed: persons.id`.
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

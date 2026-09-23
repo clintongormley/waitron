@@ -28,7 +28,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
-  asAppUser,
   canvases,
   deviceProfiles,
   devices,
@@ -75,7 +74,6 @@ const suite = useVenueDb({
 
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, locations, nodes, withTransaction } from "@waitron/db";
+import { captureError, locations, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -204,7 +204,6 @@ describe("the series↔node guard (record-sale)", () => {
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         // node.seriesId belongs to node.nodeId, but we claim to process on `other.nodeId`.
         return recordSale(
           tx,
@@ -223,7 +222,6 @@ describe("the series↔node guard (record-sale)", () => {
   it("accepts a sale whose node owns the series", async () => {
     const backend = backendFor();
     const result = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(
         tx,
         backend,

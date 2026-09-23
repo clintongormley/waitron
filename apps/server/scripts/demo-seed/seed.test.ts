@@ -22,7 +22,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -107,7 +107,6 @@ describe("seedDemoRestaurant", () => {
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
 
     const read = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
@@ -331,7 +330,6 @@ describe("seedDemoRestaurant", () => {
     // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
     const { rows: imageRows } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,
       );

@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   canvases,
   deviceProfiles,
   floorZones,
@@ -165,7 +164,6 @@ const suite = useVenueDb({
     const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
       async (tx) => {
-        await asAppUser(tx);
         const cat = await createCatalogue(tx, { name: "Carta" });
         const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
         const p = await createProduct(tx, {
@@ -358,7 +356,6 @@ function deps(db: Database): TillApiDeps {
  * or the logout route a cookie that names a genuine row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,
@@ -371,7 +368,6 @@ async function openSession(db: Database): Promise<string> {
 /** Ends a session out of band on the app role, so a cookie can be made to name a CLOSED row. */
 async function closeSession(db: Database, id: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await endSession(tx, id);
   });
 }
@@ -414,7 +410,6 @@ async function seedDeviceProfile(
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
   const rows = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition rather than raw SQL: `device_profiles.id`, `.created_at` and
     // `.updated_at` are `$defaultFn` generators on NOT NULL columns
     // (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`) that a raw insert never reaches
@@ -940,7 +935,6 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       .returning({ id: persons.id });
     const personId = row!.id;
     const session = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
     });
     return { personId, sessionId: session.id };
@@ -2839,7 +2833,6 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
       .returning({ id: persons.id });
     managerPersonId = managerRow!.id;
     const managerSession = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return loginWithPin(tx, {
         tillId: cfg.tillId,
         personId: managerPersonId,
@@ -3101,7 +3094,6 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
 // Each fixture owns a fresh product and offer so other catalogue expectations remain independent.
 async function modifierOfferFixture() {
   const data = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
@@ -3332,7 +3324,6 @@ describe("canonical modifier HTTP serialization", () => {
     // The parked line holds the six names BY VALUE, so renaming the list and its labels afterwards
     // leaves the order reading exactly what the diner was shown.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await updateOptionList(
         tx,
         f.prepList.id,
@@ -3395,7 +3386,6 @@ describe("canonical modifier HTTP serialization", () => {
     // A label the list still carries and no longer offers: a till holding a stale menu is refused
     // rather than selling the dish with a withdrawn answer.
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await updateOptionList(
         tx,
         f.prepList.id,

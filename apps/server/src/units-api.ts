@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createUnit,
   deleteUnit,
@@ -60,7 +60,6 @@ function screenTranslatable(
 export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void {
   const gated = <T>(sessionId: string, action: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "person.manage",

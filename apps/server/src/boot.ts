@@ -6,7 +6,6 @@ import { serve } from "@hono/node-server";
 import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
-  asAppUser,
   installChangeFeed,
   subscribeToChanges,
   persistNodeMembershipIfNewer,
@@ -414,7 +413,6 @@ export function connectedCardProviderSweep(deps: {
     // No card seats at all → nothing pooled to sweep (only the simulator, already added).
     if (purposes.length > 0) {
       const held = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const rows = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
@@ -2038,7 +2036,6 @@ export async function startServer(
     // local time rather than the interim UTC placeholder the previous task carried.
     readClock: () =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         return resolveVenueClock(tx, till.nodeId);
       }),
     outcomes: backupOutcomes,

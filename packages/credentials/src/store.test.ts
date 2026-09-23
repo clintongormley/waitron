@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -54,11 +54,9 @@ beforeEach(async () => {
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE });
     });
     const actual = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
     });
     expect(actual).toEqual(STRIPE);
@@ -82,7 +80,6 @@ describe("the seal binds each credential to its purpose", () => {
       }),
     );
     const actual = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
     });
     expect(actual).toEqual(STRIPE);
@@ -95,14 +92,12 @@ describe("the seal binds each credential to its purpose", () => {
     // `payments.` prefix, so a binding to that prefix alone would also open the row.
     const sumup = { apiKey: "sup_x", merchantCode: "M1", affiliateAppId: "-", affiliateKey: "-" };
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await putCredential(tx, RING_V1, { purpose: "payments.sumup", value: sumup });
       await tx.execute(sql`
         update tenant_credentials set purpose = 'payments.stripe' where purpose = 'payments.sumup'`);
     });
     const error = await captured(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
       }),
     );
@@ -415,7 +410,6 @@ describe("listCredentials", () => {
     );
     // Exercise the metadata projection as the app role.
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return listCredentials(tx);
     });
     expect(rows).toHaveLength(1);

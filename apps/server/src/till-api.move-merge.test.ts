@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, floorZones, locations, tills, withTransaction } from "@waitron/db";
+import { floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -134,7 +134,6 @@ function deps(db: Database): TillApiDeps {
  * a genuine open row. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,
@@ -182,7 +181,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     // Seed two tables + a tab in the session's tenant/location (d.cfg).
     const { src, dst, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "R-src" });
       const t = await createTable(tx, d.cfg, { label: "R-dst" });
       const tab = await openTab(tx, d.cfg, { tableId: s.id });
@@ -213,7 +211,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const { dst, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "O-src" });
       const t = await createTable(tx, d.cfg, { label: "O-dst" });
       const tab = await openTab(tx, d.cfg, { tableId: s.id });
@@ -237,7 +234,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const { src, extra, tabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "J-src" });
       const e = await createTable(tx, d.cfg, { label: "J-extra" });
       const tab = await openTab(tx, d.cfg, { tableId: s.id });
@@ -268,7 +264,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const { fromTable, intoTabId, fromTabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const into = await createTable(tx, d.cfg, { label: "M-into" });
       const from = await createTable(tx, d.cfg, { label: "M-from" });
       const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
@@ -301,7 +296,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const { intoTabId, fromTabId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const into = await createTable(tx, d.cfg, { label: "MC-into" });
       const from = await createTable(tx, d.cfg, { label: "MC-from" });
       const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
@@ -345,7 +339,6 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "MS-src" });
       const tab = await openTab(tx, d.cfg, { tableId: s.id });
       return tab.tabId;

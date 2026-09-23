@@ -18,7 +18,6 @@ import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  asAppUser,
   catalogues,
   categories,
   diningTables,
@@ -609,7 +608,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     modules: ALL_MODULES,
   });
   const original = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const menu = await createCatalogue(tx, { name: "Modifier menu" });
     const section = await createMenuSection(tx, {
       menuId: menu.id,
@@ -725,7 +723,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
-    await asAppUser(tx);
     const optionLists = await listOptionLists(tx);
     expect(optionLists).toHaveLength(1);
     const imported = optionLists[0]!;

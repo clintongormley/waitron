@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
+import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
@@ -68,14 +68,12 @@ beforeEach(async () => {
 
 async function sell() {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });
 }

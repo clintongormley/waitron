@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
+import { locations, tills, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -89,7 +89,6 @@ async function setupVenue(): Promise<Venue> {
     orderFlow: "prepay",
   };
   const managerSid = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition for the same reason as the venue rows above: `persons.id` and
     // `persons.created_at` are `$defaultFn` generators and both columns are NOT NULL
     // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
@@ -132,7 +131,6 @@ describe("bookings seat route → real openTab", () => {
 
     // A table to reserve, and a `booked` reservation on it (the seat reuses the booking's own table).
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      await asAppUser(tx);
       const { id } = await createTable(tx, v.tillCfg, { label: "7" });
       return id;
     });
@@ -154,7 +152,6 @@ describe("bookings seat route → real openTab", () => {
     // The booking is seated with the REAL tab id, and that id names a real OPEN working_orders row —
     // proving the real openTab (not a fake) ran through the seat.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const booking = await tx.execute<{ status: string; tab_id: string | null }>(
         sql`select status, tab_id from bookings where id = ${bookingId}`,
       );

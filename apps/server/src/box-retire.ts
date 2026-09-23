@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
@@ -58,7 +58,6 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
       await withTransaction(deps.appDb, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "system.manage",

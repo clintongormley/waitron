@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
+import { purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -45,7 +45,6 @@ describe("purchase-invoice operations", () => {
 
   async function asApp<T>(fn: Parameters<typeof withTransaction<T>>[1]): Promise<T> {
     return withTransaction(fx.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
   }

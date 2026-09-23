@@ -21,7 +21,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, drawerOpens, printJobs, withTransaction } from "@waitron/db";
+import { drawerOpens, printJobs, withTransaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
@@ -179,7 +179,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -286,7 +285,6 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
 async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
       { locationId: cfg.locationId },
@@ -301,7 +299,6 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
 async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uint8Array[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ payload: printJobs.payload })
       .from(printJobs)
@@ -314,7 +311,6 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Uin
 async function drawerOpenCount(cfg: TillConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
   });
@@ -354,7 +350,6 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
  *  order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
 async function stationQueueOrderIds(stationId: string): Promise<string[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const groups = await listStationQueue(tx, stationId);
     return groups.map((g) => g.orderId);
   });
@@ -441,7 +436,6 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
  *  list a decline must leave intact. Each test owns its tenant, so it lists only this test's sales. */
 async function outstandingSalesFor(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
   });
@@ -838,7 +832,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     await FakeFiscalBackend.install(suite.db);
     const fake = new FakeFiscalBackend(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId);
     });
     const app = suite.db;
@@ -890,7 +883,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Kept per seed for the same reason as `nextNif`.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
       await insertCapturedPayment(tx, {
         workingOrderId: id,
@@ -951,7 +943,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await insertCapturedPayment(tx, {
         workingOrderId: id,
         provider: "stripe",
@@ -1271,7 +1262,6 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       await withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await insertCapturedPayment(tx, {
           workingOrderId: id,
           provider: "stripe",

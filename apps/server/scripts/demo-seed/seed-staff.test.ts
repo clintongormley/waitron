@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -78,7 +78,6 @@ describe("seedStaff", () => {
     await provisionVenue();
 
     const persons = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await seedStaff(tx);
 
       const { rows } = await tx.execute<{
@@ -115,7 +114,6 @@ describe("seedStaff", () => {
     await provisionVenue();
 
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await seedStaff(tx);
 
       const { rows } = await tx.execute<{

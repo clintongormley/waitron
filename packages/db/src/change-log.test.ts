@@ -8,7 +8,6 @@ import { CORE_CHANGE_SOURCES } from "./classification.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { withTransaction } from "./tenancy.js";
 import type { Transaction } from "./client.js";
-import { asAppUser } from "./testing/roles.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 // `locations` is a change source, so one fixture table serves every case here.
@@ -82,7 +81,6 @@ describe("the change log", () => {
     const seen = collect();
     let id = "";
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       id = await insertLocation(tx, "App-role venue");
     });
     expect(seen).toEqual([{ resources: [{ type: "locations", id }] }]);

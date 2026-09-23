@@ -6,7 +6,7 @@
 import "./errors.js";
 import type { Context } from "hono";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authenticateAgent } from "@waitron/printing";
 
 /**
@@ -44,7 +44,6 @@ export async function requireAgent(
   // off the connection pool (the same posture the enrol rate-limit takes for the sale path).
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     return authenticateAgent(tx, token);
   });
 }

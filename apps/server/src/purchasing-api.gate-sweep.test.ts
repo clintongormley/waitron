@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -86,7 +86,6 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
     // on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches — the
     // refusal is `NOT NULL constraint failed: persons.id`.

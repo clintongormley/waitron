@@ -7,7 +7,7 @@
 // what the deployment role, which no longer exists, may read or write.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
+import { saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -147,7 +147,6 @@ async function setupVenue(): Promise<Seeded> {
 
   const cfg = tillConfigFromVenue(venue);
   const seeded = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -180,7 +179,6 @@ async function setupVenue(): Promise<Seeded> {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   catalogues,
   categories,
   locations,
@@ -88,7 +87,6 @@ async function setupVenue(): Promise<TillConfig> {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

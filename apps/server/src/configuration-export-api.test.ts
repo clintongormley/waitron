@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -53,7 +53,6 @@ const suite = useVenueDb({
     venue = await applyVenue(planVenue(request, ALL_MODULES), { db, modules: ALL_MODULES });
     moduleVersions = await schemaVersionsByModule(db, ALL_MODULES);
     cookie = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const admin = await tx.execute<{ id: string }>(sql`
         select id from persons where role = 'admin'
       `);

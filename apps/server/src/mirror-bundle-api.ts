@@ -20,7 +20,6 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import {
-  asAppUser,
   persistNodeMembershipIfNewer,
   readNodeMembership,
   withTransaction,
@@ -162,7 +161,6 @@ export function mountMirrorBundleApi(
       // `loginManagerById` is the id sibling that shares all the same credential checks
       // (`packages/identity/src/manager-login.ts`) and resolves the admin by id regardless.
       await withTransaction(deps.appDb, async (tx) => {
-        await asAppUser(tx);
         const session = await loginManagerById(tx, {
           personId,
           password,

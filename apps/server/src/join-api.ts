@@ -9,7 +9,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
@@ -141,7 +141,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
@@ -169,7 +168,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       const kind = isUuid(id) ? await joinRequestKind(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,

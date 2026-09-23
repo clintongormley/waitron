@@ -5,7 +5,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tillId } from "@waitron/shared";
 import type { LocationId, NodeId, SeriesId, TillId } from "@waitron/shared";
-import { asAppUser, locations, nodes, orderFlow, withTransaction } from "@waitron/db";
+import { locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
@@ -201,7 +201,6 @@ export async function readOrderFlow(
   cfg: Pick<TillConfig, "locationId">,
 ): Promise<OrderFlow> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       .select({ orderFlow: locations.orderFlow })
       .from(locations)
@@ -229,7 +228,6 @@ export async function readFilingModule(
   cfg: Pick<TillConfig, "nodeId">,
 ): Promise<string | null> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       .select({ filingModule: nodes.filingModule })
       .from(nodes)

@@ -1,12 +1,6 @@
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import {
-  asAppUser,
-  locations,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
@@ -33,7 +27,6 @@ export function mountLocationSettingsApi(
   const scope = eq(locations.id, deps.cfg.locationId);
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "venue.configure",

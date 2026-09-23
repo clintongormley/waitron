@@ -1,14 +1,7 @@
 // PGlite: reads on one transaction, no concurrency and no connection-role question.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  asAppUser,
-  locations,
-  tills,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { locations, tills, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -71,7 +64,6 @@ async function seedVenue(): Promise<{ tillId: TillId }> {
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

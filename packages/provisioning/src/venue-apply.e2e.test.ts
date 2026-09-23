@@ -4,7 +4,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
@@ -149,7 +149,6 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
     const standardSeriesId = venue.seriesIds[0]!;
 
     const { saleId, fiscal } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(
         tx,
         backend,
@@ -201,7 +200,6 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // tenant (asAppUser), the same role constraints production's login runs under, so this also proves
     // app_user can SELECT the seeded password_hash and INSERT the management session.
     const session = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return loginManagerById(tx, {
         personId: personId!,
         password: "dashPass123",
@@ -212,7 +210,6 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return loginManagerById(tx, {
           personId: personId!,
           password: "wrongpass1",
@@ -246,7 +243,6 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // The email path mints a management session for the provisioned admin — run as the app role under
     // the tenant (asAppUser), the same role constraints production's login runs under.
     const session = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return loginManager(tx, {
         email: adminEmail,
         password: "dashPass123",
@@ -257,7 +253,6 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         return loginManager(tx, {
           email: adminEmail,
           password: "wrongpass1",

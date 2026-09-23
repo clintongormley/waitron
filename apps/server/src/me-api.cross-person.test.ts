@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -182,7 +182,6 @@ async function setupVenue(): Promise<VenueResult> {
  */
 async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       .insert(persons)
       .values({ displayName: name, pinHash: hashPin("0000"), role: "staff" })
@@ -195,7 +194,6 @@ async function seedPerson(name: string): Promise<string> {
  * cookie header — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;

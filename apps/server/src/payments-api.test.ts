@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   deviceProfiles,
   devices,
   locations,
@@ -115,7 +114,6 @@ async function seedVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = loc!.id;
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -286,7 +284,6 @@ async function addReader(
 
 async function sealedStripe(): Promise<Record<string, string> | null> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tryGetCredential(tx, RING, {
       purpose: "payments.stripe",
     });
@@ -306,7 +303,6 @@ describe("connect", () => {
     expect(evicted.slice(before)).toEqual(["stripe"]);
     // The sealed payload exists and is exactly the four declared fields.
     const stored = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return getCredential(tx, RING, {
         purpose: "payments.stripe",
       });
@@ -913,7 +909,6 @@ describe("reader adoption and local management", () => {
       updated = resolve;
     });
     const unpairWrite = withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       // ONE clock reading bound to BOTH stamps, so the two columns take the same value. Both are
       // text columns, and `nowIso()` is their canonical spelling.
       const unpaired = nowIso();

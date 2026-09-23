@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -68,7 +68,6 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
     await withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "diagnostics.view",

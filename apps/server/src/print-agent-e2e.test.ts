@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -86,7 +86,6 @@ const suite = useVenueDb({
       orderFlow: "ticket_then_pay",
     };
     const managerSid = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -377,11 +376,9 @@ describe("print-agent end to end", () => {
     const networkPayload = esc().text("Mesa 4").cut().bytes();
     const usbPayload = esc().text("Barra 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
     });
     const { jobId: usbJobId } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return enqueuePrintJob(tx, { locationId }, usbPrinterId, usbPayload);
     });
 
@@ -411,7 +408,6 @@ describe("print-agent end to end", () => {
 
     // A further tick is halted: it claims nothing (no new job appears, the printed one stays done).
     const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return enqueuePrintJob(tx, { locationId }, printerId, esc().text("Ignored").bytes());
     });
     await agent.runOnce();

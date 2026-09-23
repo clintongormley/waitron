@@ -3,15 +3,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  asAppUser,
-  locations,
-  printJobs,
-  printers,
-  tills,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { locations, printJobs, printers, tills, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -100,7 +92,6 @@ async function seedVenue(): Promise<Venue> {
     .returning({ id: tills.id });
   const cookie = (role: PersonRoleValue, name: string) =>
     withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [p] = await tx
         .insert(persons)
         .values({ displayName: name, pinHash: hashPin("1234"), role })
@@ -122,7 +113,6 @@ async function raise(
   severity: "warning" | "error" = "error",
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await recordIncident(tx, {
       tillId: v.tillId,
       error: new AppError(code as never, {} as never),

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedNodeAndSeries,
@@ -49,7 +49,6 @@ function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
     ...overrides,
   };
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return computeTopSellers(tx, input);
   });
 }

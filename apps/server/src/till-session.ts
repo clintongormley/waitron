@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { sessions } from "@waitron/identity";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
@@ -104,7 +104,6 @@ export async function requireSession(
   // shape, and what keeps a forged cookie a clean 401 (`till-api.ts`'s note on `shared.invalid_id`).
   if (id === null || !isUuid(id)) throw new AppError("session.required", {});
   const personId = await withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     const [row] = await tx
       .select({ personId: sessions.personId })
       .from(sessions)

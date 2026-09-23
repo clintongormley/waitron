@@ -2,7 +2,7 @@
 // because each sale opens its own transaction and reads the committed products.
 // Image bytes share the database transaction. Fiscal sales are preproduction.
 
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -46,7 +46,6 @@ export async function seedDemoRestaurant(
   // One tx for every in-transaction sub-seed. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const { productsByImage, menuIds } = await seedCatalogues(tx, {
       locationId,
       locale,

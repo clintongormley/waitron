@@ -9,7 +9,6 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 import {
-  asAppUser,
   deviceProfiles,
   devices,
   kitchenStations,
@@ -358,7 +357,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
     .onConflictDoNothing();
 
   await withTransaction(admin, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
     await createProduct(tx, {

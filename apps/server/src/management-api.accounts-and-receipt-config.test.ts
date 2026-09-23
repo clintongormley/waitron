@@ -55,7 +55,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
@@ -153,7 +153,6 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   // (`packages/identity/src/schema/persons.ts`), and a raw statement reaches no generator —
   // `NOT NULL constraint failed: persons.id`.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [manager] = await tx
       .insert(persons)
       .values({
@@ -236,7 +235,6 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
  * landed, not merely that a route returned a success status. */
 async function countPersonsNamed(displayName: string): Promise<number> {
   const rows = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const r = await tx.execute<{ display_name: string }>(
       sql`select display_name from persons where display_name = ${displayName}`,
     );
@@ -393,7 +391,6 @@ describe("Management API staff + session routes", () => {
   it("does not count the expected authenticator transition as a failed password", async () => {
     await setupTenant();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(persons).values({
         displayName: "Factor Manager",
         email: "factor@example.com",

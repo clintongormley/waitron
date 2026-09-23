@@ -8,7 +8,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -148,7 +148,6 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const { product, operatorId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const created = await createProduct(tx, {
@@ -323,7 +322,6 @@ interface Registro {
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({
         tillId: registrosFacturacion.tillId,
@@ -344,7 +342,6 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
       .from(sales);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, DEFAULT_TIME_ZONE, newId, nowIso, withTransaction } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -80,7 +80,6 @@ async function insertBooking(
 ): Promise<void> {
   const location = fields.locationId ?? v.locationId;
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // `id` and `created_at` supplied for the same reason as in `setupVenue`: both are `$defaultFn`
     // generators on `bookings` (`./schema/bookings.ts:50` and `:72`), which drizzle runs for a
     // BUILDER insert and never for raw SQL.
@@ -102,7 +101,6 @@ function annotate(
   tableIds: string[],
 ): Promise<Map<string, { reservedTime: string | null }>> {
   return withTransaction(db, async (tx: Transaction) => {
-    await asAppUser(tx);
     return BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, v, now, tableIds);
   });
 }

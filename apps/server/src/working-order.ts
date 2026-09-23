@@ -36,7 +36,6 @@ import {
 import {
   allocateOrderNumber,
   appendOrderAmendment,
-  asAppUser,
   categories,
   diningTables,
   invoiceSeries,
@@ -925,7 +924,6 @@ export async function parkOrder(
 
   try {
     return await withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
       const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
         zoneId: req.zoneId,
@@ -945,7 +943,6 @@ export async function parkOrder(
     // transaction began, and there is no uncommitted writer to wait for. That is why
     // `payWorkingOrder`'s duplicate-key backstop (`till-sale.ts`) replays in a fresh tx too. Replay the committed OPEN order's number, filing and inserting nothing.
     return withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       const [existing] = await tx
         .select({ orderNumber: workingOrders.orderNumber })
         .from(workingOrders)
@@ -2927,7 +2924,6 @@ export async function listHeldOrders(
 ): Promise<HeldOrderSummary[]> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({
         id: workingOrders.id,
@@ -2968,8 +2964,6 @@ export async function getHeldOrder(
   id: string,
 ): Promise<HeldOrder> {
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     const [order] = await tx
       .select({
         id: workingOrders.id,
@@ -3127,8 +3121,6 @@ export async function updateHeldOrder(
   req: UpdateHeldOrderRequest,
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     // Read the order's status. Absent or not-open → `working_order.not_open`; the DB triggers
     // (enforce_transition on the label update, require_open_parent on the line delete/insert) are
     // the backstop if this app check is ever wrong. Venue-wide (till-reroute §3.6 — any node's open
@@ -3360,8 +3352,6 @@ export async function abandonHeldOrder(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     const updated = await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
@@ -3411,8 +3401,6 @@ export async function placeOrder(
   saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     // Read the order's status. Absent or not-open → `working_order.not_open`; the
     // enforce_transition trigger is the DB backstop if this app check is ever wrong.
     const [locked] = await tx
@@ -3559,8 +3547,6 @@ export async function cancelPlacedOrder(
   }
 
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -3599,8 +3585,6 @@ export async function sendToPrep(
   id: string,
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     // Only settled orders are eligible for firing. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status })
@@ -3640,8 +3624,6 @@ export async function markCollected(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
-
     // Only settled orders are eligible for collection. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })

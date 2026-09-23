@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tenants, withTransaction } from "@waitron/db";
+import { locations, tenants, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { authenticateAgent } from "@waitron/printing";
@@ -145,7 +145,6 @@ async function errorCodeOf(res: Response): Promise<string> {
 /** Resolve a minted agent token to its row id under the tenant — the production auth path. */
 async function authenticate(token: string): Promise<{ agentId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return authenticateAgent(tx, token);
   });
 }

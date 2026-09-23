@@ -10,7 +10,6 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   captureError,
   constraintTarget,
   isUniqueViolation,
@@ -158,7 +157,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
@@ -171,7 +169,6 @@ async function voidSale(
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, authz);
   });
 }
@@ -299,7 +296,6 @@ describe("recordVoid — numbering", () => {
 
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx.insert(sales).values({
           tillId,
           nodeId,

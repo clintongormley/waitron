@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
-  asAppUser,
   captureError,
   isPgError,
   pgErrorCode,
@@ -81,7 +80,6 @@ async function seedSale(
  */
 function settle(db: Database, input: SettleSaleInput): Promise<void> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await settleSale(tx, input);
   });
 }
@@ -518,7 +516,6 @@ describe("settleSale — error propagation", () => {
 // rejects a tender once a settlement row exists.
 async function settleDirect(db: Database, saleId: SaleId, amount: string): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await tx.insert(tenders).values({
       saleId,
       method: "cash",

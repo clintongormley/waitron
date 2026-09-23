@@ -15,7 +15,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -170,7 +170,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -210,7 +209,6 @@ async function setupTwoTabs(): Promise<{
 }> {
   const { cfg, cafe } = await setupVenue();
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
     const ta = await openTab(tx, cfg, {
@@ -274,7 +272,6 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
   it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
     });
 

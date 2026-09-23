@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -124,7 +124,6 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
 async function recordTicket(invoiceNumber: number): Promise<string> {
   const ticketId = await seedSale(suite.db, till, invoiceNumber);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordSale(tx, ticketSaleFor(ticketId, invoiceNumber));
   });
   return ticketId;
@@ -171,7 +170,6 @@ async function substitute(
   const substitutionId = await seedSubstitutionRow(invoiceNumber);
   const sale = substitutionSaleFor(substitutionId, invoiceNumber, overrides);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordSubstitution(tx, sale, {
       substitutedSaleIds: substitutedSaleIds.map((id) => brandSaleId(id)),
     });

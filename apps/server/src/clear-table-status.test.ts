@@ -5,7 +5,6 @@
 import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   diningTables,
   locations,
   nowIso,
@@ -33,7 +32,6 @@ const suite = useVenueDb({
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

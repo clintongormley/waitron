@@ -15,7 +15,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -174,7 +174,6 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     await createProduct(tx, {
@@ -204,7 +203,6 @@ async function setupVenue(): Promise<SeededVenue> {
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
 }
@@ -216,7 +214,6 @@ async function openTabOn(
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
   });
 }
@@ -296,7 +293,6 @@ describe("joinTable → one bill", () => {
     const t2 = await seedTable(cfg, "JP2");
     const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await joinTable(tx, cfg, tabId, t2);
     });
     expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab (durable: settle clears status_id, not tab_id)
@@ -322,7 +318,6 @@ describe("mergeTabs → one registro (H2)", () => {
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
     });
 
@@ -357,7 +352,6 @@ describe("mergeTabs join → one bill covering both tables", () => {
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
     });
     expect(await tabIdOf(tFrom)).toBe(intoTab);

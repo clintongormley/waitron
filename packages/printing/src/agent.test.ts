@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, locations, printAgents, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, printAgents, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -41,7 +41,6 @@ async function setup(): Promise<PrintAgentConfig> {
 /** One transaction, the shape the Task-6 route wraps each core call in. */
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

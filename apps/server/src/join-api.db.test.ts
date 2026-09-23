@@ -27,7 +27,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -86,7 +86,6 @@ async function knock(
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
 ): Promise<{ joinId: string; verificationNumber: string }> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const made = await createJoinRequest(tx, venue.cfg, input);
     return { joinId: made.joinId, verificationNumber: made.verificationNumber };
   });

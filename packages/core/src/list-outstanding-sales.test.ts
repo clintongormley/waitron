@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   saleSettlements,
   saleSubstitutions,
   saleVoids,
@@ -25,7 +24,6 @@ beforeEach(async () => {
 
 function list() {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return listOutstandingSales(tx);
   });
 }
@@ -35,7 +33,6 @@ function list() {
 // the settlement row exists.
 async function settleDirectly(saleId: SaleId): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await tx.insert(tenders).values({
       saleId,
       method: "cash",

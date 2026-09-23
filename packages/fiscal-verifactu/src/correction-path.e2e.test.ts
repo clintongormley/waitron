@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import {
@@ -115,7 +115,6 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
 async function recordOriginal(): Promise<string> {
   const originalId = await seedSale(suite.db, till, 1);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordSale(tx, originalSaleFor(originalId, 1));
   });
   return originalId;
@@ -164,7 +163,6 @@ async function correct(
   const correctiveId = await seedCorrectiveRow(invoiceNumber, correctsSaleId, total);
   const sale = { ...correctiveSaleFor(correctiveId, invoiceNumber), ...overrides };
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.recordCorrection(tx, sale, { correctsSaleId: brandSaleId(correctsSaleId) });
   });
   return correctiveId;

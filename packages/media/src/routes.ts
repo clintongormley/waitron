@@ -1,6 +1,6 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
-import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
@@ -63,7 +63,6 @@ export const MEDIA_ROUTES: ModuleRoutes = {
     const maxUploadBytes = ctx.maxUploadBytes ?? 5 * 1024 * 1024;
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
       withTransaction(ctx.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "image.manage",
@@ -163,7 +162,6 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         const filename = c.req.param("filename");
         if (!MEDIA_FILENAME.test(filename)) return c.body(null, 404);
         const content = await withTransaction(ctx.db, async (tx) => {
-          await asAppUser(tx);
           return readImageBytes(tx, filename);
         });
         if (!content) return c.body(null, 404);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNodeAndSeries, seedSale, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -31,7 +31,6 @@ function run(overrides: Partial<PeriodVatInput> = {}): Promise<VatSummary> {
     ...overrides,
   };
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return computeVatSummaryForPeriod(tx, input);
   });
 }

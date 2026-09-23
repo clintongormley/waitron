@@ -3,7 +3,6 @@ import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  asAppUser,
   diningTables,
   locations,
   printJobs,
@@ -98,7 +97,6 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
@@ -126,7 +124,6 @@ function printCfg(cfg: TillConfig): PrintConfig {
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

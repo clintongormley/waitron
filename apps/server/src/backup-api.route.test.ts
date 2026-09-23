@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { SingletonRole } from "@waitron/db";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -152,7 +152,6 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through drizzle rather than the raw `insert into persons` this seeded on PostgreSQL, and not
     // for tidiness: `persons.id` and `persons.created_at` used to be filled by the COLUMN and are
     // now filled by drizzle's `$defaultFn` instead, so a statement that names neither is refused.

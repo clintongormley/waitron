@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -136,7 +136,6 @@ describe("demo seed end-to-end", () => {
 
     // --- Read the seeded catalogue set and a business day's close in one transaction. ---
     const read = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
       const { rows: imageRows } = await tx.execute<{ image: string | null }>(
@@ -196,7 +195,6 @@ describe("demo seed end-to-end", () => {
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
     const storedImage = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return readImageBytes(tx, read.image!);
     });
     expect(storedImage?.contentType).toBe("image/png");

@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { findIncident, markIncidentHandled } from "@waitron/core";
 import { permissionsForRole, resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
@@ -40,7 +40,6 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
   ): Promise<T> => {
     const sessionId = requireManagementSession(c);
     return withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       const session = await resolveManagementSession(tx, sessionId);
       const held = new Set(permissionsForRole(session.role));
       return fn(tx, { personId: session.personId, held });

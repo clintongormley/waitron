@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, asAppUser, captureError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -20,7 +20,6 @@ const suite = useVenueDb({
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

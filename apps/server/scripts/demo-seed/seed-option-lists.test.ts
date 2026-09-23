@@ -26,7 +26,7 @@
 // Nothing here checks who may write an option list.
 
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -98,7 +98,6 @@ describe("seedOptionLists", () => {
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
       suite.db,
       async (tx) => {
-        await asAppUser(tx);
         const { productsByImage } = await seedCatalogues(tx, {
           locationId,
           locale: LOCALE,

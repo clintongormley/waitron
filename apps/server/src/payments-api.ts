@@ -10,14 +10,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  asAppUser,
-  devices,
-  nowIso,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { devices, nowIso, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -136,7 +129,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: PAYMENTS_MANAGE,

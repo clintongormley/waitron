@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, catalogues, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -56,7 +56,6 @@ const suite = useVenueDb({
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
     // supplied even though these sessions are minted directly rather than via a PIN/password login.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -113,7 +112,6 @@ function mountApp(venueLocale = "es-ES"): Hono {
 /** A live kitchen station and course of the seeded venue, as the app role. */
 async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cfg = venueCfg();
     const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
     const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });

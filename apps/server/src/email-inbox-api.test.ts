@@ -2,7 +2,7 @@
 // person row and a real permission lookup, with only the Mailpit client faked.
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -56,7 +56,6 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const sessions = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
     // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
     // statement never reaches, and both columns are NOT NULL.

@@ -4,7 +4,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  asAppUser,
   kitchenStations,
   locations,
   nowIso,
@@ -113,7 +112,6 @@ async function seedTenantWithLocation(): Promise<Tenant> {
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -203,7 +201,6 @@ async function joinAndAccept(
   };
   const joinId = token.slice(0, token.indexOf("."));
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
       choice: verificationNumber,
     });
@@ -233,7 +230,6 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
 
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
   });

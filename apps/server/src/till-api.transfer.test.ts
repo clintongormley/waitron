@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, locations, tills, withTransaction } from "@waitron/db";
+import { locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -78,7 +78,6 @@ const suite = useVenueDb({
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
     // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
     const product = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
       const p = await createProduct(tx, {
@@ -157,7 +156,6 @@ function deps(db: Database): TillApiDeps {
  * `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,
@@ -178,7 +176,6 @@ async function setupTabsApp(
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const tabAResult = await openTab(tx, d.cfg, {

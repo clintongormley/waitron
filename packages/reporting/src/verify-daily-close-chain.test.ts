@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, dailyCloses, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, dailyCloses, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -28,7 +28,6 @@ beforeEach(async () => {
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return recordDailyClose(tx, {
       nodeId: venue.nodeId,
       businessDay,
@@ -44,7 +43,6 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
 // proves app_user's SELECT grant is enough to re-walk the chain.
 function verify() {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }

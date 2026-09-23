@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   joinRequests,
   locations,
   nowIso,
@@ -106,7 +105,6 @@ const suite = useVenueDb({
       orderFlow: "ticket_then_pay",
     };
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const [mgr] = await tx
         .insert(persons)
         .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -185,7 +183,6 @@ async function joinAndAccept(
 ): Promise<{ agentId: string; token: string }> {
   const { token, verificationNumber, joinId } = await knock(app, label);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfg, joinId, {
       choice: verificationNumber,
     });
@@ -279,7 +276,6 @@ async function pull(
  * slice; a fire/sale enqueues in-process). Returns the job id. */
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, { locationId }, printerId, payload);
     return jobId;
   });
@@ -311,7 +307,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     });
     // Nothing was written — the window guard runs before any DB work.
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(joinRequests).where(eq(joinRequests.label, name));
     });
     expect(rows).toHaveLength(0);
@@ -328,7 +323,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     expect(body.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
     const joinId = body.token.slice(0, body.token.indexOf("."));
     const [pending] = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({ kind: joinRequests.kind })
         .from(joinRequests)
@@ -337,7 +331,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     expect(pending).toMatchObject({ kind: "print_agent" });
     // The knock alone never creates the real row — that is the admin's accept.
     const agents = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(printAgents).where(eq(printAgents.name, name));
     });
     expect(agents).toHaveLength(0);
@@ -383,7 +376,6 @@ describe("GET /print-api/agent/join/status", () => {
 
     // Accept in-process (the route is proven in join-api.db.test.ts).
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
       expect(r.ok).toBe(true);
     });

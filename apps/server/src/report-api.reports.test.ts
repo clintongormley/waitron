@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   invoiceSeries,
   locations,
   nodes,
@@ -197,7 +196,6 @@ const suite = useVenueDb({
     // session. The supervisor is what pins the routes to report.view specifically: a supervisor 200
     // proves they gate on report.view, not report.export (which the supervisor lacks).
     const sids = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const mkPerson = async (
         name: string,
         role: (typeof personRole.enumValues)[number],

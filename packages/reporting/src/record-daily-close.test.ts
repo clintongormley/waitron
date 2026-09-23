@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  captureError,
-  constraintTarget,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, constraintTarget, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -50,14 +44,12 @@ function closeInput(businessDay: string) {
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return recordDailyClose(tx, { ...closeInput(businessDay), closedBy: CLOSED_BY, cashCounts });
   });
 }
 
 function runCompute(businessDay: string) {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    await asAppUser(tx);
     return computeDailyClose(tx, closeInput(businessDay));
   });
 }
@@ -318,7 +310,6 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     await record("2026-08-04", []);
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx.execute(sql`
           insert into daily_closes (id, node_id, business_day, sequence_no, prev_entry_hash,
                                     entry_hash, closed_at, closed_by, snapshot)

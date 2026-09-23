@@ -7,7 +7,7 @@
 import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
@@ -173,7 +173,6 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,
     ): Promise<T> =>
       withTransaction(db, async (tx) => {
-        await asAppUser(tx);
         const auth = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: BOOKING_WRITE,

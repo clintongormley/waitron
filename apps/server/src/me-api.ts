@@ -1,13 +1,7 @@
 import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import {
-  asAppUser,
-  readTenant,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -155,7 +149,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       return fn(tx);
     });
 

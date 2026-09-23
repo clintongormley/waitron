@@ -1,5 +1,4 @@
 import {
-  asAppUser,
   diningTables,
   kitchenStations,
   locations,
@@ -119,7 +118,6 @@ beforeAll(async () => {
 describe("the kitchen and floor read models on a real migrated venue", () => {
   it("rolls an open tab up onto its table — counts, total and timing band", async () => {
     const [table] = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return listTablesWithState(tx, cfg);
     });
     expect(table).toMatchObject({
@@ -140,7 +138,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
 
   it("lists the station queue with the item's age classified", async () => {
     const groups = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return listStationQueue(tx, stationId);
     });
     expect(groups).toHaveLength(1);
@@ -150,7 +147,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
 
   it("lists the expo queue with the order's open age in whole minutes", async () => {
     const orders = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       return listExpoQueue(tx, cfg);
     });
     expect(orders).toHaveLength(1);

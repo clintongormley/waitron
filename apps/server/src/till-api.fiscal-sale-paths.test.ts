@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  asAppUser,
   deviceProfiles,
   saleLines,
   sales,
@@ -212,7 +211,6 @@ async function setupVenue(): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -577,7 +575,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 4. A GENUINE chained fiscal record exists for this tenant/node — one, hashed (own tenant, so
     // the count is order-independent).
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(registros.length).toBe(1);
@@ -586,7 +583,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
     const saleRows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select({ operatorId: sales.operatorId }).from(sales);
     });
     expect(saleRows).toEqual([{ operatorId }]);
@@ -725,7 +721,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
     // the stored 64-hex huella the append-only table pins.
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(2);
@@ -776,7 +771,6 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
@@ -794,7 +788,6 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
     // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
     const profileId = await seedProfileFF("kds");
@@ -818,7 +811,6 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
@@ -882,7 +874,6 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
     //    under its id and attributed to the logged-in operator.
     const after = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return {
         registros: await tx.select().from(registrosFacturacion),
         wo: await tx
@@ -922,7 +913,6 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
@@ -1153,7 +1143,6 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(await payRes.json()).toEqual({ outcome: "declined" });
 
     const after = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return {
         registros: await tx.select().from(registrosFacturacion),
         wo: await tx
@@ -1338,7 +1327,6 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
 
     const noSaleYet = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales);
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
@@ -1468,7 +1456,6 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
 
     const after = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return {
         wo: await tx
           .select({ status: workingOrders.status })
@@ -1637,7 +1624,6 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
     // collected_at is stamped (direct witness) AND the order is GONE from the station queue.
     const [wo] = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({
           // `.mapWith(Boolean)` because `sql<boolean>` is a TypeScript cast and not a read mapping:
@@ -1772,7 +1758,6 @@ describe("handheld sales and device capability gates", () => {
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
         transport: "network_tcp",
@@ -1813,7 +1798,6 @@ describe("handheld sales and device capability gates", () => {
     // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
     // separate device metadata; it never keys the chain.
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
@@ -1861,7 +1845,6 @@ describe("handheld sales and device capability gates", () => {
     // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
     const registros = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
@@ -2023,7 +2006,6 @@ describe("handheld sales and device capability gates", () => {
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
     const afterRefused = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
@@ -2039,7 +2021,6 @@ describe("handheld sales and device capability gates", () => {
     expect(placed.status).toBe(200);
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
     const afterPlaced = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(afterPlaced.length).toBe(1);
@@ -2089,7 +2070,6 @@ describe("handheld sales and device capability gates", () => {
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     const afterRefused = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
@@ -2106,7 +2086,6 @@ describe("handheld sales and device capability gates", () => {
     expect(collect.status).toBe(200);
     expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
     const after = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return {
         wo: await tx
           .select({ status: workingOrders.status })
@@ -2161,7 +2140,6 @@ describe("handheld sales and device capability gates", () => {
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     const stillPlaced = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
@@ -2177,7 +2155,6 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(cancelled.status).toBe(200);
     const abandoned = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
@@ -2193,7 +2170,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const { extraListId, quesoId, optionListId, labelId } = await withTransaction(
     suite.db,
     async (tx) => {
-      await asAppUser(tx);
       // The extra is a PRODUCT of its own, taxed at its OWN class — `reduced`, where the dish is
       // `general`, so the filed desglose has to carry two bands.
       const queso = await createProduct(tx, {
@@ -2256,7 +2232,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
   const printerId = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const printer = await createPrinter(tx, cfg, {
       name: "Modifier receipts",
       transport: "cloud_poll",
@@ -2287,7 +2262,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // answers nothing. The default content language keys the staff-name maps, so it is read back from
   // the venue rather than assumed.
   const { defaultLanguage } = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return readContentLanguages(tx, cfg.locale);
   });
   const frozenAnswer = {
@@ -2323,7 +2297,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
     { rate: "10.00", base: "1.27", tax: "0.13" },
   ]);
   const stored = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // `quantity` and `vat_rate` are whole numbers at their own scales — thousandths and basis
     // points — read as text so the assertion pins the stored counts. `unit_name` comes off the
     // table definition rather than a raw `select` for the reason the weighed-line read above
@@ -2359,7 +2332,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // The options answer IS frozen, on the DISH's working-order line, with the list's and the label's
   // names copied by value; the child line answers nothing of its own.
   const frozen = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx
       .select({ optionSnapshots: workingOrderLines.optionSnapshots })
       .from(workingOrderLines)
@@ -2370,7 +2342,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
   // sale froze, never the catalogue's current ones.
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await updateProduct(tx, quesoId, { name: "Manchego" });
   });
   const replay = await app.request("/api/sales", {
@@ -2389,7 +2360,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   });
   expect(reprint.status, await reprint.clone().text()).toBe(200);
   const printed = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx.execute<{ payload: Buffer }>(
       sql`select payload from print_jobs where printer_id=${printerId} and kind='document'`,
     );
@@ -2408,7 +2378,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
   expect(text).toContain("Preparación: Frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
   });
   expect(recordCount).toHaveLength(1);

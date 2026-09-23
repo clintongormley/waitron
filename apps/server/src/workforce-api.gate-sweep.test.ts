@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, nowIso, withTransaction } from "@waitron/db";
+import { nowIso, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -107,7 +107,6 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const seeded = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     // Through the table definitions, not raw SQL: every `id` and `created_at` here is a JavaScript
     // `$defaultFn` generator on this engine, which a raw insert never reaches.

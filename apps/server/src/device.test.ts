@@ -28,7 +28,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -90,7 +90,6 @@ async function setupVenue(): Promise<SeededVenue> {
     orderFlow: "prepay",
   };
   const st = await withTransaction(admin, async (tx) => {
-    await asAppUser(tx);
     return createStation(tx, cfg, { name: "Cocina", isDefault: true });
   });
   return { cfg, stationId: st.id };

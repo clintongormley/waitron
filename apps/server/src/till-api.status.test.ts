@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
+import { locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -72,7 +72,6 @@ const suite = useVenueDb({
     cfg = makeCfg(till!.id, locationId, nodeId);
     // Seed a table and active/inactive statuses through the application transaction.
     const seeded = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
       const [active] = await tx
         .insert(tableServiceStatuses)
@@ -153,7 +152,6 @@ function deps(db: Database): TillApiDeps {
  *  `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,

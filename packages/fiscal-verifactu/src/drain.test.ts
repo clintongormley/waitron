@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { asAppUser, newId, nowIso, withTransaction } from "@waitron/db";
+import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -150,11 +150,9 @@ describe("drain — happy path, an anulación row", () => {
     });
 
     const sale = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 

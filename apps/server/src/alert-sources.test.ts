@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  asAppUser,
   CORE_MIGRATIONS,
   locations,
   printAgents,
@@ -196,7 +195,6 @@ async function seedJob(t: {
 /** Run the source as the app role in one transaction, exactly as the registry does. */
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return printingAlertSource().read({ tx, now });
   });
 }
@@ -395,7 +393,6 @@ const stubRuntimeDeps = (db: Database) => (): CardProviderRuntimeDeps => ({
 
 async function readBattery(source: AlertSource, now = NOW) {
   return withTransaction(batterySuite.db, async (tx) => {
-    await asAppUser(tx);
     return source.read({ tx, now });
   });
 }

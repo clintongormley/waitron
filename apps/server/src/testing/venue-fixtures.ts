@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { asAppUser, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -115,7 +115,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
   );
 
   const seeded = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const cafe = await createProduct(tx, {

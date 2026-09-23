@@ -9,7 +9,6 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   incidents,
   invoiceSeries,
   saleLines,
@@ -200,7 +199,6 @@ function correctionInput(
  * already registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
@@ -213,7 +211,6 @@ async function correct(
   overrides: Partial<RecordCorrectionInput> = {},
 ) {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return recordCorrection(tx, backend, correctionInput(correctsSaleId, overrides));
   });
 }
@@ -327,7 +324,6 @@ describe("recordCorrection — the sale being corrected", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId });
     });
     await expect(correct(backend, saleId)).rejects.toMatchObject({

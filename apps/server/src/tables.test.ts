@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   DEFAULT_TIME_ZONE,
-  asAppUser,
   locations,
   nowIso,
   ticketItems,
@@ -122,7 +121,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }
@@ -551,7 +549,6 @@ async function setupTabVenue(): Promise<{
     orderFlow: "prepay",
   };
   const { cafeId, aguaId, tableId } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
     const cafe = await createProduct(tx, {

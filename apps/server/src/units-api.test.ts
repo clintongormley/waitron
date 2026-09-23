@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
+import { catalogues, CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -27,7 +27,6 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from persons`);
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
     // `$defaultFn` generators and both columns are NOT NULL, so a raw insert naming neither stops
     // at `NOT NULL constraint failed: persons.id`. The same holds for every fixture insert below.

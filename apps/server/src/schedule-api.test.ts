@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, locations, tills, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -76,7 +76,6 @@ function mountApp(): Hono {
  * role) and return the cookie header that carries it — the credential every schedule route gates on. */
 async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, { tillId, personId, pin });
   });
   return `${SESSION_COOKIE}=${session.id}`;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
 import { listOutstandingSales } from "./list-outstanding-sales.js";
@@ -36,7 +36,6 @@ describe("listOutstandingSales reads a wide count of cents back as its printed a
     const saleId = await seedBareSale(suite.db, seed, { total: "70.00", invoiceNumber: 1 });
 
     const out = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return listOutstandingSales(tx);
     });
 
@@ -65,7 +64,6 @@ describe("listOutstandingSales reads a wide count of cents back as its printed a
     });
 
     const out = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return listOutstandingSales(tx);
     });
 

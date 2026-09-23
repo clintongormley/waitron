@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, sales, withTransaction } from "@waitron/db";
+import { captureError, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
@@ -50,7 +50,6 @@ beforeEach(async () => {
 
 async function sell() {
   return withTransaction(pg.db, async (tx) => {
-    await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
@@ -64,7 +63,6 @@ describe("id", () => {
 describe("zero-rate sales", () => {
   it("files the existing zero-rate product treatment as S1 with a zero cuota", async () => {
     const { saleId } = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       return recordSale(
         tx,
         backend,
@@ -149,7 +147,6 @@ describe("the taxpayer every record is filed as", () => {
     await pg.db.execute(sql`delete from tenants`);
     const error = await captureError(() =>
       withTransaction(pg.db, async (tx) => {
-        await asAppUser(tx);
         return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
       }),
     );
@@ -306,7 +303,6 @@ describe("recordCorrection — refusals", () => {
     // directly (bypassing core, which only ever issues F2), then try to correct it.
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
         tillId,
@@ -406,7 +402,6 @@ describe("recordSubstitution — refusals", () => {
     // reused literal id would collide with that sibling test's row.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
         tillId,
@@ -493,7 +488,6 @@ describe("recordSale — invoice type selection", () => {
     // branch itself rather than leave it an untested assumption about code nothing exercises.
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       // total is zero with no tender and no settlement — the simplest possible sale row now that
       // migration 0012 dropped `tip_amount`/`amount_charged` and retired the commit-time
       // coverage trigger (a bare, unsettled sale is a legitimate steady state, design §3) — the same
@@ -548,7 +542,6 @@ describe("recordSale — invoice type selection", () => {
     counterparty: { taxId: string; legalName: string; countryCode: string },
   ): Promise<void> {
     await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
         tillId,
@@ -701,7 +694,6 @@ describe("filedReceiptFor", () => {
     // registro is chained — inserted directly (like the "F1" case above), bypassing core, so the
     // divergence-prone breakdown reaches the backend verbatim.
     const ref = await withTransaction(pg.db, async (tx) => {
-      await asAppUser(tx);
       await tx.insert(sales).values({
         id: freshSaleId,
         tillId,

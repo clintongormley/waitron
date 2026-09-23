@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { Transaction } from "@waitron/db";
-import { asAppUser, invoiceSeries, withTransaction } from "@waitron/db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import { applyVenue, planVenue, resolveFiscalModules } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -173,7 +173,6 @@ async function setupGbVenue(): Promise<GbVenue> {
  *  header for what that costs. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     return fn(tx);
   });
 }

@@ -23,7 +23,6 @@ import type {
 } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
-  asAppUser,
   captureError,
   constraintTarget,
   isUniqueViolation,
@@ -164,7 +163,6 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
     // Never as the owner. An owner can disable any trigger, so an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
-    await asAppUser(tx);
     await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
@@ -712,7 +710,6 @@ describe("recordSale — settlement modes", () => {
 
     // Path A — immediate, on the beforeEach venue.
     const a = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, nodeId);
       return recordSale(
         tx,
@@ -724,7 +721,6 @@ describe("recordSale — settlement modes", () => {
     // Path B — a second, independent venue: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
     const b = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await backend.registerNode(tx, other.nodeId);
       return recordSale(
         tx,
@@ -738,7 +734,6 @@ describe("recordSale — settlement modes", () => {
       );
     });
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
     });
 
@@ -848,7 +843,6 @@ describe("recordSale — numbering", () => {
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await asAppUser(tx);
         await tx.insert(sales).values({
           tillId,
           nodeId,

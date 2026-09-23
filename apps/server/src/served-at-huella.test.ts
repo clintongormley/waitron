@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
-  asAppUser,
   saleLines,
   sales,
   ticketItems,
@@ -225,7 +224,6 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     }),
   );
   const seeded = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const agua = await createProduct(tx, {
@@ -288,7 +286,6 @@ async function openServeAndPay(
 ): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const table = (await listTables(tx, cfg)).find((candidate) => candidate.id === tableId);
     const lines =
       table?.zoneId === null
@@ -308,7 +305,6 @@ async function openServeAndPay(
 
   if (serveEveryLine) {
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       await markLineServed(tx, cfg, tabId, 1);
       await markLineServed(tx, cfg, tabId, 2);
     });
@@ -321,7 +317,6 @@ async function openServeAndPay(
   });
 
   const huella = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
       .from(registrosFacturacion)
@@ -336,7 +331,6 @@ async function openServeAndPay(
 /** `served_at` per line, in line_no order — the field this test differs between the two tabs. */
 async function servedAtByLine(shop: Shop, tabId: string): Promise<(string | null)[]> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
       .from(workingOrderLines)
@@ -385,7 +379,6 @@ describe("served_at is not part of the huella", () => {
  */
 async function placeTable(shop: Shop): Promise<void> {
   await withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
     const department = await tx.execute<{ department_id: string }>(sql`
       select department_id
@@ -443,7 +436,6 @@ interface Placement {
  *  read side). */
 async function placementOf(shop: Shop): Promise<Placement> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const table = (await listTables(tx, shop.cfg)).find((t) => t.id === shop.tableId);
     expect(table).toBeDefined();
     return {
@@ -522,7 +514,6 @@ describe("table placement is not part of the huella", () => {
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaId, cafeId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return openTab(tx, cfg, {
       tableId,
       lines: [
@@ -533,7 +524,6 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
   });
 
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
     // product nor category names a route), then walk each ticket item queued→preparing→ready.
     const lines = await tx
@@ -570,7 +560,6 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
   });
 
   const huella = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
       .from(registrosFacturacion)
@@ -592,7 +581,6 @@ interface KdsState {
 
 async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const items = await tx
       .select({ state: ticketItems.state })
       .from(ticketItems)
@@ -679,7 +667,6 @@ async function attachExtra(
   overlay: { allergens: OverlayAllergens | null },
 ): Promise<{ listId: string; productId: string }> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const panecillo = await createProduct(tx, {
       catalogueId: shop.menuId,
       categoryId: null,
@@ -725,11 +712,9 @@ async function openWithExtraAndPay(
   // `{productId, quantity}` lines, while `addTabRound` is the path that accepts `extras` and expands
   // the dish into a parent row + one child row (working-order.ts `priceOrderLines`).
   const { tabId } = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return openTab(tx, cfg, { tableId });
   });
   await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     await addTabRound(tx, cfg, tabId, [
       {
         productId: aguaId,
@@ -747,7 +732,6 @@ async function openWithExtraAndPay(
   });
 
   const huella = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
       .from(registrosFacturacion)
@@ -764,7 +748,6 @@ async function openWithExtraAndPay(
  *  sale is found by its `working_order_id` back-pointer (the pay path stamps it, till-sale.ts). */
 async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const rows = await tx
       .select({ id: saleLines.id })
       .from(saleLines)
@@ -778,7 +761,6 @@ async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
  *  authoring read side) — the field the self-check pins to prove the two shops GENUINELY differ. */
 async function overlayOf(shop: Shop, productId: string): Promise<OverlayAllergens | null> {
   return withTransaction(shop.db, async (tx) => {
-    await asAppUser(tx);
     const product = await readProductEditor(tx, productId);
     return product.allergens;
   });

@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  asAppUser,
-  diningTables,
-  saleLines,
-  sales,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { diningTables, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -167,7 +160,6 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
 
   const cfg = tillConfigFromVenue(venue);
   const catalogue = await withTransaction(suite.db, async (tx) => {
-    await asAppUser(tx);
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
@@ -398,7 +390,6 @@ describe("recordTillSale", () => {
     });
     const workingOrderId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, unitPrice: "4.10", available: true },
         { variantId: variantIds!.unavailable, unitPrice: "4.80", available: true },
@@ -539,7 +530,6 @@ describe("recordTillSale", () => {
 
     // A genuine chained fiscal record exists — one for this tenant's single sale.
     const rows = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx.select().from(registrosFacturacion);
     });
     expect(rows.length).toBe(1);
@@ -618,7 +608,6 @@ describe("recordTillSale", () => {
     await FakeFiscalBackend.install(suite.db);
     const fake = new FakeFiscalBackend(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId);
     });
 
@@ -685,7 +674,6 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     );
     const cfg = tillConfigFromVenue(venue);
     const productId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
       const product = await createProduct(tx, {
@@ -720,7 +708,6 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
 
     const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const woLines = await tx
         .select({ descriptions: workingOrderLines.descriptions })
         .from(workingOrderLines)
@@ -755,7 +742,6 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     });
 
     const lines = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       return tx
         .select({ descriptions: workingOrderLines.descriptions })
         .from(workingOrderLines)
@@ -851,7 +837,6 @@ describe("ordering extras and options — parent + child lines", () => {
     );
     const cfg = tillConfigFromVenue(venue);
     const seeded = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
@@ -1032,7 +1017,6 @@ describe("ordering extras and options — parent + child lines", () => {
     ]);
 
     const { wol, sl } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const wol = await tx
         .select({
           id: workingOrderLines.id,
@@ -1098,7 +1082,6 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines).toHaveLength(2); // parent + one child (the repeat is a single summed line)
 
     const { wol, sl } = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const wol = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -1154,7 +1137,6 @@ describe("ordering extras and options — parent + child lines", () => {
   /** The filed lines of the one sale this working order produced, in `line_no` order. */
   async function filedLinesOf(workingOrderId: string) {
     return withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
         .from(sales)
@@ -1206,7 +1188,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const workingOrderId = randomUUID();
 
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await createOpenOrder(
         tx,
         v.cfg,
@@ -1275,7 +1256,6 @@ describe("ordering extras and options — parent + child lines", () => {
     // so no future write can put one there without this failing first. Same instrument as
     // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note guard.
     const columns = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       // This engine has no `information_schema`; a table's columns come from the PRAGMA function,
       // the same replacement `configuration-transfer.ts:403` takes. The structural claim is
       // unchanged: an unknown table would yield no rows, and `toContain("option_snapshots")` below
@@ -1299,7 +1279,6 @@ describe("ordering extras and options — parent + child lines", () => {
     // PARK: persist an OPEN order with parent + child lines, and capture the PREVIEW price its lines
     // were built from (the same authoritative `priceBasketWithOptions` result).
     const preview = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { priced } = await createOpenOrder(
         tx,
         v.cfg,
@@ -1344,7 +1323,6 @@ describe("ordering extras and options — parent + child lines", () => {
     // stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
     // exactly as a live walk-up does — a child sale_line is never orphaned by the re-price.
     const filed = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
         .from(sales)
@@ -1382,7 +1360,6 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx
         .insert(diningTables)
         .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
@@ -1390,7 +1367,6 @@ describe("ordering extras and options — parent + child lines", () => {
 
     // Open a tab and send a round of the burger with two extras.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
@@ -1415,7 +1391,6 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines).toHaveLength(3);
 
     const filed = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
         .from(sales)
@@ -1443,7 +1418,6 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx
         .insert(diningTables)
         .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa 1", active: true });
@@ -1472,7 +1446,6 @@ describe("ordering extras and options — parent + child lines", () => {
 
     const tableId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       await tx
         .insert(diningTables)
         .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa NC", active: true });
@@ -1481,7 +1454,6 @@ describe("ordering extras and options — parent + child lines", () => {
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
     // Then VOID the bacon child (line_no 2), leaving {1,3,4} — non-contiguous.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
@@ -1509,7 +1481,6 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines).toHaveLength(3);
 
     const filed = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
         .from(sales)

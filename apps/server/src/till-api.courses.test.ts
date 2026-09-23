@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -100,7 +100,6 @@ const suite = useVenueDb({
     // same `withTransaction` + `asAppUser` path the routes read/write through — so the course FK + the
     // active/assignment filters are real, not bypassed by a superuser insert.
     await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       entCourseId = ent.id;
@@ -189,7 +188,6 @@ function deps(db: Database): TillApiDeps {
  *  `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
-    await asAppUser(tx);
     return loginWithPin(tx, {
       tillId: cfg.tillId,
       personId: ana.id,

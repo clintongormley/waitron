@@ -14,7 +14,6 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import {
-  asAppUser,
   fireControlMode,
   readNodeMembership,
   withTransaction,
@@ -500,7 +499,6 @@ function withVenueAuth<T>(
 ): Promise<T> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    await asAppUser(tx);
     await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
     return fn(tx);
   });
@@ -637,7 +635,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      await asAppUser(tx);
       const { personId } = await resolveManagementSession(tx, sessionId);
       const finish = credentialChangeThrottle.begin(personId);
       try {
@@ -671,7 +668,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       if (deps.googleOidc === undefined) throw new AppError("google.invalid", {});
       const out = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return beginGoogleLogin(tx, {
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
@@ -716,7 +712,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       deleteCookie(c, googleFlowCookie, { path: "/management-api/google/callback" });
       if (boundState !== state) throw new AppError("google.invalid", {});
       const claimed = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return claimGoogleState(tx, { state });
       });
       // The provider exchange is a network call, so it sits between the one-time state claim and
@@ -734,7 +729,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (claimed.mode === "link") {
         if (claimed.personId === null) throw new AppError("google.invalid", {});
         await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           await completeGoogleLink(tx, {
             personId: claimed.personId!,
             subject,
@@ -743,7 +737,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.redirect(`${deps.origin}/manage/profile?google=linked`);
       }
       const completion = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return loginWithGoogle(tx, { subject });
       });
       setManagementCookie(c, completion.id, deps.secureCookies);
@@ -764,7 +757,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listActiveStaff(tx);
       });
       return c.json(roster);
@@ -823,7 +815,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           const opened = await loginManager(tx, {
             email,
             password,
@@ -873,7 +864,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       if (typeof body.email === "string") {
         const issued = await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           return requestAccountRecoveryAction(tx, {
             email: body.email as string,
           });
@@ -904,7 +894,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const purpose = body.purpose;
       const inspection = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return inspectAccountAction(tx, {
           token: body.token as string,
           purpose,
@@ -935,7 +924,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const purpose: "invitation" | "password_reset" = body.purpose;
       const password = body.password;
       const completion = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const common = {
           purpose,
           password,
@@ -960,7 +948,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const id = readManagementSessionId(c);
       if (id !== null && isUuid(id)) {
         await withTransaction(deps.db, async (tx) => {
-          await asAppUser(tx);
           await endManagementSession(tx, id);
         });
       }
@@ -1009,7 +996,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const { personId, password, totp } = credential;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const session = await loginManagerById(tx, {
           personId,
           password,
@@ -1035,7 +1021,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const people = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listPersons(tx, { managementSessionId: sessionId });
       });
       return c.json(people);
@@ -1073,7 +1058,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
       const { created, issued } = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         const created = await invitePerson(tx, {
           managementSessionId: sessionId,
           displayName,
@@ -1099,7 +1083,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
@@ -1109,7 +1092,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return issueAccountAction(tx, {
           personId,
           purpose: "invitation",
@@ -1143,7 +1125,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
       const status = requireEnum(body.status, "status", ["pending", "active", "suspended"]);
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await updatePersonDetails(tx, {
           managementSessionId: sessionId,
           personId,
@@ -1167,7 +1148,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await clearPersonPin(tx, { managementSessionId: sessionId, personId: id });
       });
       return c.body(null, 204);
@@ -1179,7 +1159,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await deactivatePerson(tx, { managementSessionId: sessionId, personId });
       });
       return c.body(null, 204);
@@ -1191,7 +1170,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
@@ -1201,7 +1179,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
           personId,
@@ -1217,7 +1194,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "person.manage",
@@ -1227,7 +1203,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
           personId,
@@ -1259,7 +1234,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const receipt = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1288,7 +1262,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const { receipt } = body;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await putReceipt(tx, {
           managementSessionId: sessionId,
           receipt,
@@ -1317,7 +1290,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const canvases = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1335,7 +1307,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireCanvasId(c.req.param("id"));
       const canvas = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1369,7 +1340,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // declared type), so the closure reads these — the create-person/create-status pattern above.
       const { name, definition } = body;
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return createCanvas(tx, {
           managementSessionId: sessionId,
           name,
@@ -1401,7 +1371,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const { name, definition } = body;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await updateCanvas(tx, {
           managementSessionId: sessionId,
           id,
@@ -1421,7 +1390,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireCanvasId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await deleteCanvas(tx, {
           managementSessionId: sessionId,
           id,
@@ -1438,7 +1406,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const theme = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1463,7 +1430,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const { theme } = body;
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await putTenantTheme(tx, {
           managementSessionId: sessionId,
           theme,
@@ -1494,7 +1460,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceProfiles = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1513,7 +1478,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
       const profile = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
@@ -1569,7 +1533,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // `device_form_factor` enum column never sees a value it cannot hold.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return createDeviceProfile(tx, {
           managementSessionId: sessionId,
           name,
@@ -1622,7 +1585,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // The device's FORM FACTOR — screened against the closed `FORM_FACTORS` set, the same as POST.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return updateDeviceProfile(tx, {
           managementSessionId: sessionId,
           id,
@@ -1645,7 +1607,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await deleteDeviceProfile(tx, {
           managementSessionId: sessionId,
           id,
@@ -1683,7 +1644,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // pattern above.
       const { label, color } = body;
       const result = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return createStatus(tx, {
           managementSessionId: sessionId,
           label,
@@ -1700,7 +1660,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const statuses = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return listStatuses(tx, { managementSessionId: sessionId });
       });
       return c.json(statuses);
@@ -1767,7 +1726,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.body(null, 204);
       }
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await updateStatus(tx, patch);
       });
       return c.body(null, 204);
@@ -1782,7 +1740,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireStatusId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await deactivateStatus(tx, {
           managementSessionId: sessionId,
           id,
@@ -2517,7 +2474,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
       const out = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
@@ -2537,7 +2493,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return beginPasskeyAuthentication(tx, { rpId: deps.rpId });
       });
       return c.json(out);
@@ -2563,7 +2518,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
       const session = await withTransaction(deps.db, async (tx) => {
-        await asAppUser(tx);
         return finishPasskeyAuthentication(tx, {
           challengeHandle,
           response: response as never,
