@@ -29,8 +29,8 @@ export interface MenuItem {
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
 export interface MenuOffer extends MenuItem {
-  /** The price this offer charges, RESOLVED (`offer-price.ts`). `grossPrice` is the STORED menu
-   * price; the order path and the till charge this one. */
+  /** The price the server's order path charges for this offer; today it equals `grossPrice`, the
+   * STORED menu price. */
   unitPrice: string;
   menuName: string;
   sectionName: Record<string, string>;

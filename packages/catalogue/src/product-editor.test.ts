@@ -116,7 +116,7 @@ it("saves and reads the canonical editor shape with independent content and vari
 });
 
 it("saves a product with exactly one variant, or none", async () => {
-  // Spec §15.1: one variant is allowed; there is no "Regular" variant to make up a second.
+  // Spec §15.1: one variant is allowed; the server no longer requires a second.
   const one = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
   );

@@ -918,7 +918,7 @@ export class VenueOperationsScreen extends LitElement {
         // The one answer to which product this form is about: an existing offer's own product,
         // otherwise the operator's pick, falling back to the first product the dropdown can show —
         // the option a browser selects when the form marks none. The offer that gets saved and the
-        // variants that get published both read it, so they are never two different products.
+        // variants whose overrides it lists and saves both read it, so they are never two products.
         const product = row
           ? model.products.find((candidate) => candidate.id === row.productId)
           : (products.find((candidate) => candidate.id === this.offerProductId) ?? products[0]);

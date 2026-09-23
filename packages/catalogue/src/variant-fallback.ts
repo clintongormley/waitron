@@ -21,9 +21,12 @@ import { productUnits } from "./schema/units.js";
  *
  * The catalogue's product reads, and the order path's read of an extras item, take their inherited
  * values from here, so the nullability of the four columns a variant may leave blank (`vat_class`,
- * `pricing_unit`, `unit_price`, `dietary_declarations`) stops here: their callers see the same
- * non-null types they always did. The catalogue's reads keyed on CATEGORY MEMBERSHIP read each
- * product's OWN `product_categories` rows, so a variant that inherits its parent's categories is not
+ * `pricing_unit`, `unit_price`, `dietary_declarations`) stops here for reads that go through
+ * `effectiveProductColumns`: their callers see non-null types. The exception is deliberate: a
+ * variant's own price is read raw, and may be blank, in the variant list
+ * (`ProductVariant.unitPrice`) and in the menu price chain (`readOfferVariants`). The catalogue's
+ * reads keyed on CATEGORY MEMBERSHIP read each product's OWN `product_categories` rows, so a variant
+ * that inherits its parent's categories is not
  * listed under them there — a category's product list and its delete preview (`categories.ts`) are
  * two; `readProductCategories` refuses a variant's id (`product.not_found`). Reads keyed on an ORDER
  * LINE's product — the

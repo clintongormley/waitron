@@ -612,8 +612,8 @@ describe("venue operations screen", () => {
       grossPrice: "5.00",
       displayOrder: 0,
     });
-    // Olives has no variants of its own, so nothing is published — least of all the Negroni variant
-    // the same model carries.
+    // Olives has no variants of its own, so the menu overrides nothing — least of all for the
+    // Negroni variant the same model carries.
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
@@ -748,7 +748,7 @@ describe("venue operations screen", () => {
     ]);
   });
 
-  it("shows a refused variant publication on the form, not only in the console", async () => {
+  it("shows a refused variant override on the form, not only in the console", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
       createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
@@ -864,6 +864,7 @@ describe("venue operations screen", () => {
     field(el, "offer-variant-price-v1").value = "1.234";
     await action(el, "save-editor");
     expect(api.setMenuVariants).not.toHaveBeenCalled();
+    expect(summary(el)).toContain("Enter a non-negative price with up to two decimal places.");
     expect(
       el.shadowRoot!.querySelector('[data-field-error="offer-variant-price-v1"]'),
     ).not.toBeNull();

@@ -182,8 +182,8 @@ describe("product variants", () => {
         "en",
       ),
     );
-    const published = await run((tx) => listMenuVariants(tx, offerId));
-    expect(published).toEqual([
+    const overrides = await run((tx) => listMenuVariants(tx, offerId));
+    expect(overrides).toEqual([
       { variantId: variants[0]!.id, price: "4.00", offered: true },
       { variantId: variants[1]!.id, price: null, offered: true },
     ]);
@@ -250,7 +250,7 @@ describe("product variants", () => {
     ]);
   });
 
-  it("refuses to publish a variant belonging to another product and publishes nothing", async () => {
+  it("refuses to override a variant belonging to another product and stores no override", async () => {
     const [foreign] = await run(async (tx) => {
       const unit = await createUnit(
         tx,

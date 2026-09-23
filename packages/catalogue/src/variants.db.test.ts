@@ -577,13 +577,13 @@ it("a variant removed while its override is being written ends Inactive, the ove
   // One write transaction runs on the venue file at a time, so the removal runs second and sees
   // the committed override; `racePair` (`test/fixtures.ts`) carries the measurement that it does
   // not start early. Removing is always allowed now (spec §15.6), so both succeed.
-  const [publishing, removing] = await racePair(
+  const [overriding, removing] = await racePair(
     suite.db,
     (tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "4.00", offered: true }]),
     (tx) => setProductVariants(tx, f.parentId, [], "en"),
   );
 
-  expect(publishing.status).toBe("fulfilled");
+  expect(overriding.status).toBe("fulfilled");
   expect(removing.status).toBe("fulfilled");
   expect(await app((tx) => listProductVariants(tx, f.parentId))).toEqual([
     { ...w125, active: false },

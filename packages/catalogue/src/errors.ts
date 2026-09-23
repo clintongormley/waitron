@@ -78,7 +78,8 @@ declare module "@waitron/shared" {
     "menu_item.variant_not_allowed": { productId: string };
     /** A variant field is malformed or a submitted variant identity is duplicated. */
     "product.variant_invalid": { field: string };
-    /** A submitted variant identity does not belong to the product. */
+    /** A submitted variant identity is not a variant of the product or, in a menu's variant
+     * overrides, not an Active one. */
     "product.variant_not_found": { variantId: string };
     /** A variant could not be removed while menu offers still published it. Nothing throws it
      * now: removing a variant makes it Inactive and is always allowed (spec §15.6). Kept
@@ -86,7 +87,7 @@ declare module "@waitron/shared" {
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
-    /** A product with variants cannot be sold without selecting one. */
+    /** A product with Active variants cannot be sold without selecting one. */
     "product.variant_required": { productId: string };
     /** A selected variant is disabled or absent from the menu offer. */
     "product.variant_unavailable": { variantId: string };

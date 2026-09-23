@@ -160,9 +160,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.product": "Producto",
   "venue.price": "Precio",
   "venue.variants": "Variantes",
-  "venue.offered": "Se ofrece en este menú",
+  "venue.offered": "Se ofrece en esta carta",
   "venue.variant_price_hint":
-    "Deja vacío el precio de una variante para cobrar su propio precio o, si no tiene, el del producto en este menú.",
+    "Deja vacío el precio de una variante para cobrar su propio precio o, si no tiene, el del producto en esta carta.",
   "venue.add_offer": "Añadir producto a la carta",
   "venue.save_price": "Guardar precio",
   "venue.remove_offer": "Quitar de la carta",

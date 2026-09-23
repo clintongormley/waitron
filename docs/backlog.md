@@ -458,6 +458,10 @@ states). **Planned the same day** as nine pull requests, branches `feat/variants
 (measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
+Task 3's migration drops the per-menu variant table, `menu_item_variants`
+(`packages/catalogue/drizzle/0001_drop_menu_item_variants.sql`), and nothing but the configuration
+transfer reads the old `product_variants` table any more, so variants a venue stored there no longer
+appear: a dev venue needs `wa-wt reset demo <name>` to see variants again.
 
 **Task 1 LANDED as #511 (2026-09-23): every dev venue now needs `wa-wt reset demo <name>`, and no
 provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
@@ -470,7 +474,9 @@ line's raw columns (Task 5, dish and extras); and republishing a variant's aller
 not write values that hide its parent's (Task 6). Deliberately left: the counts of `products`'
 columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
 are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
-compares.
+compares. The same file's paragraph saying `product_variants.image` is deliberately not guarded is
+stale too: since Task 3 a variant's photo is `products.image`, which that file's triggers guard. It
+stays unedited for the same reason.
 
 **Task 2 LANDED as #517 (2026-09-23): a product's one on/off switch is now two — Active (it exists)
 and Available (sold out for now).** Delete makes a product Inactive, the products list gained a
@@ -483,8 +489,9 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   question Q1). **Recommended next action:** keep a sold-out line in held work, flag it on the
   till, and refuse only a quantity increase (the server already refuses the increase).
 - **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
-  section has been switched off** — only its product and extras. Natural home: Task 3, which moves
-  variants into `products`.
+  section has been switched off** — only its product and extras. Task 3 did not take it, so it
+  remains open; Task 5 ("A variant is sold as the product it is"), which reworks the sale line, may
+  be its natural home.
 - **The units screen's "Availability" column shows the Active flag.** `productsUsingUnit`
   (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
   that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
@@ -1172,15 +1179,12 @@ and `wt-price-input`. [Developer guide](developers/products.md),
 
 What it left open:
 
-- **A variant's image has no foreign key, unlike a product's.** `products.image` carries a real
-  `ON DELETE RESTRICT` reference to `media_images` (declared in the media set's baseline,
-  `packages/media/drizzle/0001_media_baseline_sql.sql`); `product_variants.image` is a plain text
-  column (`packages/catalogue/drizzle/0000_catalogue_baseline.sql`). The image library still
-  refuses to delete a photo a variant uses, because `listImageUsages` and `deleteImage` both scan
-  that column — but that is application-level protection only, and any delete path that skips
-  `deleteImage` is not stopped by the database. **Next action:** decide whether the variant column
-  should get the same foreign key the product column has.
+- **A variant's image has no foreign key, unlike a product's — CLOSED by variants plan Task 3.** A
+  variant is now a `products` row, so its photo is `products.image` and the database guards it with
+  the same triggers as a product's photo; the measurement is under *Variants* in the
+  [developer guide](developers/products.md).
 
+- **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's own parser refuses a blank; `createProduct` writes what it is given. Its
   siblings share the pattern: `option_lists.name`, `option_labels.name`, `extra_lists.name` and
   `product_variants.name` are each declared `"name" text NOT NULL` in
