@@ -56,45 +56,16 @@ WORKDIR /app
 CMD ["node", "/app/print-agent.js"]
 
 # ---------------------------------------------------------------------------
-# Runtime stage — the build outputs, a left-over Postgres client and a non-root user.
+# Runtime stage — the build outputs and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
 
 ARG WAITRON_BUILD_ID
 
-# The Postgres CLIENT major. NOTHING IN THIS IMAGE RUNS A POSTGRES CLIENT PROGRAM any more. The
-# backup duty was the only thing that ever did, and it no longer starts a separate program at all:
-# it copies the venue database file with the engine's own `vacuum into`
-# (`packages/store/src/archive.ts`), and `apps/server/src/backup-keys.ts` records in its own header
-# that it used to be pg-dump.ts and used to hold that shell-out.
-#
-# Checked 2026-09-23 with
-# `grep -rnE '\b(psql|pg_dump|pg_restore|pg_isready|createdb|dropdb|pg_ctl)\b' packages apps deploy scripts`:
-# every hit under `packages/` and `apps/` is a comment describing what the storage switch removed.
-# Two hits are live, and neither of them runs in this image — `deploy/compose.yml`'s `pg_isready`
-# healthcheck runs inside the `postgres:18-alpine` container, and `scripts/schema-equivalence.sh`
-# reaches its `psql` and `pg_dump` through `docker exec` into a throwaway Postgres container.
-#
-# So the install below is left-over, and it is kept rather than removed because dropping a package
-# from the box image is its own decision and its own change. Two other files still spell the same
-# 18 — deploy/compose.yml's `db` service and deploy/waitron.sh's HELPER_IMAGE, whose comment points
-# back at this note. What used to couple the three numbers was a version check that no longer runs
-# anywhere: `pg_dump` 17 refusing an 18 server ("aborting because of server version mismatch").
-ARG PG_MAJOR=18
-
-# postgresql-client comes from PGDG, not Debian: node:26-slim is Debian 13 (trixie), whose own repos
-# carry postgresql-client-17 only. libcap2-bin is here for the setcap below.
+# libcap2-bin is here for the setcap below.
 RUN set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends ca-certificates curl libcap2-bin; \
-  install -d /usr/share/postgresql-common/pgdg; \
-  curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-    -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc; \
-  echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
-    > /etc/apt/sources.list.d/pgdg.list; \
-  apt-get update; \
-  apt-get install -y --no-install-recommends "postgresql-client-${PG_MAJOR}"; \
-  apt-get purge -y --auto-remove curl; \
+  apt-get install -y --no-install-recommends ca-certificates libcap2-bin; \
   rm -rf /var/lib/apt/lists/*
 
 # The on-prem profile is `network_mode: host`, whose namespace keeps the kernel's

@@ -34,25 +34,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Written before anything can fail, because the teardown step runs `if: always()` and compose
-      # refuses to interpolate this file — required, no default — even to tear a stack down.
-      - name: Write the box's .env, the one secret it needs before anything runs
+      # deploy/.env is where waitron.sh puts a real box's and it is gitignored, so compose reads it
+      # with no flag. It carries nothing but the two tags this job builds, so compose runs those rather
+      # than resolving the published `:main` images and pulling them. It is written first so every
+      # later step reads the same file, the `if: always()` teardown included.
+      - name: Point compose at the images this job builds
         run: |
           set -euo pipefail
           {
-            echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
             echo "WAITRON_IMAGE=waitron:ci"
             echo "WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:ci"
           } > deploy/.env
 
-      # A measurement taken where both answers look alike measures nothing (CLAUDE.md §1). The app
-      # runs in the HOST namespace and reaches Postgres over the host's own loopback, so a
-      # pre-existing listener on 5432 would take the bootstrap and every assertion below would then
-      # pass against a cluster this job never created. 443 is the port the box itself must bind.
+      # 443 and 9110 are bound in the HOST namespace by the two containers this job starts, so a
+      # process already holding either one leaves the box unable to bind, and the stack-up step
+      # further down then fails on its 300-second health timeout, naming neither the port nor what is
+      # holding it.
       - name: Refuse to smoke against something already listening
         run: |
           set -euo pipefail
-          for port in 443 5432 9110; do
+          for port in 443 9110; do
             if ss -ltn "( sport = :$port )" | grep -q LISTEN; then
               ss -ltn
               echo "port $port is already in use — the smoke below would measure the wrong thing" >&2

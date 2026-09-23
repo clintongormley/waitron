@@ -28,6 +28,9 @@ const COMPOSE = read("deploy/compose.yml");
 const WAITRON_SH = read("deploy/waitron.sh");
 const CI = read(".github/workflows/ci.yml");
 const IMAGE_SMOKE = read(".github/workflows/image-smoke.yml");
+// Fetched onto every box beside compose.yml, so a line it still calls REQUIRED is an instruction an
+// operator follows for a variable nothing reads.
+const ENV_EXAMPLE = read("deploy/.env.example");
 const CONFIG_SOURCE = read("apps/server/src/config.ts");
 // The operator commands the server bundle produces. Declared under `waitron.commands` rather than
 // `bin` because nothing builds at install time, so a `bin` target under `dist/` is a command pnpm
@@ -68,8 +71,6 @@ const HOSTNAME = only(
   "BOX_HOSTNAME",
 );
 
-// A provisioned box's own URL, from `instance.env`. The image never carries one.
-const DATABASE_URL = "postgres://waitron_app:pw@127.0.0.1:5432/waitron";
 const load = (env: Record<string, string | undefined>) =>
   loadConfig(env, "/opt/waitron/drizzle", "/opt/waitron/state");
 
@@ -98,7 +99,7 @@ describe("the container image's environment", () => {
   it("binds every interface, not the container's own loopback", () => {
     // config.ts defaults httpHost to 127.0.0.1, which in a container serves nobody while the
     // loopback healthcheck still reports healthy.
-    expect(load({ ...IMAGE_ENV, DATABASE_URL }).httpHost).toBe("0.0.0.0");
+    expect(load({ ...IMAGE_ENV }).httpHost).toBe("0.0.0.0");
   });
 
   it("sets every variable config.ts requires in production", () => {
@@ -112,7 +113,7 @@ describe("the container image's environment", () => {
   });
 
   it("loads as a LIVE box — the mode the wizard writes and no preproduction run reaches", () => {
-    const config = load({ ...IMAGE_ENV, DATABASE_URL, WAITRON_ENV: "production" });
+    const config = load({ ...IMAGE_ENV, WAITRON_ENV: "production" });
     expect(config.environment).toBe("production");
     expect(config.managementRpId).toBe(HOSTNAME);
   });
@@ -125,7 +126,6 @@ describe("the container image's environment", () => {
     (variable) => {
       const env: Record<string, string | undefined> = {
         ...IMAGE_ENV,
-        DATABASE_URL,
         WAITRON_ENV: "production",
       };
       delete env[variable];
@@ -252,7 +252,7 @@ describe("the waitron.sh box command", () => {
   });
 
   it("keeps the tls certificate when it empties the state volume on a plain reset", () => {
-    expect(WAITRON_SH).toMatch(/find \/s .*! -name tls/);
+    expect(WAITRON_SH).toMatch(/find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls/);
   });
 
   it("refuses a reset on a production box unless forced", () => {
@@ -283,6 +283,22 @@ describe("every copy of the box's hostname", () => {
     // The URL in the QR code the restaurant actually scans.
     expect(only(WAITRON_SH, /BOX_URL="([^"]+)"/, "waitron.sh BOX_URL")).toBe(`https://${HOSTNAME}`);
   });
+});
+
+it("starts no database server on the box, and needs no secret before the box boots", () => {
+  // A venue is a directory of SQLite files inside the `state` volume, so the box runs no cluster and
+  // holds no database credential. Pinned as absences because both are one line away from returning:
+  // the service and the named volume are spelled the same way at the same indent, so one pattern
+  // covers both, and a `${POSTGRES_PASSWORD:?...}` interpolation makes compose refuse to read the
+  // file at all — including for a `down`, which is how a box gets torn down.
+  expect(COMPOSE).not.toMatch(/^ {2}db:$/m);
+  expect(COMPOSE).not.toContain("POSTGRES_PASSWORD");
+  expect(COMPOSE).not.toContain("postgres");
+  expect(COMPOSE).not.toContain("5432");
+  // The same absence in the two files that would put it back: the script that installs a box, and
+  // the example environment it fetches onto one.
+  expect(WAITRON_SH).not.toContain("POSTGRES_PASSWORD");
+  expect(ENV_EXAMPLE).not.toContain("POSTGRES_PASSWORD");
 });
 
 it("stores image-library bytes in the database without a separate image volume", () => {

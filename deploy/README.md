@@ -1,9 +1,8 @@
 # Running a Waitron node
 
-A node is a few containers: the Waitron app, a local mail capture, the print agent, and a database
-container the app no longer talks to (see `db` below). Everything the node keeps lives in the named
-Docker volumes below, so `docker volume` is the whole of a box's life — back those up and you have
-backed up the box.
+A node is a few containers: the Waitron app, a local mail capture, and the print agent. Everything
+the node keeps lives in the named Docker volumes below, so `docker volume` is the whole of a box's
+life. Back those up and you have backed up the box.
 
 **The venue's own database is a folder inside the `state` volume.** The app opens
 `/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars and
@@ -12,12 +11,15 @@ app's path, no connection string and no database password.
 
 | volume        | mounted at                     | holds                                                                                                                           |
 | ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `db`          | `/var/lib/postgresql`          | a PostgreSQL cluster nothing reads any more — compose still starts the service; a later change retires it                       |
 | `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, the CA and leaf PEMs |
 | `logs`        | `/var/lib/waitron/logs`        | the rotating log file                                                                                                           |
 | `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                      |
 | `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                        |
 | `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                             |
+
+A box installed before the box ran its own database server was retired also carries a `waitron_db`
+volume holding that old database. Nothing reads it and nothing on the box removes it, including
+`reset`. Once such a box has been upgraded, `docker volume rm waitron_db` reclaims the space.
 
 ## Setting up a box
 
@@ -30,17 +32,18 @@ sudo bash waitron.sh install
 ```
 
 `install` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only;
-on anything else it says so and exits 2), enables the daemon at boot, fetches `compose.yml` and
-`.env.example` from the ref you are installing — overwriting any local copy of those two files, and
+on anything else it says so and exits 2) and enables the daemon at boot. It then fetches `compose.yml`
+and `.env.example` from the ref you are installing, overwriting any local copy of those two files and
 printing a line to say so, because the compose file and the image running against it must always come
-from the same commit — generates the box's `POSTGRES_PASSWORD` into `.env` the first time, pulls all of
-the box's images — the two Waitron images from GHCR and the database and mail-catcher images from
-Docker Hub — stopping with an error if any of them fails to download, and starts the containers. It is
-non-interactive and idempotent: running it again later (to update, say) does nothing destructive,
-and in particular it never mints a second `POSTGRES_PASSWORD` — the cluster consumes it only at its
-first start and keeps it thereafter, so a regenerated `.env` would leave the two disagreeing. The
-venue's own databases are unaffected by any of this: they are files in the `state` volume, and no
-password opens them.
+from the same commit. Finally it pulls the box's images, the two Waitron ones from GHCR and the
+mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
+containers.
+
+A plain `install` writes no `deploy/.env` at all. The box has no secret it needs before it boots: the
+venue's databases are files in the `state` volume that open with no password, and every other setting
+has a default in the image that suits a box reached at `waitron.local`. The only thing that writes `.env` is installing a branch or a
+commit, which records the image tags it built there. So `install` is non-interactive and idempotent,
+and running it again later to update the box does nothing destructive.
 
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
@@ -66,9 +69,11 @@ exercised on a developer machine without touching `/opt`).
 
 The compose project is named `waitron`. On a developer machine that is also running the repository's
 dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the
-two collide, and a `docker compose up` here would reconcile that running project instead. Pass
-`COMPOSE_PROJECT_NAME=waitron-<something>` when exercising this file on such a machine; on a box the
-collision cannot arise.
+two collide. A `docker compose up` here would then reconcile that running project, and because
+`waitron.sh` passes `--remove-orphans` on every compose command it runs, it stops and removes the dev
+stack's containers rather than warning about them. Their volumes are left alone, so the dev database
+survives. Pass `COMPOSE_PROJECT_NAME=waitron-<something>` when
+exercising this file on such a machine; on a box the collision cannot arise.
 
 If HTTP is disabled, use the installer's **Secure help** address, `https://waitron.local/setup/trust`.
 The main listener serves this guide during setup, trading, pending adoption and boot recovery.
@@ -79,7 +84,7 @@ it. It does not offer the box's fallback CA, which cannot certify that connectio
 
 ```bash
 cd /opt/waitron
-docker compose pull && docker compose up -d   # updates to whatever .env selects — the published :main, unless you installed a branch (run `waitron.sh install` with no ref to return to :main)
+docker compose pull && docker compose up -d --remove-orphans   # updates to the published :main, unless a branch install pinned an image in .env (run `waitron.sh install` with no ref to return to :main)
 docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
@@ -149,15 +154,14 @@ sudo bash waitron.sh reset          # wipe the database and settings, keep the b
 sudo bash waitron.sh reset --all    # also wipe the certificate, so a new one is minted on next boot
 ```
 
-Both forms wipe the database and every other volume except one folder: plain `reset` keeps `tls/`
-inside the box's `state` volume, which holds the certificate authority the phone already trusts and
-the box's own certificate signed by it. Because that folder survives, a phone that has already been
-told to trust this box does not need to trust it again after a plain `reset`. `reset --all` throws
-`tls/` away too, so the box mints a brand-new certificate authority on its next boot and every phone
-has to go through the trust step again. Neither form touches `.env`, so whatever it holds — the
-generated `POSTGRES_PASSWORD` and whichever image `install` last selected — survives a reset. Only
-the data in the volumes is wiped, and that includes the venue's databases, because they live in the
-`state` volume.
+Both forms wipe every volume in the table above except one folder: plain `reset` keeps `tls/` inside the box's `state`
+volume, which holds the certificate authority the phone already trusts and the box's own certificate
+signed by it. Because that folder survives, a phone that has already been told to trust this box does
+not need to trust it again after a plain `reset`. `reset --all` throws `tls/` away too, so the box
+mints a brand-new certificate authority on its next boot and every phone has to go through the trust
+step again. Neither form touches `.env`, so if a branch install pinned an image there, the box comes
+back on that same image. Only the data in the volumes is wiped, and that includes the venue's
+databases, because they live in the `state` volume.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
@@ -207,14 +211,10 @@ middle of a cold restore, so it is worth reading twice:
 
 ## The box's environment — `deploy/.env`
 
-`.env.example` documents every line. Two are worth calling out here.
-
-**`POSTGRES_PASSWORD`** is the `db` container's own password, consumed at its first start.
-`waitron.sh install` generates it and never prints it, and compose still refuses to start without
-it. **The app no longer reads it, directly or derived:** a venue is a directory of SQLite files
-under the `state` volume, so the server opens no database server and holds no database credentials
-at all. The `db` service itself is retired by a later change. Everything else the box holds — the vault key ring, the CA and leaf certificates, the
-node's own secrets — is minted on the first setup boot into the `state` volume.
+`.env.example` documents every line, and every one of them is optional: a box reached at
+`waitron.local` runs with no `.env` at all. The box holds no database credential, because there is no
+database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
+certificates, are minted on the first setup boot into the `state` volume and never appear here.
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,
