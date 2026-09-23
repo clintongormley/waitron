@@ -14,10 +14,12 @@ import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "credentials",
-  // No prerequisites: `drizzle/0000_baseline.sql` declares no foreign key, so the set migrates on
-  // an empty database. The runtime still applies core first, because `credentialProvisioned` reads
-  // `tenants` — a reason about the CODE, not about what this set builds.
+  // No prerequisites: `drizzle/0000_baseline.sql` names no other set's table — no foreign key, no
+  // trigger — so nothing it builds depends on core. The runtime applies core before every module
+  // anyway, and credentials needs that at run time: `credentialProvisioned` reads `tenants`.
   subject: CREDENTIALS_MIGRATIONS,
   declarations: barrel,
+  // False: `purpose` is a plain `label()`. `PURPOSES` in `src/purposes.ts` is the authority on its
+  // values, and the column's one check refuses only the empty string.
   declaresClosedVocabularies: false,
 });

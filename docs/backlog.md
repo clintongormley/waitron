@@ -2031,8 +2031,7 @@ image constraints under *Detail → Box image*.
   holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`,
   `credentials`, `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and
   `venue-service`. `credentials` has had one since, and it found no drift; re-run the command for
-  the current list. Four of those — `fiscal-verifactu`, `identity`, `credentials` and `scheduler` —
-  each carry a `src/schema/index.ts` barrel, their own migration set and a
+  the current list. Three of those — `fiscal-verifactu`, `identity` and `scheduler` — each carry a `src/schema/index.ts` barrel, their own migration set and a
   `src/schema-ownership.test.ts` beside it, which is everything a call site needs to be written
   from, so each is roughly ten lines now that the factory exists. (That is not a comparison with the
   four that landed: `catalogue` has no `schema-ownership.test.ts` and did not need one — the barrel
@@ -2046,8 +2045,8 @@ image constraints under *Detail → Box image*.
   (2026-09-23).** `src/migrations.ts` says core must migrate first because of "the baseline's
   `tenants` foreign key", and `src/migrations.test.ts` that "the credentials baseline references
   `tenants`". `drizzle/0000_baseline.sql` declares no foreign key at all, and the set's
-  schema-conformance suite migrates it on an empty database with no prerequisites and passes. The
-  key went with the tenant column in #378 (2026-09-16). The ORDER is still right for a different
+  schema-conformance suite, which reads the built keys with `pragma foreign_key_list`, finds none.
+  The key, `tenant_credentials_tenant_fk`, went with the tenant column in #378 (2026-09-16). The ORDER is still right for a different
   reason — `credentialProvisioned` in `src/store.ts` reads `tenants` — so the fix is to restate the
   reason, not to drop the ordering.
 

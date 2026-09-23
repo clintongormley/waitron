@@ -623,8 +623,8 @@ _Dated 2026-09-23._ Both facts about the guard in that paragraph have since chan
 as the record of what was true when the work was done. The comparing machinery is no longer in
 `packages/db/src/schema/schema-conformance.test.ts` — that file is a short call site now — and it is
 no longer core-only. It lives in `packages/db/src/testing/schema-conformance.ts` as a suite factory
-that any migration set can call, and `catalogue`, `payments`, `workforce` and `workforce-es` do.
-Which sets have a call site is `ls packages/*/src/schema/schema-conformance.test.ts`; a set with
+that any migration set can call, and when this note was written `catalogue`, `payments`,
+`workforce` and `workforce-es` did. Which sets have a call site now is `ls packages/*/src/schema/schema-conformance.test.ts`; a set with
 none is still unguarded.
 
 **Three ways a raw-SQL site can be wrong, and NONE of them is loud any more.** Measured on
@@ -706,8 +706,8 @@ re-derive there — established by running it, not by reading the migration.
 probe a module set, do not grep it.
 
 _Dated 2026-09-23._ Those two paragraphs are the record of a hand probe, and they stay as written.
-What has changed since is that four module sets no longer need one: `catalogue`, `payments`,
-`workforce` and `workforce-es` each call the shared schema-conformance suite factory
+What has changed since is that, when this note was written, four module sets no longer needed
+one — `catalogue`, `payments`, `workforce` and `workforce-es` each call the shared schema-conformance suite factory
 (`packages/db/src/testing/schema-conformance.ts`) from a
 `packages/<pkg>/src/schema/schema-conformance.test.ts` of their own, so for those four the method is
 a suite that runs with the package's own tests rather than something to remember to do (which pushes

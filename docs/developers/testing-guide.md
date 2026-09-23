@@ -123,7 +123,7 @@ sentence on each field; this is the shape of it. Four fields are required:
 Three more are optional:
 
 - `prerequisites` — the sets that must be applied BEFORE the subject, in order. Omit it for a set
-  that has none, which today is core alone.
+  that has none; core is one, and so is any module set whose SQL names no other set's table.
 - `reload` — an arrow function that re-imports that same barrel from inside a test. It earns its
   keep only in a package that runs a mutation test, which among these callers is `packages/db`
   alone, and that is the one call site passing it; the reason is written out at the field itself.
@@ -141,14 +141,19 @@ The difference between the two lists is the subject's own tables. A set with no 
 over an empty list and takes its first reading of an unmigrated database, which is the same code
 path rather than a special case.
 
-**Finding a module's prerequisites: read them off the package's own suites, do not guess.** Any
-existing `useVenueDb` call in the package already had to get the list and the order right, or its
-own migrations would not apply. `packages/workforce/src/migrations.test.ts:32` is the worked
+**Finding a module's prerequisites: read them off the package's own suites, do not guess.** An
+existing `useVenueDb` call in the package is where to start: its suite passes with that list in
+that order. (A missing prerequisite does not stop a set migrating on this engine — a foreign key
+naming a table that does not exist is refused at the first write, not at migrate time — so a clean
+migrate alone would not have told you.) `packages/workforce/src/migrations.test.ts:32` is the worked
 example, and it states the reason for a three-set case in the comment beside it: core first because
 shifts point at its `locations`, `tills` and `nodes`, then identity because `employments` and
 `time_entries` point at its `persons`, then workforce itself. Ordering across packages is the
 runtime's job and nothing enforces it, which is why each call site writes the reason down rather
-than just the list.
+than just the list. A package's suites can apply MORE than its set's tables need, though:
+`packages/credentials` applies core in every suite because its code reads `tenants`, while its
+migrations point at nothing in core, so its call site passes no prerequisites. Check the list
+against the foreign keys in the set's own `drizzle/*.sql` and keep only the sets they name.
 
 **Adding a call site can turn a module's own suite red, and that is the point.** A set getting its
 first check may report real drift. Treat that as its own piece of work rather than something to fix

@@ -38,8 +38,9 @@ the retired PGlite helper it replaced, this package included.
 `./src/testing/` also publishes `describeSchemaConformance`
 (`./src/testing/schema-conformance.ts`), a suite factory that declares a whole database-backed suite
 holding one migration set's tables to the drizzle declarations that are supposed to have built them.
-The core set calls it from `./src/schema/schema-conformance.test.ts`, and four module packages call
-it through the `exports` entry `@waitron/db/testing/schema-conformance.js`. What a call site has to
+The core set calls it from `./src/schema/schema-conformance.test.ts`, and module packages call it
+through the `exports` entry `@waitron/db/testing/schema-conformance.js` —
+`ls packages/*/src/schema/schema-conformance.test.ts` lists which. What a call site has to
 state, and how to work out a set's prerequisites, is in
 `docs/developers/testing-guide.md`. **Everything under `./src/testing/` that is not itself a
 `.test.ts` is measured for coverage and mutated** — it is ordinary source as far as both gates are
