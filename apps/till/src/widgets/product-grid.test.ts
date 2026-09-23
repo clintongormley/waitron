@@ -5,7 +5,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -84,6 +84,7 @@ describe("till-product-grid", () => {
   // variants are all unavailable has nothing to sell and gets none.
   it("gives a tile to a product with no variants and to one with an available variant, never to one whose variants are all unavailable", async () => {
     const variant = (id: string, available: boolean) => ({
+      ...sellingValuesOf(cafe),
       id,
       name: id,
       unitPrice: "4.50",

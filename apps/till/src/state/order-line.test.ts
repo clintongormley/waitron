@@ -9,7 +9,7 @@ import {
   toWireModifiers,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
 const cafe: TillProduct = {
@@ -188,6 +188,7 @@ it("rounds each extras pick before summing, so a fractional dish quantity matche
 
 describe("needsModifierPicker", () => {
   const wine = (available: boolean) => ({
+    ...sellingValuesOf(cafe),
     id: "wine-125",
     name: "Wine 125",
     unitPrice: "4.50",

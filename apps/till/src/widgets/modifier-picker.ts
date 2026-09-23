@@ -9,11 +9,12 @@ import { lineGross } from "../state/order-line.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
-import type {
-  OfferedExtraItem,
-  OfferedExtrasList,
-  OfferedOptionsList,
-  TillProduct,
+import {
+  sellingValuesOf,
+  type OfferedExtraItem,
+  type OfferedExtrasList,
+  type OfferedOptionsList,
+  type TillProduct,
 } from "../api/client.js";
 
 /** What a confirmed pick carries: the dish as chosen, plus everything `LineSelection` holds — the
@@ -99,7 +100,7 @@ export class TillModifierPicker extends LitElement {
       }
 
       /* An unavailable variant stays listed so the operator sees it is sold out, not missing. */
-      .option:has(input:disabled) .option-name {
+      .option:has(input[name="product-variant"]:disabled) .option-name {
         color: var(--wt-color-text-muted);
       }
 
@@ -216,15 +217,17 @@ export class TillModifierPicker extends LitElement {
   }
 
   /**
-   * The product as chosen: the variant's price and its three names carried ALONGSIDE the product's,
-   * never folded into them. Each surface resolves the name it shows (`product-presentation.ts`), so
-   * the basket can render the staff name while a receipt renders the customer one.
+   * The product as chosen: sold under the variant's price and selling values, with the variant's
+   * three names carried ALONGSIDE the product's, never folded into them. Each surface resolves the
+   * name it shows (`product-presentation.ts`), so the basket can render the staff name while a
+   * receipt renders the customer one.
    */
   get #selectedProduct(): TillProduct {
     const variant = this.#chosenVariant;
     if (variant === undefined) return this.product;
     return {
       ...this.product,
+      ...sellingValuesOf(variant),
       unitPrice: variant.unitPrice,
       variantId: variant.id,
       variantName: variant.name,

@@ -5,7 +5,7 @@ import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
 import { TillModifierPicker } from "./modifier-picker.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -616,6 +616,24 @@ describe("till-modifier-picker", () => {
       unitPrice,
       unitPriceDifference,
       available,
+      // Every selling value differs from the parent's (`cafe`'s), so a chosen product that kept
+      // the parent's fails the pick tests below.
+      unit: {
+        id: "unit-litre",
+        name: { es: "litro" },
+        abbreviation: { es: "l" },
+        precision: 3,
+        hardwareUnit: null,
+      },
+      pricingUnit: "weight" as const,
+      vatClass: "reduced" as const,
+      category: `${id} category`,
+      allergens: { sulphites: { presence: "contains" as const } },
+      diet: { vegan: "yes" as const, vegetarian: "yes" as const, contains: [] },
+      dietDerivation: { origins: ["plant" as const], pending: false },
+      dietOverride: { vegan: "yes" as const },
+      dietaryDeclarations: ["vegan"],
+      courseId: `${id} course`,
     });
     // The parent's price is 4.00: "Wine 125" is dearer, "Wine 100" cheaper, "Wine 150" the same.
     const wineProduct: TillProduct = {
@@ -690,6 +708,28 @@ describe("till-modifier-picker", () => {
       await el.updateComplete;
       expect(store.lines[0]!.product).toMatchObject({ variantId: "Wine 150", unitPrice: "4.00" });
     });
+
+    it("sells the chosen variant under its own unit, VAT, course, allergens and diet, not the parent's", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(wineProduct, "Vino", store);
+      addButton(picker).click();
+      await el.updateComplete;
+      const chosen = wineProduct.variants![1]!;
+      expect(store.lines[0]!.product).toMatchObject({
+        id: "cafe",
+        variantId: "Wine 125",
+        unit: chosen.unit,
+        pricingUnit: "weight",
+        vatClass: "reduced",
+        category: "Wine 125 category",
+        allergens: { sulphites: { presence: "contains" } },
+        diet: chosen.diet,
+        dietDerivation: chosen.dietDerivation,
+        dietOverride: chosen.dietOverride,
+        dietaryDeclarations: ["vegan"],
+        courseId: "Wine 125 course",
+      });
+    });
   });
 
   describe("what blocks Add reads as more than body copy", () => {
@@ -707,6 +747,41 @@ describe("till-modifier-picker", () => {
       // A paragraph with no rule of its own keeps the user agent's 1em margins, which is also the
       // only em-derived spacing this file would carry.
       expect(counter.marginTop).toBe("0px");
+    });
+
+    it("mutes an unavailable variant's name", async () => {
+      const wineVariant = (id: string, available: boolean) => ({
+        ...sellingValuesOf(cafe),
+        id,
+        name: id,
+        unitPrice: "4.00",
+        unitPriceDifference: null,
+        available,
+      });
+      const { picker: winePicker } = await openPicker(
+        {
+          ...cafe,
+          name: "Vino",
+          variants: [wineVariant("Sold out", false), wineVariant("Open", true)],
+        },
+        "Vino",
+        new WorkingOrderStore(),
+      );
+      const [soldOut, open] = [
+        ...winePicker.shadowRoot!.querySelectorAll<HTMLElement>("fieldset .option-name"),
+      ].map((name) => getComputedStyle(name).color);
+      expect(soldOut).not.toBe(open);
+    });
+
+    it("leaves the name of an extra shut off at its list's maximum unmuted", async () => {
+      const { picker } = await openPicker(sandwich, "Bocadillo", new WorkingOrderStore());
+      pickBox(picker, "list-bread", "p-white")!.click();
+      await picker.updateComplete;
+      const rye = pickBox(picker, "list-bread", "p-rye")!;
+      expect(rye.disabled).toBe(true);
+      const nameColour = (input: HTMLInputElement) =>
+        getComputedStyle(input.closest(".option")!.querySelector(".option-name")!).color;
+      expect(nameColour(rye)).toBe(nameColour(pickBox(picker, "list-bread", "p-white")!));
     });
 
     it("marks an options list with nothing to choose as a refusal, not as prose", async () => {

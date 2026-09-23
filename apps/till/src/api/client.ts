@@ -323,7 +323,9 @@ export interface TillProduct {
   variantCustomerName?: Record<string, string> | null;
   variantKitchenName?: string | null;
   kitchenName?: string | null;
-  variants?: {
+  /** Each variant's selling values are its EFFECTIVE ones as the offer resolved them — a line rung
+   * up as the variant is sold under these, never the parent's. */
+  variants?: (TillSellingValues & {
     id: string;
     name: string;
     customerName?: Record<string, string> | null;
@@ -334,7 +336,7 @@ export interface TillProduct {
      * two are equal — computed for the picker's "+€1.50" label; nothing stores it (spec §15.3). */
     unitPriceDifference: string | null;
     available: boolean;
-  }[];
+  })[];
   /**
    * The product's STAFF-facing name — plain text, not per-language. This is what the till's own
    * buttons and basket render: an operator reads the name the venue uses internally, never a
@@ -412,6 +414,38 @@ export interface TillProduct {
   dietaryDeclarations?: string[];
 }
 
+/** The product values a line is sold under, apart from its price and names. */
+export type TillSellingValues = Pick<
+  TillProduct,
+  | "unit"
+  | "pricingUnit"
+  | "vatClass"
+  | "category"
+  | "allergens"
+  | "courseId"
+  | "diet"
+  | "dietDerivation"
+  | "dietOverride"
+  | "dietaryDeclarations"
+>;
+
+/** Exactly the {@link TillSellingValues} of `source`, so spreading them over a product replaces every
+ * one of the product's — an absent value included — and nothing else. */
+export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
+  return {
+    unit: source.unit,
+    pricingUnit: source.pricingUnit,
+    vatClass: source.vatClass,
+    category: source.category,
+    allergens: source.allergens,
+    courseId: source.courseId,
+    diet: source.diet,
+    dietDerivation: source.dietDerivation,
+    dietOverride: source.dietOverride,
+    dietaryDeclarations: source.dietaryDeclarations,
+  };
+}
+
 /**
  * One menu (catalogue) the till's location may sell from — the `menus[]` half of the zone-offers body.
  * The catalogue's authoritative sell-side shape ({@link AccessibleCatalogue}), imported from the
@@ -484,8 +518,15 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     variants: offer.variants.map((variant) => {
       const difference = subtractDecimal(decimal(variant.unitPrice), decimal(offer.unitPrice));
       return {
-        ...variant,
+        ...sellingValuesOf(variant),
+        id: variant.id,
+        name: variant.name,
+        customerName: variant.customerName,
+        kitchenName: variant.kitchenName,
+        image: variant.image,
+        unitPrice: variant.unitPrice,
         unitPriceDifference: compareDecimal(difference, decimal("0")) === 0 ? null : difference,
+        available: variant.available,
       };
     }),
     offeredModifiers: offer.offeredModifiers,

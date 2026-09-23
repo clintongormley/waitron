@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
 
 /** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {
@@ -89,7 +89,14 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
       unitPrice: string,
       unitPriceDifference: string | null,
       available: boolean,
-    ) => ({ id, name: `Vino ${id}`, unitPrice, unitPriceDifference, available });
+    ) => ({
+      ...sellingValuesOf(burger),
+      id,
+      name: `Vino ${id}`,
+      unitPrice,
+      unitPriceDifference,
+      available,
+    });
     const { host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
       {

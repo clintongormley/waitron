@@ -2226,4 +2226,100 @@ describe("menuOfferToTillProduct", () => {
       ["same", null],
     ]);
   });
+
+  it("carries each variant's own effective selling values, never its parent's", () => {
+    // Every value the variant sells under differs from the parent's, so a mapping that read the
+    // parent's for any of them fails here.
+    const parentUnit = {
+      id: "unit-each",
+      name: { es: "unidad" },
+      abbreviation: { es: "ud" },
+      precision: 0,
+      hardwareUnit: null,
+    };
+    const litre = {
+      id: "unit-litre",
+      name: { es: "litro" },
+      abbreviation: { es: "l" },
+      precision: 3,
+      hardwareUnit: null,
+    };
+    const product = menuOfferToTillProduct({
+      id: "offer-wine",
+      menuId: "menu-1",
+      productId: "wine",
+      sectionId: "section-1",
+      grossPrice: null,
+      unitPrice: "4.00",
+      displayOrder: 0,
+      active: true,
+      menuName: "Carta",
+      sectionName: { es: "Vinos" },
+      name: "Vino",
+      customerName: null,
+      kitchenName: null,
+      unit: parentUnit,
+      vatClass: "general",
+      category: "Vinos",
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [
+        {
+          id: "wine-carafe",
+          name: "Jarra",
+          customerName: { es: "Jarra carta" },
+          kitchenName: "Jarra KDS",
+          image: "carafe.webp",
+          unitPrice: "9.00",
+          menuPrice: "9.00",
+          offered: true,
+          available: true,
+          unit: litre,
+          pricingUnit: "weight",
+          vatClass: "reduced",
+          category: "Jarras",
+          allergens: { sulphites: { presence: "contains" } },
+          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          dietDerivation: { origins: ["plant"], pending: false },
+          dietOverride: { vegan: "yes" },
+          dietaryDeclarations: ["vegan"],
+          courseId: "course-drinks",
+        },
+      ],
+    });
+    expect(product.variants).toEqual([
+      {
+        id: "wine-carafe",
+        name: "Jarra",
+        customerName: { es: "Jarra carta" },
+        kitchenName: "Jarra KDS",
+        image: "carafe.webp",
+        unitPrice: "9.00",
+        unitPriceDifference: "5.00",
+        available: true,
+        unit: litre,
+        pricingUnit: "weight",
+        vatClass: "reduced",
+        category: "Jarras",
+        allergens: { sulphites: { presence: "contains" } },
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        dietDerivation: { origins: ["plant"], pending: false },
+        dietOverride: { vegan: "yes" },
+        dietaryDeclarations: ["vegan"],
+        courseId: "course-drinks",
+      },
+    ]);
+    expect(product).toMatchObject({
+      unit: parentUnit,
+      vatClass: "general",
+      category: "Vinos",
+      allergens: null,
+      courseId: null,
+    });
+  });
 });

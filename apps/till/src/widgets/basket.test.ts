@@ -6,7 +6,12 @@ import { setContentLanguages } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
-import type { OfferedExtraItem, OfferedModifier, TillProduct } from "../api/client.js";
+import {
+  sellingValuesOf,
+  type OfferedExtraItem,
+  type OfferedModifier,
+  type TillProduct,
+} from "../api/client.js";
 import type { SelectedExtra } from "../state/working-order.js";
 
 /**
@@ -944,6 +949,7 @@ it("offers no Edit on a line whose only question was its variant", async () => {
     ...cafe,
     variants: [
       {
+        ...sellingValuesOf(cafe),
         id: "v-large",
         name: "Grande",
         unitPrice: "2.00",
