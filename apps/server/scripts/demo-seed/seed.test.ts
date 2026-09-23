@@ -339,7 +339,7 @@ describe("seedDemoRestaurant", () => {
     // Products were seeded (feed the sales generator).
     expect(read.products.length).toBeGreaterThan(0);
 
-    // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
+    // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.webp` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
     const { rows: imageRows } = await withTransaction(suite.db, async (tx) => {
       return tx.execute<{ image: string | null }>(
@@ -347,6 +347,6 @@ describe("seedDemoRestaurant", () => {
       );
     });
     expect(imageRows.length).toBe(1);
-    expect(imageRows[0]!.image).toMatch(/^[0-9a-f]{64}\.png$/);
+    expect(imageRows[0]!.image).toMatch(/^[0-9a-f]{64}\.webp$/);
   });
 });

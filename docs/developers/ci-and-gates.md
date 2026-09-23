@@ -663,7 +663,7 @@ sharp beside the bundle in `/app/node_modules`. Measured 2026-09-23 with the rep
   `node_modules/.pnpm/sharp@0.35.4…/node_modules` was put beside it. The build stage of
   `deploy/Dockerfile` makes that copy (`/sharp-runtime`), and the runtime stage puts it at
   `/app/node_modules`.
-- `packages/provisioning/dist/bin.js` reaches `@waitron/media` as well. Copied to a directory with no
+- The provisioning bundle (`dist/bin.js` in `packages/provisioning`) reaches `@waitron/media` as well. Copied to a directory with no
   sharp anywhere above it, it printed its usage and exited 2, because `prepare.ts` imports sharp only
   when a photo is prepared.
 
@@ -683,9 +683,9 @@ following `dependencies` through each workspace member's `package.json`, and com
 `--external:sharp` flags in a package's `build` script with the number of `esbuild ` commands in it.
 Measured 2026-09-24: with the flag taken off the `dist/record-one-sale.js` command in
 `apps/server/package.json` and a second copy added to the `dist/server.js` command, its flag case
-still passed. bundle-smoke's `grep -q 'import("sharp")'` step reads `apps/server/dist/server.js`
-only, so the other bundles the server's `build` makes, and `waitron-provision`
-(`packages/provisioning/dist/bin.js`), are not read by it.
+still passed. bundle-smoke's `grep -q 'import("sharp")'` step reads the server bundle (`dist/server.js` in
+`apps/server`) only, so the other bundles the server's `build` makes, and `waitron-provision`
+(`dist/bin.js` in `packages/provisioning`), are not read by it.
 
 ## Two TypeScript compilers are installed, and that is deliberate
 
