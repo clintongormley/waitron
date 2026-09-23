@@ -12,8 +12,8 @@
 //
 // FAILING result for keeping the default — prints `AUTOCHECKPOINT_OFF_NEEDED=true` because arm A's
 // restore is incomplete, its integrity check is not `ok`, Litestream logged a WARN/ERROR line, its
-// peak side file is larger than arm B's, or it uploaded more than STORE_BYTES_FACTOR times arm B's
-// bytes (the sign of repeated full copies).
+// peak side file is larger than arm B's, or its store held more than STORE_BYTES_FACTOR times arm B's
+// bytes at the end (the sign of repeated full copies).
 // PASSING result — `AUTOCHECKPOINT_OFF_NEEDED=false` with `A-restore-complete=true A-integrity=ok
 // A-log-problems=0` and A's peak at or below B's.
 // VOID — arm C grew under 4096 bytes a sale (a probe that cannot see growth measured nothing), or
@@ -54,7 +54,7 @@ const SQLITE_DEFAULT_AUTOCHECKPOINT = 1000;
 const TRUNCATE_THRESHOLD_BYTES = 121_359 * 4096;
 /** Below one page a sale, something folded the side file back (S4's `MIN_WAL_BYTES_PER_SALE`). */
 const MIN_OFFLINE_WAL_PER_SALE = 4096;
-/** How many times arm B's upload arm A may make before it reads as repeated full copies. A stated bar. */
+/** How many times arm B's end-of-arm store bytes arm A's may be before it reads as repeated full copies. A stated bar. */
 const STORE_BYTES_FACTOR = 2;
 
 type Arm = { name: "A" | "B" | "C" | "D"; reachable: boolean; foldBackOff: boolean; sales: number };

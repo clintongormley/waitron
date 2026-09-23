@@ -12,8 +12,8 @@
 // No pass/fail. VOID if a restored copy's integrity check is not `ok` or its ledger row count, image
 // count or total image bytes differ from the source's — a fast restore of the wrong database measures
 // nothing. Contents are not compared. The store is a local MinIO, so the time excludes the internet:
-// `store-bytes` is what the store held under the generation, an upper bound on what a rebuild
-// downloads; how much a restore reads was not measured.
+// `store-bytes` is what the store held under the generation, probably an upper bound on what a
+// rebuild downloads (reasoning, not measured); how much a restore reads was not measured.
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, statSync, statfsSync } from "node:fs";
 import { tmpdir } from "node:os";

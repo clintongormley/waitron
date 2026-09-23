@@ -278,7 +278,7 @@ was stopping Litestream.
   TRUNCATE (which blocks both readers and writers)" — a pause on the sale path this limit exists to
   keep us short of. No box disk size is recorded anywhere to set it against instead.
   **2026-09-23:** arm 2b drove an offline side file past that threshold, for a few seconds only; it did
-  not shrink, the longest commit was 6.861 ms, and what the emergency checkpoint does over longer was
+  not shrink, the longest commit over the whole arm was 6.861 ms, and what the emergency checkpoint does over longer was
   not established (results note, Slice 2 measurements §2).
 - **The fold-back runs on the writer connection, in a write-queue slot, with no transaction open.**
   Measured during planning (Node v26.7.0, SQLite 3.53.4): run from a separate connection while a sale's
@@ -528,7 +528,7 @@ Dated pointers go into the topology design in task 10, not rewrites:
 | §7.3 — owner's NAS or USB disk as a stream target | S3-compatible buckets only (§0.2) |
 | §7.5 — a restore from the store claims a seat | slice 2's rebuild resumes the dead node's identity from the locked secrets row; seats arrive with promotion in slice 3 (§5) |
 | §7.7 — freshness from Litestream's status, "backup-age incident" | freshness read from the bucket; dashboard alerts (§7) |
-| §8.3 — `wal_autocheckpoint = 0` | measured 2026-09-23: `AUTOCHECKPOINT_OFF_NEEDED = false` on a close comparison (A's peak side file 0.5% below B's, one recorded run); results note, Slice 2 measurements §2 |
+| §8.3 — `wal_autocheckpoint = 0` | measured 2026-09-23: `AUTOCHECKPOINT_OFF_NEEDED = false` on a close comparison (A's peak side file below B's in both recorded runs, by 0.5% and 1.5%); results note, Slice 2 measurements §2 |
 | §11 slice 2 — "archive via `VACUUM INTO`" | already landed in slice 1 (slice-1 spec, decision 7) |
 
 ---

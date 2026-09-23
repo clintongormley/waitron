@@ -271,7 +271,7 @@ the box's own filings reach the store before it dies.
 
 **S0 never starts the streaming daemon.** Every upload it makes is `syncOnce`; `replicate`, the
 long-running mode the product would run, is driven elsewhere — by the `LS` foundation check, S3, S4
-and the slice-2 probes (`grep -rn "replicate(" src`, 2026-09-23). That is why "the box dies before the next sync" is a scripted step here:
+and four of the five slice-2 probes (restart, autocheckpoint, restore-points, restore-time) (`grep -rn "replicate(" src`, 2026-09-23). That is why "the box dies before the next sync" is a scripted step here:
 under the daemon it would be a timing window, and S0 measures nothing about that window.
 
 **The three parts share ONE store and are separated by TERM**, the way `s1_double_promotion`
@@ -931,7 +931,9 @@ operation error S3: ListObjectsV2, exceeded maximum number of attempts, 10, … 
   extrapolates the measured rate and measures nothing beyond it. **2026-09-23:** the slice-2 probe's
   arm 2b ran 15,000 offline sales in fifteen rounds of 1,000: the side file stood at 40,174,152 bytes
   after the first round and each later round added between 41,162,920 and 41,929,240
-  (`D-wal-by-round`, results note, Slice 2 measurements §2). One run, about half a minute long by arithmetic.
+  (`D-wal-by-round`, results note, Slice 2 measurements §2), about half a minute long by arithmetic. A
+  second run, the failing-case line, gave 41,092,880–41,925,120 bytes a round and a longest commit of
+  5.205 ms.
 - **a disk budget.** The WAL ceiling is stated, not derived from any partition size — this repository
   records none.
 

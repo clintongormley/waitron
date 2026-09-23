@@ -321,7 +321,8 @@ the store can be reached.
    the log having grown to 308 MB in between. Nothing here extends that beyond 7500 sales — an earlier
    draft cited a longer probe, and it is gone because its output was never recorded anywhere a reader
    could check. **2026-09-23:** slice 2's arm 2b ran 15,000 offline sales, with p99 0.545 ms and the
-   longest commit 6.861 ms over the whole arm; it recorded no per-day figure, so it says nothing about
+   longest commit 6.861 ms over the whole arm (a second run, the failing-case line, gave p99 0.419 ms and
+   a longest commit of 5.205 ms); it recorded no per-day figure, so it says nothing about
    drift ([Slice 2 measurements §2](#slice-2-measurements)).
 2. **The log grows linearly and is bounded only by how long the box stays offline** — about **41 KB a
    sale**, 308 MB over 7500 sales, roughly **104 offline trading days per GiB**. It holds about **80x**
@@ -360,7 +361,8 @@ grew linearly and sat over the per-sale ceiling throughout, so a breach can equa
 a wider schema. That a longer offline stretch stays linear: the run stops at 7500 sales, and days-per-GiB
 extrapolates the measured rate. **2026-09-23:** slice 2's arm 2b ran 15,000 offline sales in fifteen
 rounds of 1,000; the side file stood at 40,174,152 bytes after the first round and each later round added
-between 41,162,920 and 41,929,240 (`D-wal-by-round`, one run, about half a minute by arithmetic —
+between 41,162,920 and 41,929,240 (`D-wal-by-round`, about half a minute by arithmetic; a second run,
+the failing-case line, gave 41,092,880–41,925,120 bytes a round and a longest commit of 5.205 ms —
 [Slice 2 measurements §2](#slice-2-measurements)).
 And a disk budget: no partition size is recorded anywhere in this
 repository. **250 sales a day is an assumption nothing in this repository measures**, and the row says so
@@ -553,7 +555,7 @@ be quoted as a single number where S4's spread already shows these move run to r
 
 Every probe ran against the rig's model schema (`src/model.ts`), not `packages/fiscal-verifactu`'s,
 and against the pinned local MinIO, not the owner's bucket. Each was first run once with its code
-altered so that its failing case — or, for measurements 2–4, its control — had to fire; that line is
+altered so that its failing case — or, for measurements 2 and 3, its control — had to fire; that line is
 quoted beside the real one. The probes
 ran one at a time.
 
@@ -565,7 +567,7 @@ ran one at a time.
 | `AUTOCHECKPOINT_OFF_NEEDED` | `AUTOCHECKPOINT_OFF_NEEDED = false` (measurement 2; the peak comparison behind it is close, see below) | Task 6: whether the venue connection sets `wal_autocheckpoint = 0` while streaming |
 | `TRUNCATE_THRESHOLD_OFFLINE` | `D-crossed-threshold=true D-shrank-after-threshold=false D-max-commit-ms=6.861` (arm 2b; peak side file 621,090,032 bytes; past the threshold for the last three of fifteen rounds only); what Litestream's emergency checkpoint does past the threshold is not established — the side file was past it for a few seconds only, and the absence of log lines says nothing (see 2b) | Task 6: the side-file limit |
 | `LINUX_BINARIES_RUN` | `LINUX_BINARIES_RUN = true`; `litestream-0.5.17-linux-x86_64.tar.gz` sha256:cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d, `litestream-0.5.17-linux-arm64.tar.gz` sha256:f8ca4a050095c1efbda2c4365172e61bf9d955ea0d9ac42f448b52e51819baa5 (measurement 5; amd64 under emulation) | Task 6: the image's download-and-check step |
-| restore points | on the compressed schedule, every sampled boundary newer than the oldest surviving full copy restored, at the level-1 boundaries sampled (three per group), and nothing older did; the restored row counts were recorded but not compared with the sales at each point (measurement 3); extrapolated to production: 30-second points back to the oldest surviving daily full copy | the spec's promise about going back in time (docs) |
+| restore points | on the compressed schedule, every sampled boundary newer than the oldest surviving full copy restored, at the level-1 boundaries sampled (four per group; three of the surviving four were younger than the oldest full copy), and nothing older did; the restored row counts were recorded but not compared with the sales at each point (measurement 3); extrapolated to production: 30-second points back to the oldest surviving daily full copy | the spec's promise about going back in time (docs) |
 | restore time | 4,058 / 4,107 / 4,092 ms at 5,000 × 171 KiB images; 7,345 / 51,712 / 9,394 ms at 5,000 × 330 KiB (measurement 4, local store, no network; the 51.7 s restore is unexplained and was not re-run) | the rebuild screen's wording (docs) |
 
 **Litestream configuration lines each probe used, and whether it was seen taking effect** (for Task 6's
@@ -619,8 +621,10 @@ generation prefix. `objects-after` counts files per level: level 0 went from 2 f
 to 3 (48,455 bytes), so it gained one file and 38,206 bytes, and a level-2 file appeared, while level 9
 stayed at one file of 2,203 bytes — **no fresh full copy was uploaded at level 9**. The probe never
 read the new level-0 file, so whether it held the whole database or only the changed pages was not
-established; for scale, the rig's model database is 81,920 bytes (20 pages of 4096) at 80 sales
-(measured 2026-09-23 by building it with 80 sales and folding the side file back). The spec's §8.1
+established. For scale, a re-run during review opened a database through the rig's `openNode`, made
+80 `sell()` calls, ran `checkpoint()` and read the file with `statSync`: the checkpoint printed
+`{"busy":0,"log":-1,"checkpointed":-1}` and the file was 81,920 bytes. `log: -1` means that database
+was not in write-ahead-log mode, so it is not exactly the probe's state. The spec's §8.1
 wording also names "Litestream exits 0 having uploaded no fresh full copy" as failing: the daemon did
 not exit, and no new level-9 file appeared, yet the restore was complete. The generation's `opened.json` marker
 survived, and no WARN or ERROR line was logged. `daemon-exit=0` is the exit code of the probe's own
@@ -665,7 +669,7 @@ Arm D (2b) made 15,000 sales with default folding and the store unreachable. The
 round, crossed 497,086,464 bytes (`truncate-page-n`'s documented default of 121,359 pages at 4096
 bytes — the default of the current release's documentation, not read from the pin) in round 13, and
 was larger again in rounds 14 and 15, ending at 621,090,032. None of the fifteen per-round samples
-was smaller than the one before it (one sample per round, taken after the round's pause); the longest commit was
+was smaller than the one before it (one sample per round, taken after the round's pause); the longest commit over the whole arm was
 6.861 ms and p99 0.545 ms; the daemon stayed up and logged no WARN or ERROR line. What that does NOT
 establish: the file was past the threshold only for the last three rounds, a few seconds (each round
 is its sales plus a 1.5-second pause), so what Litestream's emergency checkpoint does over minutes or
@@ -714,7 +718,7 @@ still in the store and restored, although level-2 files of the same age were the
 10-second level-2 interval had passed many times since. They were removed by the
 retention window, together with full copies and higher levels. In the control run, with the default
 24-hour retention, every level-1, level-2 and level-3 file seen was still there after 630 seconds. So on this schedule the limit on going back was the oldest surviving full copy, and within it
-restores were accepted at the level-1 boundaries sampled (three per group). The plan's reading of this probe had expected a level-1 point
+restores were accepted at three of the four surviving level-1 boundaries sampled (140, 74 and 6 s); the fourth, 208 s, was older than the oldest full copy and was refused. The plan's reading of this probe had expected a level-1 point
 to be lost once merged into level 2; that is not what the pin did.
 
 **Extrapolated, not measured:** with the production settings, a restore could reach any 30-second
@@ -757,7 +761,8 @@ bytes of database and side file; nothing in the run explains the second restore'
 
 store-bytes is what the store held under the generation, not what a restore read: here it held three
 copies of about the database's size (levels 0, 1 and 9), and how much of that a restore downloads
-was not measured. So store-bytes is an upper bound on what a rebuild downloads; divide the download
+was not measured. So store-bytes is probably an upper bound on what a rebuild downloads (reasoning, not
+measured); divide the download
 by the venue's line speed for the part this local run leaves out. Since the images are incompressible,
 the download is unlikely to be much below `image-bytes` (reasoning, not measured). Not established:
 any network, a real photo's bytes, or the real schema.
