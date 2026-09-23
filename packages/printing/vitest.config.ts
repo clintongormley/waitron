@@ -24,7 +24,7 @@ export default defineConfig({
       // executes when the barrel is imported, so it covers trivially; agent.ts is the real subject
       // of this package's suites.
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

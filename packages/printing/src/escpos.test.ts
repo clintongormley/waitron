@@ -374,6 +374,14 @@ describe("esc() ESC/POS builder", () => {
         0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x74, 5, 0x82,
       ]);
     });
+    it("selects no table when switching to plain mid-payload, even with a table given", () => {
+      expect([...esc("pc858").init().charset("plain").text("€").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e, 0x45, 0x55, 0x52,
+      ]);
+      expect([...esc("pc858").init().charset("plain", 5).text("é").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 19, 0x1c, 0x2e, 0x65,
+      ]);
+    });
     it("keeps Latin-1 and selects no table when no charset is given", () => {
       expect([...esc().init().text("é€").bytes()]).toEqual([0x1b, 0x40, 0xe9, 0xac]);
     });
