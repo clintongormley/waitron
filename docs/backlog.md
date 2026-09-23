@@ -2231,7 +2231,7 @@ image constraints under *Detail → Box image*.
   variants branch `feat/variants-sale-line` (not yet pushed on 2026-09-23) changes, which is why
   the table-service, boot-and-counter and three `tender-pay-*` suites are separate files that can
   be folded back into `till-app.test.ts` and `tender-pay.test.ts` once it lands;
-  98.82/99.08/98.97/96.93); `apps/dashboard` (**PR #DASH_PR**, 2026-09-23 — tests for the login
+  98.82/99.08/98.97/96.93); `apps/dashboard` (**PR #538**, 2026-09-23 — tests for the login
   screen's Google, passkey, two-step, emailed-link and reset paths, the app shell's session signals,
   module navigation and screens opened from their address, the printers, backup, payments,
   kitchen, devices and email screens (a disabled printer offered again keeps its id), the canvas
@@ -2610,7 +2610,7 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
-2026-09-23, dashboard coverage, PR #DASH_PR).** `apps/dashboard/src/screens/units-screen.ts` (about
+2026-09-23, dashboard coverage, PR #538).** `apps/dashboard/src/screens/units-screen.ts` (about
 line 190) shows every `content.translation_required` refusal beside the unit's NAME field. The server
 checks the name and the abbreviation separately (`packages/catalogue/src/units.ts`) and raises the same
 code, which carries only a language (`packages/catalogue/src/content-languages.ts`), so a refused
@@ -2624,7 +2624,7 @@ on a language change only when it has no names yet (about lines 59-62), and its 
 through. Found by reading; no test pins it. **Next action:** have the
 refusal name the field (or check each field separately), then place it test-first.
 
-**Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #DASH_PR).** Each from
+**Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
 - Two dashboard client methods nothing calls: `connectPaymentProvider` and `addReader` in
   `apps/dashboard/src/api/client.ts`. Run:
