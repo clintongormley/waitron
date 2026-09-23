@@ -1836,6 +1836,10 @@ ongoing overhaul listed at the top of Track A.
   from the list makes the dropdown show the first zone (checked while reviewing #365). **Next
   action:** find whether a `table_tab` zone can be the counter default or a device default; if it
   can, decide whether that is refused where it is set or handled by the till.
+  A device's default is set only through `PUT
+  /management-api/venue-service/devices/:deviceId/default-zone` (`packages/venue-service/src/routes.ts`),
+  and nothing in the tree calls that route — grepped across `apps/` and `packages/` on 2026-09-24,
+  which found only the route and its tests — so no screen sets one today.
 - **The built-in doneness picker is gone; doneness is a modifier the venue adds itself — DONE as Task
   10** (owner decision 2026-09-14). The `doneness` enum, its two columns, the
   `working_order.invalid_doneness` code, the kitchen-ticket line and the till picker are all deleted
@@ -2298,7 +2302,16 @@ image constraints under *Detail → Box image*.
   and option list forms, the API client's routes and refusals, and the staff, profile, roster,
   schedule and purchases screens; no source file changed; none added to the files lane B's variants
   work is changing; 99.2/99.58/99.42/97.73 statements/lines/functions/branches, 97.71 branches on a
-  second run).
+  second run); `venue-service` (**PR #TBD**, 2026-09-24 — tests for the opening-hours,
+  zone-menu display-order and product-route bodies the management routes refuse, a device's own
+  default zone winning over the counter default, moving an order to another zone's department and
+  service mode with its line snapshots kept, an empty round, one menu-item read per round,
+  copying from an order or line with no snapshot, route refusals and a route widened to the whole
+  venue, and the operations screen's sorting, fallbacks, form refusals, keyboard paths and focus
+  return; no source file changed; 99.4/99.34/100/97.61). Left uncovered in `venue-service`: seven guards in
+  `operations.ts` and four branches in the operations screen that no current caller reaches — by
+  reading, except the missing-department refusal in `recordWorkingLineContexts`, which a foreign key
+  was measured to block; each is listed with its reason in the pull request.
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

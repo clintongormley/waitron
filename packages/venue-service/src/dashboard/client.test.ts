@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRequest } from "@waitron/dashboard-kit";
+import { LiveData, createRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -146,5 +146,61 @@ describe("VenueServiceApi", () => {
     expect(JSON.parse(fetchImpl.mock.calls[9]![1].body as string)).toEqual({
       name: { en: "Drinks", fr: "Boissons" },
     });
+  });
+
+  it("replaces a menu offer's variant overrides in one PUT", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    const variants = [
+      { variantId: "v1", price: "4.50", offered: true },
+      { variantId: "v2", price: null, offered: false },
+    ];
+    await api.setMenuVariants("m1", "i1", variants);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([["/management-api/catalogues/m1/items/i1/variants", "PUT", { variants }]]);
+  });
+
+  it("reads through its background copy passively, so a refresh keeps no session alive", async () => {
+    const empty = {
+      departments: [],
+      zones: [],
+      routes: [],
+      hours: [],
+      zoneMenus: [],
+      readiness: [],
+    };
+    const fetchImpl = vi.fn((path: string) =>
+      Promise.resolve(
+        jsonResponse(path === "/management-api/venue-service" ? empty : [{ id: "m1" }]),
+      ),
+    );
+    const onSuccess = vi.fn();
+    const liveData = new LiveData();
+    const api = new VenueServiceApi(
+      createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch, onSuccess }),
+      liveData,
+    );
+    const background = api.background;
+    expect(background.liveData).toBe(liveData);
+
+    await background.load();
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
+    for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
+      expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+    }
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    fetchImpl.mockClear();
+    await api.load();
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
+    for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
+      expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
+    }
+    expect(onSuccess).toHaveBeenCalledTimes(8);
   });
 });

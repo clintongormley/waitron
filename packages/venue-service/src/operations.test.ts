@@ -12,6 +12,8 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
   floorZones,
   kitchenStations,
   locations,
@@ -35,17 +37,25 @@ import {
   deactivateDepartment,
   deletePreparationRoute,
   allowMenuInZone,
+  findOrderServiceContext,
   getOrderServiceContext,
+  listDepartmentHours,
+  listDepartments,
+  listPreparationRoutes,
   listWorkingLineContexts,
   listServiceZones,
   listVenueReadiness,
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
+  replaceDepartmentHours,
   resolvePreparationRoutes,
   resolveNewOrderZone,
   resolveZoneOffer,
   resolveZoneContext,
+  retargetOrderServiceContext,
+  setDeviceDefaultZone,
+  updatePreparationRoute,
 } from "./operations.js";
 
 const suite = useVenueDb({
@@ -1223,6 +1233,349 @@ describe("resolvePreparationRoutes", () => {
       await tx.execute(sql`update products set available = true where id = ${croquetas.id}`);
       expect((await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => row.id)).toEqual([
         offer.id,
+      ]);
+    });
+  });
+});
+
+describe("departments", () => {
+  it("refuses hours and deactivation for a department outside this venue, and an empty set clears the hours", async () => {
+    const here = { locationId: brandLocationId(await seedLocation("Venue")) };
+    const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, here, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      });
+      const elsewhere = await createDepartment(tx, there, {
+        name: "Elsewhere",
+        defaultServiceMode: "table_tab",
+      });
+      const openingHours = [{ weekday: 1, opensAt: "09:00", closesAt: "17:00" }];
+      await replaceDepartmentHours(tx, here, department.id, openingHours);
+      await replaceDepartmentHours(tx, there, elsewhere.id, openingHours);
+
+      for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
+        const notFound = { code: "department.not_found", params: { departmentId } };
+        await expect(
+          rejection(replaceDepartmentHours(tx, here, departmentId, [])),
+        ).resolves.toEqual(notFound);
+        await expect(rejection(deactivateDepartment(tx, here, departmentId))).resolves.toEqual(
+          notFound,
+        );
+      }
+      await expect(listDepartmentHours(tx, there)).resolves.toEqual([
+        { departmentId: elsewhere.id, weekday: 1, opensAt: "09:00:00", closesAt: "17:00:00" },
+      ]);
+      await expect(listDepartments(tx, there)).resolves.toEqual([
+        expect.objectContaining({ id: elsewhere.id, active: true }),
+      ]);
+
+      await replaceDepartmentHours(tx, here, department.id, []);
+      await expect(listDepartmentHours(tx, here)).resolves.toEqual([]);
+    });
+  });
+});
+
+/** A venue selling one product from one menu in two zones, each zone under its own department. */
+async function seedSellingVenue() {
+  await seedUnitTenant();
+  const locationId = brandLocationId(await seedLocation("Venue"));
+  const cfg = { locationId };
+  const diningZone = await seedZone(locationId, "Dining room");
+  const barZone = await seedZone(locationId, "Bar");
+  const till = brandTillId(await seedTill(locationId, "Till"));
+  const nodeId = await seedNode(db, locationId);
+  return scoped(async (tx) => {
+    const restaurant = await createDepartment(tx, cfg, {
+      name: "Restaurant",
+      defaultServiceMode: "table_tab",
+    });
+    const bar = await createDepartment(tx, cfg, { name: "Bar", defaultServiceMode: "table_tab" });
+    await configureZone(tx, cfg, { zoneId: diningZone, departmentId: restaurant.id });
+    await configureZone(tx, cfg, { zoneId: barZone, departmentId: bar.id, serviceMode: "prepay" });
+    const menu = await createCatalogue(tx, { name: "All day" });
+    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "All day" } });
+    const product = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Tortilla",
+      pricingUnit: "each",
+      unitPrice: "0.00",
+      vatClass: "general",
+    });
+    const offer = await createMenuItem(tx, {
+      menuId: menu.id,
+      productId: product.id,
+      sectionId: section.id,
+      grossPrice: "4.50",
+    });
+    for (const zoneId of [diningZone, barZone]) {
+      await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+    }
+    return {
+      cfg,
+      diningZone,
+      barZone,
+      restaurantId: restaurant.id,
+      barId: bar.id,
+      productId: product.id,
+      menuItemId: offer.id,
+      till,
+      nodeId,
+    };
+  });
+}
+
+type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
+
+async function openOrder(tx: Transaction, venue: SellingVenue, orderNumber: number) {
+  const id = randomUUID();
+  await tx.execute(sql`
+    insert into working_orders (id, till_id, node_id, order_number, opened_at)
+    values (${id}, ${venue.till}, ${venue.nodeId}, ${orderNumber}, ${new Date().toISOString()})`);
+  return id;
+}
+
+async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, lineNo: number) {
+  const id = randomUUID();
+  await tx.insert(workingOrderLines).values({
+    id,
+    workingOrderId: orderId,
+    lineNo,
+    productId: venue.productId,
+    name: "Tortilla",
+    descriptions: { "en-GB": "Tortilla" },
+    quantity: 1000,
+    unitPrice: 409,
+    unitPriceGross: 450,
+    vatRate: 1000,
+    lineTotal: 450,
+    category: "Uncategorised",
+  });
+  return id;
+}
+
+async function seedDevice(venue: SellingVenue, label: string): Promise<string> {
+  const [profile] = await db
+    .insert(deviceProfiles)
+    .values({ name: label, formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
+  const [device] = await db
+    .insert(devices)
+    .values({
+      locationId: venue.cfg.locationId,
+      deviceProfileId: profile!.id,
+      tillId: venue.till,
+      label,
+      tokenHash: "scrypt$00$00",
+    })
+    .returning({ id: devices.id });
+  return device!.id;
+}
+
+describe("order service context", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("starts a device's new order in its own default zone ahead of the venue's counter default", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    const counterTill = await seedDevice(venue, "Counter till");
+    const barTill = await seedDevice(venue, "Bar till");
+    await scoped(async (tx) => {
+      await tx.execute(sql`
+        update zone_service_policies set is_counter_default = true
+        where zone_id = ${venue.diningZone}`);
+      // Set twice: the second call re-points the device rather than keeping its first zone.
+      await setDeviceDefaultZone(tx, cfg, barTill, venue.diningZone);
+      await setDeviceDefaultZone(tx, cfg, barTill, venue.barZone);
+
+      await expect(resolveNewOrderZone(tx, cfg, { deviceId: barTill })).resolves.toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        departmentName: "Bar",
+        serviceMode: "prepay",
+        defaultMenuId: expect.any(String),
+      });
+      await expect(resolveNewOrderZone(tx, cfg, { deviceId: counterTill })).resolves.toMatchObject({
+        zoneId: venue.diningZone,
+        departmentId: venue.restaurantId,
+      });
+    });
+  });
+
+  it("moves an order onto another zone's department and service mode, keeping its line snapshots", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const lineId = await addLine(tx, venue, orderId, 1);
+      await recordWorkingLineContexts(tx, cfg, orderId, [
+        { workingOrderLineId: lineId, menuItemId: venue.menuItemId },
+      ]);
+
+      await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
+
+      await expect(getOrderServiceContext(tx, cfg, orderId)).resolves.toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: "prepay",
+      });
+      const snapshot = await tx.execute<{ department_id: string; department_name: string }>(sql`
+        select department_id, department_name from working_line_contexts
+        where working_order_line_id = ${lineId}`);
+      expect(snapshot.rows).toEqual([
+        { department_id: venue.restaurantId, department_name: "Restaurant" },
+      ]);
+    });
+  });
+
+  it("records nothing for an empty round, even on an order that has no service context", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await expect(recordWorkingLineContexts(tx, cfg, orderId, [])).resolves.toBeUndefined();
+
+      // Control: a round with a line on the same order needs the context the order lacks.
+      const lineId = await addLine(tx, venue, orderId, 1);
+      await expect(
+        rejection(
+          recordWorkingLineContexts(tx, cfg, orderId, [
+            { workingOrderLineId: lineId, menuItemId: venue.menuItemId },
+          ]),
+        ),
+      ).resolves.toEqual({
+        code: "order.service_context_missing",
+        params: { workingOrderId: orderId },
+      });
+      await expect(listWorkingLineContexts(tx, cfg, orderId)).resolves.toEqual([]);
+    });
+  });
+
+  it("resolves a menu item once however many lines of the round share it", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const [first, second, third] = [
+        await addLine(tx, venue, orderId, 1),
+        await addLine(tx, venue, orderId, 2),
+        await addLine(tx, venue, orderId, 3),
+      ];
+      const line = (workingOrderLineId: string) => ({
+        workingOrderLineId,
+        menuItemId: venue.menuItemId,
+      });
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+
+      await recordWorkingLineContexts(tx, cfg, orderId, [line(first!)]);
+      const oneLine = prepared.mock.calls.length;
+      prepared.mockClear();
+      await recordWorkingLineContexts(tx, cfg, orderId, [line(second!), line(third!)]);
+      expect(prepared).toHaveBeenCalledTimes(oneLine);
+
+      const recorded = await listWorkingLineContexts(tx, cfg, orderId);
+      expect(recorded.map((row) => [row.workingOrderLineId, row.menuItemId]).sort()).toEqual(
+        [first!, second!, third!].map((id) => [id, venue.menuItemId]).sort(),
+      );
+    });
+  });
+
+  it("copies no snapshot from an order or a line that never had one", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const from = await openOrder(tx, venue, 1);
+      const to = await openOrder(tx, venue, 2);
+      const fromLine = await addLine(tx, venue, from, 1);
+      const toLine = await addLine(tx, venue, to, 1);
+
+      await expect(copyOrderServiceContext(tx, cfg, from, to)).resolves.toBeUndefined();
+      await expect(copyWorkingLineContext(tx, cfg, fromLine, toLine)).resolves.toBeUndefined();
+
+      await expect(findOrderServiceContext(tx, cfg, to)).resolves.toBeNull();
+      await expect(listWorkingLineContexts(tx, cfg, to)).resolves.toEqual([]);
+    });
+  });
+});
+
+describe("preparation route writes", () => {
+  it("refuses an unknown category, a second route for one subject, and deleting a route this venue lacks", async () => {
+    const { cfg, zoneId, otherLocationId } = await seedRoutingVenue();
+    const there = { locationId: brandLocationId(otherLocationId) };
+    await scoped(async (tx) => {
+      const grill = await insertStation(tx, cfg.locationId, "Grill");
+      const menu = await createCatalogue(tx, { name: "Routes" });
+      const soup = await productWithCategory(tx, menu.id, "Soup");
+      const skip = { kind: "no_preparation" as const };
+
+      await expect(
+        rejection(createPreparationRoute(tx, cfg, { categoryId: UNKNOWN_ID, target: skip })),
+      ).resolves.toEqual({
+        code: "route.subject_not_found",
+        params: { subject: "category", id: UNKNOWN_ID },
+      });
+
+      await createPreparationRoute(tx, cfg, { categoryId: soup.categoryId, target: skip });
+      await expect(
+        rejection(
+          createPreparationRoute(tx, cfg, { categoryId: soup.categoryId, target: station(grill) }),
+        ),
+      ).resolves.toEqual({ code: "route.duplicate", params: {} });
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [soup.id])).resolves.toEqual(
+        new Map([[soup.id, skip]]),
+      );
+
+      const elsewhere = await createPreparationRoute(tx, there, {
+        categoryId: soup.categoryId,
+        target: skip,
+      });
+      for (const routeId of [UNKNOWN_ID, elsewhere]) {
+        await expect(rejection(deletePreparationRoute(tx, cfg, routeId))).resolves.toEqual({
+          code: "route.not_found",
+          params: { routeId },
+        });
+      }
+      await expect(listPreparationRoutes(tx, there)).resolves.toEqual([
+        expect.objectContaining({ id: elsewhere, categoryId: soup.categoryId }),
+      ]);
+    });
+  });
+
+  it("widens a zone's route to the whole venue when it is updated with no zone", async () => {
+    const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    await scoped(async (tx) => {
+      const grill = await insertStation(tx, cfg.locationId, "Grill");
+      const menu = await createCatalogue(tx, { name: "Widening" });
+      const steak = await productWithCategory(tx, menu.id, "Steak");
+      const routeId = await createPreparationRoute(tx, cfg, {
+        zoneId,
+        productId: steak.id,
+        target: station(grill),
+      });
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, otherZoneId, [steak.id])),
+      ).resolves.toEqual({
+        code: "route.missing",
+        params: { zoneId: otherZoneId, productId: steak.id },
+      });
+
+      await updatePreparationRoute(tx, cfg, routeId, {
+        zoneId: null,
+        productId: steak.id,
+        target: station(grill),
+      });
+
+      await expect(resolvePreparationRoutes(tx, cfg, otherZoneId, [steak.id])).resolves.toEqual(
+        new Map([[steak.id, station(grill)]]),
+      );
+      await expect(listPreparationRoutes(tx, cfg)).resolves.toEqual([
+        expect.objectContaining({ id: routeId, zoneId: null, productId: steak.id }),
       ]);
     });
   });
