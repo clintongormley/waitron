@@ -62,6 +62,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/module",
   "@waitron/payments-stripe",
   "@waitron/payments-sumup",
+  "@waitron/print-agent",
   "@waitron/print-agent-app",
   "@waitron/printing",
   "@waitron/provisioning",
