@@ -314,7 +314,10 @@ export class VariantTable extends LitElement {
   }
 
   override render() {
-    const visible = this.#visible();
+    // Each row keeps its index in the whole list, which is what every row action reports.
+    const visible = this.rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => this.#shows(row.variant));
     return html`<label class="filter"
         >${t("editor.variants_show")}<select
           name="variant-status"
@@ -386,8 +389,8 @@ export class VariantTable extends LitElement {
           <tbody>
             ${repeat(
               visible,
-              (row) => row.key,
-              (row) => this.#row(row, this.rows.indexOf(row)),
+              ({ row }) => row.key,
+              ({ row, index }) => this.#row(row, index),
             )}
           </tbody>
         </table>
@@ -398,7 +401,7 @@ export class VariantTable extends LitElement {
           : html`<p class="notice" data-test="no-variants">${t("editor.no_variants_status")}</p>`
       }
       ${
-        this.openBlocked && visible.some(({ variant }) => variant.id !== undefined)
+        this.openBlocked && visible.some(({ row }) => row.variant.id !== undefined)
           ? html`<p class="notice" data-test="open-blocked">${t("editor.open_variant_blocked")}</p>`
           : nothing
       }
