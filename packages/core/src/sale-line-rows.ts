@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
+import {
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+  decimalToThousandths,
+} from "@waitron/shared";
 import type { RecordSaleLine } from "./record-sale.js";
 
 /**
@@ -28,10 +33,10 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     optionSnapshots: line.optionSnapshots ?? [],
     unitName: line.unitName ?? null,
     unitPrecision: line.unitPrecision ?? null,
-    quantity: stringToThousandths(line.quantity),
-    unitPrice: stringToCents(line.unitPrice),
-    vatRate: stringToBasisPoints(line.vatRate),
-    lineTotal: stringToCents(line.lineTotal),
+    quantity: decimalToThousandths(decimal(line.quantity)),
+    unitPrice: decimalToCents(decimal(line.unitPrice)),
+    vatRate: decimalToBasisPoints(decimal(line.vatRate)),
+    lineTotal: decimalToCents(decimal(line.lineTotal)),
     category: line.category ?? null,
     variantId: line.variantId ?? null,
     variantName: line.variantName ?? null,

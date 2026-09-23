@@ -19,9 +19,9 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   percentOf,
   sumDecimals,
-  stringToCents,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 import type {
@@ -283,7 +283,7 @@ export async function recordSale(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: stringToCents(input.total),
+      total: decimalToCents(decimal(input.total)),
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
