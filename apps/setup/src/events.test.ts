@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   dispatchAdoptRequested,
+  dispatchConfigurationRequested,
   dispatchProvisionRequested,
   dispatchSetupAdvance,
   dispatchSetupGoto,
@@ -58,6 +59,17 @@ test("dispatchAdoptRequested fires a composed, bubbling adopt-requested wrapping
   };
   const e = capture("adopt-requested", (el) => dispatchAdoptRequested(el, body));
   expect(e.detail).toEqual({ body });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchConfigurationRequested fires a composed, bubbling configuration-requested wrapping the request", () => {
+  const request = {
+    artifact: new File(["encrypted"], "prepared.waitron-config"),
+    passphrase: "pw",
+  };
+  const e = capture("configuration-requested", (el) => dispatchConfigurationRequested(el, request));
+  expect(e.detail).toEqual({ request });
   expect(e.bubbles).toBe(true);
   expect(e.composed).toBe(true);
 });

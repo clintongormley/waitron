@@ -47,9 +47,8 @@ describe("setup-done-screen", () => {
   it("keeps waiting (no reload) while getStatus fails with a network TypeError", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await mountDone(getStatus);
-    // It really is polling, not stuck. WAITED for, not timed: the old form slept 40ms against a 3ms
-    // interval and then asserted the count, which fails on a loaded machine when the browser's event
-    // loop starves between two polls — observed once in a full-package run, green in isolation.
+    // Waited for, not timed: a fixed sleep before counting polls fails when a loaded machine starves
+    // the browser's event loop.
     await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(1));
     expect(q(el, "[data-test=reload]")).toBeNull();
     expect(q(el, "[data-test=status]")).not.toBeNull();
@@ -85,6 +84,61 @@ describe("setup-done-screen", () => {
       .mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus);
     await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+  });
+
+  // The removed element still renders once and arms its first-poll timer after it has left the page.
+  // The attached control arms an identical zero-delay timer AFTER it, and same-delay timers fire in
+  // the order they were set, so once the control has polled the removed one's timer has fired too.
+  it("never polls when removed before its first render", async () => {
+    const getStatus = vi.fn(() => new Promise(() => {}));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    try {
+      const el = document.createElement("setup-done-screen");
+      Object.assign(el, { api: apiWith(getStatus), startDelayMs: 0, pollIntervalMs: 3 });
+      host.appendChild(el);
+      el.remove();
+      await el.updateComplete;
+      const controlStatus = vi.fn(() => new Promise(() => {}));
+      await mountDone(controlStatus);
+      await vi.waitFor(() => expect(controlStatus).toHaveBeenCalled());
+      expect(getStatus).not.toHaveBeenCalled();
+    } finally {
+      host.remove();
+    }
+  });
+
+  // In the case this test guards against, both elements run the same code and the removed one is
+  // rejected first, so it has finished by the time the control shows its reload.
+  it("does not offer the reload when it is removed while a poll is in flight", async () => {
+    const inFlight = () => {
+      let fail!: (reason: unknown) => void;
+      const getStatus = vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      );
+      return { getStatus, fail: (reason: unknown) => fail(reason) };
+    };
+    const removed = inFlight();
+    const control = inFlight();
+    const el = await mountDone(removed.getStatus);
+    const controlEl = await mountDone(control.getStatus);
+    await vi.waitFor(() => {
+      expect(removed.getStatus).toHaveBeenCalledOnce();
+      expect(control.getStatus).toHaveBeenCalledOnce();
+    });
+    const host = el.parentElement!;
+    el.remove();
+    removed.fail({ code: "server.internal" });
+    control.fail({ code: "server.internal" });
+    await vi.waitFor(() => expect(q(controlEl, "[data-test=reload]")).not.toBeNull());
+    host.appendChild(el);
+    await el.updateComplete;
+    expect(q(el, "[data-test=reload]")).toBeNull();
+    expect(q(el, "[data-test=status]")).not.toBeNull();
+    expect(removed.getStatus).toHaveBeenCalledOnce();
   });
 
   it("reloads into the till when the reload control is clicked", async () => {
@@ -151,6 +205,14 @@ describe("setup-done-screen", () => {
       expect(q(el, "[data-test=status]")?.textContent).toContain("has restarted"),
     );
     expect(q(el, "[data-test=reload]")).toBeNull();
+  });
+
+  it("tells the operator what the break-glass secret is for on a trading server", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
+    expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
+    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
+    expect(warning).toContain("You need it to promote this server if the primary is unreachable.");
+    expect(warning).not.toContain("cannot do that in this version");
   });
 
   // The break-glass secret is still shown once — it is the adopt response's only appearance — but the

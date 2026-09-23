@@ -1,9 +1,11 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
 import type { DeepPartial } from "../setup-app.js";
-import { getVenueSetupCountryPack } from "@waitron/country-packs";
+import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
+import type { CountryPack } from "@waitron/country";
 import type { ProvisionBody } from "../api/client.js";
 
 type Emitted = { kind: "patch" | "goto" | "advance"; detail: unknown };
@@ -332,6 +334,20 @@ describe("setup-venue-screen", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     expect(q(el, "[data-test=postalCode]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=province]")!.hasAttribute("invalid")).toBe(true);
+  });
+
+  it("clears the province when the operator goes back to Select province", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el);
+    await type(el, "province", "");
+    expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toBe(
+      "Fiscal territory: Select province",
+    );
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
     expect(q(el, "[data-test=province]")!.hasAttribute("invalid")).toBe(true);
   });
 
@@ -755,4 +771,149 @@ it("keeps the operator's own choice when the province changes", async () => {
   await toggleLocale(el, "ca-ES", false); // the operator unticks Catalan
   await type(el, "province", "17"); // Girona — also Catalan
   expect(ticked(el)).toEqual(["es-ES"]);
+});
+
+it("does not move the province while the postcode typed so far is incomplete", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  await type(el, "province", "08");
+  await type(el, "postalCode", "2800");
+  expect((q(el, "[data-test=province]") as HTMLSelectElement).value).toBe("08");
+  expect(ticked(el)).toEqual(["es-ES", "ca-ES"]);
+});
+
+it("submits the form when Enter is pressed in a field", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+  const events = collect(host);
+  await fillValid(el);
+  q(el, "[data-test=city]")!.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(events).toEqual([
+    { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
+    { kind: "advance", detail: null },
+  ]);
+});
+
+it("asks the shell to reload the Demo defaults when the retry is pressed", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { mode: "demo" },
+  });
+  const requests: Event[] = [];
+  host.addEventListener("setup-defaults-requested", (event) => requests.push(event));
+  q(el, "[data-test=retry-defaults]")!.click();
+  expect(requests).toHaveLength(1);
+});
+
+it("drops the server's mark when the shell withdraws the refused field", async () => {
+  const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    invalidField: "seriesCode",
+  });
+  expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(true);
+  el.invalidField = undefined;
+  await el.updateComplete;
+  expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(false);
+  expect(q(el, "[data-test=seriesCode]")!.getAttribute("error")).toBe("");
+});
+
+it("refuses a draft country that has no venue-setup pack and derives nothing from it", async () => {
+  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+    draft: { venue: { country: "GB", location: { province: "Kent" } } },
+    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
+  });
+  const events = collect(host);
+  expect((q(el, "[data-test=operationDescription]") as HTMLInputElement).value).toBe("");
+  expect(q(el, "[data-test=taxId]")!.getAttribute("label")).toBe("Tax ID");
+  expect(el.shadowRoot!.querySelectorAll('input[name="invoiceLocales"]')).toHaveLength(0);
+  expect(q(el, "[data-test=province]")!.tagName).toBe("WT-INPUT");
+  expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toBe(
+    "Fiscal territory: Select province",
+  );
+  expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Time zone: —");
+  q(el, "[data-test=next]")!.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "#country-error")!.textContent).toBe("Check the country.");
+  expect(q(el, "[data-test=country]")!.getAttribute("aria-invalid")).toBe("true");
+});
+
+const SPARSE_PACK: CountryPack = {
+  countryCode: "ZZ",
+  name: "Zedland",
+  defaultLocale: "zz-ZZ",
+  defaultTimeZone: "Etc/GMT-3",
+  invoiceLocales: ["zz-ZZ"],
+  moduleIds: [],
+  availableForVenueSetup: true,
+  administrativeAreas: [],
+  fiscalJurisdictions: [
+    {
+      id: "ZZ-main",
+      areaCodes: [],
+      supported: true,
+      modules: { filing: "verifactu", tax: "vat" },
+    },
+  ],
+  defaultFiscalJurisdictionId: "ZZ-main",
+};
+
+it("emits a country pack with no provinces or validators as the operator typed it", async () => {
+  const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
+  packs.push(SPARSE_PACK);
+  try {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await type(el, "country", "ZZ");
+    expect(q(el, "[data-test=taxId]")!.getAttribute("label")).toBe("Tax ID");
+    expect(q(el, "[data-test=province]")!.tagName).toBe("WT-INPUT");
+    expect(q(el, "[data-test=locale-zz-ZZ]")!.parentElement!.textContent!.trim()).toBe("zz-ZZ");
+    for (const [field, value] of Object.entries({
+      taxId: " zz 42 ",
+      legalName: "Zed Foods",
+      name: "Harbour",
+      operationDescription: "Groceries",
+      addressLine1: "1 Quay",
+      postalCode: " zz-9 ",
+      city: "Port",
+      province: "North Riding",
+      dayCutover: "05:00",
+      tillName: "Till",
+      seriesCode: "A",
+      rectificativeSeriesCode: "B",
+    }))
+      await type(el, field, value);
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([
+      {
+        kind: "patch",
+        detail: {
+          patch: {
+            venue: {
+              country: "ZZ",
+              taxId: " zz 42 ",
+              legalName: "Zed Foods",
+              location: {
+                name: "Harbour",
+                fiscalTerritory: "ZZ-main",
+                invoiceLocales: ["zz-ZZ"],
+                operationDescription: "Groceries",
+                addressLine1: "1 Quay",
+                addressLine2: null,
+                postalCode: " zz-9 ",
+                city: "Port",
+                province: "North Riding",
+                timeZone: "Etc/GMT-3",
+                dayCutover: "05:00",
+              },
+              tillName: "Till",
+              seriesCode: "A",
+              rectificativeSeriesCode: "B",
+            },
+          },
+        },
+      },
+      { kind: "advance", detail: null },
+    ]);
+  } finally {
+    packs.splice(packs.indexOf(SPARSE_PACK), 1);
+  }
 });
