@@ -1,8 +1,9 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   filesUnder,
@@ -91,16 +92,28 @@ async function drizzlePackage(set: string): Promise<DrizzlePackage> {
   return { dir, bin, configPath };
 }
 
+/** How a drizzle-kit run ended, and everything it printed. */
+interface Run {
+  status: number | null;
+  signal: string | null;
+  error: string | undefined;
+  stdout: string;
+  stderr: string;
+}
+
+const execFileAsync = promisify(execFile);
+
 /**
  * Runs `drizzle-kit generate` for a package, writing into `outDir` instead of its own set. The
  * config drizzle-kit reads is the package's own with `out` replaced, and with `overrides` on top.
+ * Asynchronous, so the cases below run their packages side by side.
  */
-function generate(
+async function generate(
   pkg: DrizzlePackage,
   outDir: string,
   name: string,
   overrides: Record<string, string> = {},
-) {
+): Promise<Run> {
   const configPath = join(scratch, `${name}.drizzle.config.ts`);
   const replaced = { out: relative(pkg.dir, outDir), ...overrides };
   writeFileSync(
@@ -108,19 +121,37 @@ function generate(
     `import base from ${JSON.stringify(pkg.configPath)};\n` +
       `export default { ...base, ...${JSON.stringify(replaced)} };\n`,
   );
-  return spawnSync(pkg.bin, ["generate", "--config", configPath], {
-    cwd: pkg.dir,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-    timeout: GENERATE_TIMEOUT_MS,
-  });
+  try {
+    const { stdout, stderr } = await execFileAsync(pkg.bin, ["generate", "--config", configPath], {
+      cwd: pkg.dir,
+      encoding: "utf8",
+      timeout: GENERATE_TIMEOUT_MS,
+    });
+    return { status: 0, signal: null, error: undefined, stdout, stderr };
+  } catch (thrown) {
+    // execFile rejects on a non-zero exit, a signal (its timeout included) or a failed start, and
+    // attaches whatever the child printed.
+    const failed = thrown as Error & {
+      code?: number | string;
+      signal?: string | null;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      status: typeof failed.code === "number" ? failed.code : null,
+      signal: failed.signal ?? null,
+      error: failed.message,
+      stdout: failed.stdout ?? "",
+      stderr: failed.stderr ?? "",
+    };
+  }
 }
 
 /** A readable account of a run, for an assertion message. */
-function describeRun(run: ReturnType<typeof generate>): string {
+function describeRun(run: Run): string {
   return (
     `status ${String(run.status)}, signal ${String(run.signal)}` +
-    (run.error === undefined ? "" : `, ${run.error.message}`) +
+    (run.error === undefined ? "" : `, ${run.error}`) +
     `\n--- stdout\n${run.stdout}\n--- stderr\n${run.stderr}`
   );
 }
@@ -137,7 +168,7 @@ function describeRun(run: ReturnType<typeof generate>): string {
 const COMPLETED = ["No schema changes, nothing to migrate", "Your SQL migration file"];
 
 /** Why a run does not count as a completed generation, or `undefined` when it does. */
-function generationFailure(run: ReturnType<typeof generate>): string | undefined {
+function generationFailure(run: Run): string | undefined {
   if (run.status === 0 && COMPLETED.some((marker) => run.stdout.includes(marker))) return undefined;
   return `drizzle-kit generate did not report finishing (${COMPLETED.join(" / ")}): ${describeRun(run)}`;
 }
@@ -154,13 +185,13 @@ describe("every migration set matches its package's TypeScript schema", () => {
     expect(sets).toContain(join("packages", "fiscal-verifactu", "drizzle"));
   });
 
-  it.each(sets)(
+  it.concurrent.for(sets)(
     "%s: drizzle-kit generate changes nothing",
-    async (set) => {
+    async (set, { expect }) => {
       const pkg = await drizzlePackage(set);
       const copy = join(scratch, set.replaceAll("/", "__"));
       cpSync(join(repoRoot, set), copy, { recursive: true });
-      const run = generate(pkg, copy, set.replaceAll("/", "__"));
+      const run = await generate(pkg, copy, set.replaceAll("/", "__"));
       expect(generationFailure(run), set).toBeUndefined();
       expect(
         differences(join(repoRoot, set), copy),
@@ -178,9 +209,9 @@ describe("every migration set matches its package's TypeScript schema", () => {
  * `generate` to write a new migration for it.
  */
 describe("negative control", () => {
-  it(
+  it.concurrent(
     "writes a new migration when the snapshot lacks a table the schema declares",
-    async () => {
+    async ({ expect }) => {
       const set = join("packages", "identity", "drizzle");
       const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control");
@@ -196,7 +227,7 @@ describe("negative control", () => {
       delete snapshot.tables.persons;
       writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
-      const run = generate(pkg, copy, "control");
+      const run = await generate(pkg, copy, "control");
       expect(generationFailure(run)).toBeUndefined();
       const found = differences(join(repoRoot, set), copy);
       expect(found.some((line) => /^new: [^/]+\.sql$/.test(line))).toBe(true);
@@ -215,16 +246,18 @@ describe("negative control", () => {
 describe("negative control: a generation that did not finish", () => {
   const set = join("packages", "bookings", "drizzle");
 
-  it(
+  it.concurrent(
     "is refused when the schema module throws at import",
-    async () => {
+    async ({ expect }) => {
       const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control-throws");
       cpSync(join(repoRoot, set), copy, { recursive: true });
       const throwing = join(scratch, "throwing-schema.ts");
       writeFileSync(throwing, 'throw new Error("negative control: schema import failed");\n');
 
-      const run = generate(pkg, copy, "control-throws", { schema: relative(pkg.dir, throwing) });
+      const run = await generate(pkg, copy, "control-throws", {
+        schema: relative(pkg.dir, throwing),
+      });
       expect(differences(join(repoRoot, set), copy)).toEqual([]);
       expect(generationFailure(run) ?? "accepted as finished").toContain(
         "negative control: schema import failed",
@@ -233,9 +266,9 @@ describe("negative control: a generation that did not finish", () => {
     TEST_TIMEOUT_MS,
   );
 
-  it(
+  it.concurrent(
     "is refused when drizzle-kit stops to ask whether a column was renamed",
-    async () => {
+    async ({ expect }) => {
       const pkg = await drizzlePackage(set);
       const copy = join(scratch, "control-prompt");
       cpSync(join(repoRoot, set), copy, { recursive: true });
@@ -257,7 +290,7 @@ describe("negative control: a generation that did not finish", () => {
       const edited = join(scratch, "control-prompt-edited");
       cpSync(copy, edited, { recursive: true });
 
-      const run = generate(pkg, copy, "control-prompt");
+      const run = await generate(pkg, copy, "control-prompt");
       expect(differences(edited, copy)).toEqual([]);
       expect(generationFailure(run) ?? "accepted as finished").toContain(
         "Interactive prompts require a TTY",
