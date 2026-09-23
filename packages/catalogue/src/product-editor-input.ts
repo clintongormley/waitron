@@ -5,7 +5,7 @@ import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
-import type { VatClass } from "./pricing.js";
+import { VAT_CLASSES, type VatClass } from "./pricing.js";
 import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
 export type { ProductEditorInput } from "./product-types.js";
 import "./errors.js";
@@ -94,9 +94,36 @@ function nullableTranslations(value: unknown, field: string): Record<string, str
   return nonBlankTranslations(translations(value, field));
 }
 
-/** Parse the complete write body before touching storage; reference ownership is checked in the transaction. */
-export function parseProductEditorInput(value: unknown): ProductEditorInput {
+/** `null` is a variant's blank; a product with no parent refuses it as malformed. */
+function inheritable<T>(
+  value: unknown,
+  field: string,
+  isVariant: boolean,
+  parse: (value: unknown, field: string) => T,
+): T | null {
+  return isVariant && value === null ? null : parse(value, field);
+}
+function vatClass(value: unknown, field: string): VatClass {
+  if (!VAT_CLASSES.includes(value as VatClass)) invalid(field);
+  return value as VatClass;
+}
+/** A variant has no variants or attached lists of its own (spec §4.4), so only an empty one is taken. */
+function emptyOnVariant<T>(values: T[], field: string, isVariant: boolean): T[] {
+  if (isVariant && values.length > 0) invalid(field);
+  return values;
+}
+
+/**
+ * Parse the complete write body before touching storage; reference ownership is checked in the
+ * transaction, and so is `parentId` against the stored parent. `isVariant` is the STORED row's.
+ */
+export function parseProductEditorInput(
+  value: unknown,
+  { isVariant }: { isVariant: boolean },
+): ProductEditorInput {
   const body = object(value, "product");
+  const parentId =
+    body.parentId === undefined ? {} : { parentId: nullableId(body.parentId, "parentId") };
   const name = requiredText(body.name, "name");
   const customerName = nullableTranslations(body.customerName, "customerName");
   const soldAlone = boolean(body.soldAlone, "soldAlone");
@@ -109,7 +136,11 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
   // the one outcome a caller still on the old contract could not tell from having worked.
   for (const legacy of ["modifierIds", "optionGroupIds"] as const)
     if (body[legacy] !== undefined) invalid(legacy);
-  const attachments = modifiers(body.modifiers, "modifiers");
+  const attachments = emptyOnVariant(
+    modifiers(body.modifiers, "modifiers"),
+    "modifiers",
+    isVariant,
+  );
   const primaryCategoryId =
     body.primaryCategoryId === null ? null : id(body.primaryCategoryId, "primaryCategoryId");
   if (
@@ -118,14 +149,11 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
       : primaryCategoryId !== null
   )
     invalid("primaryCategoryId");
-  if (
-    typeof body.vatClass !== "string" ||
-    !["general", "reduced", "super_reduced", "zero"].includes(body.vatClass)
-  )
-    invalid("vatClass");
+  const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
+  const listed = emptyOnVariant(body.variants, "variants", isVariant);
   const seen = new Set<string>();
-  const variants = body.variants.map((value, index): ProductVariantInput => {
+  const variants = listed.map((value, index): ProductVariantInput => {
     const field = `variants.${index}`;
     const variant = object(value, field);
     const variantId = variant.id === undefined ? undefined : id(variant.id, `${field}.id`);
@@ -139,7 +167,8 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
       customerName: nullableTranslations(variant.customerName, `${field}.customerName`),
       kitchenName: nullableText(variant.kitchenName, `${field}.kitchenName`),
       image: nullableText(variant.image, `${field}.image`),
-      unitPrice: price(variant.unitPrice, `${field}.unitPrice`),
+      // Every listed entry is a variant, so a blank price follows the product's (spec §15.3).
+      unitPrice: inheritable(variant.unitPrice, `${field}.unitPrice`, true, price),
       available: boolean(variant.available, `${field}.available`),
     };
   });
@@ -153,6 +182,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
           ]),
         );
   return {
+    ...parentId,
     name,
     customerName,
     soldAlone,
@@ -160,15 +190,20 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     kitchenName: nullableText(body.kitchenName, "kitchenName"),
     image: nullableText(body.image, "image"),
     unitId,
-    unitPrice: price(body.unitPrice, "unitPrice"),
+    unitPrice: inheritable(body.unitPrice, "unitPrice", isVariant, price),
     active: boolean(body.active, "active"),
     available: boolean(body.available, "available"),
-    vatClass: body.vatClass as VatClass,
+    vatClass: tax,
     variants,
     categoryIds,
     primaryCategoryId,
     modifiers: attachments,
     allergens,
-    dietaryDeclarations: validateDietaryDeclarations(body.dietaryDeclarations),
+    dietaryDeclarations: inheritable(
+      body.dietaryDeclarations,
+      "dietaryDeclarations",
+      isVariant,
+      validateDietaryDeclarations,
+    ),
   };
 }

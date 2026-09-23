@@ -230,10 +230,52 @@ it("reassigning to null returns the products to each-priced and leaves products 
     .from(products)
     .where(inArray(products.id, [onSource, onOther]));
   const pricingById = Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]));
-  // The reassigned product loses its unit row AND returns to each-priced (the no-unit ⟺ each invariant).
+  // The reassigned top-level product loses its unit row AND returns to each-priced.
   expect(await app((tx) => storedUnitId(tx, onSource))).toBeNull();
   expect(pricingById[onSource]).toBe("each");
   // The product on another unit keeps both its unit row and its weight pricing.
   expect(await app((tx) => storedUnitId(tx, onOther))).toBe(otherUnit.id);
   expect(pricingById[onOther]).toBe("weight");
+});
+
+it("reassigning a variant's own unit to null leaves its pricing unit blank, so it follows its parent's", async () => {
+  await seedTenant(suite.db);
+  const parent = await product();
+  const [parentRow] = await suite.db
+    .select({ catalogueId: products.catalogueId })
+    .from(products)
+    .where(inArray(products.id, [parent]));
+  const [variantRow] = await suite.db
+    .insert(products)
+    .values({
+      catalogueId: parentRow!.catalogueId,
+      parentId: parent,
+      name: "Small",
+      pricingUnit: "weight",
+    })
+    .returning({ id: products.id });
+  const variant = variantRow!.id;
+  const sourceUnit = await app((tx) =>
+    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+  );
+  await app(async (tx) => {
+    await assignProductUnit(tx, parent, sourceUnit.id);
+    await assignProductUnit(tx, variant, sourceUnit.id);
+  });
+  await suite.db
+    .update(products)
+    .set({ pricingUnit: "weight" })
+    .where(inArray(products.id, [parent]));
+
+  await app((tx) => reassignProductsToUnit(tx, sourceUnit.id, [parent, variant], null));
+
+  const pricing = await suite.db
+    .select({ id: products.id, pricingUnit: products.pricingUnit })
+    .from(products)
+    .where(inArray(products.id, [parent, variant]));
+  expect(Object.fromEntries(pricing.map((row) => [row.id, row.pricingUnit]))).toEqual({
+    [parent]: "each",
+    [variant]: null,
+  });
+  expect(await app((tx) => storedUnitId(tx, variant))).toBeNull();
 });

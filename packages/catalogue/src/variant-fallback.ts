@@ -1,4 +1,4 @@
-import { eq, exists, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, eq, exists, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias, QueryBuilder } from "drizzle-orm/sqlite-core";
 import { products } from "@waitron/db";
 import { productCategories } from "./schema/categories.js";
@@ -24,16 +24,45 @@ import { productUnits } from "./schema/units.js";
  * `pricing_unit`, `unit_price`, `dietary_declarations`) stops here for reads that go through
  * `effectiveProductColumns`: their callers see non-null types. The exception is deliberate: a
  * variant's own price is read raw, and may be blank, in the variant list
- * (`ProductVariant.unitPrice`) and in the menu price chain (`readOfferVariants`). The catalogue's
+ * (`ProductVariant.unitPrice`) and in the menu price chain (`readOfferVariants`), and the product
+ * editor (`readProductEditor`) reads a variant's own price, VAT class and dietary declarations raw,
+ * blanks included. The catalogue's
  * reads keyed on CATEGORY MEMBERSHIP read each product's OWN `product_categories` rows, so a variant
  * that inherits its parent's categories is not
  * listed under them there — a category's product list and its delete preview (`categories.ts`) are
- * two; `readProductCategories` refuses a variant's id (`product.not_found`). Reads keyed on an ORDER
+ * two; `readProductCategories` refuses a variant's id (`product.not_found`) under its default
+ * `"top-level"` scope. Reads keyed on an ORDER
  * LINE's product, which is the variant on a variant line — the kitchen's station routing and its
  * allergen and dietary display (`apps/server/src/working-order.ts`) — read their values from here
  * too, and preparation routes (`packages/venue-service/src/operations.ts`) read their CATEGORY from
  * here.
  */
+
+/** A `products` row with no parent: a product in its own right, never a variant. */
+export const isTopLevelProduct = isNull(products.parentId);
+
+/** The `pricing_unit` to store when a row's unit is cleared: 'each' for a product with no parent,
+ * blank for a variant, which then follows its parent's unit and pricing unit (V12). */
+export function clearedPricingUnit(): SQL {
+  return sql`case when ${products.parentId} is null then 'each' end`;
+}
+
+/**
+ * Which rows a read or write of ONE product by id may find. `"top-level"` finds only a product with
+ * no parent, so a variant's id answers exactly as an id that names no product; `"any"` finds a
+ * variant too. `"any"` is passed only by the product editor's save (`saveProductEditor`, in its
+ * read of the stored row and its `replaceProductCategories` call) and by the routing write that
+ * follows it (`applyRouting` in `apps/server/src/catalogue-api.ts`, calling `setProductStation` and
+ * `setProductCourse`).
+ */
+export type ProductScope = "top-level" | "any";
+
+/** The `where` for product `productId` within `scope`. */
+export function productWithId(productId: string, scope: ProductScope): SQL {
+  return scope === "any"
+    ? eq(products.id, productId)
+    : and(eq(products.id, productId), isTopLevelProduct)!;
+}
 
 /** The parent row of a variant, joined as `parent`. A LEFT join: a top-level product has none. */
 export const parentProducts = alias(products, "parent");

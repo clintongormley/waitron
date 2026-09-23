@@ -101,6 +101,8 @@ const products: Product[] = [
 ];
 const value: ProductEditorValue = {
   id: "p1",
+  parentId: null,
+  inherited: null,
   name: "Croquetas",
   customerName: { es: "Croquetas caseras de jamón" },
   description: { es: "Cremosas" },

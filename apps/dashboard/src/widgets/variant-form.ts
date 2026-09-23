@@ -78,7 +78,8 @@ export class VariantForm extends LitElement {
     const value = this.value;
     this.#variantId = value?.id;
     this.name = value?.name ?? "";
-    this.unitPrice = value?.unitPrice ?? "0.00";
+    // A saved variant's blank price stays blank: it follows the product's (spec §15.3).
+    this.unitPrice = value ? (value.unitPrice ?? "") : "0.00";
     this.available = value?.available ?? true;
     this.kitchenName = value?.kitchenName ?? "";
     this.customerName = { ...value?.customerName };
@@ -106,7 +107,9 @@ export class VariantForm extends LitElement {
     if (this.busy) return;
     const errors: Record<string, string> = {};
     if (!this.name.trim()) errors.name = t("editor.variant_name_required");
-    if (!isProductPrice(this.unitPrice)) errors.unitPrice = t("editor.price_invalid");
+    const unitPrice = this.unitPrice.trim() === "" ? null : this.unitPrice;
+    if (unitPrice !== null && !isProductPrice(unitPrice))
+      errors.unitPrice = t("editor.price_invalid");
     this.errors = errors;
     // A refused submit leaves every field as it was, so one bad value is corrected on its own rather
     // than retyped with the rest — and focus MOVES to the first one reported, in render order,
@@ -123,7 +126,7 @@ export class VariantForm extends LitElement {
       customerName: Object.keys(customerName).length ? customerName : null,
       kitchenName: this.kitchenName.trim() || null,
       image: this.image,
-      unitPrice: this.unitPrice,
+      unitPrice,
       available: this.available,
     };
     this.dispatchEvent(
@@ -185,7 +188,6 @@ export class VariantForm extends LitElement {
           (unitPrice) => {
             this.unitPrice = unitPrice;
           },
-          true,
         )}
         ${switchField(fields, "available", t("editor.available"), this.available, (available) => {
           this.available = available;

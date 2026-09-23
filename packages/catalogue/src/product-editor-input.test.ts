@@ -25,64 +25,147 @@ const input: ProductEditorInput = {
   allergens: null,
   dietaryDeclarations: [],
 };
+const parse = (value: unknown) => parseProductEditorInput(value, { isVariant: false });
+const parseVariant = (value: unknown) => parseProductEditorInput(value, { isVariant: true });
+
+// A variant's inherited fields, each left blank so it reads its parent's (spec §4.4, §9.1).
+const inheriting = {
+  ...input,
+  description: null,
+  image: null,
+  unitId: null,
+  unitPrice: null,
+  vatClass: null,
+  categoryIds: [],
+  primaryCategoryId: null,
+  allergens: null,
+  dietaryDeclarations: null,
+};
+
+it("accepts a blank for every inherited field of a variant, its price included", () => {
+  expect(parseVariant(inheriting)).toEqual(inheriting);
+});
+it("parses a variant's own values for the fields it overrides", () => {
+  expect(
+    parseVariant({
+      ...inheriting,
+      unitPrice: "3.5",
+      vatClass: "general",
+      dietaryDeclarations: ["vegan"],
+    }),
+  ).toEqual({
+    ...inheriting,
+    unitPrice: "3.50",
+    vatClass: "general",
+    dietaryDeclarations: ["vegan"],
+  });
+});
+it.each(["unitPrice", "vatClass"] as const)(
+  "refuses a blank %s on a product with no parent, naming it",
+  (field) => {
+    expect(() => parse({ ...input, [field]: null })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field } }),
+    );
+  },
+);
+it("refuses blank dietary declarations on a product with no parent, as any malformed list", () => {
+  expect(() => parse({ ...input, dietaryDeclarations: null })).toThrow(
+    expect.objectContaining({ code: "diet.declaration_invalid" }),
+  );
+});
+it("still refuses a malformed price or tax on a variant", () => {
+  expect(() => parseVariant({ ...inheriting, unitPrice: "1.001" })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "unitPrice" } }),
+  );
+  expect(() => parseVariant({ ...inheriting, vatClass: "none" })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "vatClass" } }),
+  );
+});
+it("refuses variants or attached lists on a variant, which offers its parent's", () => {
+  const variant = {
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    available: true,
+  };
+  expect(() => parseVariant({ ...inheriting, variants: [variant] })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "variants" } }),
+  );
+  expect(() =>
+    parseVariant({ ...inheriting, modifiers: [{ kind: "extras", id: extrasListId }] }),
+  ).toThrow(expect.objectContaining({ code: "product.invalid", params: { field: "modifiers" } }));
+});
+it("carries a parent id through, lower-cased, and omits it when the body has none", () => {
+  expect(parse(input)).not.toHaveProperty("parentId");
+  expect(parse({ ...input, parentId: null }).parentId).toBeNull();
+  expect(parseVariant({ ...inheriting, parentId: unitId.toUpperCase() }).parentId).toBe(unitId);
+});
+it.each(["not-a-uuid", 42, false])("refuses a malformed parent id %j", (parentId) => {
+  expect(() => parseVariant({ ...inheriting, parentId })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "parentId" } }),
+  );
+});
 
 it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
-  expect(parseProductEditorInput(input)).toEqual(input);
+  expect(parse(input)).toEqual(input);
+  expect(parseVariant(input)).toEqual(input);
 });
 it("carries soldAlone through but requires it in the body, exactly like available", () => {
-  expect(parseProductEditorInput({ ...input, soldAlone: false }).soldAlone).toBe(false);
+  expect(parse({ ...input, soldAlone: false }).soldAlone).toBe(false);
   // An absent soldAlone is refused rather than defaulted, mirroring the available-absent case below.
   const noFlag: Record<string, unknown> = { ...input };
   delete noFlag.soldAlone;
-  expect(() => parseProductEditorInput(noFlag)).toThrow(
+  expect(() => parse(noFlag)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
   );
 });
 it("refuses an absent available, the sibling required boolean", () => {
   const noAvailable: Record<string, unknown> = { ...input };
   delete noAvailable.available;
-  expect(() => parseProductEditorInput(noAvailable)).toThrow(
+  expect(() => parse(noAvailable)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "available" } }),
   );
 });
 it("carries active through apart from available, and requires it in the body", () => {
-  const parsed = parseProductEditorInput({ ...input, active: false, available: true });
+  const parsed = parse({ ...input, active: false, available: true });
   expect({ active: parsed.active, available: parsed.available }).toEqual({
     active: false,
     available: true,
   });
   const noActive: Record<string, unknown> = { ...input };
   delete noActive.active;
-  expect(() => parseProductEditorInput(noActive)).toThrow(
+  expect(() => parse(noActive)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "active" } }),
   );
-  expect(() => parseProductEditorInput({ ...input, active: "yes" })).toThrow(
+  expect(() => parse({ ...input, active: "yes" })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "active" } }),
   );
 });
 it("rejects a non-boolean soldAlone", () => {
-  expect(() => parseProductEditorInput({ ...input, soldAlone: 1 })).toThrow(
+  expect(() => parse({ ...input, soldAlone: 1 })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
   );
 });
 it("parses an explicit null unit as null (the Each option)", () => {
-  expect(parseProductEditorInput({ ...input, unitId: null }).unitId).toBeNull();
+  expect(parse({ ...input, unitId: null }).unitId).toBeNull();
 });
 it("still rejects a non-null non-uuid unit", () => {
-  expect(() => parseProductEditorInput({ ...input, unitId: "not-a-uuid" })).toThrow(
+  expect(() => parse({ ...input, unitId: "not-a-uuid" })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "unitId" } }),
   );
 });
 it.each([undefined, "", "none", "invalid", false])(
   "rejects an unsupported or missing tax choice %j",
   (vatClass) => {
-    expect(() => parseProductEditorInput({ ...input, vatClass })).toThrow(
+    expect(() => parse({ ...input, vatClass })).toThrow(
       expect.objectContaining({ code: "product.invalid", params: { field: "vatClass" } }),
     );
   },
 );
 it.each([undefined, null, [], "product"])("rejects a malformed body %j", (body) => {
-  expect(() => parseProductEditorInput(body)).toThrow(
+  expect(() => parse(body)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "product" } }),
   );
 });
@@ -104,7 +187,7 @@ it.each([
   ["categoryIds", [categoryId, categoryId.toUpperCase()]],
   ["primaryCategoryId", undefined],
 ] as const)("rejects malformed %s (%j)", (field, value) => {
-  expect(() => parseProductEditorInput({ ...input, [field]: value })).toThrow(
+  expect(() => parse({ ...input, [field]: value })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
@@ -112,24 +195,19 @@ it("allows memberships with no reporting category but rejects a primary outside 
   const other = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   // A non-empty set with a null reporting category is now accepted.
   expect(
-    parseProductEditorInput({ ...input, categoryIds: [categoryId], primaryCategoryId: null })
-      .primaryCategoryId,
+    parse({ ...input, categoryIds: [categoryId], primaryCategoryId: null }).primaryCategoryId,
   ).toBeNull();
   // A non-null primary must be one of the selected categories.
-  expect(() =>
-    parseProductEditorInput({ ...input, categoryIds: [categoryId], primaryCategoryId: other }),
-  ).toThrow(
+  expect(() => parse({ ...input, categoryIds: [categoryId], primaryCategoryId: other })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
   );
   // An empty set with a non-null primary stays invalid.
-  expect(() =>
-    parseProductEditorInput({ ...input, categoryIds: [], primaryCategoryId: categoryId }),
-  ).toThrow(
+  expect(() => parse({ ...input, categoryIds: [], primaryCategoryId: categoryId })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
   );
   // A non-null primary that IS in the set is normalized to lower case.
   expect(
-    parseProductEditorInput({
+    parse({
       ...input,
       categoryIds: [categoryId],
       primaryCategoryId: categoryId.toUpperCase(),
@@ -144,7 +222,7 @@ it("normalizes optional text and prices without mutating caller or copied allerg
     unitPrice: "2.5",
     allergens: { milk: { presence: "contains", source: "Recorded supplier text" } },
   };
-  expect(parseProductEditorInput(original)).toEqual({
+  expect(parse(original)).toEqual({
     ...input,
     description: null,
     kitchenName: "BAR",
@@ -170,8 +248,25 @@ it.each([
   [{ name: "Small", unitPrice: "2.00", available: "yes" }, "variants.0.available"],
 ] as const)("rejects a malformed variant %j", (variant, field) => {
   // A malformed variant is rejected while parsing that variant, before the min-two count check.
-  expect(() => parseProductEditorInput({ ...input, variants: [variant] })).toThrow(
+  expect(() => parse({ ...input, variants: [variant] })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
+  );
+});
+it("parses a variant listed with a blank price as blank, so it follows the product's", () => {
+  const blank = {
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+  };
+  expect(parse({ ...input, variants: [blank] }).variants).toEqual([blank]);
+  // Only an explicit null is a blank: a variant that omits its price is refused, not defaulted.
+  const noPrice: Record<string, unknown> = { ...blank };
+  delete noPrice.unitPrice;
+  expect(() => parse({ ...input, variants: [blank, noPrice] })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "variants.1.unitPrice" } }),
   );
 });
 it("accepts none, one or two variants, and parses each variant's own names", () => {
@@ -184,9 +279,9 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
     available: true,
   };
   // Spec §15.1: a product with exactly one variant is allowed.
-  expect(parseProductEditorInput({ ...input, variants: [one] }).variants).toEqual([one]);
-  expect(parseProductEditorInput({ ...input, variants: [] }).variants).toEqual([]);
-  const parsed = parseProductEditorInput({
+  expect(parse({ ...input, variants: [one] }).variants).toEqual([one]);
+  expect(parse({ ...input, variants: [] }).variants).toEqual([]);
+  const parsed = parse({
     ...input,
     variants: [
       {
@@ -227,13 +322,13 @@ it("accepts none, one or two variants, and parses each variant's own names", () 
   ]);
 });
 it("treats a blank customer name as absent on the product and its variants", () => {
-  const parsed = parseProductEditorInput({ ...input, customerName: { en: "  " } });
+  const parsed = parse({ ...input, customerName: { en: "  " } });
   expect(parsed.customerName).toBeNull();
 });
 it("rejects a repeated variant ID even with a different case", () => {
   const variant = { id: unitId, name: "Small", unitPrice: "2.00", available: true };
   expect(() =>
-    parseProductEditorInput({
+    parse({
       ...input,
       variants: [variant, { ...variant, id: unitId.toUpperCase() }],
     }),
@@ -261,7 +356,7 @@ it("keeps a mixed extras-and-options list in the order the body sent, and lower-
     { kind: "extras", id: extrasListId },
     { kind: "options", id: extrasListId },
   ];
-  expect(parseProductEditorInput({ ...input, modifiers: sent }).modifiers).toEqual([
+  expect(parse({ ...input, modifiers: sent }).modifiers).toEqual([
     { kind: "options", id: optionsListId },
     { kind: "extras", id: extrasListId },
     // The same id under the OTHER kind is a different list, so it is not a duplicate.
@@ -287,7 +382,7 @@ it.each([
     ],
   ],
 ] as const)("rejects %s in modifiers, naming %s", (_label, field, value) => {
-  expect(() => parseProductEditorInput({ ...input, modifiers: value })).toThrow(
+  expect(() => parse({ ...input, modifiers: value })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
@@ -297,11 +392,11 @@ it.each(["modifierIds", "optionGroupIds"] as const)(
   (legacy) => {
     // Silently dropping it would save a product with NO attachments and report success, which is the
     // one outcome a caller still on the old contract could not tell from having worked.
-    expect(() => parseProductEditorInput({ ...input, [legacy]: [extrasListId] })).toThrow(
+    expect(() => parse({ ...input, [legacy]: [extrasListId] })).toThrow(
       expect.objectContaining({ code: "product.invalid", params: { field: legacy } }),
     );
     // Even an empty legacy array is refused: it still says the caller is on the old contract.
-    expect(() => parseProductEditorInput({ ...input, [legacy]: [] })).toThrow(
+    expect(() => parse({ ...input, [legacy]: [] })).toThrow(
       expect.objectContaining({ code: "product.invalid", params: { field: legacy } }),
     );
   },

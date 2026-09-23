@@ -476,7 +476,9 @@ back, so the box does not boot until it is wiped (re-run 2026-09-23 through `app
 What it left open, each already written into the plan's later tasks: the kitchen station routing,
 preparation routes and the kitchen screen's allergens and dietary labels still read a variant
 line's raw columns (Task 5, dish and extras — done by #537); and republishing a variant's allergens and diet must
-not write values that hide its parent's (Task 6). Deliberately left: the counts of `products`'
+not write values that hide its parent's (Task 6 — done: `republishOverlays`,
+`packages/catalogue/src/operations.ts`, stores a variant's column blank when it has no overlay of
+its own for it, so the variant reads its parent's). Deliberately left: the counts of `products`'
 columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
 are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
 compares. The same file's paragraph saying `product_variants.image` is deliberately not guarded is
@@ -514,20 +516,43 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   shows them behind a filter; the translation-gap check skips Inactive variants for the same reason
   (`packages/catalogue/src/content-languages.ts`) and Task 7 must revisit it.
 - **A variant's id is refused by the management routes that read or write a product by id**, each
-  answering as it does for an id naming no product (the recipe route answers `product.not_found`),
-  until Task 6 opens a variant's own page. The check is written separately in eleven places with
-  four different answers, and four catalogue functions that write a product by id carry none of
-  their own (`applyRecipeDerivation`, `applyDietDerivation`, `deactivateProduct`,
-  `assignProductUnit`; every route that reaches them is guarded). **Next action (Task 6):** put the
-  check in one shared function, and re-test the product editor's unit and category reads for a
-  variant, whose Task 1 assertions this task retired.
+  answering as it does for an id naming no product (the recipe route answers `product.not_found`) —
+  except the product editor's two routes, which since Task 6 are a variant's own page. The
+  "is this a top-level product" check now lives in one function, `productWithId`
+  (`packages/catalogue/src/variant-fallback.ts`), used by the catalogue's by-id reads and writes,
+  `apps/server/src/catalogue-api.ts`, `apps/server/src/kitchen.ts` and
+  `packages/venue-service/src/operations.ts`; every route's answer is unchanged.
+  `createMenuItem` (its own `menu_item.variant_not_allowed`) and `setProductRecipe`
+  (`packages/recipes/src/recipes.ts`, which asks the opposite question) still write their own. Of
+  the four writers that had no check: `applyRecipeDerivation` and `applyDietDerivation` now refuse
+  a variant (`product.not_found`), because a variant has no recipe of its own, and when a parent's
+  derivation changes they republish each of its variants that sets its own value for that column.
+  `assignProductUnit` and `deactivateProduct` are left without one: a variant's own page gives it
+  its own unit through the first, and the second (which nothing outside the tests calls) makes a row
+  Inactive, which a variant may be (V6).
 - **The menu offer editor accepts a price such as `007.5` that the server then refuses** — its
   pattern (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `PRICE`) is looser
   than `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`). **Next action:** use one rule
   for both, checking first that the catalogue helper is safe to load in the browser.
-- **The dashboard's variant form turns a missing variant price into `0.00`**
-  (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
-  save still refuses a variant with no price; Task 7 settles both ends.
+- **A variant's price may be left blank on its own page and in its product's variants list, and a
+  blank variant is charged its product's price** (on a menu, a price that menu sets for the variant
+  or its product comes first).
+  Since Task 6 the product editor accepts a blank price both on a variant's own page and in its
+  product's variants list, so a product whose variant has no price of its own can be saved back
+  unchanged. The dashboard's variant form shows such a price as an empty field and saves it back
+  blank (`apps/dashboard/src/widgets/variant-form.ts`); the price field is no longer marked
+  required. What is still missing: the empty field shows no hint of the price it falls back to,
+  and a NEW variant's form still starts at `0.00`. **Next action (Task 7):** show the product's
+  price as the empty field's hint, and decide whether a new variant starts blank.
+- **The units screen lists variants too, and offers them a target labelled as Each.**
+  `productsUsingUnit` (`packages/catalogue/src/units.ts`) does not limit itself to top-level
+  products, so a variant with its own unit appears in the screen's list of products using a unit.
+  The screen's reassign target for "no unit" (`REASSIGN_EACH`,
+  `apps/dashboard/src/screens/units-screen.ts`) is labelled "Each (no unit)"
+  (`units.change_unit_each`, `apps/dashboard/src/i18n/strings.ts`). For a variant, choosing it
+  means "follow the parent's unit and pricing unit", which may be kg rather than Each.
+  **Next action:** decide whether the units screen should list variants, and how to label that
+  target for them.
 
 **Task 4 LANDED as #532 (2026-09-23): a blank menu price follows the product's own price.** A menu row's price
 (`menu_items.gross_price`) may be left empty, meaning the product's own price — the last step of the
@@ -576,10 +601,10 @@ rows: **this task needs no venue reset of its own.** What it left open:
 - **A held order brought back to the till shows a variant line with its PARENT's VAT class,
   category and allergens.** The till reads them from the offer snapshot saved in
   `working_line_contexts`, which is the parent's. Filing is unaffected — the price and rate billed
-  come from the line's own stored values — and today the product editor sets only a variant's names, photo, price and
-  availability (`packages/catalogue/src/product-editor-input.ts`), never its VAT, category or
-  allergens. **Next action (Task 6, which opens a variant's own page):** save or read the
-  chosen variant's values for a retrieved line.
+  come from the line's own stored values. Since Task 6 a variant's own page can give it its own VAT
+  class, category and allergens, so a retrieved line can now show values that differ from what was
+  billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
+  variant's values for a retrieved line.
 - **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
   (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
   the line's. I believe this predates the branch: #537 leaves that check untouched. The till now

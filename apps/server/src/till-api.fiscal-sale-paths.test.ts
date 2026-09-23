@@ -1393,8 +1393,8 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // modifier-less unreviewed dish still warns the kitchen).
             asServed: { allergens: {}, pending: true },
             // The as-served DIET twin. This dish carries no recipe (null `diet_derivation`), which reads as
-            // "no recipe": empty origins but PENDING (the same default `republishProductDiet` uses at
-            // product level), so an unreviewed dish reads vegan/vegetarian "unknown" — the CAUTIOUS
+            // "no recipe": empty origins but PENDING (the same default `republishOverlays` uses when it
+            // folds a product's diet), so an unreviewed dish reads vegan/vegetarian "unknown" — the CAUTIOUS
             // posture, matching the allergen `pending` above. An unreviewed plate asserts no positive claim.
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
           },

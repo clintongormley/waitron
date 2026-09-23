@@ -7,6 +7,7 @@ import { AppError } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { productUnits, units } from "./schema/units.js";
 import { validateUnitPrecision } from "./unit-validation.js";
+import { clearedPricingUnit } from "./variant-fallback.js";
 export {
   MAX_UNIT_PRECISION,
   assertQuantityPrecision,
@@ -170,8 +171,9 @@ export async function assignProductUnit(
  * its work in one scan instead of interleaving N separate statements across a loop. An id that is
  * not currently on `sourceUnitId` —
  * an unknown id included — matches no row and is skipped, never an error. A
- * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
- * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
+ * `null` target instead deletes those rows and, in the same transaction, sets a top-level product's
+ * `pricing_unit` to `'each'` and a variant's to blank, so the product becomes Each and the variant
+ * reads its parent's unit and pricing unit. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   sourceUnitId: string,
@@ -183,13 +185,10 @@ export async function reassignProductsToUnit(
     inArray(productUnits.productId, productIds),
   );
   if (targetUnitId === null) {
-    // Reassign to Each: the listed products still on the source unit lose their unit rows and, in the
-    // same transaction, return to each-priced so the no-unit ⟺ pricing_unit='each' invariant holds.
-    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present,
-    // and the two are awaited in turn (CLAUDE.md §3).
+    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present.
     await tx
       .update(products)
-      .set({ pricingUnit: "each" })
+      .set({ pricingUnit: clearedPricingUnit() })
       .where(
         inArray(
           products.id,
@@ -204,7 +203,8 @@ export async function reassignProductsToUnit(
   await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
 }
 
-/** Remove a product's unit assignment (it then reads as Each). A no-op when there is no row. */
+/** Remove a product's unit assignment: a top-level product then reads as Each, a variant as its
+ * parent's unit. It leaves `pricing_unit` alone, so the caller sets that. A no-op when there is no row. */
 export async function clearProductUnit(tx: Transaction, productId: string): Promise<void> {
   await tx.delete(productUnits).where(eq(productUnits.productId, productId));
 }

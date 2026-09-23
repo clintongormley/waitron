@@ -7,6 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct, PricingUnit } from "./pricing.js";
 import { customerPresentationText } from "./product-presentation.js";
+import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 
 // The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the
 // staff name) before pricing — the three-name model's seam between a catalogue read and a sale
@@ -912,9 +913,8 @@ describe("catalogue operations", () => {
   });
 
   // A caller-supplied id that names no product is a SILENT no-op, exactly as every other patch field
-  // is (image/active/…) — updateProduct does not pre-check existence, and republishProduct's SELECT
-  // returns no row, so `republish(null, null) = null` and the follow-up UPDATE matches nothing. This
-  // also exercises republishProduct's `row === undefined` branch.
+  // is (image/active/…) — updateProduct does not pre-check existence, and republishOverlays' SELECT
+  // returns no row, so nothing is written.
   it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -1051,8 +1051,7 @@ describe("catalogue operations", () => {
   });
 
   // Changing BOTH overlays in one updateProduct call republishes allergens AND diet together
-  // (republishProductOverlays' single SELECT+UPDATE), landing the same values the two single-overlay
-  // republishes would.
+  // in one republishOverlays call.
   it("updateProduct with both allergens and dietOverride republishes both columns", async () => {
     const result = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -1137,7 +1136,7 @@ describe("catalogue operations", () => {
     expect(row!.diet).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
   });
 
-  // A null derivation folds as "no recipe" (empty but PENDING) — republishProductDiet's default branch,
+  // A null derivation folds as "no recipe" (empty but PENDING) — republishOverlays' default branch,
   // the cautious posture: clearing the recipe drops the diet back to "unknown", not a positive claim.
   it("applyDietDerivation with null clears the derivation and republishes", async () => {
     const [row] = await asTenant(async (tx) => {
@@ -1158,9 +1157,8 @@ describe("catalogue operations", () => {
     expect(row!.diet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
   });
 
-  // A caller-supplied id that names no product is a SILENT no-op — republishProductDiet's SELECT
-  // returns no row (its `row === undefined` branch), so both defaults apply and the UPDATE matches
-  // nothing. Mirrors applyRecipeDerivation's nonexistent-id test.
+  // A caller-supplied id that names no product is a SILENT no-op: the derivation UPDATE matches
+  // nothing and nothing is republished. Mirrors applyRecipeDerivation's nonexistent-id test.
   it("applyDietDerivation on a nonexistent id does not throw", async () => {
     await asTenant(async (tx) => {
       const missing = "00000000-0000-0000-0000-0000000000fd";
@@ -1776,5 +1774,172 @@ describe("menu offers nest a product's variants", () => {
       { name: "Wine 175", unitPrice: "5.50", active: true },
       { name: "Wine 125", unitPrice: null, active: true },
     ]);
+  });
+});
+
+describe("a variant's published allergens and diet", () => {
+  // The parent's four overlays each carry a value a variant's own could never produce by accident:
+  // its manual map (nuts) and its recipe floor (eggs) are different allergens, and its diet
+  // override (halal) and derivation (dairy) set different parts of the profile.
+  const PARENT_MANUAL = { nuts: { presence: "may_contain" as const } };
+  const PARENT_RECIPE = { allergens: { eggs: { presence: "contains" as const } }, pending: false };
+  const PARENT_DIET_DERIVATION = { origins: ["plant" as const, "dairy" as const], pending: false };
+  const PARENT_DIET_OVERRIDE = { halal: "yes" as const };
+  let parentId: string;
+  let variantId: string;
+  let bareVariantId: string;
+  const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
+  const wine = (name: string) => ({
+    name,
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+  });
+
+  beforeEach(async () => {
+    await seedVenue(fx.db);
+    ({ parentId, variantId, bareVariantId } = await run(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Bar" });
+      const parent = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Latte",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "reduced",
+        allergens: PARENT_MANUAL,
+        dietOverride: PARENT_DIET_OVERRIDE,
+      });
+      await applyRecipeDerivation(tx, parent.id, PARENT_RECIPE);
+      await applyDietDerivation(tx, parent.id, PARENT_DIET_DERIVATION);
+      const [variant, bare] = await setProductVariants(
+        tx,
+        parent.id,
+        [wine("Oat latte"), wine("Small latte")],
+        "en",
+      );
+      return { parentId: parent.id, variantId: variant!.id, bareVariantId: bare!.id };
+    }));
+  });
+
+  /** A product's stored `allergens`/`diet`, and what a read through the fallback sees. */
+  const published = (id: string) =>
+    run(async (tx) => {
+      const [row] = await tx
+        .select({
+          allergens: products.allergens,
+          diet: products.diet,
+          effectiveAllergens: effectiveProductColumns.allergens,
+          effectiveDiet: effectiveProductColumns.diet,
+        })
+        .from(products)
+        .leftJoin(parentProducts, parentJoin)
+        .where(eq(products.id, id));
+      return row!;
+    });
+
+  it("stores both blank when all four overlays are blank, so the parent's are read", async () => {
+    const parent = await published(parentId);
+    await run(async (tx) => {
+      await updateProduct(tx, variantId, { allergens: null, dietOverride: null });
+      await updateProduct(tx, variantId, { allergens: null });
+      await updateProduct(tx, variantId, { dietOverride: null });
+    });
+    expect(await published(variantId)).toEqual({
+      allergens: null,
+      diet: null,
+      effectiveAllergens: parent.allergens,
+      effectiveDiet: parent.diet,
+    });
+    expect(parent.allergens).toEqual({
+      eggs: { presence: "contains" },
+      nuts: { presence: "may_contain" },
+    });
+  });
+
+  it("unions a variant's own manual allergens with its PARENT's recipe floor", async () => {
+    await run((tx) =>
+      updateProduct(tx, variantId, { allergens: { milk: { presence: "contains" } } }),
+    );
+    expect(await published(variantId)).toMatchObject({
+      allergens: { eggs: { presence: "contains" }, milk: { presence: "contains" } },
+      diet: null,
+    });
+  });
+
+  it("combines a variant's own diet override with its PARENT's derivation", async () => {
+    await run((tx) => updateProduct(tx, variantId, { dietOverride: { kosher: "yes" } }));
+    const parent = await published(parentId);
+    expect(parent.diet).toMatchObject({ vegan: "no", vegetarian: "yes", halal: "yes" });
+    expect(await published(variantId)).toEqual({
+      allergens: null,
+      diet: { vegan: "no", vegetarian: "yes", contains: [], kosher: "yes" },
+      effectiveAllergens: parent.allergens,
+      effectiveDiet: { vegan: "no", vegetarian: "yes", contains: [], kosher: "yes" },
+    });
+  });
+
+  it("republishes each variant with an override of its own when its parent's recipe changes", async () => {
+    await run(async (tx) => {
+      await updateProduct(tx, variantId, {
+        allergens: { milk: { presence: "contains" } },
+        dietOverride: { kosher: "yes" },
+      });
+      await applyRecipeDerivation(tx, parentId, {
+        allergens: { gluten: { presence: "contains" } },
+        pending: false,
+      });
+      await applyDietDerivation(tx, parentId, { origins: ["plant"], pending: false });
+    });
+    expect(await published(variantId)).toMatchObject({
+      allergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      diet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
+    });
+    // A variant with nothing of its own is left blank, still reading the parent's.
+    const parent = await published(parentId);
+    expect(await published(bareVariantId)).toEqual({
+      allergens: null,
+      diet: null,
+      effectiveAllergens: parent.allergens,
+      effectiveDiet: parent.diet,
+    });
+  });
+
+  it("republishes a variant with only its own allergens, or only its own diet override, on the column it overrides", async () => {
+    await run(async (tx) => {
+      await updateProduct(tx, variantId, { allergens: { milk: { presence: "contains" } } });
+      await updateProduct(tx, bareVariantId, { dietOverride: { kosher: "yes" } });
+      await updateProduct(tx, parentId, { allergens: { sesame: { presence: "contains" } } });
+      await applyRecipeDerivation(tx, parentId, {
+        allergens: { gluten: { presence: "contains" } },
+        pending: false,
+      });
+      await applyDietDerivation(tx, parentId, { origins: ["plant"], pending: false });
+    });
+    const parent = await published(parentId);
+    expect(await published(variantId)).toEqual({
+      allergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      diet: null,
+      effectiveAllergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      effectiveDiet: parent.diet,
+    });
+    expect(await published(bareVariantId)).toEqual({
+      allergens: null,
+      diet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
+      effectiveAllergens: parent.allergens,
+      effectiveDiet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
+    });
+  });
+
+  it("refuses a recipe or diet derivation written to a variant", async () => {
+    await expect(
+      run((tx) => applyRecipeDerivation(tx, variantId, { allergens: {}, pending: false })),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
+    await expect(
+      run((tx) => applyDietDerivation(tx, variantId, { origins: [], pending: false })),
+    ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
+    expect(await published(variantId)).toMatchObject({ allergens: null, diet: null });
   });
 });
