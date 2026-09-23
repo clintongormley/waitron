@@ -182,6 +182,59 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
     expect(el.shadowRoot!.querySelector('[data-hint="offer-price-i1"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  test("keeps a struck-out and a greyed-out price in the offers list readable", async () => {
+    setLocale("en");
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
+    const product = (id: string, name: string, unitPrice: string) => ({
+      id,
+      name,
+      customerName: null,
+      pricingUnit: "each",
+      unitPrice,
+      active: true,
+      variants: [],
+    });
+    const offer = (id: string, productId: string, name: string, grossPrice: string | null) => ({
+      id,
+      menuId: "m1",
+      productId,
+      sectionId: "s1",
+      sectionName: { en: "Snacks" },
+      name,
+      customerName: null,
+      grossPrice,
+      unitPrice: grossPrice ?? "3.00",
+      variants: [],
+    });
+    el.api = {
+      load: vi.fn().mockResolvedValue({
+        readiness: [],
+        departments: [],
+        zones: [],
+        routes: [],
+        hours: [],
+        zoneMenus: [],
+        menus: [{ id: "m1", name: "Bar", active: true }],
+        categories: [],
+        stations: [],
+        floorZones: [],
+        products: [product("p1", "Olives", "3.00"), product("p2", "Almonds", "4.00")],
+        offers: [offer("i1", "p1", "Olives", null), offer("i2", "p2", "Almonds", "3.50")],
+        sections: [],
+      }),
+    } as unknown as VenueServiceApi;
+    host.append(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="menus"]')!.click();
+    await el.updateComplete;
+    expect(findDeep(el.shadowRoot!, '[part~="price-inherited"]')).not.toBeNull();
+    expect(findDeep(el.shadowRoot!, "s")!.textContent).toBe("4.00");
+    await expectNoA11yViolations(host);
+  });
 });
 
 function findDeep(root: ParentNode, selector: string): HTMLElement | null {

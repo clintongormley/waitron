@@ -22,6 +22,7 @@ import type {
   MenuSection,
   NamedRow,
   PreparationRoute,
+  Product,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -99,6 +100,22 @@ export class VenueOperationsScreen extends LitElement {
       .field-error {
         margin: 0;
         font-weight: normal;
+      }
+      /* The offers table's price cell is markup handed to <wt-data-table>, so its nodes live in
+         that element's shadow root: only ::part() reaches them. */
+      wt-data-table::part(price-inherited) {
+        color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(visually-hidden) {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
       fieldset {
         display: grid;
@@ -211,6 +228,20 @@ export class VenueOperationsScreen extends LitElement {
       this.renderRoot.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`)
         ?.value ?? ""
     );
+  }
+  // Cell markup handed to <wt-data-table> is styled with part=, never a class: see static styles.
+  /** An offer is always a top-level product, which owns its price (`createMenuItem` refuses a
+   * variant), so that product's `unitPrice` is the price a blank menu price falls back to. */
+  #offerPrice(row: MenuOffer, products: readonly Product[]) {
+    if (row.grossPrice === null) {
+      return html`<span part="price-inherited"
+        >${row.unitPrice}<span part="visually-hidden"> ${t("venue.price_inherited")}</span></span
+      >`;
+    }
+    const own = products.find((product) => product.id === row.productId)?.unitPrice;
+    if (own === undefined || Number(own) === Number(row.grossPrice)) return row.unitPrice;
+    return html`<span part="visually-hidden">${t("venue.price_was")} </span
+      ><s>${own}</s> ${row.unitPrice}`;
   }
   #open(editor: Editor): void {
     // A live language change must not relabel text already entered in an open editor.
@@ -603,7 +634,7 @@ export class VenueOperationsScreen extends LitElement {
                     key: "price",
                     label: t("venue.price"),
                     align: "end",
-                    cell: (row) => row.unitPrice,
+                    cell: (row) => this.#offerPrice(row, model.products),
                     sortValue: (row) => Number(row.unitPrice),
                   },
                   {

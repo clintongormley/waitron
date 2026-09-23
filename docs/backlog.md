@@ -573,15 +573,21 @@ cash sale from a menu offer, its `working_line_contexts` row was still there on 
 so any venue that has sold from a menu fails to boot, not only one with an order still open. A
 fresh database migrates cleanly. So **every dev venue needs
 `wa-wt reset demo <name>`, and any provisioned box must be wiped**, the owner's home box included,
-now that it has landed. What it left open, both put to the owner in #532 and neither blocking:
+now that it has landed. What it left open, both put to the owner in #532 — now both closed:
 - **Creating a menu offer with no price field at all is still refused** (`management.request_invalid`);
-  only an explicit `null` means "blank, charge the product's own price", matching the rule that a
-  default is taken only when the route says a field may be absent. Pinned by a test in
-  `apps/server/src/catalogue-api.test.ts`. **Next action, only if the owner prefers it:** let a
-  missing field mean blank — one line in `apps/server/src/catalogue-api.ts`, and that test flips.
-- **The menu's offers list shows the price each offer is charged at, and nothing marks one that is
-  blank and following the product.** The spec does not decide it. **Next action, if wanted:** mark
-  such a price in the list cell (`packages/venue-service/src/dashboard/venue-operations-screen.ts`).
+  only an explicit `null` means "blank, charge the product's own price". **DECIDED 2026-09-23 by the
+  owner: keep refusing** — _"we don't want to confuse 0.00 with `""`"_, so a missing field is never read
+  as blank or as zero. Pinned by a test in `apps/server/src/catalogue-api.test.ts`.
+- **DONE (2026-09-24, lane C's A11b): the menu's offers list marks a blank price.** The owner's
+  answer: show the product's own price struck out beside a menu price that differs from it, and grey
+  out a price that is blank and following the product. A menu price equal to the product's own shows
+  plainly. The struck and greyed prices carry hidden text for a screen reader ("Was", "(product's own
+  price)"), and the column still sorts by the price charged
+  (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `#offerPrice`). The cell reads
+  the product's own price from the product list the screen already loads, not from the offers
+  response: an offer is always a top-level product, which owns its price. Where that list lacks the
+  product, a price the menu sets shows plainly, as before; a blank price is still greyed, since the
+  offer itself records that its price is blank. The edit form is unchanged.
 The till's "+€" label on a variant, priced from the parent's resolved price, was Task 5's work and
 landed with #537.
 

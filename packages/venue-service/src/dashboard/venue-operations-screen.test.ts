@@ -1378,3 +1378,135 @@ it("updates venue rows from external changes without replacing a modal draft", a
   await vi.waitFor(() => expect(tableText(el, "departments")).toContain("Updated elsewhere"));
   expect(field(el, "department-name").value).toBe("Unsaved");
 });
+
+describe("the menu offers list's price cell", () => {
+  // The product's own price (10.00), its variant's price (13.00), the menu's price (11.00) and the
+  // variant's menu price (15.00) all differ, so a cell reading the wrong one fails.
+  function offerModel(
+    offer: Partial<VenueServiceView["offers"][number]>,
+    products = model.products,
+  ) {
+    return { ...model, products, offers: [{ ...model.offers[0]!, ...offer }] };
+  }
+  async function priceCell(view: VenueServiceView) {
+    const el = await mount({ load: vi.fn().mockResolvedValue(view) } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    const root = table(el, "menu-offers-m1").shadowRoot!;
+    const header = root.querySelector('[data-sort="price"]')!.closest("th")!;
+    const column = [...root.querySelectorAll("thead th")].indexOf(header);
+    expect(column).toBeGreaterThanOrEqual(0);
+    const cell = root.querySelectorAll("tbody tr")[0]!.querySelectorAll("td")[column]!;
+    return { el, cell };
+  }
+  function visibleText(node: Element) {
+    const clone = node.cloneNode(true) as Element;
+    for (const hidden of clone.querySelectorAll('[part~="visually-hidden"]')) hidden.remove();
+    return clone.textContent!.replace(/\s+/g, " ").trim();
+  }
+  // Hidden text a screen reader reads must still be clipped out of sight, not merely marked.
+  function expectClipped(hidden: Element) {
+    const style = getComputedStyle(hidden);
+    expect([style.position, style.width, style.height, style.overflow, style.clip]).toEqual([
+      "absolute",
+      "1px",
+      "1px",
+      "hidden",
+      "rect(0px, 0px, 0px, 0px)",
+    ]);
+  }
+
+  it("strikes out the product's own price beside a menu price that differs from it", async () => {
+    const { cell } = await priceCell(offerModel({ grossPrice: "11.00", unitPrice: "11.00" }));
+    const struck = cell.querySelector("s")!;
+    expect(struck.textContent!.trim()).toBe("10.00");
+    expect(getComputedStyle(struck).textDecorationLine).toBe("line-through");
+    expect(visibleText(cell)).toBe("10.00 11.00");
+    // A strikethrough alone says nothing to a screen reader.
+    const hidden = cell.querySelector('[part~="visually-hidden"]')!;
+    expect(hidden.textContent!.trim()).toBe("Was");
+    expectClipped(hidden);
+    expect(cell.querySelector('[part~="price-inherited"]')).toBeNull();
+  });
+
+  it("greys out a blank menu price, which charges the product's own price", async () => {
+    const { el, cell } = await priceCell(offerModel({ grossPrice: null, unitPrice: "10.00" }));
+    const inherited = cell.querySelector<HTMLElement>('[part~="price-inherited"]')!;
+    expect(visibleText(inherited)).toBe("10.00");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-text-muted)";
+    el.parentElement!.append(probe);
+    expect(getComputedStyle(inherited).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(inherited).color).not.toBe(getComputedStyle(cell).color);
+    const hidden = inherited.querySelector('[part~="visually-hidden"]')!;
+    expect(hidden.textContent!.trim()).toBe("(product's own price)");
+    expectClipped(hidden);
+    expect(cell.querySelector("s")).toBeNull();
+  });
+
+  it("shows a menu price equal to the product's own price plainly", async () => {
+    const { cell } = await priceCell(offerModel({ grossPrice: "10.00", unitPrice: "10.00" }));
+    expect(visibleText(cell)).toBe("10.00");
+    expect(cell.querySelector("s")).toBeNull();
+    expect(cell.querySelector('[part~="price-inherited"]')).toBeNull();
+    expect(cell.querySelector('[part~="visually-hidden"]')).toBeNull();
+  });
+
+  it("shows a price the menu sets plainly when the product is not in the loaded list", async () => {
+    const { cell } = await priceCell(offerModel({ grossPrice: "11.00", unitPrice: "11.00" }, []));
+    expect(visibleText(cell)).toBe("11.00");
+    expect(cell.querySelector("s")).toBeNull();
+  });
+
+  it("still greys out a blank menu price when the product is not in the loaded list", async () => {
+    const { cell } = await priceCell(offerModel({ grossPrice: null, unitPrice: "10.00" }, []));
+    const inherited = cell.querySelector('[part~="price-inherited"]')!;
+    expect(visibleText(inherited)).toBe("10.00");
+    expect(inherited.querySelector('[part~="visually-hidden"]')!.textContent!.trim()).toBe(
+      "(product's own price)",
+    );
+  });
+
+  it("announces the struck and inherited prices in Spanish", async () => {
+    setLocale("es");
+    const struck = await priceCell(offerModel({ grossPrice: "11.00", unitPrice: "11.00" }));
+    expect(struck.cell.querySelector('[part~="visually-hidden"]')!.textContent!.trim()).toBe(
+      "Antes",
+    );
+    const inherited = await priceCell(offerModel({ grossPrice: null, unitPrice: "10.00" }));
+    expect(inherited.cell.querySelector('[part~="visually-hidden"]')!.textContent!.trim()).toBe(
+      "(precio propio del producto)",
+    );
+  });
+
+  it("sorts by the price charged, not the struck-out one", async () => {
+    const cheap = { id: "p2", name: "Spritz", unitPrice: "20.00" };
+    const view = {
+      ...model,
+      products: [...model.products, { ...model.products[0]!, ...cheap, variants: [] }],
+      offers: [
+        { ...model.offers[0]!, grossPrice: "11.00", unitPrice: "11.00" },
+        {
+          ...model.offers[0]!,
+          id: "i2",
+          productId: "p2",
+          name: "Spritz",
+          grossPrice: "9.00",
+          unitPrice: "9.00",
+          variants: [],
+        },
+      ],
+    };
+    const el = await mount({ load: vi.fn().mockResolvedValue(view) } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    const offers = table(el, "menu-offers-m1") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    offers.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="price"]')!.click();
+    await offers.updateComplete;
+    const names = [...offers.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+      row.querySelectorAll("td")[1]!.textContent!.trim(),
+    );
+    // Charged 9.00 against 11.00; by the struck-out prices (20.00 against 10.00) it would reverse.
+    expect(names).toEqual(["Spritz", "Negroni"]);
+  });
+});
