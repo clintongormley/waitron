@@ -63,8 +63,8 @@ describe("tablesCreatedBy", () => {
   // The CREATE here is deliberately the OTHER spelling: with both statements backtick-quoted, an
   // empty result would satisfy this case whether or not the DROP was recognised. Creating under a
   // spelling the scanner already reads leaves the backtick DROP as the only thing being measured —
-  // it prints `Set{ 'absences' }` when that tolerance is missing. No migration in the tree emits a
-  // DROP TABLE at all, so this spelling was checked against sqlite3 3.51.0, not copied from a file.
+  // it prints `Set{ 'absences' }` when that tolerance is missing. The `IF EXISTS` spelling was
+  // checked against sqlite3 3.51.0, not copied from a file.
   it("removes a table a later backtick-quoted DROP TABLE drops", () => {
     expect(
       tablesCreatedBy([
@@ -72,6 +72,31 @@ describe("tablesCreatedBy", () => {
         "DROP TABLE IF EXISTS `absences`;",
       ]),
     ).toEqual(new Set());
+  });
+
+  // drizzle-kit's rebuild of a table whose column SQLite cannot ALTER, in the shape
+  // `packages/db/drizzle/0003_variant_inherited_nullable.sql` emits: build `__new_<name>`, copy,
+  // drop the original, rename the new one into its place. The rebuilt table is still there; the
+  // temporary name is not.
+  it("follows a rebuild's rename, keeping the table and dropping the temporary name", () => {
+    expect(
+      tablesCreatedBy([
+        "CREATE TABLE `products` (\n\t`id` text PRIMARY KEY NOT NULL\n);",
+        "PRAGMA foreign_keys=OFF;--> statement-breakpoint\n" +
+          "CREATE TABLE `__new_products` (\n\t`id` text PRIMARY KEY NOT NULL\n);\n--> statement-breakpoint\n" +
+          'INSERT INTO `__new_products`("id") SELECT "id" FROM `products`;--> statement-breakpoint\n' +
+          "DROP TABLE `products`;--> statement-breakpoint\n" +
+          "ALTER TABLE `__new_products` RENAME TO `products`;--> statement-breakpoint\n" +
+          "PRAGMA foreign_keys=ON;",
+      ]),
+    ).toEqual(new Set(["products"]));
+  });
+
+  // A RENAME COLUMN names two identifiers after RENAME as well, and neither is a table.
+  it("does not read a column rename as a table rename", () => {
+    expect(
+      tablesCreatedBy(['CREATE TABLE "t" (a text);', 'ALTER TABLE "t" RENAME COLUMN "a" TO "b";']),
+    ).toEqual(new Set(["t"]));
   });
 
   it("does not treat DROP TABLE of an uncreated table as an error", () => {

@@ -65,7 +65,9 @@ import {
   readContentLanguages,
   selectMenuVariant,
   customerPresentationText,
+  effectiveProductColumns,
   kitchenPresentationName,
+  parentProducts,
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
@@ -188,9 +190,11 @@ async function resolveBasketModifiers(
         name: products.name,
         customerName: products.customerName,
         kitchenName: products.kitchenName,
-        vatClass: products.vatClass,
+        // A variant that leaves its VAT blank is taxed at its parent's rate.
+        vatClass: effectiveProductColumns.vatClass,
       })
       .from(products)
+      .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
       .where(inArray(products.id, offeredProductIds));
     for (const row of rows) {
       extraProducts.set(row.id, {

@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { diningTables, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  diningTables,
+  products,
+  saleLines,
+  sales,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -593,6 +600,36 @@ describe("recordTillSale", () => {
     ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
   });
 
+  // A variant (spec §1.2) is sold only through its parent's menu offer. On the plain `productId`
+  // path it is refused like an id the catalogue does not hold, rather than sold — and filed — under
+  // its own names as if it had no parent.
+  it("refuses a variant's id on the plain product path", async () => {
+    const { cfg, available } = await setupVenue();
+    const water = available.find((p) => p.name === "Agua mineral")!;
+    const variantId = await withTransaction(suite.db, async (tx) => {
+      const [row] = await tx
+        .insert(products)
+        .values({
+          catalogueId: water.catalogueId,
+          parentId: water.id,
+          name: "Agua con gas",
+          pricingUnit: null,
+          unitPrice: null,
+          vatClass: null,
+          dietaryDeclarations: null,
+        })
+        .returning({ id: products.id });
+      return row!.id;
+    });
+
+    await expect(
+      recordTillSale({ db: suite.db, backend, clock }, cfg, {
+        lines: [{ productId: variantId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    ).rejects.toMatchObject({ code: "sale.unknown_product", params: { productId: variantId } });
+  });
+
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
     // `TillSaleResult.qr` defaults to "" when the regime offers no verification link
     // (`FiscalRecordRef.verificationUrl` is optional). `VerifactuBackend` always sets one, so this
@@ -1152,6 +1189,75 @@ describe("ordering extras and options — parent + child lines", () => {
         .orderBy(saleLines.lineNo);
     });
   }
+
+  // A variant may be an extras item like any product. This one leaves its VAT and price blank, so
+  // its child line is taxed and priced at its PARENT's — Bacon's reduced 10% and 3.00, where the
+  // dish is general — and named by the variant's OWN staff name, never Bacon's.
+  it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
+    const v = await setupModifierVenue();
+    const workingOrderId = randomUUID();
+    const seeded = await withTransaction(suite.db, async (tx) => {
+      const [bacon] = await tx
+        .select({ catalogueId: products.catalogueId })
+        .from(products)
+        .where(eq(products.id, v.baconId));
+      const [variant] = await tx
+        .insert(products)
+        .values({
+          catalogueId: bacon!.catalogueId,
+          parentId: v.baconId,
+          name: "Bacon doble staff",
+          pricingUnit: null,
+          unitPrice: null,
+          vatClass: null,
+          dietaryDeclarations: null,
+        })
+        .returning({ id: products.id });
+      const dish = await createProduct(tx, {
+        catalogueId: bacon!.catalogueId,
+        categoryId: null,
+        name: "Tostada",
+        pricingUnit: "each",
+        unitPrice: "4.00",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Encima",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: variant!.id, maxQuantity: 1, preselected: false }],
+        },
+        v.cfg.locale,
+      );
+      await writeProductModifiers(tx, dish.id, [{ kind: "extras", id: list.id }]);
+      return { dishId: dish.id, listId: list.id, variantId: variant!.id };
+    });
+
+    const result = await recordTillSale({ db: suite.db, backend, clock }, v.cfg, {
+      lines: [
+        {
+          productId: seeded.dishId,
+          quantity: "1",
+          extras: [
+            { listId: seeded.listId, picks: [{ productId: seeded.variantId, quantity: 1 }] },
+          ],
+        },
+      ],
+      tender: { method: "cash", amount: "10.00" },
+      workingOrderId,
+    });
+
+    // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
+    expect(result.total).toBe("7.00");
+    // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
+    const child = (await filedLinesOf(workingOrderId)).find((line) => line.parentLineId !== null)!;
+    expect(child).toMatchObject({ name: "Bacon doble staff", unitPrice: 273, vatRate: 1000 });
+  });
 
   it("a WALK-UP files the dish's options answers onto the dish's own sale_line", async () => {
     const v = await setupModifierVenue();

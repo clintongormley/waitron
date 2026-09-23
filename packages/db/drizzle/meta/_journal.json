@@ -15,6 +15,27 @@
       "when": 1790097611994,
       "tag": "0001_behavioural_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790158143893,
+      "tag": "0002_variant_parent_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790158144397,
+      "tag": "0003_variant_inherited_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790158144905,
+      "tag": "0004_variant_one_level",
+      "breakpoints": true
     }
   ]
 }

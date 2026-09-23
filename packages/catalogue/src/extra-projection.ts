@@ -1,9 +1,10 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { centsToDecimal } from "@waitron/shared";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
+import { effectiveProductColumns, parentProducts } from "./variant-fallback.js";
 import type { ExtraList, ExtraListItem } from "./extra-contract.js";
 import type { ProductModifierRef } from "./product-modifiers.js";
 
@@ -28,10 +29,10 @@ const key = (menuItemId: string, listId: string, productId: string) =>
 type Candidate = { item: ExtraListItem; menuPrice: string | null };
 
 /**
- * The `unit_price` of every product an item still has to borrow one from, and no others: only an
- * item with no menu price AND no price of its own ever reaches the product's row
- * (`resolveExtraPrice`, extras.ts). ONE query whatever the number of candidates, and none when
- * nothing has to borrow.
+ * The EFFECTIVE `unit_price` (a variant with none borrows its parent's) of every product an item
+ * still has to borrow one from, and no others: only an item with no menu price AND no price of its
+ * own ever reaches the product's row (`resolveExtraPrice`, extras.ts). ONE query whatever the
+ * number of candidates, and none when nothing has to borrow.
  */
 async function borrowedUnitPrices(
   tx: Transaction,
@@ -46,8 +47,9 @@ async function borrowedUnitPrices(
   ];
   if (named.length === 0) return new Map();
   const rows = await tx
-    .select({ id: products.id, unitPrice: products.unitPrice })
+    .select({ id: products.id, unitPrice: effectiveProductColumns.unitPrice })
     .from(products)
+    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
     .where(inArray(products.id, named));
   return new Map(
     rows.map((product) => [product.id, { unitPrice: centsToDecimal(product.unitPrice) }]),

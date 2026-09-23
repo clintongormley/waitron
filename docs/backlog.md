@@ -459,6 +459,12 @@ states). **Planned the same day** as nine pull requests, branches `feat/variants
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 
+**Task 1 (`feat/variants-parent-id`): once it lands, every dev venue needs `wa-wt reset demo <name>`,
+and no provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
+venue `main` had already migrated aborts at the rebuild of `products` with
+`error in trigger products_media_image_fk_parent_delete: no such table: main.products` and rolls
+back, so the box does not boot until it is wiped (re-run 2026-09-23 through `applyMigrations`).
+
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
 dropdown), and the demo steak now carries a `Punto` cooking options list instead. The per-line

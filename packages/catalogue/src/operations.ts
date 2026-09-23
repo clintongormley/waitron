@@ -1,6 +1,6 @@
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   AppError,
   centsToDecimal,
@@ -41,6 +41,12 @@ import {
   type SellableUnit,
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
+import {
+  categoryOwnerId,
+  effectiveProductColumns as effective,
+  parentProducts,
+  unitOwnerId,
+} from "./variant-fallback.js";
 import type { Product } from "./product-types.js";
 import type { AccessibleCatalogue, AvailableProduct, MenuItem, MenuOffer } from "./menu-types.js";
 export type {
@@ -147,24 +153,26 @@ const CATALOGUE_COLUMNS = {
   version: catalogues.version,
 };
 
+/** A product's own identity and names, and its EFFECTIVE inherited values: a query selecting these
+ * left-joins {@link parentProducts} (`variant-fallback.ts`). */
 const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
-  categoryId: products.categoryId,
+  categoryId: effective.categoryId,
   name: products.name,
   customerName: products.customerName,
   soldAlone: products.soldAlone,
-  pricingUnit: products.pricingUnit,
-  unitPrice: products.unitPrice,
-  vatClass: products.vatClass,
+  pricingUnit: effective.pricingUnit,
+  unitPrice: effective.unitPrice,
+  vatClass: effective.vatClass,
   active: products.active,
-  allergens: products.allergens,
-  manualAllergens: products.manualAllergens,
-  dietOverride: products.dietOverride,
-  image: products.image,
-  description: products.description,
+  allergens: effective.allergens,
+  manualAllergens: effective.manualAllergens,
+  dietOverride: effective.dietOverride,
+  image: effective.image,
+  description: effective.description,
   kitchenName: products.kitchenName,
-  dietaryDeclarations: products.dietaryDeclarations,
+  dietaryDeclarations: effective.dietaryDeclarations,
 };
 
 const PRODUCT_COLUMNS = {
@@ -432,23 +440,24 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
-      pricingUnit: products.pricingUnit,
-      vatClass: products.vatClass,
+      pricingUnit: effective.pricingUnit,
+      vatClass: effective.vatClass,
       category: categories.name,
-      allergens: products.allergens,
-      diet: products.diet,
-      dietDerivation: products.dietDerivation,
-      dietOverride: products.dietOverride,
-      dietaryDeclarations: products.dietaryDeclarations,
-      courseId: products.courseId,
+      allergens: effective.allergens,
+      diet: effective.diet,
+      dietDerivation: effective.dietDerivation,
+      dietOverride: effective.dietOverride,
+      dietaryDeclarations: effective.dietaryDeclarations,
+      courseId: effective.courseId,
     })
     .from(menuItems)
     .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
     .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
     .innerJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
       and(
         inArray(menuItems.menuId, menuIds),
@@ -749,7 +758,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(eq(products.id, row!.id));
   return toProduct(
@@ -765,9 +775,10 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
       categoryIds: categoryIdArray,
     })
     .from(products)
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .leftJoin(productCategories, eq(productCategories.productId, categoryOwnerId))
     .where(catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId))
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
@@ -1102,31 +1113,35 @@ export async function listAvailableProducts(
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
-      pricingUnit: products.pricingUnit,
-      unitPrice: products.unitPrice,
-      vatClass: products.vatClass,
+      pricingUnit: effective.pricingUnit,
+      unitPrice: effective.unitPrice,
+      vatClass: effective.vatClass,
       category: categories.name,
       categoryLanguage: contentLanguages.defaultLanguage,
-      allergens: products.allergens,
-      diet: products.diet,
-      dietDerivation: products.dietDerivation,
-      dietOverride: products.dietOverride,
-      dietaryDeclarations: products.dietaryDeclarations,
-      courseId: products.courseId,
+      allergens: effective.allergens,
+      diet: effective.diet,
+      dietDerivation: effective.dietDerivation,
+      dietOverride: effective.dietOverride,
+      dietaryDeclarations: effective.dietaryDeclarations,
+      courseId: effective.courseId,
       catalogueId: catalogues.id,
       catalogueName: catalogues.name,
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+    .leftJoin(productUnits, eq(productUnits.productId, unitOwnerId))
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(categories, eq(categories.id, effective.categoryId))
     .leftJoin(contentLanguages, sql`true`)
     .where(
       and(
         inArray(catalogues.id, accessible),
         eq(catalogues.active, true),
         eq(products.active, true),
+        // A variant is sold only through its parent's menu offer, never as a product in its own
+        // right: sold from here it would be filed under its own names as if it had no parent.
+        isNull(products.parentId),
       ),
     )
     .orderBy(catalogues.name, products.createdAt, products.id);
