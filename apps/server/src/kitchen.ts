@@ -283,7 +283,8 @@ export async function setCategoryStation(
  * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
  * and the UPDATE names the product by id (an absent `productId`, or a variant's unless `scope` is
  * `"any"`, is a no-op — the route checks only that the id is well-formed, and KDS-1 mints no
- * `product.not_found`). Only a variant's own page (the product editor) passes `"any"`.
+ * `product.not_found`). Only the product editor's routing write (`applyRouting`, catalogue-api.ts)
+ * passes `"any"`.
  */
 export async function setProductStation(
   tx: Transaction,

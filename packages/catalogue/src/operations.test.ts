@@ -1907,6 +1907,32 @@ describe("a variant's published allergens and diet", () => {
     });
   });
 
+  it("republishes a variant with only its own allergens, or only its own diet override, on the column it overrides", async () => {
+    await run(async (tx) => {
+      await updateProduct(tx, variantId, { allergens: { milk: { presence: "contains" } } });
+      await updateProduct(tx, bareVariantId, { dietOverride: { kosher: "yes" } });
+      await updateProduct(tx, parentId, { allergens: { sesame: { presence: "contains" } } });
+      await applyRecipeDerivation(tx, parentId, {
+        allergens: { gluten: { presence: "contains" } },
+        pending: false,
+      });
+      await applyDietDerivation(tx, parentId, { origins: ["plant"], pending: false });
+    });
+    const parent = await published(parentId);
+    expect(await published(variantId)).toEqual({
+      allergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      diet: null,
+      effectiveAllergens: { gluten: { presence: "contains" }, milk: { presence: "contains" } },
+      effectiveDiet: parent.diet,
+    });
+    expect(await published(bareVariantId)).toEqual({
+      allergens: null,
+      diet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
+      effectiveAllergens: parent.allergens,
+      effectiveDiet: { vegan: "yes", vegetarian: "yes", contains: [], kosher: "yes" },
+    });
+  });
+
   it("refuses a recipe or diet derivation written to a variant", async () => {
     await expect(
       run((tx) => applyRecipeDerivation(tx, variantId, { allergens: {}, pending: false })),

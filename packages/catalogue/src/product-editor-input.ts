@@ -5,7 +5,7 @@ import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
-import type { VatClass } from "./pricing.js";
+import { VAT_CLASSES, type VatClass } from "./pricing.js";
 import type { ProductEditorInput, ProductModifierRef } from "./product-types.js";
 export type { ProductEditorInput } from "./product-types.js";
 import "./errors.js";
@@ -104,8 +104,7 @@ function inheritable<T>(
   return isVariant && value === null ? null : parse(value, field);
 }
 function vatClass(value: unknown, field: string): VatClass {
-  if (typeof value !== "string" || !["general", "reduced", "super_reduced", "zero"].includes(value))
-    invalid(field);
+  if (!VAT_CLASSES.includes(value as VatClass)) invalid(field);
   return value as VatClass;
 }
 /** A variant has no variants or attached lists of its own (spec §4.4), so only an empty one is taken. */
@@ -152,9 +151,9 @@ export function parseProductEditorInput(
     invalid("primaryCategoryId");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
-  emptyOnVariant(body.variants, "variants", isVariant);
+  const listed = emptyOnVariant(body.variants, "variants", isVariant);
   const seen = new Set<string>();
-  const variants = body.variants.map((value, index): ProductVariantInput => {
+  const variants = listed.map((value, index): ProductVariantInput => {
     const field = `variants.${index}`;
     const variant = object(value, field);
     const variantId = variant.id === undefined ? undefined : id(variant.id, `${field}.id`);
@@ -168,8 +167,8 @@ export function parseProductEditorInput(
       customerName: nullableTranslations(variant.customerName, `${field}.customerName`),
       kitchenName: nullableText(variant.kitchenName, `${field}.kitchenName`),
       image: nullableText(variant.image, `${field}.image`),
-      // A blank price follows the product's (spec §15.3).
-      unitPrice: variant.unitPrice === null ? null : price(variant.unitPrice, `${field}.unitPrice`),
+      // Every listed entry is a variant, so a blank price follows the product's (spec §15.3).
+      unitPrice: inheritable(variant.unitPrice, `${field}.unitPrice`, true, price),
       available: boolean(variant.available, `${field}.available`),
     };
   });

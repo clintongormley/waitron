@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { products, withTransaction } from "@waitron/db";
+import { kitchenCourses, kitchenStations, locations, products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { createCatalogue, listProducts } from "./operations.js";
+import {
+  applyRecipeDerivation,
+  createCatalogue,
+  listProducts,
+  updateProduct,
+} from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
 import { createCategory } from "./categories.js";
@@ -371,8 +376,21 @@ describe("a variant's own page", () => {
   let variantId: string;
   let categories: { parent: string; own: string };
   let kgUnitId: string;
+  let routing: { stationId: string; courseId: string };
   beforeEach(async () => {
     const setup = await withTransaction(fx.db, async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
+        .returning({ id: locations.id });
+      const [station] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: location!.id, name: "Bar" })
+        .returning({ id: kitchenStations.id });
+      const [course] = await tx
+        .insert(kitchenCourses)
+        .values({ locationId: location!.id, name: "Drinks" })
+        .returning({ id: kitchenCourses.id });
       const parentCategory = await createCategory(tx, { name: { en: "Coffee" } }, "en");
       const ownCategory = await createCategory(tx, { name: { en: "Espresso" } }, "en");
       const kg = await createUnit(
@@ -387,6 +405,9 @@ describe("a variant's own page", () => {
         catalogueId,
         {
           ...input,
+          customerName: { en: "A cup of coffee" },
+          image: "coffee.webp",
+          active: false,
           unitId: kg.id,
           categoryIds: [parentCategory.id],
           primaryCategoryId: parentCategory.id,
@@ -404,8 +425,19 @@ describe("a variant's own page", () => {
         },
         "en",
       );
-      return { parent, parentCategory: parentCategory.id, ownCategory: ownCategory.id, kg: kg.id };
+      await tx
+        .update(products)
+        .set({ stationId: station!.id, courseId: course!.id })
+        .where(eq(products.id, parent.id));
+      return {
+        parent,
+        parentCategory: parentCategory.id,
+        ownCategory: ownCategory.id,
+        kg: kg.id,
+        routing: { stationId: station!.id, courseId: course!.id },
+      };
     });
+    routing = setup.routing;
     parentId = setup.parent.id;
     variantId = setup.parent.variants[0]!.id;
     categories = { parent: setup.parentCategory, own: setup.ownCategory };
@@ -455,14 +487,14 @@ describe("a variant's own page", () => {
       variants: [],
       inherited: {
         description: { en: "Freshly roasted" },
-        image: null,
+        image: "coffee.webp",
         unitPrice: "9.00",
         vatClass: "reduced",
         unitId: kgUnitId,
         categoryIds: [categories.parent],
         primaryCategoryId: categories.parent,
-        stationId: null,
-        courseId: null,
+        stationId: routing.stationId,
+        courseId: routing.courseId,
         allergens: { milk: { presence: "contains" } },
         dietaryDeclarations: ["vegan"],
       },
@@ -470,6 +502,21 @@ describe("a variant's own page", () => {
     const parent = await read(parentId);
     expect(parent.parentId).toBeNull();
     expect(parent.inherited).toBeNull();
+  });
+
+  it("offers the parent's PUBLISHED allergens as inherited, never only its manual overlay", async () => {
+    const eggs = { eggs: { presence: "contains" as const } };
+    await withTransaction(fx.db, (tx) =>
+      applyRecipeDerivation(tx, parentId, { allergens: eggs, pending: false }),
+    );
+    const union = await read(variantId);
+    expect(union.inherited?.allergens).toEqual({ milk: { presence: "contains" }, ...eggs });
+    expect(union.allergens).toBeNull();
+
+    await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { allergens: null }));
+    const recipeOnly = await read(variantId);
+    expect(recipeOnly.inherited?.allergens).toEqual(eggs);
+    expect(recipeOnly.allergens).toBeNull();
   });
 
   it("keeps a blank blank when the read value is saved back unchanged", async () => {

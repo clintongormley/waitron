@@ -295,7 +295,6 @@ describe("setProductVariants stores each variant as a product under its parent",
 describe("the product editor", () => {
   it("reads Active variants only, so saving the parent back cannot restore a removed one", async () => {
     const f = await fixture();
-    // Both priced: the editor's write body still requires a variant price.
     const [w125, w175] = await app((tx) =>
       setProductVariants(
         tx,

@@ -41,30 +41,37 @@ const columns = {
   categoryIds: categoryIdArray,
 };
 
+/** The row as stored, and beside it the PUBLISHED allergens (the manual overlay merged with the
+ * recipe derivation, or null when not yet reviewed), which the editor's `allergens` field does not
+ * carry. */
 async function readStored(tx: Transaction, productId: string) {
   const [row] = await tx
-    .select(columns)
+    .select({ ...columns, publishedAllergens: products.allergens })
     .from(products)
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
     .leftJoin(productCategories, eq(productCategories.productId, products.id))
     .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
+  const { publishedAllergens, ...stored } = row;
   return {
-    ...row,
-    unitPrice: priceOrNull(row.unitPrice),
-    vatClass: row.vatClass as VatClass | null,
-    dietaryDeclarations:
-      row.dietaryDeclarations === null
-        ? null
-        : validateDietaryDeclarations(row.dietaryDeclarations),
+    stored: {
+      ...stored,
+      unitPrice: priceOrNull(stored.unitPrice),
+      vatClass: stored.vatClass as VatClass | null,
+      dietaryDeclarations:
+        stored.dietaryDeclarations === null
+          ? null
+          : validateDietaryDeclarations(stored.dietaryDeclarations),
+    },
+    publishedAllergens,
   };
 }
 
 /** A parent's value for each field its variants inherit. A parent has no parent of its own, so
  * `products_top_level_owns_ck` sets its price, VAT class and dietary declarations. */
 async function readInherited(tx: Transaction, parentId: string): Promise<InheritedValues> {
-  const parent = await readStored(tx, parentId);
+  const { stored: parent, publishedAllergens } = await readStored(tx, parentId);
   return {
     description: parent.description,
     image: parent.image,
@@ -75,7 +82,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     primaryCategoryId: parent.primaryCategoryId,
     stationId: parent.stationId,
     courseId: parent.courseId,
-    allergens: parent.allergens,
+    allergens: publishedAllergens,
     dietaryDeclarations: parent.dietaryDeclarations!,
   };
 }
@@ -85,7 +92,7 @@ export async function readProductEditor(
   tx: Transaction,
   productId: string,
 ): Promise<ProductEditorValue> {
-  const row = await readStored(tx, productId);
+  const { stored: row } = await readStored(tx, productId);
   if (row.parentId !== null) {
     return {
       ...row,
@@ -179,12 +186,12 @@ export async function saveProductEditor(
       dietaryDeclarations: value.dietaryDeclarations,
     });
   }
-  const scope = isVariant ? "any" : "top-level";
+  // The row is known here (found above, or just created), so the scope only has to admit a variant.
   await replaceProductCategories(
     tx,
     productId,
     { categoryIds: value.categoryIds, primaryCategoryId: value.primaryCategoryId },
-    scope,
+    "any",
   );
   if (!isVariant) {
     await setProductVariants(tx, productId, value.variants, fallbackLanguage);

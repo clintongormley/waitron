@@ -181,6 +181,10 @@ export interface InheritedValues {
   primaryCategoryId: string | null;
   stationId: string | null;
   courseId: string | null;
+  /** The parent's PUBLISHED allergens (its manual overlay merged with its recipe derivation, or null
+   * when not yet reviewed), which are what a variant with no allergen overlay of its own reads. The
+   * variant's own editable `allergens` field is the variant's manual overlay; this field is the
+   * parent's published value, not the parent's manual overlay. */
   allergens: ProductAllergens | null;
   dietaryDeclarations: DietaryLabel[];
 }
