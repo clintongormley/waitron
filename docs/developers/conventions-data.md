@@ -890,7 +890,7 @@ publications nor a replication identity, so there is no statement left to make a
 reproduce. The reasoning above records what was true on PostgreSQL. A per-table check would have to
 read each module's `_CLASSIFICATION` list against its schema file's primary keys.
 
-## A module/migration dependency graph has TWO kinds of cross-set edge
+## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different
 migration set. Both exist in the tree today, but the second kind is no longer spelled the way it was.
@@ -915,8 +915,14 @@ hedges from its own header belong here, because a failing test can never restore
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so
 `CREATE FUNCTION` and `FOR EACH ROW EXECUTE FUNCTION f()` are both syntax errors on it. And a SQLite
 trigger's BODY is read by nothing: a trigger carries statements between `BEGIN` and `END`, and an
-`INSERT INTO <another module's table>` in there is a real cross-module edge that NEITHER remaining
-detector sees. That edge is uncovered today.
+`INSERT INTO` or a `SELECT … FROM` naming another module's table in there — media's triggers on
+`media_images` read `products` and `category_details` that way — is a real cross-module edge that
+NEITHER remaining detector sees. That edge is uncovered today, and the engine does not catch it
+either. Measured 2026-09-23 on `node:sqlite` (Node v26.7.0): a trigger whose body reads or writes a
+table that does not exist is created without complaint, and the insert that fires it fails with
+`no such table: main.<name>`; create the table and the same insert succeeds. The control in the
+other direction: a trigger ON a missing table is refused when it is created. So a missing
+dependency of this shape surfaces only when the trigger first fires.
 
 **Transactions**
 
@@ -1163,8 +1169,9 @@ being the strong state rather than an unfinished one.
 
 Guard: `scripts/journal-monotonic.test.ts`, and what it can prove today is worth knowing. A ONE-entry
 journal cannot be out of order, so a per-set case over one such set is true by construction and is not
-evidence that any `when` in the tree is right; most sets are in that state. Two are not — `packages/db`
-and `packages/media` each carry a second entry, so those two cases compare something. What is really
+evidence that any `when` in the tree is right; most sets are in that state. The sets that carry more
+than one entry are the ones whose case compares something — `packages/db`, `packages/identity` and
+`packages/media` when counted on 2026-09-23; count again rather than trusting that list. What is really
 exercised is `outOfOrder` itself, pinned by a synthetic negative control, plus the anti-vacuity anchor
 that every journal is on disk. The tree-scanning half becomes a real check again at the first
 `drizzle-kit generate` after a baseline, which is why it is in place now rather than written

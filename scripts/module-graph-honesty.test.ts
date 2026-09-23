@@ -61,9 +61,10 @@ import { packageDirOf } from "../packages/module/src/module.js";
  *   `EXECUTE FUNCTION <fn>`, and that edge kind was detected here; SQLite has no functions at all
  *   (sqlite3 3.51: `CREATE FUNCTION` → `near "FUNCTION": syntax error`, and `FOR EACH ROW EXECUTE
  *   FUNCTION f()` → `near "EXECUTE": syntax error`), so the detector was deleted as dead syntax. A
- *   SQLite trigger instead carries statements between `BEGIN` and `END`, and an `INSERT INTO
- *   <other module's table>` in there is a real cross-module edge that NEITHER remaining detector
- *   sees. Nothing covers that today.
+ *   SQLite trigger instead carries statements between `BEGIN` and `END`, and an `INSERT INTO` or a
+ *   `SELECT … FROM` naming another module's table in there is a real cross-module edge that NEITHER
+ *   remaining detector sees — media's triggers on `media_images` read core's and catalogue's tables
+ *   that way. Nothing covers that today.
  * - It is a regex over comment- and string-stripped text, NOT a SQL parser. `stripSql` blanks
  *   slash-star blocks, `--` line comments, and `'…'` string literals (preserving line numbers),
  *   so a `references`/`create trigger` mention in any of those is ignored — pinned by the

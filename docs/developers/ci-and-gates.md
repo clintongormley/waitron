@@ -820,7 +820,9 @@ Cost: a bricked box, an hour of guesswork, and a wipe that destroyed the evidenc
 The upgrade regression that migrated real databases from each release point covered `core` alone.
 It was deleted with the PostgreSQL test harness on 2026-09-22 — its subject was PostgreSQL's own
 enum-safety rule inside drizzle's single migrate transaction, and there is no `ALTER TYPE` left —
-so **no migration set has an upgrade test at all today.**
+so **no test applies a shipped migration to a database already at an earlier point today.** The
+one test that migrates a database that is not virgin — the older-artifact case in
+`apps/server/src/restore-fiscal-e2e.test.ts` — replays a core step it makes up, not a shipped one.
 
 **2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
 was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
@@ -831,7 +833,7 @@ SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carr
 with a named `CHECK` instead, so no file in the tree can hold the statement that guard searched
 for. It was deleted rather than left green over a spelling that can no longer appear, which is a
 state it could only reach by having its anti-vacuity floor lowered. The general gap above is
-unaffected: it is about module sets never being upgrade-tested, not about enums.
+unaffected: it is about shipped migrations never being upgrade-tested, not about enums.
 
 ## Check every command's exit status
 

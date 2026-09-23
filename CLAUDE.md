@@ -219,8 +219,8 @@ hook, or how tests are scheduled:
   SESSION's browser run, or beside a backgrounded whole-workspace `pnpm -r test:coverage` — check
   what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
-- **No test applies a shipped migration to a database already at an earlier point** — every set is
-  migrated from a VIRGIN database — so a green gate is no evidence that any set can upgrade a box. See
+- **No test applies a shipped migration to a database already at an earlier point**, so a green
+  gate is no evidence that any set can upgrade a box. See
   [ci-and-gates.md](docs/developers/ci-and-gates.md). Cost: a bricked box, an hour of guesswork, and
   a wipe that destroyed the evidence.
 
@@ -462,7 +462,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   quantity, it misreads one — `decimalToCents` rounds the third place rather than dropping it, so
   0.005 kg is the count 5 at the quantity scale and the count 1 at the money scale. The converters
   hold the bound — nine integer digits for a quantity, three for a rate — because an integer column
-  accepts any size silently. The
+  does not enforce them. The
   money rule's two guards and both its hedges apply unchanged, and `quantity`, `money` and
   `bigCount` are all `integer(name)`, so only the caller separates them. A rate's CHECK constraint
   is written against 10000: one written as `rate <= 100` refuses every rate above one percent. Guard: the shared schema-conformance suite,
@@ -506,9 +506,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   triggers on tables core and catalogue create, and others whose bodies read them. Guard:
   `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and never reads
   a trigger's BODY, so a table named only between `BEGIN` and `END`, read or written, is an edge
-  nothing checks. The engine will not catch it either: measured on `node:sqlite` (Node v26.7.0), a
-  trigger whose body names a missing table is created without complaint and fails only when it
-  fires, with `no such table`.
+  nothing checks. The engine will not catch it either: measured 2026-09-23 on `node:sqlite` (Node
+  v26.7.0), a trigger whose body names a missing table is created without complaint and fails only
+  when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
+  alone and missed two trigger edges, caught by hand in review. See
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its append-only classification
   travels with it — `applyMigrations` installs each set's triggers from the `appendOnlyTables` the
@@ -540,7 +542,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
   `scripts/journal-monotonic.test.ts`, weaker than its name today — most sets are a single baseline
-  entry, which cannot be out of order, so it bites only on a set's second migration. A drizzle bump
+  entry, which cannot be out of order, so it bites only on a set with more than one entry. A drizzle bump
   starts with `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
@@ -550,6 +552,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   path runs without the check — the cold restore, `rejoin-command` and `dev-setup` among them, and
   [conventions-data.md](docs/developers/conventions-data.md) holds the full list. Cost: without it an
   ahead database re-migrates CLEANLY and surfaces later as an unclassified driver error.
+- **An empty value is a value.** A path variable set to `""` must fall back to its default through
+  `isUnset` (`apps/server/src/env-value.ts`), never through `resolve("")`, which is the working
+  directory; a reader with no default refuses `""` explicitly, as `resolveVenueDir` does with
+  `provisioning.venue_dir_missing`. See [conventions-data.md](docs/developers/conventions-data.md).
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Schema changes
   drop and recreate. This rule expires the day a real venue is live; add its replacement in the same
   change.
@@ -572,11 +578,16 @@ browser test** — most of these rules exist because a test passed while proving
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do**, so
-  a package suite that seems to hang is not waiting on Docker. Run a rig with
-  `TESTCONTAINERS_RYUK_DISABLED=true`; an INTERRUPTED run then leaks containers, and `pnpm reap`
+  a package suite that seems to hang is not waiting on Docker. **`TESTCONTAINERS_RYUK_DISABLED=true`
+  is required locally** — Ryuk hangs on this machine — and with it off an INTERRUPTED run leaks
+  containers; `pnpm reap`
   removes them by label and age — but not every rig stamps the label. Never a blanket
   `docker volume prune`, and `docker volume inspect` before any manual `rm`. Which rig is which:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
+- **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
+  `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
+  container. The live subject is under `bench/`: `bench/sqlite-failover/src/store.ts` publishes a
+  port. See [testing-guide.md](docs/developers/testing-guide.md).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.
