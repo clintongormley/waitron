@@ -15,9 +15,10 @@ const READERS_PATH = "/management-api/payments/readers";
 const STATUS_PATH = "/management-api/payments/readers/r1/status";
 const UNPAIR_PATH = "/management-api/payments/readers/r1/unpair";
 
-/** A request stub over the three routes the dialog calls. `add` may resolve an {@link AddReaderResult}
- * or throw; `status` is called for every poll and returns the next {@link ReaderStatus}; `unpair`
- * resolves (the orphan cleanup) unless overridden. */
+/** A request stub over the three routes the dialog calls. `add` returns an {@link AddReaderResult}, a
+ * promise of one (which a test may leave pending), or throws; `status` is called for every poll and
+ * returns the next {@link ReaderStatus} or a promise of it; `unpair` resolves (the orphan cleanup)
+ * unless overridden. `addCalls`, `statusCalls` and `unpairCalls` count the requests on each route. */
 function stubRequest(opts: {
   add?: () => AddReaderResult | Promise<AddReaderResult> | never;
   status?: () => ReaderStatus | Promise<ReaderStatus>;
