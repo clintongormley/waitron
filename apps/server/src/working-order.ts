@@ -65,8 +65,10 @@ import {
   readContentLanguages,
   selectMenuVariant,
   customerPresentationText,
+  effectiveProductColumns,
   kitchenPresentationName,
-  readExtraItemProducts,
+  parentJoin,
+  parentProducts,
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
@@ -79,6 +81,7 @@ import type {
   LockedLine,
   PricedLines,
   ProductAllergens,
+  VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
@@ -181,27 +184,40 @@ async function resolveBasketModifiers(
     ),
   ];
   const extraProducts = new Map<string, ExtraProductFacts>();
-  // A variant that leaves its VAT blank is taxed at its parent's rate: the reader's VAT is effective.
-  for (const row of await readExtraItemProducts(tx, offeredProductIds)) {
-    extraProducts.set(row.id, {
-      id: row.id,
-      name: row.name,
-      // The dish's own customer text takes this same fallback a few lines below, from the one home
-      // of the blank-falls-back-to-the-staff-name rule.
-      descriptions: customerPresentationText(
-        {
-          name: row.name,
-          customerName: row.customerName,
-          kitchenName: row.kitchenName,
-          variantName: null,
-          variantCustomerName: null,
-          variantKitchenName: null,
-        },
-        defaultLanguage,
-      ).product,
-      kitchenName: row.kitchenName,
-      vatClass: row.vatClass,
-    });
+  if (offeredProductIds.length > 0) {
+    const rows = await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        customerName: products.customerName,
+        kitchenName: products.kitchenName,
+        // A variant that leaves its VAT blank is taxed at its parent's rate.
+        vatClass: effectiveProductColumns.vatClass,
+      })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(inArray(products.id, offeredProductIds));
+    for (const row of rows) {
+      extraProducts.set(row.id, {
+        id: row.id,
+        name: row.name,
+        // The dish's own customer text takes this same fallback a few lines below, from the one home
+        // of the blank-falls-back-to-the-staff-name rule.
+        descriptions: customerPresentationText(
+          {
+            name: row.name,
+            customerName: row.customerName,
+            kitchenName: row.kitchenName,
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          defaultLanguage,
+        ).product,
+        kitchenName: row.kitchenName,
+        vatClass: row.vatClass as VatClass,
+      });
+    }
   }
   return { ...attached, extraProducts };
 }
