@@ -363,7 +363,8 @@ literals a fiscal record hashes. The alternative, cents as the in-memory type th
 catalogue, payments, reporting and `apps/server`, reaches the same storage with a far larger
 change and a live risk of rounding drift in the arithmetic the hash chain depends on.
 
-The two converters live alone in `packages/shared/src/cents.ts` rather than beside the arithmetic.
+The converters live alone in `packages/shared/src/cents.ts` (which also uses
+`packages/shared/src/scales.ts`'s literal renderer and raw pattern) rather than beside the arithmetic.
 `money.ts` is read as TEXT by `packages/shared/src/conventions.test.ts` and fails on any
 float-shaped operation in it, including the number constructor; keeping that check that strict is
 worth more than one module. `cents.ts` has its own version of the check, which allows the number

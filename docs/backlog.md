@@ -3830,6 +3830,16 @@ What the preparation tasks left, with F1's own answers where it found them:
     from `sqlToQuery(check.value).sql` alone (read in its bundled source, not run), so the
     migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
     works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
+    **OPEN** (found 2026-09-23 in this branch's review, left unchanged): the quantity raw reader,
+    `rawThousandthsToDecimal`, still refuses any value past nine integer digits, although
+    `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of quantities. That is the
+    opposite choice to money's raw reader, which deliberately admits a total wider than any one
+    amount; needs a decision.
+    **OPEN** (same review): `decimalToCents` checks the money bound BEFORE rounding to cents, so
+    `decimalToCents("999999999999.995")` returns `100000000000000`, an amount with thirteen integer
+    digits that `assertMoney` refuses (measured 2026-09-23 on this branch). `main` checks in the same
+    order (`toScale(assertMoney(value), MONEY_SCALE)`), so this predates the branch; fixing it
+    changes money behaviour, so it needs a decision.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,
