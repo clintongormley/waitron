@@ -157,7 +157,7 @@ export type LineExtras = { note?: string; variantId?: string };
  */
 interface BasketModifiers extends AttachedModifiers {
   /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child.
-   * On a new pick only the Active and Available ones (see `sellableOnly` below). */
+   * When the basket is priced afresh, only the Active and Available ones (see `sellableOnly`). */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
 
@@ -169,11 +169,17 @@ interface BasketModifiers extends AttachedModifiers {
  * (`validateExtraSelections`, `packages/catalogue/src/extra-contract.ts`), so no other product can
  * reach a child line.
  *
- * `sellableOnly` is for a NEW pick: a product that is Inactive or Unavailable (spec §15.6) is then
- * dropped from every list's items, so `validateExtraSelections` refuses a pick of it exactly as it
- * refuses one the list never offered (`extras.invalid`, field `productId`) — the till was not
- * offered it either (`readExtraProducts`, offered-modifiers.ts). The held-order edit that keeps
- * lines already rung passes `false`: it re-checks neither the dish's states nor its extras'.
+ * `sellableOnly` is for pricing a basket afresh: a product that is Inactive or Unavailable (spec
+ * §15.6) is then dropped from every list's items, so `validateExtraSelections` refuses a pick of it
+ * exactly as it refuses one the list never offered (`extras.invalid`, field `productId`) — the till
+ * was not offered it either (`readExtraProducts`, offered-modifiers.ts). The held-order edit that
+ * keeps lines already rung passes `false`, so when every line of the edit is quantity-only, a line
+ * kept at or below its stored quantity keeps a pick that has since sold out. For a line whose quantity rises {@link updateHeldOrder} checks the
+ * dish's and its extras' states itself, and when one is not sellable sends the edit to the
+ * replacement path, which passes `true`. The till's retrieve drops a pick that the dish's offer, as
+ * the till last loaded it, no longer lists (`deriveExtraSelections`,
+ * apps/till/src/state/held-extras.ts), so from the till an extra that sold out before that load
+ * leaves the basket rather than reaching this path as a kept pick.
  */
 async function resolveBasketModifiers(
   tx: Transaction,
@@ -3178,8 +3184,9 @@ export async function updateHeldOrder(
 
     // A quantity-only edit keeps the line's commercial lock and stable id. The client identifies the
     // stored parent line explicitly; every line must still name the same product/offer, remain in the
-    // same order, and answer its dish's extras and options exactly as the stored line did. Anything
-    // else takes the replacement path below and is priced from the current offer.
+    // same order, and answer its dish's extras and options exactly as the stored line did, and a
+    // line whose quantity rises must have its dish's and its extras' product rows Active and
+    // Available. Anything else takes the replacement path below and is priced from the current offer.
     const storedLineRows = await tx
       .select({
         id: workingOrderLines.id,
@@ -3307,7 +3314,36 @@ export async function updateHeldOrder(
         return paired === null ? null : { stored, paired };
       });
     }
-    const preservesEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
+    // A line whose quantity RISES sells more of its dish and of every extra it carries, so each of
+    // their product rows must be Active and Available (spec §15.6). The line's variant and the menu
+    // offer's own switches are not re-checked on a raise. One that is not sends the edit to the
+    // replacement path, whose sellable reads refuse it. A kept or lowered quantity is not
+    // re-checked: existing work is not cancelled (2026-09-20 spec §10). One read for the basket.
+    const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
+    const raisedProductIds = new Set(
+      keepsEveryLine
+        ? rebuilt.flatMap((entry, index) =>
+            compareDecimal(decimal(req.lines[index]!.quantity), decimal(entry!.stored.quantity)) > 0
+              ? [sameLines[index]!.productId, ...entry!.paired.map(({ pick }) => pick.productId)]
+              : [],
+          )
+        : [],
+    );
+    const raisesUnsellable =
+      raisedProductIds.size > 0 &&
+      (
+        await tx
+          .select({ id: products.id })
+          .from(products)
+          .where(
+            and(
+              inArray(products.id, [...raisedProductIds]),
+              eq(products.active, true),
+              eq(products.available, true),
+            ),
+          )
+      ).length < raisedProductIds.size;
+    const preservesEveryLine = keepsEveryLine && !raisesUnsellable;
     if (preservesEveryLine) {
       for (let index = 0; index < req.lines.length; index++) {
         const requested = req.lines[index]!;

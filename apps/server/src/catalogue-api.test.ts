@@ -1104,6 +1104,49 @@ describe("mountCatalogueApi — products", () => {
     expect((await res.json()) as { active: boolean }).toMatchObject({ active: false });
   });
 
+  it("POST /management-api/products with available:false → 201, a sold-out product that stays active", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Create-unavailable catalogue");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Agotado",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        available: false,
+      },
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ active: true, available: false });
+  });
+
+  it("PATCH /management-api/products/:id with available:false stores it and leaves active unchanged", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Patch-unavailable catalogue");
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Se agota",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await createRes.json()) as { id: string }).id;
+
+    const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { available: false },
+    });
+    expect(res.status).toBe(204);
+    const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(await list.json()).toEqual([
+      expect.objectContaining({ id: productId, active: true, available: false }),
+    ]);
+  });
+
   it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Create-active catalogue");
@@ -1530,6 +1573,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     ["vatClass", { ...productBase, vatClass: 5 }],
     ["image", { ...productBase, image: 5 }],
     ["active", { ...productBase, active: "nope" }],
+    ["available", { ...productBase, available: "nope" }],
   ])(
     "POST /products rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
@@ -1564,6 +1608,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     ["categoryId", { categoryId: 5 }],
     ["image", { image: 5 }],
     ["active", { active: "yes" }],
+    ["available", { available: "yes" }],
   ])(
     "PATCH /products/:id rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
