@@ -2040,7 +2040,11 @@ image constraints under *Detail → Box image*.
   plan; 100/100/100/99.03); `payments-sumup` (**PR #512**, 2026-09-23 — tests for the default
   one-second poll, a reversal with no row or no SumUp key, a removed reader's status, a declined
   duplicate incident, and the dashboard dialogs' single-flight, detach and dismiss paths;
-  99.24/99.71/98.03/98.93).
+  99.24/99.71/98.03/98.93); `payments-stripe` (**PR #514**, 2026-09-23 — tests for a negative
+  minor-unit amount, a reader cancel refused after a timeout or a network error, a restricted key
+  of unknown environment, the default SDK factory, an on-device forward pass the device resolved
+  none of and one with two declines sharing an incident, and the dashboard forms' single-flight,
+  dismiss, default-callback and error-copy paths; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

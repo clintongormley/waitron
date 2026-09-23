@@ -22,6 +22,11 @@ describe("fromMinorUnits", () => {
     expect(fromMinorUnits(100000)).toBe("1000.00");
   });
 
+  it("keeps the sign of a negative amount", () => {
+    expect(fromMinorUnits(-1210)).toBe("-12.10");
+    expect(fromMinorUnits(-5)).toBe("-0.05");
+  });
+
   it("round-trips with toMinorUnits", () => {
     for (const s of ["0.00", "0.05", "12.10", "1000.00", "9999999999.99"]) {
       expect(fromMinorUnits(toMinorUnits(decimal(s)))).toBe(s);
