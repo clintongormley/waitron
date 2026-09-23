@@ -20,9 +20,11 @@ import type { Store } from "./store.ts";
 export const LITESTREAM_VERSION = "0.5.17";
 
 /**
- * How long any one litestream call may take before it is killed. Generous: the slowest call this
- * rig makes is a restore, and the recorded runs finish one in well under a second against a local
- * container. It is a bound on a stall, not a performance budget.
+ * How long any one litestream call may take before it is killed, unless the caller passes its own
+ * bound. Generous for the scenarios: their slowest call is a restore, and their recorded runs finish
+ * one in well under a second against a local container. Measurement 4's gigabyte-scale restores took
+ * 4-52 seconds and pass a longer bound of their own (`probes/restore-time.ts`). It is a bound on a
+ * stall, not a performance budget.
  */
 const CHILD_TIMEOUT_MS = 30_000;
 
@@ -121,16 +123,28 @@ export async function resolveLitestream(): Promise<{ bin: string; version: strin
  * 2026-09-18, a `replicate` daemon under a default config still listed every `0000/` file it had
  * uploaded after 90 seconds and had created no `0001/` file. With them, three L0 files disappeared
  * 6-8 seconds after being written, once a `0001/` file covering their transaction range existed.
- * S3 (`scenarios/s3_copied_replica.ts`) is the only caller that needs a deletion to happen at all.
+ * S3 (`scenarios/s3_copied_replica.ts`) is the only caller that passes `fastCompaction`; measurement 3
+ * (`probes/restore-points.ts`) also relies on deletions, set through its own `globalLines`.
  */
 export function writeConfig(opts: {
   dbPath: string;
-  store: Store;
+  /**
+   * Only these three fields are read, and measurement 5 builds one inside a Linux container where
+   * the SDK client a full `Store` carries is not installed.
+   */
+  store: Pick<Store, "bucket" | "endpoint" | "credentials">;
   prefix: string;
   configPath: string;
   fastCompaction?: boolean;
+  /**
+   * Extra TOP-LEVEL configuration lines, written after the compaction block. The slice-2 probes pass
+   * `snapshot:` and `levels:` blocks here. Litestream's reference says of a level entry that
+   * "Unrecognized keys are silently ignored rather than rejected" (litestream.io/reference/config,
+   * fetched 2026-09-23), so a caller must observe a setting taking effect rather than trust it was read.
+   */
+  globalLines?: string[];
 }): string {
-  const { dbPath, store, prefix, configPath, fastCompaction = false } = opts;
+  const { dbPath, store, prefix, configPath, fastCompaction = false, globalLines = [] } = opts;
   const url = `s3://${store.bucket}/${prefix}?endpoint=${store.endpoint}&region=us-east-1&force-path-style=true`;
   writeFileSync(
     configPath,
@@ -138,6 +152,7 @@ export function writeConfig(opts: {
       `access-key-id: \${${ENV_ACCESS_KEY_ID}}`,
       `secret-access-key: \${${ENV_SECRET_ACCESS_KEY}}`,
       ...(fastCompaction ? FAST_COMPACTION : []),
+      ...globalLines,
       ``,
       `dbs:`,
       `  - path: ${dbPath}`,
@@ -161,7 +176,7 @@ export function writeConfig(opts: {
  * seconds after `kill()`, and the scenario's `finally` awaits it before anything stops the MinIO
  * container.
  *
- * Three scenarios call this, at four sites, and none of them needs that flush.
+ * The scenarios below do not need that flush; whether a slice-2 probe does was not tested.
  * `s_litestream_roundtrip` makes its last read before killing its daemon. S3
  * (`scenarios/s3_copied_replica.ts`) kills the daemon, awaits `exited`, and then runs a `syncOnce`
  * with box-a's handle still open — and that S3 does not need the flush was RUN rather than read off
@@ -182,6 +197,7 @@ export function writeConfig(opts: {
 export function replicate(
   bin: string,
   config: string,
+  onLog?: (chunk: string) => void,
 ): { kill(): void; exited: Promise<number | null> } {
   const child = spawn(bin, ["replicate", "-config", config], {
     env: childEnv(config),
@@ -196,7 +212,11 @@ export function replicate(
   // false). Measured 2026-09-18 on the pin — one `replicate -once` run redirected separately gave
   // 7 lines on stdout and 0 on stderr. A daemon whose stdout was discarded would report its own
   // death with an empty explanation.
-  const collect = (chunk: Buffer) => (log = tail(log + chunk.toString()));
+  const collect = (chunk: Buffer) => {
+    const text = chunk.toString();
+    log = tail(log + text);
+    onLog?.(text);
+  };
   child.stdout.on("data", collect);
   child.stderr.on("data", collect);
 
@@ -264,14 +284,16 @@ export async function restore(
   config: string,
   dbName: string,
   outPath: string,
+  extraArgs: string[] = [],
+  timeoutMs: number = CHILD_TIMEOUT_MS,
 ): Promise<void> {
-  const result = await run(bin, ["restore", "-config", config, "-o", outPath, dbName], {
-    env: childEnv(config),
-  });
+  const result = await run(
+    bin,
+    ["restore", "-config", config, ...extraArgs, "-o", outPath, dbName],
+    { env: childEnv(config), timeoutMs },
+  );
   if (result.timedOut) {
-    throw new Error(
-      `litestream restore was killed after ${CHILD_TIMEOUT_MS}ms: ${result.stderr.trim()}`,
-    );
+    throw new Error(`litestream restore was killed after ${timeoutMs}ms: ${result.stderr.trim()}`);
   }
   if (result.code !== 0) {
     throw new Error(`litestream restore exited ${result.code}: ${result.stderr.trim()}`);
@@ -286,13 +308,18 @@ export async function restore(
  * `/var/run/litestream.sock`) — that talks to a daemon that is already running (measured
  * 2026-09-18 on the pin).
  */
-export async function syncOnce(bin: string, config: string): Promise<void> {
+export async function syncOnce(
+  bin: string,
+  config: string,
+  timeoutMs: number = CHILD_TIMEOUT_MS,
+): Promise<void> {
   const result = await run(bin, ["replicate", "-once", "-config", config], {
     env: childEnv(config),
+    timeoutMs,
   });
   if (result.timedOut) {
     throw new Error(
-      `litestream replicate -once was killed after ${CHILD_TIMEOUT_MS}ms: ${result.stderr.trim()}`,
+      `litestream replicate -once was killed after ${timeoutMs}ms: ${result.stderr.trim()}`,
     );
   }
   if (result.code !== 0) {

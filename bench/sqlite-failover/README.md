@@ -30,6 +30,21 @@ pnpm --silent --filter @waitron/bench-sqlite-failover scenarios --json   # the s
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
 
+### Slice 2 probes (2026-09-23)
+
+One-off measurements for the slice-2 spec §8.1, not scenarios: the runner never discovers them, and
+each ends with one result line. Their recorded results are in the results note under "Slice 2
+measurements".
+
+```bash
+export TESTCONTAINERS_RYUK_DISABLED=true
+pnpm --filter @waitron/bench-sqlite-failover probe:restart          # 1: restart after an outside fold-back
+pnpm --filter @waitron/bench-sqlite-failover probe:autocheckpoint   # 2 and 2b: automatic fold-back; offline past truncate-page-n
+pnpm --filter @waitron/bench-sqlite-failover probe:restore-points   # 3: surviving restore points (compressed schedule, ~11 min)
+pnpm --filter @waitron/bench-sqlite-failover probe:restore-time     # 4: restore time; add `--image-kib 330` (no `--`: pnpm passes it on; measured 2026-09-23: with `--`, the probe printed `reason="bad option -- --image-kib; …"`, and without it `pnpm` ran `node src/probes/restore-time.ts "--image-kib" …`) for the largest measured photo
+pnpm --filter @waitron/bench-sqlite-failover probe:linux            # 5: linux/amd64 and linux/arm64 in Docker
+```
+
 **The results are written up in
 [`docs/research/2026-09-16-sqlite-failover-prototype.md`](../../docs/research/2026-09-16-sqlite-failover-prototype.md)**
 — what each scenario had to show, its recorded verdict, the control that makes that verdict a
@@ -223,7 +238,9 @@ spawning the runner, which would run the whole suite.
   The asset is matched on its full name, never a substring: the release lists both
   `litestream-0.5.17-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.17-darwin-arm64.tar.gz`
   (a different artefact), so `includes("darwin-arm64")` matches two. Only darwin/arm64 has been
-  downloaded and run.
+  downloaded and run. **2026-09-23:** `setup:litestream` itself has still run only on darwin/arm64;
+  `probe:linux` downloaded and ran the two Linux archives in Docker (results note, Slice 2
+  measurements §5).
 
 The rig **establishes** external behaviour by observing it rather than asserting it: what MinIO's
 conditional write does (S6, plan Task 2) and how Litestream lays out and restores a replica (plan
@@ -253,8 +270,8 @@ its tail instead of selling. The three runs differ by two flags — does the box
 the box's own filings reach the store before it dies.
 
 **S0 never starts the streaming daemon.** Every upload it makes is `syncOnce`; `replicate`, the
-long-running mode the product would run, is driven by the `LS` foundation check and by S3, and by
-nothing else in this rig. That is why "the box dies before the next sync" is a scripted step here:
+long-running mode the product would run, is driven elsewhere — by the `LS` foundation check, S3, S4
+and four of the five slice-2 probes (restart, autocheckpoint, restore-points, restore-time) (`grep -rn "replicate(" src`, 2026-09-23). That is why "the box dies before the next sync" is a scripted step here:
 under the daemon it would be a timing window, and S0 measures nothing about that window.
 
 **The three parts share ONE store and are separated by TERM**, the way `s1_double_promotion`
@@ -911,7 +928,12 @@ operation error S3: ListObjectsV2, exceeded maximum number of attempts, 10, … 
   (`model.ts`) with its indexes at SQLite's default page size, not
   `packages/fiscal-verifactu`'s schema.
 - **that a LONGER offline stretch stays linear.** The run stops at 7500 sales; `offline-days-per-gib`
-  extrapolates the measured rate and measures nothing beyond it.
+  extrapolates the measured rate and measures nothing beyond it. **2026-09-23:** the slice-2 probe's
+  arm 2b ran 15,000 offline sales in fifteen rounds of 1,000: the side file stood at 40,174,152 bytes
+  after the first round and each later round added between 41,162,920 and 41,929,240
+  (`D-wal-by-round`, results note, Slice 2 measurements §2), about half a minute long by arithmetic. A
+  second run, the failing-case line, gave 41,092,880–41,925,120 bytes a round and a longest commit of
+  5.205 ms.
 - **a disk budget.** The WAL ceiling is stated, not derived from any partition size — this repository
   records none.
 

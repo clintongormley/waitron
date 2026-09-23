@@ -6,7 +6,12 @@
   "scripts": {
     "scenarios": "node src/scenarios.ts",
     "setup:litestream": "node src/setup-litestream.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "probe:restart": "node src/probes/restart-after-foldback.ts",
+    "probe:autocheckpoint": "node src/probes/autocheckpoint.ts",
+    "probe:restore-points": "node src/probes/restore-points.ts",
+    "probe:restore-time": "node src/probes/restore-time.ts",
+    "probe:linux": "node src/probes/linux-binaries.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",

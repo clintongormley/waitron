@@ -277,6 +277,9 @@ was stopping Litestream.
   (`truncate-page-n`, default "121359, ~500MB") says that past it Litestream "forces a blocking
   TRUNCATE (which blocks both readers and writers)" — a pause on the sale path this limit exists to
   keep us short of. No box disk size is recorded anywhere to set it against instead.
+  **2026-09-23:** arm 2b drove an offline side file past that threshold, for a few seconds only; it did
+  not shrink, the longest commit over the whole arm was 6.861 ms, and what the emergency checkpoint does over longer was
+  not established (results note, Slice 2 measurements §2).
 - **The fold-back runs on the writer connection, in a write-queue slot, with no transaction open.**
   Measured during planning (Node v26.7.0, SQLite 3.53.4): run from a separate connection while a sale's
   transaction was open, it waited out the whole busy timeout, and because `node:sqlite` is synchronous
@@ -286,6 +289,11 @@ was stopping Litestream.
   fresh full copy on restart, the same generation continues. If it does not, the supervisor opens a new
   generation after every pause; generation names already carry when they were opened (§4.4), so no
   extra counter is needed.
+  **2026-09-23, measured:** the restarted daemon did NOT upload a new level-9 full copy; it uploaded
+  the missed sales into the same generation, and a restore after the restart held every sale. So the
+  condition as worded above does not describe what happened: the recorded `RESTART_RESYNCS = true`
+  rests on the restore being complete. Which branch the supervisor takes is for Task 6 and the owner
+  to confirm against this result (results note, Slice 2 measurements §1).
 - **Whether SQLite's automatic folding should be switched off at all** is measured too (§8.1, item 2).
   The topology design says to (§8.3); the prototype found the setting makes no difference while the
   store is unreachable. Until the measurement says otherwise, `packages/store` keeps SQLite's default,
@@ -452,6 +460,8 @@ Each on 0.5.17, each stating in advance what the failing result would print:
    photos shrunk during planning, not from a venue.
 5. **The pinned binary on Linux, both processor types.** Every prototype run was darwin/arm64.
 
+> **Measured 2026-09-23.** Results, and the values later tasks read — RESTART_RESYNCS, AUTOCHECKPOINT_OFF_NEEDED, LINUX_BINARIES_RUN and arm 2b's reading of truncate-page-n — are in the prototype results note under [Slice 2 measurements](../../research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+
 ### 8.2 Tests
 
 - **Unit:** the S3 client's conditional write against scripted responses ("precondition failed" is a
@@ -494,7 +504,7 @@ Each lands on its own. The first three do not need Litestream.
    (§3.1).
 3. The single-process lock on the venue folder, then the restart reset (§6). (2026-09-23: the reset
    landed first, so this step is now the lock alone.)
-4. The measurements (§8.1), results recorded.
+4. The measurements (§8.1), results recorded. (2026-09-23: done; results note, Slice 2 measurements.)
 5. `@waitron/stream`: the S3 client, the pointer and generations (§4.4).
 6. The supervisor, the binary in the box image, the side-file limit (§4.1, §4.2, §4.5).
 7. Freshness, `/health`, alerts (§7).
@@ -518,7 +528,7 @@ Dated pointers go into the topology design in task 10, not rewrites:
 | §7.3 — owner's NAS or USB disk as a stream target | S3-compatible buckets only (§0.2) |
 | §7.5 — a restore from the store claims a seat | slice 2's rebuild resumes the dead node's identity from the locked secrets row; seats arrive with promotion in slice 3 (§5) |
 | §7.7 — freshness from Litestream's status, "backup-age incident" | freshness read from the bucket; dashboard alerts (§7) |
-| §8.3 — `wal_autocheckpoint = 0` | pending measurement §8.1 item 2 |
+| §8.3 — `wal_autocheckpoint = 0` | measured 2026-09-23: `AUTOCHECKPOINT_OFF_NEEDED = false` on a close comparison (A's peak side file below B's in both recorded runs, by 0.5% and 1.5%); results note, Slice 2 measurements §2 |
 | §11 slice 2 — "archive via `VACUUM INTO`" | already landed in slice 1 (slice-1 spec, decision 7) |
 
 ---
