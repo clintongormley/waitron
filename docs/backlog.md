@@ -3072,6 +3072,22 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 
 **Dashboard, till and setup:**
 
+- **One word for "switched off, kept for the record" across the dashboard — Small** (owner,
+  2026-09-23). The same idea has four labels today, found by grepping the English strings
+  (`apps/dashboard/src/i18n/strings.ts`, `packages/venue-service/src/dashboard/strings.ts`):
+  products and venues say **Active / Inactive** (`product.inactive_badge`, `venue.inactive`);
+  printers, card readers and staff say **Disabled** with a **Disable** action
+  (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
+  `person.mark_inactive`); extras and options say **In use / Not in use** (`extras.not_in_use`,
+  `options.not_in_use`); and a generic `action.deactivate` ("Deactivate") exists beside
+  `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**
+  (spec §15.6), kept separate from **Available** (sold out for now). **Next action:** pick the one
+  pair, and the one action verb, for every screen whose record is switched off rather than deleted —
+  deciding first whether a revoked printer or a disabled login is really the same state as an
+  inactive product — then change the English and Spanish strings together and record the rule in
+  `docs/developers/design-system.md`. String keys are not renamed on the way (only their text), so no
+  test or code that names a key moves.
+
 - **The Waitron wordmark is invisible on the dashboard banner in the dark theme** (seen 2026-09-14
   on the dashboard alerts branch; confirmed 2026-09-16 during #378's run-it
   verification, which also settled that it predates both branches — `packages/ui/brand/waitron-lockup.svg`
