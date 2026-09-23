@@ -3244,6 +3244,14 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `packages/*/src` on 2026-09-14, after `computeDailyClose` was made sequential, found no remaining
    `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
    services, close pools, or query through a pool.
+5. **`packages/identity/src/totp.test.ts`'s "rejects a wrong token" case can fail by chance.** It
+   sends `000000` against a freshly generated secret and expects a refusal, and the comment in
+   `verifyTotp`'s catch (`packages/identity/src/totp.ts`) calls `000000` "well-formed-but-wrong".
+   It is not always wrong: while PR #534 was in review, Codex fixed a secret and a clock at which
+   `000000` IS the valid code, and `apps/server/src/me-api.test.ts`'s authenticator test answered
+   200 where it expected 401. That test now picks a code that is invalid for the enrolment's secret
+   at the current time; the identity case and the comment still carry the old assumption. Fix
+   the same way: derive a code the secret does not accept, rather than a constant.
 
 **Names left behind by the tenant-column removal (LANDED #378, 2026-09-16):**
 
