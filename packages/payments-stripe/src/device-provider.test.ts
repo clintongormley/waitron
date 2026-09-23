@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   compareDecimal,
@@ -219,6 +220,66 @@ describe("StripeOnDeviceProvider.forward", () => {
     // so a host that sleeps until the earliest nextDueAt must be told to come back — otherwise
     // this row stays accepted_offline for ever and the card revenue is never cleared.
     expect(result.nextDueAt).not.toBeNull();
+  });
+
+  it("opens no write when the device resolved none of the pending refs, and asks to come back", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const client = new FakeStripeDevice();
+    const provider = providerFor(client);
+    client.nextCollect("offline");
+    const a = await provider.collect(collectParams(s, true));
+
+    // The same database, counting how many transactions the provider opens on it.
+    let transactions = 0;
+    const counted = new Proxy(pg.db, {
+      get(target, prop) {
+        const value: unknown = Reflect.get(target, prop, target);
+        if (prop === "withWriteLock") {
+          return (fn: () => Promise<unknown>) => {
+            transactions += 1;
+            return target.withWriteLock(fn);
+          };
+        }
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    }) as Database;
+    const counting = new StripeOnDeviceProvider({ client, db: counted, nodeId: TEST_NODE_ID });
+
+    client.queueResult({ settled: [], declined: [] });
+    const result = await counting.forward(AT);
+
+    expect(result).toEqual({
+      nextDueAt: new Date(AT.getTime() + 5 * 60 * 1000),
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+    // Only the read of the pending payments; nothing to write, so no second transaction.
+    expect(transactions).toBe(1);
+    const row = await pg.db.transaction((tx) =>
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
+    );
+    expect(row?.state).toBe("accepted_offline");
+  });
+
+  it("counts one incident when two declines on one till share an open incident", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
+    const client = new FakeStripeDevice();
+    const provider = providerFor(client);
+    client.nextCollect("offline");
+    const a = await provider.collect(collectParams(s, true));
+    client.nextCollect("offline");
+    const b = await provider.collect(collectParams(s, true));
+
+    // Neither payment has a sale, so both declines key the same open incident (till, code).
+    client.queueResult({ settled: [], declined: [a.paymentRef, b.paymentRef] });
+    const result = await provider.forward(AT);
+
+    expect(result).toMatchObject({ forwarded: 0, declined: 2, incidentsRaised: 1 });
+    const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    expect(incidents).toHaveLength(1);
   });
 });
 

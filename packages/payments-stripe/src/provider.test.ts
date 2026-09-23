@@ -147,6 +147,46 @@ describe("StripeTerminalProvider.collect", () => {
     expect(row?.state).toBe("failed");
   });
 
+  it("a timed-out collect still fails cleanly when cancelling the reader action is refused", async () => {
+    const cancels: string[] = [];
+    const client: StripeClient = {
+      createPaymentIntent: () => Promise.resolve({ id: "pi_stalled" }),
+      processPaymentIntent: () => Promise.resolve(),
+      readerOutcome: () => Promise.resolve({ status: "in_progress" }),
+      cancelReaderAction: (readerId) => {
+        cancels.push(readerId);
+        return Promise.reject(new Error("reader unreachable"));
+      },
+      refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
+    };
+    const p = await collectParams();
+    const result = await providerFor(client).collect(p);
+    expect(cancels).toEqual(["reader_1"]);
+    expect(result.state).toBe("failed");
+    const row = await rowFor(result.paymentRef);
+    expect(row?.state).toBe("failed");
+  });
+
+  it("a network error still fails cleanly when cancelling the reader action is refused", async () => {
+    const cancels: string[] = [];
+    const client: StripeClient = {
+      createPaymentIntent: () => Promise.reject(new Error("network down")),
+      processPaymentIntent: () => Promise.resolve(),
+      readerOutcome: () => Promise.resolve({ status: "succeeded" }),
+      cancelReaderAction: (readerId) => {
+        cancels.push(readerId);
+        return Promise.reject(new Error("reader unreachable"));
+      },
+      refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
+    };
+    const p = await collectParams();
+    const result = await providerFor(client).collect(p);
+    expect(cancels).toEqual(["reader_1"]);
+    expect(result.state).toBe("failed");
+    const row = await rowFor(result.paymentRef);
+    expect(row?.state).toBe("failed");
+  });
+
   it("polls the reader with the default real-timer sleep between attempts", async () => {
     // No `sleep` override, so the production default (`setTimeout`) runs; `intervalMs: 0` keeps it
     // instant. The reader is in_progress once, then succeeds, so the loop sleeps exactly once on the

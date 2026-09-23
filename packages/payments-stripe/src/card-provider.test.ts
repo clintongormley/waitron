@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type Stripe from "stripe";
+import Stripe from "stripe";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -8,6 +8,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   STRIPE_CARD_PROVIDER,
   createStripeCardProvider,
+  defaultMakeStripe,
   deferredStripeClient,
   secretKeyFromSealed,
 } from "./card-provider.js";
@@ -358,6 +359,15 @@ describe("secretKeyFromSealed", () => {
     expect(() => secretKeyFromSealed({ secretKey: "sk_live_x" }, "preproduction")).toThrow(
       /payment.credential_environment_mismatch/,
     );
+  });
+  it("accepts a key whose environment it cannot tell, such as a restricted key", () => {
+    expect(secretKeyFromSealed({ secretKey: "rk_live_x" }, "preproduction")).toBe("rk_live_x");
+  });
+});
+
+describe("defaultMakeStripe", () => {
+  it("builds a real Stripe SDK client for the key", () => {
+    expect(defaultMakeStripe("sk_test_x")).toBeInstanceOf(Stripe);
   });
 });
 

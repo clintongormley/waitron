@@ -14,7 +14,9 @@ import { StripePaymentsClient } from "./client.js";
  * The Stripe ADD-READER DIALOG (`readerAdd.kind === "reference"`): a reader-name field and the Stripe
  * Terminal reader-id field, with a help tooltip explaining where to find it. Pressing _Add_ POSTs the
  * reference; the server verifies it with one retrieve, so there is no countdown — success saves the row
- * (`onAdded`) and closes, and a rejection shows the not-accepted copy for another try.
+ * (`onAdded`) and closes. A `reader.not_found` or `server.internal` refusal — or one carrying no
+ * code, which `codeOf` reads as `server.internal` — shows the not-accepted copy for another try;
+ * any other refusal shows the shared message for its code.
  */
 @customElement("stripe-add-reader")
 export class StripeAddReader extends LitElement {
