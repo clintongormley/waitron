@@ -66,45 +66,12 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 //      exemption-clause level, removing the `/management-api/promote` clause turns the same authorized
 //      promote into a 403 (the negative control), restoring it turns it green again (CLAUDE.md §4).
 //
-// WHAT WENT WITH POSTGRESQL, AND IS NOT REPLACED.
-//
-// The container was justified by role separation: the read-only gate was served through a
-// non-superuser `app_login` pool, the promote's point-of-no-return write went through a separate
-// table-owner connection, and the promoted primary's fiscal drain ran as the deployment role. There
-// is no role on this engine — `pg.connectAs` has no counterpart — and there is no second
-// handle either: `PromoteDeps.db` is ONE handle (`promote.ts:40-52`) and boot opens the venue
-// directory once. Nothing below now distinguishes a write the deployment role may make from one it
-// may not.
-//
-// **Step 5, `non-owner WAITRON_ADMIN_DATABASE_URL → 500 promotion.failed, node unchanged; unset →
-// falls back and succeeds`, is DELETED: its subject no longer exists.** It booted a node whose
-// `WAITRON_ADMIN_DATABASE_URL` named the non-owner `app_login` role, so the promote's owner write
-// was refused `42501` and surfaced as a loud 500 rather than a silent no-op, and then booted the
-// same node with the variable unset to show the fallback to the migrations URL. That variable is
-// gone from the CODE, and the scope is the whole receipt:
-// `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages scripts deploy .github` returns only these
-// three comment lines (run 2026-09-23). The UNSCOPED grep over the worktree is not zero and never
-// will be — it also reaches the retired plans and specs under `docs/superpowers/`, which record the
-// variable as it was. `grep -c 'DATABASE_URL\|databaseUrl' apps/server/src/config.ts` returns 0, so
-// config reads no connection URL at all, and there is no second connection for a
-// promote to fail over to. **What is no longer covered:** that a promote whose point-of-no-return
-// write is refused fails CLOSED — a 500 with the deployment untouched — rather than reporting
-// success. The failure mode it guarded (a promote that half-succeeds) is not reachable through a
-// connection this box may not write with any more, but nothing has re-derived what else could
-// refuse that write on this engine.
-//
-// STEP 1 WAS RED FROM ITS `awaitingFiscalCertificate` POLL ONWARD, ON A BROKEN PRODUCT FUNCTION,
-// AND IT PASSES NOW. `drain`'s `workIsDue` (`packages/fiscal-verifactu/src/drain.ts`) used to issue
-// `select envios_work_due(<instant>::timestamptz)`. Measured here 2026-09-22 on this suite's OWN
-// venue directory, after the sale: the statement as written threw `unrecognized token: ":"` at the
-// cast, and with the cast removed `no such function: envios_work_due`. Nothing created that
-// function — `packages/fiscal-verifactu/drizzle/` holds one baseline and it names no such thing. So
-// the promoted primary's fiscal pass failed outright (`duty.failed` with `fiscal.drain`, every
-// pass) instead of finding due work and skipping it for want of a certificate, and the
-// awaiting-cert cell never flipped. This box is `WAITRON_ENV=production`, which is why the failure
-// showed here and not in a preproduction boot: `fiscalDrainEnabled` (`onboarding-policy.ts`)
-// short-circuits a preproduction pass to an empty result before any SQL runs. `workIsDue` is an
-// ordinary query now and the step passes unedited.
+// WHAT IS NO LONGER COVERED. This engine has no database roles, and `PromoteDeps.db` is ONE handle
+// (`promote.ts:40-53`), so nothing below distinguishes a write the deployment may make from one it
+// may not. No case here shows that a promote whose point-of-no-return write is REFUSED fails closed
+// — a 500 with the deployment untouched — rather than reporting success. No test under
+// `apps/server/src` asserts `promotion.failed`, the code that refusal would surface as
+// (`promote-api.ts:80`).
 
 // `undici`'s `fetch` is mocked to REJECT so no background pull/tunnel dial reaches a real host; Node's
 // own global `fetch` (a distinct module identity — see boot.promote.test.ts) still serves the probes.

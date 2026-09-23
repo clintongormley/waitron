@@ -70,7 +70,6 @@ import { verifySecret } from "@waitron/identity";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { TillConfig } from "./till-config.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 const suite = useVenueDb({
@@ -98,8 +97,7 @@ async function seedProfile(
 }
 
 // One `withTransaction` per call — the shape every verb here is exercised through.
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
   });
@@ -776,15 +774,15 @@ describe("denyJoinRequest", () => {
 describe("acceptPrintAgentJoinRequest", () => {
   it("a right choice inserts a print_agents row (id = joinId, name = label, token carried) and deletes the request", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
-    const made = await asApp(cfg, (tx) =>
+    const made = await asApp((tx) =>
       createJoinRequest(tx, cfg, { kind: "print_agent", label: "kitchen-pi" }),
     );
-    const result = await asApp(cfg, (tx) =>
+    const result = await asApp((tx) =>
       acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
     );
     expect(result).toEqual({ ok: true, agentId: made.joinId, name: "kitchen-pi" });
 
-    const [agent] = await asApp(cfg, (tx) =>
+    const [agent] = await asApp((tx) =>
       tx.select().from(printAgents).where(eq(printAgents.id, made.joinId)),
     );
     expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
@@ -793,7 +791,7 @@ describe("acceptPrintAgentJoinRequest", () => {
     // route composes `${joinId}.${secret}` — that composition is Task 6's concern, not this one.
     expect(verifySecret(made.token, agent!.tokenHash)).toBe(true);
 
-    const gone = await asApp(cfg, (tx) =>
+    const gone = await asApp((tx) =>
       tx.select().from(joinRequests).where(eq(joinRequests.id, made.joinId)),
     );
     expect(gone).toHaveLength(0);
@@ -801,7 +799,7 @@ describe("acceptPrintAgentJoinRequest", () => {
 
   it("a wrong choice returns mismatch, consumes the request (single-use), inserts no agent", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
-    const made = await asApp(cfg, (tx) =>
+    const made = await asApp((tx) =>
       createJoinRequest(tx, cfg, { kind: "print_agent", label: "x" }),
     );
     const wrong = String((Number(made.verificationNumber) + 1) % 100).padStart(2, "0");
@@ -809,18 +807,16 @@ describe("acceptPrintAgentJoinRequest", () => {
     // (an AppError would roll it back into an unlimited retry — accept's header), so the single-use
     // property is only observable across transaction boundaries.
     expect(
-      await asApp(cfg, (tx) =>
-        acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: wrong }),
-      ),
+      await asApp((tx) => acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: wrong })),
     ).toEqual({ ok: false, reason: "mismatch" });
-    const agents = await asApp(cfg, (tx) =>
+    const agents = await asApp((tx) =>
       tx.select().from(printAgents).where(eq(printAgents.id, made.joinId)),
     );
     expect(agents).toHaveLength(0);
     // consumed: a retry with the RIGHT choice is now not_found.
     expect(
       await codeOf(() =>
-        asApp(cfg, (tx) =>
+        asApp((tx) =>
           acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
         ),
       ),
@@ -829,12 +825,10 @@ describe("acceptPrintAgentJoinRequest", () => {
 
   it("refuses a device request 404 (kind predicate rides the delete)", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
-    const made = await asApp(cfg, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "d" }),
-    );
+    const made = await asApp((tx) => createJoinRequest(tx, cfg, { kind: "device", label: "d" }));
     expect(
       await codeOf(() =>
-        asApp(cfg, (tx) => acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: "00" })),
+        asApp((tx) => acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: "00" })),
       ),
     ).toBe("join_request.not_found");
   });
@@ -845,22 +839,22 @@ describe("readAgentJoinStatus", () => {
     const cfg = (await setupVenue(suite.db)).cfg;
     // `token` is the bare secret at the verb layer (see acceptPrintAgentJoinRequest's test); the route
     // splits the Bearer and hands readAgentJoinStatus the secret, so pass `token` directly here.
-    const made = await asApp(cfg, (tx) =>
+    const made = await asApp((tx) =>
       createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
     );
-    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
+    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
       "pending",
     );
-    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, "wrong"))).toBe(
+    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, "wrong"))).toBe(
       "not_approved",
     );
-    await asApp(cfg, (tx) =>
+    await asApp((tx) =>
       acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
     );
-    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
+    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
       "approved",
     );
-    expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, randomUUID(), made.token))).toBe(
+    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, randomUUID(), made.token))).toBe(
       "not_approved",
     );
   });
@@ -870,49 +864,41 @@ describe("selfEnrolNodeAgent", () => {
   it("mints one agent per node whose token authenticates", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
     const nodeId = randomUUID();
-    const { agentId, token } = await asApp(cfg, (tx) =>
+    const { agentId, token } = await asApp((tx) =>
       selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
     );
     // The token is the accept-shape `${id}.${secret}` and authenticates as this agent.
-    const auth = await asApp(cfg, (tx) => authenticateAgent(tx, token));
+    const auth = await asApp((tx) => authenticateAgent(tx, token));
     expect(auth.agentId).toBe(agentId);
   });
 
   it("is idempotent per node: a second call refreshes the token, keeps one row and the same id", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
     const nodeId = randomUUID();
-    const first = await asApp(cfg, (tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
-    const second = await asApp(cfg, (tx) =>
-      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box again" }),
-    );
+    const first = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
+    const second = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box again" }));
     expect(second.agentId).toBe(first.agentId); // stable id → printer bindings survive
     expect(second.token).not.toBe(first.token); // fresh secret
 
-    const rows = await asApp(cfg, (tx) =>
+    const rows = await asApp((tx) =>
       tx.select().from(printAgents).where(eq(printAgents.nodeId, nodeId)),
     );
     expect(rows).toHaveLength(1);
 
     // The old token no longer authenticates; the new one does, as the same agent.
-    await expect(asApp(cfg, (tx) => authenticateAgent(tx, first.token))).rejects.toThrow(
-      /unauthorized/,
-    );
-    expect((await asApp(cfg, (tx) => authenticateAgent(tx, second.token))).agentId).toBe(
-      first.agentId,
-    );
+    await expect(asApp((tx) => authenticateAgent(tx, first.token))).rejects.toThrow(/unauthorized/);
+    expect((await asApp((tx) => authenticateAgent(tx, second.token))).agentId).toBe(first.agentId);
   });
 
   it("refuses a revoked node's re-enrol with device.join_revoked and does NOT reactivate it", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
     const nodeId = randomUUID();
-    const { agentId } = await asApp(cfg, (tx) =>
-      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
-    );
+    const { agentId } = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
     // Revoke it (active := false), the deliberate revoke self-enrol must not silently undo.
     await suite.db.execute(sql`update print_agents set active = false where id = ${agentId}`);
 
     expect(
-      await codeOf(() => asApp(cfg, (tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }))),
+      await codeOf(() => asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }))),
     ).toBe("device.join_revoked");
 
     // Through the table definition: a raw read skips drizzle's decoding and hands this boolean

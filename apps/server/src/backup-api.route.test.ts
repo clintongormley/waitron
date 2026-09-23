@@ -155,7 +155,7 @@ async function setupTenant(): Promise<void> {
     // Measured on this tree — `NOT NULL constraint failed: persons.id`, then, once an id is
     // supplied, `NOT NULL constraint failed: persons.created_at`. The two sides, each read inside
     // the `persons` block rather than grepped file-wide:
-    // `origin/main:packages/identity/drizzle/0000_identity_baseline.sql:44,:60` carried
+    // `aabdde6a8^:packages/identity/drizzle/0000_identity_baseline.sql:44,:60` carried
     // `DEFAULT gen_random_uuid()` and `DEFAULT now()`;
     // `packages/identity/drizzle/0000_baseline.sql:46,:62` carry a bare `NOT NULL`, because the
     // defaults moved to `packages/identity/src/schema/persons.ts:27,:67`. The insert the PRODUCT

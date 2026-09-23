@@ -10,10 +10,10 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
  *
  * Every case below is lifted from `search.pg.test.ts`, which asserted the same grammar against
  * PostgreSQL's `websearch_to_tsquery`. That suite needed a container, so the grammar had nothing
- * running behind it on this branch — and the grammar is OURS now (`parseSearch` in `images.ts`),
+ * running behind it during #489 — and the grammar is OURS now (`parseSearch` in `images.ts`),
  * not the database's, which is exactly the code a dead suite must not be the only witness for. It
  * was deleted with the harness on 2026-09-22; recover it with
- * `git show origin/main:packages/media/src/search.pg.test.ts`.
+ * `git show aabdde6a8^:packages/media/src/search.pg.test.ts`.
  *
  * WHAT IS NOT LIFTED, so nobody reads this as the whole of that suite. Its stemming cases
  * (`bread -rolls`, `roll -rolls`, `"breads with rolls"`) assert that a search finds a word form it
@@ -58,7 +58,7 @@ describe("exclusions, phrases and or", () => {
   });
 
   // Also lifted from `search.pg.test.ts` (deleted 2026-09-22 with the PostgreSQL harness; recover
-  // it with `git show origin/main:packages/media/src/search.pg.test.ts`). The library's first load
+  // it with `git show aabdde6a8^:packages/media/src/search.pg.test.ts`). The library's first load
   // sends `sort=relevance` with no query, and that combination was a 500 under PostgreSQL: without
   // a query the rank and name-match expressions collapsed to bare constants, which it rejects in
   // ORDER BY. The expressions are JavaScript now, so the OLD failure mode is gone — what is still

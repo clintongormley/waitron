@@ -49,7 +49,7 @@ const NOW = new Date("2026-07-25T04:00:00Z");
  * such moment to observe.
  *
  * Migration sets: CORE then SCHEDULER, the pair the deleted `core_scheduler` template this file
- * cloned was built from (`git show origin/main:packages/scheduler/src/testing/global-setup.ts`).
+ * cloned was built from (`git show aabdde6a8^:packages/scheduler/src/testing/global-setup.ts`).
  *
  * `resetPerTest: false` is kept for the reason it was always kept: each case claims a DISTINCT
  * period, so accumulating rows never collide on `scheduled_runs_key`, and every read is scoped to

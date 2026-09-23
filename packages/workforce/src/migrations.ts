@@ -4,9 +4,10 @@ import { WORKFORCE_CLASSIFICATION } from "./classification.js";
 
 /**
  * This package's migration set. Exported as data rather than a function because ordering across
- * packages is the RUNTIME's responsibility — core migrations must run before these (shifts point at
- * core's `locations`, `tills` and `nodes`) — and a descriptor makes the caller state that order out
- * loud.
+ * packages is the RUNTIME's responsibility, and a descriptor makes the caller state that order out
+ * loud. Its foreign keys into core's `locations`, `tills` and `nodes` and identity's `persons` do
+ * not need those sets to have run first: applied before both through `applyMigrations`, it
+ * migrates cleanly (measured 2026-09-23).
  *
  * Its own journal table (`__drizzle_migrations_workforce`) is what keeps the workforce lane
  * migration-isolated from the fiscal sequence: journals never collide, so this lane runs in

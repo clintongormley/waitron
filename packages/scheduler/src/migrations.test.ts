@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
-  CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
   isPgError,
@@ -15,9 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  // Core first — this set's baseline migration references core's `tenants` table. Ordering across
-  // packages is the runtime's job and nothing enforces it, so it is explicit here.
-  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  migrations: [SCHEDULER_MIGRATIONS],
 });
 
 /**

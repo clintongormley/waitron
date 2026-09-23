@@ -196,8 +196,8 @@ async function attachExtras(
  *  insert satisfies `require_open_parent`), fired via the real resolver into a `ticket_items` row at the
  *  venue's default station, then transitioned open → placed (the Mode-T counter path: a placed delivery is
  *  in the kitchen awaiting collection). Returns its id so a test can COLLECT it via the legal placed →
- *  settled + `collected_at` transition (a settled → settled update is rejected by `enforce_transition`, so
- *  `collected_at` is set AS the order settles, mirroring the real collectOrder Task 6 wires). An instant
+ *  settled + `collected_at` transition (`collected_at` is set AS the order settles, mirroring the real
+ *  collectOrder Task 6 wires). An instant
  *  handover with NO ticket item leaves no occupancy — the `EXISTS(ticket_items)` branch of
  *  `listTablesWithState`'s pending-deliveries count. */
 async function seedFiredDelivery(

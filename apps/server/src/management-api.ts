@@ -482,22 +482,16 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 }
 
 /**
- * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
- * transaction, confirm the caller's management session carries
- * `venue.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
- * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
- * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
- * `withTransaction` + `authorizeManager` block that followed it. `cfg` is the venue config the
- * route resolved via `requireVenueCfg`, whose `locationId` the zone/table verbs scope to (they take
- * `cfg`, unlike the status verbs).
+ * The authorize gate the zone, table, table-placement, station, station-assignment, bump-mode,
+ * course, product-course and fire-control routes run their database work through: open a
+ * transaction, confirm the caller's management session carries `venue.configure`, then run `fn`.
+ * The route's own `requireManagementSession` (→ 401) runs before this.
  */
 function withVenueAuth<T>(
   deps: ManagementApiDeps,
-  cfg: TillConfig,
   sessionId: string,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  void cfg;
   return withTransaction(deps.db, async (tx) => {
     await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
     return fn(tx);
@@ -1776,7 +1770,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // but that narrowing does not survive into the `withTransaction` closure (TS resets a captured property
       // to its declared type), so the closure reads this — the login/create-person pattern above.
       const { name } = body;
-      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+      const result = await withVenueAuth(deps, sessionId, (tx) =>
         createZone(tx, cfg, { name, displayOrder }),
       );
       return c.json(result, 201);
@@ -1788,7 +1782,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, cfg, sessionId, (tx) => listZones(tx, cfg));
+      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
       return c.json(zones);
     }),
   );
@@ -1829,7 +1823,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, cfg, sessionId, (tx) => updateZone(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) => updateZone(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -1841,7 +1835,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateZone(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => deactivateZone(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -1877,7 +1871,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // but that narrowing does not survive into the `withTransaction` closure (a captured property resets to
       // its declared type), so the closure reads this local — the login/create-person pattern above.
       const { label } = body;
-      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+      const result = await withVenueAuth(deps, sessionId, (tx) =>
         createTable(tx, cfg, { label, zoneId, capacity }),
       );
       return c.json(result, 201);
@@ -1889,7 +1883,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const tables = await withVenueAuth(deps, cfg, sessionId, (tx) => listTables(tx, cfg));
+      const tables = await withVenueAuth(deps, sessionId, (tx) => listTables(tx, cfg));
       return c.json(tables);
     }),
   );
@@ -1929,7 +1923,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (patch.label === undefined && patch.zoneId === undefined && patch.capacity === undefined) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, cfg, sessionId, (tx) => updateTable(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) => updateTable(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -1942,7 +1936,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateTable(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => deactivateTable(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2000,7 +1994,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // asserts nothing the verb does not check.
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
-      await withVenueAuth(deps, cfg, sessionId, (tx) =>
+      await withVenueAuth(deps, sessionId, (tx) =>
         setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation }),
       );
       return c.body(null, 204);
@@ -2015,7 +2009,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => clearPlacement(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => clearPlacement(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2057,7 +2051,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // but that narrowing does not survive into the `withVenueAuth` closure (a captured property resets
       // to its declared type), so the closure reads this local — the login/create-person pattern above.
       const { name } = body;
-      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+      const result = await withVenueAuth(deps, sessionId, (tx) =>
         createStation(tx, cfg, { name, displayOrder, isDefault }),
       );
       return c.json(result, 201);
@@ -2070,7 +2064,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const stations = await withVenueAuth(deps, cfg, sessionId, (tx) => listStations(tx, cfg));
+      const stations = await withVenueAuth(deps, sessionId, (tx) => listStations(tx, cfg));
       return c.json(stations);
     }),
   );
@@ -2167,7 +2161,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, cfg, sessionId, (tx) => updateStation(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) => updateStation(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -2179,7 +2173,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateStation(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => deactivateStation(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2192,7 +2186,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => setDefaultStation(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => setDefaultStation(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2227,7 +2221,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         if (stationId !== null && !isUuid(stationId)) {
           throw new AppError("station.not_found", { stationId });
         }
-        await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+        await withVenueAuth(deps, sessionId, async (tx) => {
           if (!isUuid(id)) return; // malformed id names no entity → the verb's unknown-id no-op
           await setStation(tx, cfg, id, stationId);
         });
@@ -2252,7 +2246,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
       const mode: BumpMode = body.mode;
-      await withVenueAuth(deps, cfg, sessionId, (tx) => setBumpMode(tx, cfg, mode));
+      await withVenueAuth(deps, sessionId, (tx) => setBumpMode(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );
@@ -2283,7 +2277,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       // Bind the validated `name` to a local: the `typeof` guard narrows `body.name` HERE, but that
       // narrowing does not survive into the `withVenueAuth` closure — the login/create-person pattern.
       const { name } = body;
-      const result = await withVenueAuth(deps, cfg, sessionId, (tx) =>
+      const result = await withVenueAuth(deps, sessionId, (tx) =>
         createCourse(tx, cfg, { name, displayOrder }),
       );
       return c.json(result, 201);
@@ -2295,7 +2289,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const courses = await withVenueAuth(deps, cfg, sessionId, (tx) => listCourses(tx, cfg));
+      const courses = await withVenueAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
       return c.json(courses);
     }),
   );
@@ -2336,7 +2330,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         return c.body(null, 204);
       }
-      await withVenueAuth(deps, cfg, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
       return c.body(null, 204);
     }),
   );
@@ -2348,7 +2342,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, cfg, sessionId, (tx) => deactivateCourse(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => deactivateCourse(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2372,7 +2366,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
       }
-      await withVenueAuth(deps, cfg, sessionId, async (tx) => {
+      await withVenueAuth(deps, sessionId, async (tx) => {
         if (!isUuid(id)) return; // malformed id names no product → the verb's unknown-id no-op
         await setProductCourse(tx, cfg, id, courseId);
       });
@@ -2386,7 +2380,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const mode = await withVenueAuth(deps, cfg, sessionId, (tx) => getFireControl(tx, cfg));
+      const mode = await withVenueAuth(deps, sessionId, (tx) => getFireControl(tx, cfg));
       return c.json({ mode });
     }),
   );
@@ -2413,7 +2407,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       // Membership above verifies `mode` is a real enum value; narrow it for the `withVenueAuth` closure.
       const mode = body.mode as FireControl;
-      await withVenueAuth(deps, cfg, sessionId, (tx) => setFireControl(tx, cfg, mode));
+      await withVenueAuth(deps, sessionId, (tx) => setFireControl(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );

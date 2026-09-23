@@ -16,10 +16,10 @@ import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "workforce",
-  // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity, whose
-  // `persons` table `employments` and `time_entries` point at. Ordering across packages is the
-  // runtime's job and nothing enforces it, so it is stated here — the same list and the same
-  // reason as `src/migrations.test.ts`.
+  // Core and identity, because the set's foreign keys point at core's `locations`, `tills` and
+  // `nodes` and at identity's `persons`, so this is the database those keys resolve in. Not because
+  // the migration needs them: with an empty list the set still builds and every case still passes
+  // (measured 2026-09-23).
   prerequisites: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   subject: WORKFORCE_MIGRATIONS,
   declarations: barrel,

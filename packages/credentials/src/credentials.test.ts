@@ -36,7 +36,7 @@ import { credentialProvisioned, getCredential, putCredential } from "./store.js"
  * ## `credential_tenants` is gone, and the cases below are what holds its behaviour now
  *
  * `credentialProvisioned` (`./store.ts`) used to be `select credential_tenants(?)`. That function
- * was created by `drizzle/0001_credentials_baseline_sql.sql`, which this branch DELETED; the SQLite
+ * was created by `drizzle/0001_credentials_baseline_sql.sql`, which #489 DELETED; the SQLite
  * baseline creates the table and nothing else, and SQLite has no user-defined SQL functions, so the
  * call threw `no such function: credential_tenants` (measured here 2026-09-22). It is an ordinary
  * query now, and the two cases that were red for that reason pass without being adjusted.
@@ -59,7 +59,7 @@ const STRIPE = {
 };
 
 // CORE then CREDENTIALS — the pair the deleted `core_credentials` template this file cloned was
-// built from (`git show origin/main:packages/credentials/src/testing/global-setup.ts`).
+// built from (`git show aabdde6a8^:packages/credentials/src/testing/global-setup.ts`).
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 describe("the vault through the venue store", () => {

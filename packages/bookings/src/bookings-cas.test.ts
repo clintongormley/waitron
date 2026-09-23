@@ -16,7 +16,7 @@
  * and `fakeCore`'s `SELECT … FOR UPDATE` on the dining table (`./testing/fake-core.js`) — because
  * drizzle's SQLite query builder has no `.for()` and each was a compile error
  * (`error TS2339: Property 'for' does not exist`). Recover the deleted case with
- * `git show origin/main:packages/bookings/src/bookings-cas.test.ts`.
+ * `git show aabdde6a8^:packages/bookings/src/bookings-cas.test.ts`.
  *
  * Rewriting it into something that passes is what CLAUDE.md §4's "treat 'there is a test' as an
  * unfinished sentence" refuses, so it was not rewritten. What the requirement behind it — a

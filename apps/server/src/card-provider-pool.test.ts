@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { CardProviderContribution, IncidentSink, PaymentProvider } from "@waitron/payments";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
@@ -11,9 +10,10 @@ import { createCardProviderPool } from "./card-provider-pool.js";
 
 // The pool's own contract (build-once, cache, evict-to-rebuild, unknown-id, propagate-a-build-
 // failure) is provider-agnostic, so most cases here use a FAKE CardProviderContribution with a spy
-// `build` — deterministic call counting with no vault I/O. One case wires the real SumUp seat over a
-// seeded `payments.sumup` credential to prove the pool actually threads its deps into a real seat's
-// `build`.
+// `build` — deterministic call counting with no vault I/O. One case builds the real SumUp seat
+// through the pool and checks it is returned and cached; the deps the pool passes are not
+// exercised, because that seat reads its credential only on first use (`deferredClient` in
+// `packages/payments-sumup/src/card-provider.ts`), so the case seals none.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -81,21 +81,6 @@ function fakeProvider(name: string): PaymentProvider {
       throw new Error("not used by the pool");
     },
   };
-}
-
-export async function seedTenantWithSumUpKey(): Promise<void> {
-  await seedTenant(suite.db);
-  await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, {
-      purpose: "payments.sumup",
-      value: {
-        apiKey: "sup_sk_x",
-        merchantCode: "MABC123",
-        affiliateAppId: "-",
-        affiliateKey: "-",
-      },
-    }),
-  );
 }
 
 describe("createCardProviderPool", () => {
@@ -179,7 +164,7 @@ describe("createCardProviderPool", () => {
     expect(build).toHaveBeenCalledTimes(2);
   });
 
-  it("wires the real SumUp seat: get returns a live SumUpCloudProvider built from the sealed credential", async () => {
+  it("wires the real SumUp seat: get returns a live SumUpCloudProvider", async () => {
     const pool = createCardProviderPool({
       providers: [SUMUP_CARD_PROVIDER],
       db: suite.db,

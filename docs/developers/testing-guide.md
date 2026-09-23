@@ -124,7 +124,7 @@ sentence on each field; this is the shape of it. Four fields are required:
 
 Three more are optional:
 
-- `prerequisites` — the sets that must be applied BEFORE the subject, in order. Omit it for a set
+- `prerequisites` — the sets applied BEFORE the subject, in order. Omit it for a set
   that has none; core is one, and so is any module set whose SQL names no other set's table.
 - `reload` — an arrow function that re-imports that same module from inside a test. It earns its
   keep only in a package that runs a mutation test, which among these callers is `packages/db`
@@ -143,22 +143,25 @@ The difference between the two lists is the subject's own tables. A set with no 
 over an empty list and takes its first reading of an unmigrated database, which is the same code
 path rather than a special case.
 
-**Finding a module's prerequisites: read them off the package's own suites, do not guess.** An
-existing `useVenueDb` call in the package is where to start: its suite passes with that list in
-that order. (A missing prerequisite reached only through a foreign key or a trigger body does not
-stop a set migrating on this engine — a foreign key naming a table that does not exist is refused
-at the first write, not at migrate time — so a clean migrate alone would not have told you.) `packages/workforce/src/migrations.test.ts:32` is the worked
-example, and it states the reason for a three-set case in the comment beside it: core first because
-shifts point at its `locations`, `tills` and `nodes`, then identity because `employments` and
-`time_entries` point at its `persons`, then workforce itself. Ordering across packages is the
-runtime's job and nothing enforces it, which is why each call site writes the reason down rather
-than just the list. A package's suites can apply MORE than its set's tables need, though:
-`packages/credentials`'s other database suites apply core — `credentials.test.ts` because
+**Finding a module's prerequisites: read them off the set's own SQL, do not guess.** They are the
+other sets whose tables the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES`, the
+table a `CREATE TRIGGER … ON` names, or a trigger body — and only those, in runtime order. A passing
+suite does not confirm the list. A missing prerequisite reached only through a foreign key or a
+trigger body does not stop a set migrating on this engine — a foreign key naming a table that does
+not exist is refused at the first write, not at migrate time — so a clean migrate alone would not
+have told you, and an existing `useVenueDb` call in the package is a place to start reading, not an
+answer. `packages/workforce/src/schema/schema-conformance.test.ts` is the worked example, and it
+states the reason for a two-set list in the comment beside it: core because the set's foreign keys
+point at its `locations`, `tills` and `nodes`, and identity because they point at its `persons`.
+That is the database those keys resolve in, not something the migration needs — the suite also
+passes with an empty list (measured 2026-09-23) — which is why each call site writes the reason
+down rather than just the list. A package's suites can apply MORE than its set's tables need,
+though: `packages/workforce/src/migrations.test.ts` applies core also for the `tenants` row its
+setup seeds and the `locations` and `nodes` rows its cases seed (`seedLocation`, `seedNode`), and
+most of `packages/credentials`'s database suites apply core — `credentials.test.ts` because
 `credentialProvisioned` reads `tenants` — while its migrations point at nothing in core, so its
-schema-conformance call site passes no prerequisites. Check the list against the other sets' tables
-the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES`, the table a `CREATE TRIGGER …
-ON` names, or a trigger body — and keep only those sets, in runtime order.
-`packages/media/src/schema/schema-conformance.test.ts` is the case of the middle one: its set puts
+`migrations.test.ts` and its schema-conformance call site pass no prerequisites.
+`packages/media/src/schema/schema-conformance.test.ts` is the case of the trigger: its set puts
 triggers on core's and catalogue's tables, and the migration fails with `no such table` without
 them.
 
@@ -756,7 +759,7 @@ nothing else touched:
 - `pnpm --filter @waitron/db test -- job-claim.pg`, against the shipped version — **3 failed**,
   read on 2026-09-21, which on the day was every case in that file. That suite was deleted on
   2026-09-22 with the rest of the real-PostgreSQL tier; read it with
-  `git show origin/main:packages/db/src/job-claim.pg.test.ts`. Only the FIRST failure is the
+  `git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`. Only the FIRST failure is the
   control: it fails on the 30-second test timeout, which is the waiting. Its holder is then still
   parked, so the per-test reset blocks on that holder's row locks and takes the rest of the file
   down with it. Expect the
@@ -776,7 +779,7 @@ with, so the failure shape cannot arise. It is kept here because the *lesson* �
 has to carry its choice out on something that survives a rewrite — is about databases, not about
 PostgreSQL, and slice 2 puts a second writer back. The suite named below was deleted with the rest
 of the real-PostgreSQL tier; read it with
-`git show origin/main:packages/db/src/job-claim.pg.test.ts`.
+`git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`.
 
 `ctid` is the obvious way to carry a locking selection's choice out to the UPDATE around it, and it
 is wrong. Measured 2026-09-21 on PostgreSQL 18, with a claim parked mid-statement on an advisory
@@ -857,7 +860,7 @@ something an authority will judge, run the real check over it. Pointer:
 A key you never list is never checked at all; `toEqual` is what put `memberOf` under a matcher for
 the first time. **The worked example is historical** — it was taken on PostgreSQL, and the file it
 names left this tree with the storage switch (read it with
-`git show origin/main:packages/provisioning/src/instance-state.ts`). What the matcher hid there:
+`git show aabdde6a8^:packages/provisioning/src/instance-state.ts`). What the matcher hid there:
 `pg_roles.rolname` is `name`, so `array(select rolname …)` was `name[]`, which `node-postgres`
 handed back as the wire literal `"{app_user}"` through a field typed `string[]` — hence that
 file's `::text[]` casts. Work such a failure out case by case:
