@@ -67,6 +67,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/recipes",
   "@waitron/reporting",
   "@waitron/scheduler",
+  "@waitron/server-kit",
   "@waitron/shared",
   "@waitron/tunnel",
   "@waitron/ui",
