@@ -270,8 +270,7 @@ What that leaves open:
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
-**Photos are shrunk on upload (slice 2, Task 0, 2026-09-23; PR #543,
-not yet landed).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
+**Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
 stripped of its metadata (GPS position included) and stored as WebP at quality 80 by `prepareImage`
 (`packages/media/src/prepare.ts`), which the upload route calls before it opens the write
 transaction (`packages/media/src/routes.ts`). Measured on ten real food photos by the slice-2 plan's
@@ -3897,7 +3896,7 @@ its database to a bucket the owner supplies, and a dead box is rebuilt from it. 
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
 (#540) — the values later tasks read are under "What later
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
-Task 0, shrink every uploaded photo, is in #543, not yet landed; what it does and what it leaves
+Task 0, shrink every uploaded photo, landed as #543; what it does and what it leaves
 open are under the image library in Track A.
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
