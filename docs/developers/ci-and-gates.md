@@ -68,12 +68,24 @@ its two halves. `pnpm reap` (`scripts/reap-testcontainers.mjs`) removes stale co
 separate pass, kills orphaned vitest workers. **The container half no longer has a subject in any
 package suite.** It matches the `com.waitron.reapable` label alone, and
 `grep -rn com.waitron.reapable` over the repository on 2026-09-23 finds exactly one stamp outside
-that script and its own suite — `bench/sqlite-failover/src/store.ts` — in a bench that declares
-no `test` script at all, so no suite under `packages/` or `apps/` can leave a
-container for it to find. **The worker half is unchanged and has nothing to do with the storage
-engine:** an interrupted vitest run still reparents its workers to ppid 1, where they spin at ~100%
-CPU until killed. So the occasion to run it is after an interrupted run of ANY suite, not before a
-database one.
+that script and its own suite — `bench/sqlite-failover/src/store.ts:75`, a `.withLabels({...})` on
+the MinIO container `startStore` brings up — in a bench that declares no `test` script at all, so
+no suite under `packages/` or `apps/` can leave a container for it to find. **The worker half is
+unchanged and has nothing to do with the storage engine:** an interrupted vitest run still reparents
+its workers to ppid 1, where they spin at ~100% CPU until killed. So the occasion to run it is after
+an interrupted run of ANY suite, not before a database one.
+
+**What that grep does NOT say is that the labelled rig is the only container starter, and an earlier
+version of this paragraph said so.** `bench/pglite-throughput/src/bench.ts:331` starts a real
+`postgres:18-alpine` through `PostgreSqlContainer` and chains no `.withLabels` at all, so an
+interrupted run of that rig leaks a container the reaper's label filter can never match. Clear it by
+hand — `docker ps -a --filter ancestor=postgres:18-alpine`, then `docker rm -f` what that names,
+after `docker volume inspect` on anything attached. Measured on this machine on 2026-09-23: that
+filter named leaked `postgres:18-alpine` containers, and `docker inspect --format
+'{{json .Config.Labels}}'` on each printed `{}` — no `com.waitron.reapable`, so the reaper would
+indeed have walked past them. Neither bench declares a `test` script — `pnpm-workspace.yaml` says
+that is on purpose — so this only bites someone who ran the rig by hand. `docs/backlog.md` carries
+the open choice between stamping the label there and keeping the by-hand cleanup.
 
 Run the normal hook once through the push, then verify CI scope and required checks on the current
 head. A green hook proves only its own checks; it is not evidence of package tests or coverage.

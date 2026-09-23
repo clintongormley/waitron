@@ -167,11 +167,19 @@ Save `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` be
 failed test fixture. Measured on a PostgreSQL container in September 2026: the reader-adoption gate
 found a healthy container with a requested TCP binding but an empty published-port list, and a
 focused rerun passed without explaining the first failure. Receipt:
-`docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`. The only thing in this tree
-that starts a container now is `bench/sqlite-failover`, which exposes a port the same way, so that
-is where this still applies.
+`docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`. Nothing under `packages/`
+or `apps/` starts a container now, so the live subject is under `bench/`:
+`bench/sqlite-failover/src/store.ts:76` publishes a port with `withExposedPorts(9000)` and reads it
+back with `getMappedPort(9000)`, which is the same shape the failure above took. The rule was
+briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that no PACKAGE fixture binds a port
+— true, and narrower than "the tree" — and restored with that hedge the same day.
 
-## Reuse a supplied test container before probing Docker again.
+## Reuse a supplied test container before probing Docker again — RETIRED
+
+Retired on 2026-09-23 along with the `CLAUDE.md` §4 rule of the same name: no suite in this tree is
+handed a container by a global setup any more, so there is nothing left to reuse. Kept as the
+receipt for why the rule existed, not as a rule. Do not restore it without a fixture that supplies a
+container.
 
 A failing `docker info` command is not evidence that a container global setup already started is
 absent. Run 34507423350 failed `deployment.test.ts` at exactly that redundant check. The suites
