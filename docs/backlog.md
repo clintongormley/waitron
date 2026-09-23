@@ -454,7 +454,7 @@ with variants is never sold itself, variants print under their own names and fol
 onto every menu, prices fall back from the most specific one set, and Active and Available become two
 states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
 [the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
-(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1 and 2 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
+(`~/waitron-campaign-b`), which is working through it task by task; Tasks 1, 2 and 3 have landed (below). **Two of its tasks cannot upgrade a venue that holds data**
 (measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
 menus' extras attachments and variant price overrides. So every dev venue needs
 `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
@@ -485,9 +485,10 @@ both. Its migration adds a column and needs no reset of its own. What it left op
 - **Reopening a held order on the till drops a sold-out item** — an extra the menu no longer lists,
   and every extra of a dish that has sold out — with a "no longer available" message. The same
   already happened to an Inactive product. `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`
-  §10 says marking a product unavailable must not cancel existing work. Put to the owner (lane B
-  question Q1). **Recommended next action:** keep a sold-out line in held work, flag it on the
-  till, and refuse only a quantity increase (the server already refuses the increase).
+  §10 says marking a product unavailable must not cancel existing work. **The owner chose option A
+  on 2026-09-23** (lane B question Q1): keep a sold-out line in held work, flag it on the till, and
+  refuse only a quantity increase (the server already refuses the increase). A follow-up item, not
+  part of the variants plan's nine tasks. **Next action:** build it.
 - **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
   section has been switched off** — only its product and extras. Task 3 did not take it, so it
   remains open; Task 5 ("A variant is sold as the product it is"), which reworks the sale line, may
@@ -496,6 +497,32 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
   that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
   **Next action:** rename the field to `active` and head the column "Status", in one change.
+
+**Task 3 LANDED as #528 (2026-09-23): variants are stored as products and follow their product onto
+every menu.** A menu now stores something for a variant only to override its price or switch it off
+there (`menu_item_variant_overrides`), and the price charged is the most specific one set: the
+variant's price on that menu, then its own, then its product's price on that menu. Every dev venue
+needs `wa-wt reset demo <name>` (see above). What it left open:
+- **A removed variant's photo cannot be deleted.** Removing a variant makes it Inactive and keeps
+  its row, photo included, so the image library counts the photo as used and the database refuses
+  the delete, while the product editor does not show Inactive variants. Accepted until Task 7, which
+  shows them behind a filter; the translation-gap check skips Inactive variants for the same reason
+  (`packages/catalogue/src/content-languages.ts`) and Task 7 must revisit it.
+- **A variant's id is refused by the management routes that read or write a product by id**, each
+  answering as it does for an id naming no product (the recipe route answers `product.not_found`),
+  until Task 6 opens a variant's own page. The check is written separately in eleven places with
+  four different answers, and four catalogue functions that write a product by id carry none of
+  their own (`applyRecipeDerivation`, `applyDietDerivation`, `deactivateProduct`,
+  `assignProductUnit`; every route that reaches them is guarded). **Next action (Task 6):** put the
+  check in one shared function, and re-test the product editor's unit and category reads for a
+  variant, whose Task 1 assertions this task retired.
+- **The menu offer editor accepts a price such as `007.5` that the server then refuses** — its
+  pattern (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `PRICE`) is looser
+  than `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`). **Next action:** use one rule
+  for both, checking first that the catalogue helper is safe to load in the browser.
+- **The dashboard's variant form turns a missing variant price into `0.00`**
+  (`apps/dashboard/src/widgets/variant-form.ts`). Nothing reaches it today, because the product-editor
+  save still refuses a variant with no price; Task 7 settles both ends.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
