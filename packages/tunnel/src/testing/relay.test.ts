@@ -148,6 +148,8 @@ describe("createRelayStandin", () => {
     const box = connect(relay.boxPort, "127.0.0.1");
     const frame = encodeFrame({ t: "register", boxId: "b", token: "t" });
     box.write(frame.subarray(0, 6)); // partial — decodeFrame returns null, the relay buffers
+    // The relay answers nothing to a partial frame, so this cannot wait for it to be read; if the
+    // halves ever arrive together the ack still comes, and only the partial-frame path goes unrun.
     await sleep(10);
     box.write(frame.subarray(6)); // completes the frame
     expect((await readFrame(box))!.frame).toEqual({ t: "ack" });

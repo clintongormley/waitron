@@ -2386,19 +2386,6 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
-writing tunnel's coverage tests).** `packages/tunnel/src/testing/relay.ts` is the loopback relay the
-tunnel suites use (tests and dev only, not the shipped relay). When a parked box or a waiting client
-closes, only the `sockets` set forgets it: the box stays in `idle` and the client in `waiters`. The
-review of the coverage branch ran a probe with a no-reset control: after a waiting client reset,
-the next box to register was sent `go` at once, paired with the dead client, and a live client
-arriving next was dropped unpaired; after a parked box reset, a client was paired with the dead box
-and its bytes went nowhere. Three tests in `relay.test.ts` pass anyway because they check only the
-next `ack` — the two reset cases say so, and the older "drops an idle box that sends garbage after
-registering, and keeps serving" claims more than it checks. **Next action:** remove the entry on
-close, test-first (a live client after the reset is paired with a live box), and narrow or extend
-that older test.
-
 **The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
 bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
 picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
@@ -2409,6 +2396,19 @@ reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that br
 three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
+
+**The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
+writing tunnel's coverage tests, PR #TBD).** `packages/tunnel/src/testing/relay.ts` is test-only:
+nothing outside `packages/tunnel`'s own suites imports it, and Waitron ships no relay. When a parked
+box closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
+box and its bytes go nowhere (both reviewers of that branch ran this). When a waiting client closes,
+it stays in `waiters` until its wait window (`waitForBoxMs`) runs out, so a box registering inside
+that window is sent `go` and paired with the dead client. Three tests in `relay.test.ts` pass anyway
+because they check only the next `ack`: the two reset cases say so, and the older "drops an idle box
+that sends garbage after registering, and keeps serving" claims more than it checks. **Next
+action:** only if `@waitron/tunnel` outlives its planned retirement (see *Waitron retains* below) —
+drop the entry on close, test-first (a live client after the reset is paired with a live box), and
+narrow or extend that older test.
 
 **On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
 (found 2026-09-21, task F1; fixed 2026-09-23 by PR #493).** The flip opened ONE connection per database file,
