@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { validateImageBytes } from "@waitron/catalogue";
 import { AppError } from "@waitron/shared";
+import { imageFilename } from "./stored-filename.js";
 import "./errors.js";
 
 /**
@@ -89,6 +89,6 @@ export async function prepareImage(
   const stored = new Uint8Array(output);
   return {
     bytes: stored,
-    filename: `${createHash("sha256").update(stored).digest("hex")}.${validateImageBytes(stored)}`,
+    filename: imageFilename(stored),
   } as PreparedImage;
 }
