@@ -860,10 +860,13 @@ key across the two files stops either being restored on its own, in either direc
 snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`
 holds the graph — so a key declared in TypeScript but not yet generated is invisible to it, and so is
 one added by hand-written migration SQL, because a custom migration leaves the snapshot alone. Both
-gaps are stated in the guard's own header with the date they were last compared. The reading was
-chosen over the TypeScript deliberately: a reading taken from the TypeScript passes the moment
-somebody edits a table file, while the constraint is still live in every migrated database, and it
-would have gone silently vacuous at the flip, when `PgTable` stops matching anything.
+gaps are stated in the guard's own header. The first is caught elsewhere:
+`scripts/migrations-match-schema.test.ts` runs `drizzle-kit generate` for every set into a copy and
+fails when anything changes. The second is not, because `generate` compares the TypeScript with the
+snapshot and never reads the SQL. The reading was chosen over the TypeScript deliberately: a reading
+taken from the TypeScript passes the moment somebody edits a table file, while the constraint is still
+live in every migrated database, and it would have gone silently vacuous at the flip, when `PgTable`
+stops matching anything.
 
 **How the six that existed were resolved (task P7, 2026-09-19).** All six were a `local` row naming a
 venue row by id — a person, a till, a location — so neither of the two routes §2.1 named applied: an
@@ -1171,14 +1174,18 @@ At the paused rebase, reset the migrations dir to main's exact state
 pasting back any hand-written SQL you saved first — a regeneration DROPS it, which is exactly how
 core's nine behavioural triggers and media's two image foreign keys were lost at the flip; both
 replacement files record it in their own headers). Stage only your migrations, `rebase --continue`,
-and verify by RUNNING `scripts/append-only-triggers.test.ts` and
-`packages/fiscal-verifactu/src/inmutabilidad.test.ts`. Paid for on #165.
+and verify by RUNNING `scripts/append-only-triggers.test.ts`,
+`scripts/migrations-match-schema.test.ts` and `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
+Paid for on #165.
 
 The justification this used to carry — "works because the snapshot chain deliberately lags the DB,
-custom migrations being snapshot-less" — is not something this tree bears out, and it has not been
-re-taken since the storage switch: the two hand-written `--custom` migrations in the tree each carry
-their own `meta/000N_snapshot.json`, and each differs from the one before it. Treat the procedure as
-the receipt rather than the explanation.
+custom migrations being snapshot-less" — is half right. The three hand-written `--custom` migrations
+in the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
+`packages/db/drizzle/0004_variant_one_level.sql` and `packages/media/drizzle/0001_image_references.sql`)
+each carry their own `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-23 each
+of those files equalled the one before it once `id` and `prevId` were removed and keys sorted, so the
+snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
+does not reproduce it.
 
 ## Drizzle picks what to apply from `max(created_at)` alone
 

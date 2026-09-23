@@ -1,9 +1,10 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { packageDirOf } from "../packages/module/src/module.js";
 import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables.js";
+import { migrationSqlFiles } from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Every table a module's migrations CREATE is classified `ledger`/`state`/`local` (swap spec §2.1)
@@ -23,7 +24,6 @@ import { tablesCreatedBy } from "../packages/sync-enrolment/src/migration-tables
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
-const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 /** From every descriptor's `migrations.from` (`../<pkg>/drizzle`), the package DIR → module NAME map,
  * through `@waitron/module`'s `packageDirOf`. A package is in scope only if a descriptor points at it
@@ -35,34 +35,29 @@ function packageDirToModule(): Map<string, string> {
 interface DrizzlePackage {
   moduleName: string;
   packageDir: string;
-  /** Raw SQL of each `drizzle/*.sql` file; stripping happens at scan time. */
+  /** Raw SQL of each `.sql` file in the package's `drizzle/`, in path order; stripping happens at
+   * scan time. */
   sqls: string[];
 }
 
 function discoverDrizzlePackages(): DrizzlePackage[] {
   const discovered: DrizzlePackage[] = [];
   for (const [packageDir, moduleName] of packageDirToModule()) {
-    const drizzleDir = join(PACKAGES_DIR, packageDir, "drizzle");
-    let entries: string[];
-    try {
-      entries = readdirSync(drizzleDir);
-    } catch {
-      // A descriptor pointing at a package with no `drizzle/` dir: skip it. The anchor's module floor
-      // catches a discovery that silently found too few packages.
-      continue;
-    }
-    const sqls = entries
-      .filter((name) => name.endsWith(".sql"))
-      .sort()
-      .map((name) => readFileSync(join(drizzleDir, name), "utf8"));
+    const set = join("packages", packageDir, "drizzle");
+    // A descriptor pointing at a package with no `drizzle/` dir: skip it. The anchor's module floor
+    // catches a discovery that silently found too few packages.
+    if (!existsSync(join(REPO_ROOT, set))) continue;
+    const sqls = migrationSqlFiles(REPO_ROOT, set).map((file) =>
+      readFileSync(join(REPO_ROOT, file), "utf8"),
+    );
     discovered.push({ moduleName, packageDir, sqls });
   }
   return discovered;
 }
 
 /** Every table a module's migrations leave in existence (lowercased), by module name — CREATEs minus
- * later DROPs, a RENAME counting as a drop of the old name and a create of the new, in filename
- * order. A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
+ * later DROPs, a RENAME counting as a drop of the old name and a create of the new, in the order
+ * `migrationSqlFiles` returns (sorted by repo-relative path). A module with a `drizzle/` dir but no `.sql` (e.g. `fiscal-none`) contributes an empty set. */
 function createdTablesByModule(discovered: DrizzlePackage[]): Map<string, Set<string>> {
   const byModule = new Map<string, Set<string>>();
   for (const { moduleName, sqls } of discovered) {

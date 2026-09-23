@@ -3851,9 +3851,24 @@ What the preparation tasks left, with F1's own answers where it found them:
   pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
   claim, the slice-1 spec's four unannotated "211" mentions, and what became of
   `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
-- **Deferred cleanups, each with its reason in its PR** — P7's three (assert `drizzle-kit generate`
-  is a no-op; unify the three root-project schema readers into
-  `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
+- **Deferred cleanups, each with its reason in its PR**
+  - P7's three (#426) — **DONE** (2026-09-23, PR #533). A new root
+    guard, `scripts/migrations-match-schema.test.ts`, regenerates every migration set into a copy
+    with `drizzle-kit generate` and fails if anything changes, so a schema edit that was never
+    generated is now caught; it compares the TypeScript with the snapshot only, so a key added by
+    hand-written SQL is still seen by nothing. The migration-set readers two root guards each
+    carried a copy of now live once in `packages/sync-enrolment/src/testing/migration-sets.ts`,
+    in the same package as `tablesCreatedBy` but outside what its `index.ts` exports, and
+    `classification-complete` reads its SQL through them. `two-file-foreign-keys` builds its
+    table-to-class map once. Left, found while doing it: `no-tenant-column`'s SQL check still
+    passed with one set's SQL dropped, because it checks for an absence and the remaining files
+    clear its floor of eight. `module-graph-honesty`, `schema-constraints` and
+    `packages/db/src/classification.test.ts` still read a set's SQL their own way — the top of the
+    `drizzle` folder only, and `module-graph-honesty` unsorted — rather than through
+    `migrationSqlFiles`, which walks subfolders; no set has SQL in a subfolder today
+    (`find packages apps -path '*/drizzle/*/*.sql' -not -path '*/node_modules/*'` printed nothing,
+    2026-09-23), and drizzle's migrator applies only `<folder>/<tag>.sql` for each journal entry.
+    `journal-monotonic` parses `_journal.json` itself rather than sharing `headSnapshot`'s reader.
   - P5's three (#475) — **one DONE, one moot, one still declined, for a restated reason**
     (2026-09-23, PR #531). **Done:** the two-call write conversion
     `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the

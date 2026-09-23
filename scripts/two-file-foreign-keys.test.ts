@@ -1,7 +1,11 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
+import {
+  headSnapshot,
+  migrationSets,
+} from "../packages/sync-enrolment/src/testing/migration-sets.js";
 
 /**
  * Two database files, and nothing joining them at the database level.
@@ -16,37 +20,30 @@ import { ALL_MODULES } from "../packages/composition/src/index.js";
  * see both sides — the same reason `classification-complete.test.ts` lives here.
  *
  * WHAT IT READS. Drizzle's own head snapshot per migration set, resolved through `meta/_journal.json`
- * exactly as `no-tenant-column.test.ts` resolves it: the normalised schema drizzle-kit diffs to emit
+ * by `headSnapshot` in `packages/sync-enrolment/src/testing/migration-sets.ts`, the reader
+ * `no-tenant-column.test.ts` shares: the normalised schema drizzle-kit diffs to emit
  * its SQL, which holds the graph directly as `tables[*].foreignKeys[*]`. Reading generated artifacts
  * rather than the TypeScript keeps this file free of the storage engine's types, which is what the
  * flip exists to avoid having to revisit.
  *
  * Three gaps, stated because a failing test can never restore a missing hedge:
  *
- * 1. **A key declared in TypeScript but not yet generated is invisible to it**, and nothing in the
- *    tree regenerates a migration set and diffs it, so nothing catches the gap either: searched on
- *    2026-09-19 for every file naming drizzle-kit across `packages`, `apps`, `scripts`, `.github`,
- *    `.husky` and `deploy`, the only suites that came back are each package's
- *    `schema-ownership.test.ts`, which assert which tables a set creates, never that a regeneration
- *    is a no-op. The trade is deliberate: an ungenerated key reaches no database, while a key still
- *    live in every migrated box would have passed a reading taken from the TypeScript the moment
- *    someone edited it — which is exactly the state the two `DROP CONSTRAINT` migrations beside this
- *    guard exist to leave behind.
+ * 1. **A key declared in TypeScript but not yet generated is invisible to it.** That state fails
+ *    `migrations-match-schema.test.ts` instead, which regenerates every set into a copy and requires
+ *    nothing to change. Reading the snapshot rather than the TypeScript is deliberate: an
+ *    ungenerated key reaches no database, while a reading taken from the TypeScript would pass the
+ *    moment someone deleted a key there, with the key still live in every migrated database.
  * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not change
- *    the snapshot — and there are such keys: read on 2026-09-19, scanning each
- *    `packages/<pkg>/drizzle/` directory's SQL statement by statement, applying every `ADD
- *    CONSTRAINT … FOREIGN KEY` and subtracting every `DROP CONSTRAINT` and `DROP TABLE`, ends with
- *    MORE keys than the snapshots hold — the extras all declared in the hand-written `*_sql.sql`
- *    files. What that scan agrees with the snapshots about is the answer: no crossing edge, and no
- *    unclassified endpoint, from either reading. Nothing keeps them agreeing. (The directory is
- *    written with a placeholder because a glob's closing `*` followed by a slash would end this
- *    comment.)
+ *    the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the snapshot,
+ *    never with the SQL. None is known today: on 2026-09-23 the three custom migrations (journal
+ *    entries whose snapshot equals the one before, `id` and `prevId` aside and keys sorted) had no
+ *    `REFERENCES` or `FOREIGN KEY` outside a `--` comment. Nothing keeps it that way.
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
-const ROOTS = ["packages", "apps"];
+const sets = migrationSets(repoRoot);
 
 /** Which file a class lives in (topology design §2.1). */
 function fileOfClass(cls: string): string {
@@ -54,46 +51,11 @@ function fileOfClass(cls: string): string {
 }
 
 /** Physical table name (lowercased) -> declared class, across every module. */
-function classOfTable(): Map<string, string> {
-  const classes = new Map<string, string>();
-  for (const module of ALL_MODULES) {
-    for (const entry of module.classification ?? []) {
-      classes.set(entry.table.toLowerCase(), entry.class);
-    }
+const classes = new Map<string, string>();
+for (const module of ALL_MODULES) {
+  for (const entry of module.classification ?? []) {
+    classes.set(entry.table.toLowerCase(), entry.class);
   }
-  return classes;
-}
-
-/** Every `drizzle/` migration set directly under a package or app, as repo-relative paths. */
-function migrationSets(): string[] {
-  const sets: string[] = [];
-  for (const root of ROOTS) {
-    for (const entry of readdirSync(join(repoRoot, root))) {
-      const dir = join(repoRoot, root, entry, "drizzle");
-      if (existsSync(dir) && statSync(dir).isDirectory()) sets.push(relative(repoRoot, dir));
-    }
-  }
-  return sets.sort();
-}
-
-/**
- * The snapshot drizzle holds for a set's HEAD. `"empty"` is a set that declares no migrations at all
- * (`packages/fiscal-none` owns no tables); `"missing"` is a set with no journal at all, or one whose
- * journal names a head whose snapshot is not on disk. Either would drop that set out of the check
- * below without saying so, which is the case the suite refuses rather than skips.
- */
-type HeadSnapshot = { kind: "file"; path: string } | { kind: "empty" } | { kind: "missing" };
-
-function headSnapshot(set: string): HeadSnapshot {
-  const journal = join(repoRoot, set, "meta", "_journal.json");
-  if (!existsSync(journal)) return { kind: "missing" };
-  const entries = JSON.parse(readFileSync(journal, "utf8")).entries as { idx: number }[];
-  if (entries.length === 0) return { kind: "empty" };
-  const head = Math.max(...entries.map((entry) => entry.idx));
-  const snapshot = join(repoRoot, set, "meta", `${String(head).padStart(4, "0")}_snapshot.json`);
-  return existsSync(snapshot)
-    ? { kind: "file", path: relative(repoRoot, snapshot) }
-    : { kind: "missing" };
 }
 
 interface Edge {
@@ -107,8 +69,8 @@ interface Edge {
 /** Every foreign key in every set's head snapshot. */
 function declaredForeignKeys(): Edge[] {
   const edges: Edge[] = [];
-  for (const set of migrationSets()) {
-    const head = headSnapshot(set);
+  for (const set of sets) {
+    const head = headSnapshot(repoRoot, set);
     if (head.kind !== "file") continue;
     const snapshot = JSON.parse(readFileSync(join(repoRoot, head.path), "utf8")) as {
       tables: Record<
@@ -157,7 +119,6 @@ function violationOf(edge: Edge, classes: Map<string, string>): string | null {
 
 describe("the two database files are independent", () => {
   it("has no foreign key crossing between them", () => {
-    const classes = classOfTable();
     const violations = declaredForeignKeys()
       .map((edge) => violationOf(edge, classes))
       .filter((violation) => violation !== null);
@@ -167,7 +128,7 @@ describe("the two database files are independent", () => {
   it("reads a head snapshot for every migration set that declares one", () => {
     // A set whose journal names a head with no snapshot on disk would drop out of the check above
     // without saying so, and an absence assertion cannot notice its own missing input.
-    expect(migrationSets().filter((set) => headSnapshot(set).kind === "missing")).toEqual([]);
+    expect(sets.filter((set) => headSnapshot(repoRoot, set).kind === "missing")).toEqual([]);
   });
 
   // Vacuous-pass anchor. An empty graph — a snapshot shape that changed under us, a discovery that
@@ -189,7 +150,6 @@ describe("the two database files are independent", () => {
  * made-up constraint — so that both answers are pinned rather than one.
  */
 describe("negative controls", () => {
-  const classes = classOfTable();
   const edge = (from: string, to: string): Edge => ({
     set: "control",
     constraint: "control_fk",

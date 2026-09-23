@@ -6,9 +6,13 @@
  * `CREATE TABLE` would keep a dropped table forever and put them in permanent disagreement, so this
  * subtracts on `DROP TABLE`, and follows `ALTER TABLE … RENAME TO` from the old name to the new.
  *
- * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in FILENAME order, because
- * create → drop → create must resolve to "present" and the reverse to "absent". `readdirSync` does
- * not sort, so both callers sort.
+ * ORDER IS THE CONTRACT: the caller passes one migration set's SQL in the order the migrations
+ * apply, because create → drop → create must resolve to "present" and the reverse to "absent". Both
+ * callers approximate that order by sorting paths: `packages/db/src/classification.test.ts` sorts
+ * the file names at the top of core's set, and `migrationSqlFiles` (`./testing/migration-sets.ts`)
+ * sorts every `.sql` path in a set by the whole path. drizzle names each migration after its
+ * zero-padded number, so on 2026-09-23 the sorted `.sql` names of every set matched its journal's
+ * order.
  */
 
 /** `CREATE TABLE ["public".]"<name>"` — the name backtick-quoted (what every `CREATE TABLE` under
