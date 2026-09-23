@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   categoryDetails,
-  productVariants,
+  parentJoin,
+  parentProducts,
   readContentLanguages,
   staffPresentationName,
   validateContentTranslations,
@@ -28,9 +29,9 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products, product variants and categories reference this photo. `readImage` counts
-   * `listImageUsages`; `listImages` counts the same three sources in its own SQL, and the two must
-   * stay in step or the library shows a free photo that then refuses to delete. */
+  /** How many products (variants among them) and categories reference this photo. `readImage`
+   * counts `listImageUsages`; `listImages` counts the same two sources in its own SQL, and the two
+   * must stay in step or the library shows a free photo that then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -142,45 +143,45 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     .from(mediaImages)
     .where(eq(mediaImages.id, imageId));
   if (!image[0]) throw new AppError("image.not_found", { imageId });
-  const rows = await tx
+  // A variant is a `products` row with a `parent_id`, so one column covers both. A variant with no
+  // photo of its own shows its parent's and holds no use of it.
+  const productRows = await tx
     .select({
       id: products.id,
+      parentId: products.parentId,
       catalogueId: products.catalogueId,
       name: products.name,
+      parentName: parentProducts.name,
       active: products.active,
     })
     .from(products)
+    .leftJoin(parentProducts, parentJoin)
     .where(eq(products.image, image[0].filename))
     .orderBy(products.id);
-  // A variant carries its own photo, so a variant reference protects the image exactly as a
-  // product's does. Without this the picture behind a published variant could be deleted.
-  const variantRows = await tx
-    .select({
-      id: productVariants.id,
-      productId: productVariants.productId,
-      catalogueId: products.catalogueId,
-      productName: products.name,
-      variantName: productVariants.name,
-      active: products.active,
-    })
-    .from(productVariants)
-    .innerJoin(products, eq(products.id, productVariants.productId))
-    .where(eq(productVariants.image, image[0].filename))
-    .orderBy(productVariants.id);
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })
     .from(categoryDetails)
     .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
     .where(eq(categoryDetails.image, image[0].filename))
     .orderBy(categories.id);
+  const usage = ({
+    parentId,
+    parentName,
+    name,
+    ...row
+  }: (typeof productRows)[number]): ImageUsage =>
+    parentId === null
+      ? { kind: "product", ...row, name }
+      : {
+          kind: "variant",
+          ...row,
+          productId: parentId,
+          // The " · " join lives in product-presentation.ts and is called, never rewritten here.
+          name: staffPresentationName({ name: parentName!, variantName: name }),
+        };
   return [
-    ...rows.map((row): ImageUsage => ({ kind: "product", ...row })),
-    ...variantRows.map(({ productName, variantName, ...row }): ImageUsage => ({
-      kind: "variant",
-      ...row,
-      // The " · " join lives in product-presentation.ts and is called, never rewritten here.
-      name: staffPresentationName({ name: productName, variantName }),
-    })),
+    ...productRows.filter((row) => row.parentId === null).map(usage),
+    ...productRows.filter((row) => row.parentId !== null).map(usage),
     ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
   ];
 }
@@ -576,9 +577,9 @@ export async function listImages(
 }
 
 /**
- * How many products, variants and categories name each of `filenames`.
+ * How many products (variants among them) and categories name each of `filenames`.
  *
- * The three reads are the same three `listImageUsages` scans, and a source added there is added
+ * The two reads are the same two `listImageUsages` scans, and a source added there is added
  * here too — or the library shows a free photo that then refuses to delete. They are separate
  * statements on one transaction and are awaited in turn, never `Promise.all` (`CLAUDE.md` §3).
  */
@@ -596,12 +597,6 @@ async function countUsages(
     .select({ image: products.image })
     .from(products)
     .where(inArray(products.image, wanted))) {
-    tally(row.image);
-  }
-  for (const row of await tx
-    .select({ image: productVariants.image })
-    .from(productVariants)
-    .where(inArray(productVariants.image, wanted))) {
     tally(row.image);
   }
   for (const row of await tx

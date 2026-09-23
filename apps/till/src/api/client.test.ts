@@ -2094,6 +2094,7 @@ describe("menuOfferToTillProduct", () => {
       productId: "burger",
       sectionId: "section-1",
       grossPrice: "8.00",
+      unitPrice: "8.00",
       displayOrder: 0,
       active: true,
       menuName: "Carta",

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { menuItems } from "./schema/menu.js";
+import { setMenuVariants, setProductVariants } from "./variants.js";
 import { products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -1511,5 +1513,182 @@ describe("catalogue operations", () => {
     // A blank customer name falls back to the staff name for the snapshotted line text.
     expect(priceable.descriptions).toEqual({ en: "water" });
     expect(priceable.unitPrice).toBe("1.50");
+  });
+});
+
+/**
+ * A parent's variants follow it onto every menu it is on (spec §15.5, V5), nested under its offer
+ * and priced by the chain in `offer-price.ts` (§15.3). The parent's own price (4.00) and its price
+ * on this menu (4.50) differ, so a variant priced from the wrong step of the chain fails.
+ */
+describe("menu offers nest a product's variants", () => {
+  let f: { menuId: string; sectionId: string; parentId: string; offerId: string };
+  const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
+  const wine = (name: string, unitPrice: string | null, available = true) => ({
+    name,
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice,
+    available,
+  });
+
+  beforeEach(async () => {
+    await seedVenue(fx.db);
+    f = await run(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Bar" });
+      const parent = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Wine by the glass",
+        pricingUnit: "each",
+        unitPrice: "4.00",
+        vatClass: "reduced",
+      });
+      const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Wine" } });
+      const offer = await createMenuItem(tx, {
+        menuId: menu.id,
+        productId: parent.id,
+        sectionId: section.id,
+        grossPrice: "4.50",
+      });
+      return { menuId: menu.id, sectionId: section.id, parentId: parent.id, offerId: offer.id };
+    });
+  });
+
+  const offers = (options: { includeUnavailable?: boolean } = {}) =>
+    run((tx) => listMenuOffers(tx, [f.menuId], options));
+  const nested = async () =>
+    (await offers())[0]!.variants.map(({ name, unitPrice, menuPrice, offered, available }) => ({
+      name,
+      unitPrice,
+      menuPrice,
+      offered,
+      available,
+    }));
+
+  it("prices a product with no variants at its menu price, with nothing nested", async () => {
+    expect(await offers()).toEqual([
+      expect.objectContaining({ productId: f.parentId, grossPrice: "4.50", unitPrice: "4.50" }),
+    ]);
+    expect((await offers())[0]!.variants).toEqual([]);
+  });
+
+  it("offers a variant added after its parent went on the menu, at once", async () => {
+    await run((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+    );
+    expect(await nested()).toEqual([
+      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, offered: true, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: true },
+    ]);
+    // Variants are only ever nested: the menu lists the parent alone.
+    expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
+  });
+
+  it("never lists a variant as an offer of its own, even with a menu row naming it", async () => {
+    const [w125] = await run((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+    );
+    // Written straight into the table: `createMenuItem` refuses a variant.
+    await fx.db
+      .insert(menuItems)
+      .values({ menuId: f.menuId, productId: w125!.id, sectionId: f.sectionId, grossPrice: 900 });
+    expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
+  });
+
+  it("charges a price set for the variant on this menu, and switches it off there", async () => {
+    const [, w175] = await run((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+    );
+    await run((tx) =>
+      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00", offered: true }]),
+    );
+    expect((await nested())[1]).toEqual({
+      name: "Wine 175",
+      unitPrice: "6.00",
+      menuPrice: "6.00",
+      offered: true,
+      available: true,
+    });
+
+    await run((tx) =>
+      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: false }]),
+    );
+    expect((await nested())[1]).toEqual({
+      name: "Wine 175",
+      unitPrice: "5.50",
+      menuPrice: null,
+      offered: false,
+      available: false,
+    });
+
+    await run((tx) =>
+      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: true }]),
+    );
+    expect((await nested())[1]).toMatchObject({
+      unitPrice: "5.50",
+      offered: true,
+      available: true,
+    });
+  });
+
+  it("lists an Unavailable variant as unavailable and leaves an Inactive one out", async () => {
+    const [w125, w175] = await run((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null), wine("Wine 175", "5.50", false), wine("Wine 250", "7.00")],
+        "en",
+      ),
+    );
+    // Wine 250 is left out of this save, so it becomes Inactive.
+    await run((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
+    expect(await nested()).toEqual([
+      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, offered: true, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: false },
+    ]);
+  });
+
+  it("takes the offer and its variants away when the parent is Inactive or Unavailable", async () => {
+    await run((tx) => setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"));
+    await run((tx) => updateProduct(tx, f.parentId, { available: false }));
+    expect(await offers()).toEqual([]);
+    await run((tx) => updateProduct(tx, f.parentId, { available: true, active: false }));
+    expect(await offers()).toEqual([]);
+  });
+
+  it("still lists a parent none of whose variants is offered here, every variant unavailable", async () => {
+    const [w125, w175] = await run((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
+    );
+    await run((tx) =>
+      setMenuVariants(tx, f.offerId, [
+        { variantId: w125!.id, price: null, offered: false },
+        { variantId: w175!.id, price: null, offered: false },
+      ]),
+    );
+    expect(await offers()).toHaveLength(1);
+    expect((await nested()).map(({ available }) => available)).toEqual([false, false]);
+  });
+
+  it("lists only top-level products, each with its Active variants nested in order", async () => {
+    const [w125, w175] = await run((tx) =>
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null), wine("Wine 175", "5.50"), wine("Wine 250", "7.00")],
+        "en",
+      ),
+    );
+    await run((tx) => setProductVariants(tx, f.parentId, [w175!, w125!], "en"));
+    const listed = await run((tx) => listProducts(tx, f.menuId));
+    expect(listed.map((product) => product.id)).toEqual([f.parentId]);
+    expect(
+      listed[0]!.variants.map(({ name, unitPrice, active }) => ({ name, unitPrice, active })),
+    ).toEqual([
+      { name: "Wine 175", unitPrice: "5.50", active: true },
+      { name: "Wine 125", unitPrice: null, active: true },
+    ]);
   });
 });

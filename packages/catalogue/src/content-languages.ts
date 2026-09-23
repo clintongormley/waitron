@@ -49,10 +49,11 @@ export async function validateContentTranslations(
   if (gap) throw new AppError("content.translation_required", { language: gap.language });
 }
 
+/** A variant's gap names the product it belongs to, whose editor holds it. */
 export async function listContentTranslationGaps(
   tx: Transaction,
   language: string,
-): Promise<{ kind: string; id: string }[]> {
+): Promise<{ kind: string; id: string; productId?: string }[]> {
   const code = contentLanguageCode(language);
   // `product`, `variant`, `option_list`, `option_label` and `extra_list` are the kinds whose
   // customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
@@ -65,24 +66,27 @@ export async function listContentTranslationGaps(
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
   // drizzle column mapping runs over the result, and `json()` columns are plain `text` here
   // (`packages/db/src/schema/columns.ts`). It is parsed below rather than compared as text.
+  // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
+  // rows and the variant branch to the rest; otherwise each variant would be counted twice.
   const result = await tx.execute<{
     kind: string;
     id: string;
+    product_id: string | null;
     translations: string;
   }>(sql`
-    select 'product' as kind, id, customer_name as translations from products
-      where customer_name is not null and customer_name <> '{}'
-    union all select 'category' as kind, id, name as translations from categories
-    union all select 'unit' as kind, id, name as translations from units
-    union all select 'variant' as kind, id, customer_name as translations from product_variants
-      where customer_name is not null and customer_name <> '{}'
-    union all select 'section' as kind, id, name as translations from menu_sections
-    union all select 'option_list' as kind, id, customer_name as translations from option_lists
-      where customer_name is not null and customer_name <> '{}'
-    union all select 'option_label' as kind, id, customer_name as translations from option_labels
-      where customer_name is not null and customer_name <> '{}'
-    union all select 'extra_list' as kind, id, customer_name as translations from extra_lists
-      where customer_name is not null and customer_name <> '{}'
+    select 'product' as kind, id, null as product_id, customer_name as translations from products
+      where parent_id is null and customer_name is not null and customer_name <> '{}'
+    union all select 'category' as kind, id, null, name as translations from categories
+    union all select 'unit' as kind, id, null, name as translations from units
+    union all select 'variant' as kind, id, parent_id, customer_name as translations from products
+      where parent_id is not null and customer_name is not null and customer_name <> '{}'
+    union all select 'section' as kind, id, null, name as translations from menu_sections
+    union all select 'option_list' as kind, id, null, customer_name as translations
+      from option_lists where customer_name is not null and customer_name <> '{}'
+    union all select 'option_label' as kind, id, null, customer_name as translations
+      from option_labels where customer_name is not null and customer_name <> '{}'
+    union all select 'extra_list' as kind, id, null, customer_name as translations
+      from extra_lists where customer_name is not null and customer_name <> '{}'
   `);
   return result.rows
     .filter(
@@ -90,7 +94,9 @@ export async function listContentTranslationGaps(
         resolveContentText(JSON.parse(row.translations) as Record<string, string>, code, code) ===
         "",
     )
-    .map(({ kind, id }) => ({ kind, id }));
+    .map(({ kind, id, product_id }) =>
+      product_id === null ? { kind, id } : { kind, id, productId: product_id },
+    );
 }
 
 export async function readContentLanguages(

@@ -54,6 +54,7 @@ const bunVariant = {
   image: null,
   unitPrice: "1.00",
   available: true,
+  active: true,
 };
 
 /**
@@ -143,6 +144,7 @@ describe("product-list", () => {
             image: null,
             unitPrice: "4.00",
             available: true,
+            active: true,
           },
           {
             id: "large",
@@ -152,6 +154,7 @@ describe("product-list", () => {
             image: null,
             unitPrice: "7.50",
             available: true,
+            active: true,
           },
         ],
       }),
@@ -160,6 +163,28 @@ describe("product-list", () => {
     const rows = [...(await tableRoot(el)).querySelectorAll("tbody tr")];
     expect(rows[0]!.textContent).toContain("12.50");
     expect(rows[1]!.textContent).toContain("4.00–7.50");
+  });
+
+  it("prices a variant with no price of its own at its product's price", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({
+          id: "wine",
+          unitPrice: "4.00",
+          variants: [
+            { ...bunVariant, id: "w125", name: "Wine 125", unitPrice: null },
+            { ...bunVariant, id: "w175", name: "Wine 175", unitPrice: "5.50" },
+          ],
+        }),
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "wine", t("product.price")).textContent!.trim()).toBe("4.00–5.50");
+    root.querySelector<HTMLElement>(".tree-toggle")!.click();
+    await table.updateComplete;
+    expect(cellUnder(root, "wine:w125", t("product.price")).textContent!.trim()).toBe("4.00");
+    expect(cellUnder(root, "wine:w175", t("product.price")).textContent!.trim()).toBe("5.50");
   });
 
   // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
@@ -347,6 +372,7 @@ describe("product-list", () => {
               image: null,
               unitPrice: "2.00",
               available: true,
+              active: true,
             },
             {
               id: "large",
@@ -356,6 +382,7 @@ describe("product-list", () => {
               image: null,
               unitPrice: "3.00",
               available: true,
+              active: true,
             },
           ],
         }),
@@ -392,6 +419,7 @@ describe("product-list", () => {
               image: null,
               unitPrice: "2.00",
               available: true,
+              active: true,
             },
             {
               id: "large",
@@ -401,6 +429,7 @@ describe("product-list", () => {
               image: null,
               unitPrice: "3.00",
               available: true,
+              active: true,
             },
           ],
         }),

@@ -868,14 +868,42 @@ describe("mountCatalogueApi — products", () => {
       `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "4.10", offered: true }],
         },
       },
     );
     expect(published.status).toBe(200);
+    // Every Active variant is listed, the one this menu sets nothing for with the defaults.
     expect(await published.json()).toEqual([
-      { variantId: saved.variants[0]!.id, unitPrice: "4.10", available: true },
+      { variantId: saved.variants[0]!.id, price: "4.10", offered: true },
+      { variantId: saved.variants[1]!.id, price: null, offered: true },
     ]);
+    const malformed = await send(
+      app,
+      "PUT",
+      `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
+      { body: { variants: [{ variantId: saved.variants[0]!.id, price: 4.1, offered: true }] } },
+    );
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "variants.0" } },
+    });
+    // A variant follows its parent onto the menu; it is never put there on its own.
+    const variantOffer = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/items`,
+      {
+        body: { productId: saved.variants[0]!.id, sectionId, grossPrice: "4.00", displayOrder: 1 },
+      },
+    );
+    expect(variantOffer.status).toBe(400);
+    expect(await variantOffer.json()).toMatchObject({
+      error: {
+        code: "menu_item.variant_not_allowed",
+        params: { productId: saved.variants[0]!.id },
+      },
+    });
     const otherCatalogueId = await createCatalogueVia(app, "Other catalogue");
     const mismatched = await send(
       app,
@@ -886,7 +914,8 @@ describe("mountCatalogueApi — products", () => {
     expect(await mismatched.json()).toMatchObject({ error: { code: "menu_item.not_found" } });
     const offers = await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`);
     expect(((await offers.json()) as { variants: unknown[] }[])[0]!.variants).toEqual([
-      expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10" }),
+      expect.objectContaining({ id: saved.variants[0]!.id, unitPrice: "4.10", menuPrice: "4.10" }),
+      expect.objectContaining({ id: saved.variants[1]!.id, unitPrice: "2.00", menuPrice: null }),
     ]);
     await send(app, "PUT", `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`, {
       body: { variants: [] },
@@ -2920,13 +2949,13 @@ describe("catalogue routes that already refused a negative price", () => {
       `/management-api/catalogues/${catalogueId}/items/${itemId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, unitPrice: "-1.00", available: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "-1.00", offered: true }],
         },
       },
     );
     expect(badOfferVariant.status).toBe(400);
     expect(await badOfferVariant.json()).toMatchObject({
-      error: { code: "product.variant_invalid", params: { field: "unitPrice" } },
+      error: { code: "product.variant_invalid", params: { field: "price" } },
     });
 
     const badExtra = await send(app, "POST", "/management-api/modifiers/extras", {

@@ -174,7 +174,7 @@ it.each([
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
-it("refuses exactly one variant but accepts none or two, and parses each variant's own names", () => {
+it("accepts none, one or two variants, and parses each variant's own names", () => {
   const one = {
     name: "Small",
     customerName: null,
@@ -183,9 +183,8 @@ it("refuses exactly one variant but accepts none or two, and parses each variant
     unitPrice: "2.00",
     available: true,
   };
-  expect(() => parseProductEditorInput({ ...input, variants: [one] })).toThrow(
-    expect.objectContaining({ code: "product.variant_count_invalid", params: { minimum: 2 } }),
-  );
+  // Spec §15.1: a product with exactly one variant is allowed.
+  expect(parseProductEditorInput({ ...input, variants: [one] }).variants).toEqual([one]);
   expect(parseProductEditorInput({ ...input, variants: [] }).variants).toEqual([]);
   const parsed = parseProductEditorInput({
     ...input,

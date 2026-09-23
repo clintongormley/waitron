@@ -85,7 +85,7 @@ export const menuItems = table(
     active: flag("active").notNull().default(true),
   },
   (t) => [
-    // The target of menu_item_variants_offer_fk: a published variant belongs to the offer's product.
+    // The target of menu_item_variant_overrides_offer_fk: an override names the offer's product.
     unique("menu_items_id_product_key").on(t.id, t.productId),
     unique("menu_items_menu_product_key").on(t.menuId, t.productId),
     foreignKey({

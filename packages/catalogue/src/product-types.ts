@@ -47,10 +47,12 @@ export interface SellableUnit extends Unit {
 }
 
 /**
- * One product variant as the editor sends and receives it. The three names fall back INDEPENDENTLY:
- * `name` is the plain staff-facing text, `customerName` the translated text a guest reads, and
- * `kitchenName` what a kitchen ticket prints; a blank customer or kitchen name falls back to `name`.
- * `product-presentation.ts` owns that fallback and the " · " join onto the product's own name.
+ * One product variant as the editor sends and receives it — a `products` row with a `parent_id`.
+ * The three names fall back INDEPENDENTLY: `name` is the plain staff-facing text, `customerName` the
+ * translated text a guest reads, and `kitchenName` what a kitchen ticket prints; a blank customer or
+ * kitchen name falls back to `name`. `product-presentation.ts` owns that fallback and the " · " join
+ * onto the product's own name. `unitPrice` and `image` are the variant's OWN values, null where it
+ * takes its parent's.
  */
 export interface ProductVariant {
   id: string;
@@ -58,12 +60,15 @@ export interface ProductVariant {
   customerName: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
-  unitPrice: string;
+  unitPrice: string | null;
   available: boolean;
+  /** False once the variant has been removed; it is kept, never deleted (spec §15.6). */
+  active: boolean;
 }
 
-/** A variant on the way IN: a new one omits `id`, an edited one carries it. */
-export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
+/** A variant on the way IN: a new one omits `id`, an edited one carries it. Saving one makes it
+ * Active; a variant left out of a save is made Inactive. */
+export type ProductVariantInput = Omit<ProductVariant, "id" | "active"> & { id?: string };
 
 /**
  * The slice of one product row the dashboard reads out of `GET /management-api/catalogues/:id/products`

@@ -510,14 +510,17 @@ export class ProductEditor extends LitElement {
     this.draft = { ...this.draft, [key]: value };
   }
   /**
-   * The draft never holds exactly ONE variant: a lone variant is just the product's own price, so
-   * it folds back into `unitPrice` and its row disappears. The server refuses a single variant
-   * outright (`product.variant_count_invalid`), so this is the invariant, not a convenience. Only the
-   * price folds back — with no variants the product's own Available switch is what governs.
+   * The draft never holds exactly ONE variant: a lone variant folds back into the product's own
+   * price and its row disappears. Only the price folds back — with no variants the product's own
+   * Available switch is what governs.
    */
   private setVariants(variants: EditorVariant[]): void {
     if (variants.length === 1) {
-      this.draft = { ...this.draft, unitPrice: variants[0]!.unitPrice, variants: [] };
+      this.draft = {
+        ...this.draft,
+        unitPrice: variants[0]!.unitPrice ?? this.draft.unitPrice,
+        variants: [],
+      };
       return;
     }
     this.change("variants", variants);
@@ -579,7 +582,8 @@ export class ProductEditor extends LitElement {
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
       if (!variant.name.trim()) errors[`variant-${index}-name`] = t("editor.variant_name_required");
-      if (!isProductPrice(variant.unitPrice))
+      // A variant with no price of its own sells at the product's.
+      if (variant.unitPrice !== null && !isProductPrice(variant.unitPrice))
         errors[`variant-${index}-price`] = t("editor.price_invalid");
     }
     this.errors = errors;

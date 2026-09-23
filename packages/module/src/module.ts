@@ -107,7 +107,10 @@ export interface ZoneMenuOffer {
   readonly menuId: string;
   readonly productId: string;
   readonly sectionId: string;
+  /** The STORED menu price; `unitPrice` is the one charged. */
   readonly grossPrice: string;
+  /** The price this offer charges, resolved along the catalogue's menu price chain. */
+  readonly unitPrice: string;
   readonly displayOrder: number;
   readonly active: boolean;
   readonly menuName: string;
@@ -135,6 +138,8 @@ export interface ZoneMenuOffer {
   readonly dietDerivation: unknown;
   readonly dietOverride: unknown;
   readonly dietaryDeclarations: readonly string[];
+  /** The product's Active variants, each with its RESOLVED `unitPrice`, this menu's stored
+   * `menuPrice` override, and `available` (Active, Available and offered on this menu). */
   readonly variants: readonly {
     readonly id: string;
     readonly name: string;
@@ -142,6 +147,8 @@ export interface ZoneMenuOffer {
     readonly kitchenName: string | null;
     readonly image: string | null;
     readonly unitPrice: string;
+    readonly menuPrice: string | null;
+    readonly offered: boolean;
     readonly available: boolean;
   }[];
   readonly courseId: string | null;

@@ -13,5 +13,6 @@ export const QUERY_DEPENDENCIES = {
     "content_languages",
     "menu_sections",
     "menu_items",
+    "menu_item_variant_overrides",
   ],
 } as const;

@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, primaryKey, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { count, flag, id, json, label, money, newId, products, table } from "@waitron/db";
-import { menuItems } from "./menu.js";
 
 export const productVariants = table(
   "product_variants",
@@ -23,7 +22,6 @@ export const productVariants = table(
     displayOrder: count("display_order").notNull().default(0),
   },
   (t) => [
-    // The target of menu_item_variants_variant_fk: a published variant belongs to the offer's product.
     unique("product_variants_product_id_key").on(t.productId, t.id),
     foreignKey({
       columns: [t.productId],
@@ -31,32 +29,5 @@ export const productVariants = table(
       name: "product_variants_product_fk",
     }).onDelete("restrict"),
     check("product_variants_price_ck", sql`${t.unitPrice} >= 0`),
-  ],
-);
-
-/** Publication owns its price; the product's current default never reprices an existing offer. */
-export const menuItemVariants = table(
-  "menu_item_variants",
-  {
-    menuItemId: id("menu_item_id").notNull(),
-    productId: id("product_id").notNull(),
-    variantId: id("variant_id").notNull(),
-    unitPrice: money("unit_price").notNull(),
-    available: flag("available").notNull().default(true),
-    displayOrder: count("display_order").notNull().default(0),
-  },
-  (t) => [
-    primaryKey({ columns: [t.menuItemId, t.variantId], name: "menu_item_variants_pk" }),
-    foreignKey({
-      columns: [t.menuItemId, t.productId],
-      foreignColumns: [menuItems.id, menuItems.productId],
-      name: "menu_item_variants_offer_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [t.productId, t.variantId],
-      foreignColumns: [productVariants.productId, productVariants.id],
-      name: "menu_item_variants_variant_fk",
-    }).onDelete("restrict"),
-    check("menu_item_variants_price_ck", sql`${t.unitPrice} >= 0`),
   ],
 );

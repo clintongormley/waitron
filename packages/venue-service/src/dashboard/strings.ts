@@ -58,7 +58,9 @@ const en = {
   "venue.product": "Product",
   "venue.price": "Price",
   "venue.variants": "Variants",
-  "venue.available": "Available on this menu",
+  "venue.offered": "Offered on this menu",
+  "venue.variant_price_hint":
+    "Leave a variant's price empty to charge its own price, or the product's price on this menu if it has none.",
   "venue.add_offer": "Add product to menu",
   "venue.save_price": "Save price",
   "venue.remove_offer": "Remove from menu",
@@ -158,7 +160,9 @@ const es: Record<keyof typeof en, string> = {
   "venue.product": "Producto",
   "venue.price": "Precio",
   "venue.variants": "Variantes",
-  "venue.available": "Disponible en este menú",
+  "venue.offered": "Se ofrece en este menú",
+  "venue.variant_price_hint":
+    "Deja vacío el precio de una variante para cobrar su propio precio o, si no tiene, el del producto en este menú.",
   "venue.add_offer": "Añadir producto a la carta",
   "venue.save_price": "Guardar precio",
   "venue.remove_offer": "Quitar de la carta",

@@ -66,7 +66,9 @@ export async function readProductEditor(
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
-    variants: await listProductVariants(tx, productId),
+    // Active variants only: a save sends back every variant it received and makes each Active, so
+    // listing an Inactive one here would restore it on the parent's next save.
+    variants: (await listProductVariants(tx, productId)).filter((variant) => variant.active),
   };
 }
 

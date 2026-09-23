@@ -14,7 +14,6 @@ import {
   createProduct,
   createUnit,
   replaceProductCategories,
-  setMenuVariants,
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
@@ -182,7 +181,7 @@ export async function seedCatalogues(
         });
         menuItemsByProduct.set(created.id, menuItem.id);
         if (product.variants?.length) {
-          const variants = await setProductVariants(
+          await setProductVariants(
             tx,
             created.id,
             product.variants.map((variant) => ({
@@ -190,19 +189,10 @@ export async function seedCatalogues(
               customerName: variant.customerName,
               kitchenName: variant.kitchenName ?? null,
               image: null,
-              unitPrice: variant.productPrice,
+              unitPrice: variant.unitPrice,
               available: variant.available,
             })),
             locale,
-          );
-          await setMenuVariants(
-            tx,
-            menuItem.id,
-            variants.map((variant, index) => ({
-              variantId: variant.id,
-              unitPrice: product.variants![index]!.menuPrice,
-              available: product.variants![index]!.available,
-            })),
           );
         }
         if (productsByImage.has(product.image)) {

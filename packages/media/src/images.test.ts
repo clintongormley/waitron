@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { withTransaction, CORE_MIGRATIONS, catalogues, products } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS, productVariants, writeContentLanguages } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
@@ -226,10 +226,17 @@ describe("metadata, labels and references", () => {
           vatClass: "general",
         })
         .returning({ id: products.id });
+      // A variant is a `products` row with a `parent_id`.
       const [variant] = await tx
-        .insert(productVariants)
-        .values({ productId: product!.id, name: "Large", unitPrice: 300, image: image.filename })
-        .returning({ id: productVariants.id });
+        .insert(products)
+        .values({
+          catalogueId: menu!.id,
+          parentId: product!.id,
+          name: "Large",
+          unitPrice: 300,
+          image: image.filename,
+        })
+        .returning({ id: products.id });
       const uses = [
         {
           kind: "variant",
@@ -247,8 +254,43 @@ describe("metadata, labels and references", () => {
       // scan finds but the count misses would show the library a free photo that refuses to delete.
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
       expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
-      await tx.execute(sql`update product_variants set image = null`);
+      await tx.execute(sql`update products set image = null where id = ${variant!.id}`);
       expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+    });
+  });
+
+  it("counts no use for a variant that shows its parent's photo", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const { image } = await uploadImage(
+        tx,
+        { bytes: photo, names: { en: "Loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+      const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+        id: catalogues.id,
+      });
+      const [product] = await tx
+        .insert(products)
+        .values({
+          catalogueId: menu!.id,
+          name: "Bread",
+          pricingUnit: "each",
+          unitPrice: 200,
+          vatClass: "general",
+          image: image.filename,
+        })
+        .returning({ id: products.id });
+      // No photo of its own: it borrows the parent's (V11), which is the parent's use, not its own.
+      await tx
+        .insert(products)
+        .values({ catalogueId: menu!.id, parentId: product!.id, name: "Large", unitPrice: 300 });
+      const uses = [
+        { kind: "product", id: product!.id, catalogueId: menu!.id, name: "Bread", active: true },
+      ];
+      expect(await listImageUsages(tx, image.id)).toEqual(uses);
+      expect((await readImage(tx, image.id)).usageCount).toBe(1);
+      expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
     });
   });
 

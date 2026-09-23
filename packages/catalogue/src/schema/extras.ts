@@ -77,8 +77,7 @@ export const extraListItems = table(
     check("extra_list_items_qty_ck", sql`${t.maxQuantity} >= 1`),
     // An item's price becomes a sale line and so reaches a fiscal record. `isProductPrice`
     // (packages/catalogue/src/modifier-limits.ts) refuses a leading minus before the write; this is
-    // the database backstop under that, in the shape `product_variants.unit_price` and
-    // `menu_item_variants.unit_price` already carry (schema/variants.ts).
+    // the database backstop under that.
     check("extra_list_items_price_ck", sql`${t.price} >= 0`),
     // One offer per product per list. `parseExtraListInput`
     // (packages/catalogue/src/extra-contract.ts) refuses the pair within one authoring body, because

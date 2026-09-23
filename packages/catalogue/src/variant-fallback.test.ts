@@ -40,8 +40,9 @@ import { seedVenue } from "../test/fixtures.js";
 
 /**
  * A variant row is a `products` row with a `parent_id`, and a null in any inherited field reads as
- * its parent's (spec §1.2, §15.2, §15.3). No write path creates one yet, so every variant here is
- * inserted straight into the table.
+ * its parent's (spec §1.2, §15.2, §15.3). Every variant here is inserted straight into the table,
+ * because `setProductVariants` writes only a variant's names, photo and price and each case needs
+ * the other inherited fields set too.
  *
  * The parent and the two variants carry DIFFERENT values on every field a case reads, and the
  * parent and Wine 175 each carry three different names (Wine 125 has only its staff name), so a
@@ -201,53 +202,7 @@ beforeEach(async () => {
   });
 });
 
-describe("listProducts reads a variant's blanks from its parent", () => {
-  it("fills every inherited field of a variant that sets none, and never its names", async () => {
-    const all = await run((tx) => listProducts(tx, f.catalogueId));
-    const wine = all.find((p) => p.id === f.wine125)!;
-    expect(wine).toMatchObject({
-      name: "Wine 125",
-      customerName: null,
-      kitchenName: null,
-      unitPrice: "4.00",
-      vatClass: "reduced",
-      pricingUnit: "each",
-      description: { en: "A dry white from Rueda" },
-      categoryId: f.wines,
-      primaryCategoryId: f.wines,
-      categoryIds: [f.wines],
-      unitId: f.glass,
-      image: "parent.jpg",
-      allergens: PARENT_ALLERGENS,
-      manualAllergens: PARENT_ALLERGENS,
-      dietOverride: { vegan: "yes" },
-      dietaryDeclarations: ["vegan"],
-    });
-    expect(wine.unit.id).toBe(f.glass);
-  });
-
-  it("keeps every value a variant sets itself", async () => {
-    const all = await run((tx) => listProducts(tx, f.catalogueId));
-    const wine = all.find((p) => p.id === f.wine175)!;
-    expect(wine).toMatchObject({
-      name: "Wine 175",
-      customerName: { en: "Large glass of house wine" },
-      kitchenName: "W175",
-      unitPrice: "5.50",
-      vatClass: "general",
-      pricingUnit: "weight",
-      image: "large.jpg",
-      categoryId: f.bottles,
-      categoryIds: [f.bottles],
-      unitId: f.largeGlass,
-      description: { en: "A sweet red from Toro" },
-      allergens: W175_PUBLISHED_ALLERGENS,
-      manualAllergens: W175_MANUAL_ALLERGENS,
-      dietOverride: W175_DIET_OVERRIDE,
-      dietaryDeclarations: ["vegetarian"],
-    });
-  });
-
+describe("listProducts lists the parent alone, its variants nested under it", () => {
   it("reads the parent itself unchanged", async () => {
     const all = await run((tx) => listProducts(tx, f.catalogueId));
     expect(all.find((p) => p.id === f.parentId)).toMatchObject({
@@ -260,22 +215,61 @@ describe("listProducts reads a variant's blanks from its parent", () => {
       unitId: f.glass,
     });
   });
+
+  it("nests each variant by its own names and stored price, never listing it on its own", async () => {
+    const all = await run((tx) => listProducts(tx, f.catalogueId));
+    expect(all.map((p) => p.id)).toEqual([f.parentId]);
+    expect(all[0]!.variants).toEqual([
+      {
+        id: f.wine125,
+        name: "Wine 125",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: null,
+        available: true,
+        active: true,
+      },
+      {
+        id: f.wine175,
+        name: "Wine 175",
+        customerName: { en: "Large glass of house wine" },
+        kitchenName: "W175",
+        image: "large.jpg",
+        unitPrice: "5.50",
+        available: true,
+        active: true,
+      },
+    ]);
+  });
 });
 
 describe("listMenuOffers reads a variant's blanks from its parent", () => {
-  it("resolves the effective values on an offer row naming a variant", async () => {
+  // The parent's own price (4.00) and its price on this menu (4.50) differ, so a variant that
+  // inherits its price and is charged 4.00 was priced from the wrong step of the chain.
+  it("resolves the effective values of each variant nested under the parent's offer", async () => {
     await run(async (tx) => {
       const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
-      await tx.insert(menuItems).values([
-        { menuId: f.menuId, productId: f.wine125, sectionId: section.id, grossPrice: 450 },
-        { menuId: f.menuId, productId: f.wine175, sectionId: section.id, grossPrice: 600 },
-      ]);
+      await tx.insert(menuItems).values({
+        menuId: f.menuId,
+        productId: f.parentId,
+        sectionId: section.id,
+        grossPrice: 450,
+      });
     });
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
-    expect(offers.find((o) => o.productId === f.wine125)).toMatchObject({
+    expect(offers.map((o) => o.productId)).toEqual([f.parentId]);
+    const { variants } = offers[0]!;
+    expect(variants.map((v) => v.id)).toEqual([f.wine125, f.wine175]);
+    expect(variants[0]).toMatchObject({
       name: "Wine 125",
       customerName: null,
       kitchenName: null,
+      unitPrice: "4.50",
+      menuPrice: null,
+      offered: true,
+      available: true,
+      image: "parent.jpg",
       vatClass: "reduced",
       pricingUnit: "each",
       unit: { id: f.glass },
@@ -286,10 +280,12 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       dietaryDeclarations: ["vegan"],
       courseId: f.courseId,
     });
-    expect(offers.find((o) => o.productId === f.wine175)).toMatchObject({
+    expect(variants[1]).toMatchObject({
       name: "Wine 175",
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
+      unitPrice: "5.50",
+      image: "large.jpg",
       vatClass: "general",
       pricingUnit: "weight",
       unit: { id: f.largeGlass },
@@ -322,26 +318,22 @@ describe("a variant's reporting category comes from the product whose category r
           unitPrice: null,
           vatClass: null,
           dietaryDeclarations: null,
+          variantOrder: 2,
         })
         .returning({ id: products.id });
       await tx.insert(productCategories).values({ productId: row!.id, categoryId: f.bottles });
       const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
-      await tx
-        .insert(menuItems)
-        .values({ menuId: f.menuId, productId: row!.id, sectionId: section.id, grossPrice: 700 });
+      await tx.insert(menuItems).values({
+        menuId: f.menuId,
+        productId: f.parentId,
+        sectionId: section.id,
+        grossPrice: 700,
+      });
       return row!.id;
     });
 
-    const listed = (await run((tx) => listProducts(tx, f.catalogueId))).find(
-      (p) => p.id === wine250,
-    );
-    expect(listed).toMatchObject({
-      categoryId: null,
-      primaryCategoryId: null,
-      categoryIds: [f.bottles],
-    });
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
-    expect(offers.find((o) => o.productId === wine250)!.category).toBeNull();
+    expect(offers[0]!.variants.find((v) => v.id === wine250)!.category).toBeNull();
     expect(await run((tx) => readProductEditor(tx, wine250))).toMatchObject({
       primaryCategoryId: null,
       categoryIds: [f.bottles],
@@ -590,8 +582,7 @@ describe("dietary declarations on a variant", () => {
       .values({ catalogueId: f.catalogueId, parentId: f.parentId, name: "Wine 250" })
       .returning({ id: products.id, dietaryDeclarations: products.dietaryDeclarations });
     expect(row!.dietaryDeclarations).toEqual([]);
-    const all = await run((tx) => listProducts(tx, f.catalogueId));
-    expect(all.find((p) => p.id === row!.id)!.dietaryDeclarations).toEqual([]);
+    expect(await effectiveDeclarations(row!.id)).toEqual([]);
   });
 
   it("reads the parent's when the variant stored an explicit null", async () => {
@@ -600,9 +591,21 @@ describe("dietary declarations on a variant", () => {
       .from(products)
       .where(eq(products.id, f.wine125));
     expect(stored!.dietaryDeclarations).toBeNull();
-    const all = await run((tx) => listProducts(tx, f.catalogueId));
-    expect(all.find((p) => p.id === f.wine125)!.dietaryDeclarations).toEqual(["vegan"]);
+    expect(await effectiveDeclarations(f.wine125)).toEqual(["vegan"]);
   });
+
+  /** A variant is not a row of `listProducts` (it is nested there by its names alone), so its
+   * effective declarations are read through the fallback itself. */
+  async function effectiveDeclarations(id: string) {
+    const [row] = await run((tx) =>
+      tx
+        .select({ dietaryDeclarations: effectiveProductColumns.dietaryDeclarations })
+        .from(products)
+        .leftJoin(parentProducts, parentJoin)
+        .where(eq(products.id, id)),
+    );
+    return row!.dietaryDeclarations;
+  }
 });
 
 describe("INHERITED_KEYS", () => {

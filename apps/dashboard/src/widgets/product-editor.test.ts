@@ -908,7 +908,7 @@ it("folds the lone variant back into the plain price when the second one is canc
     new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  // A draft never holds exactly one variant: the server refuses that shape outright.
+  // A draft never holds exactly one variant.
   expect(el.currentValue.variants).toEqual([]);
   expect(el.currentValue.unitPrice).toBe("9.00");
   expect(variantTable(el)).toBeNull();
@@ -933,6 +933,37 @@ it("folds a removed second variant's sibling price back into the plain price fie
   expect(
     (el.shadowRoot!.querySelector("[name=unit-price]") as HTMLElement & { value: string }).value,
   ).toBe("2.00");
+});
+
+it("keeps the product's own price when the variant left alone has no price of its own", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [{ ...small, unitPrice: null }, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  variantTable(el)!.dispatchEvent(
+    new CustomEvent("wt-remove", { detail: { index: 1 }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.variants).toEqual([]);
+  expect(el.currentValue.unitPrice).toBe("9.00");
+});
+
+it("saves a variant with no price of its own, which sells at the product's", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [{ ...small, unitPrice: null }, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.variants[0].unitPrice).toBeNull();
 });
 
 it("applies a reorder, an availability toggle and an edit from the variants table to the draft", async () => {

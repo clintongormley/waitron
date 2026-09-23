@@ -118,7 +118,7 @@ describe("seedCatalogues", () => {
         category_count: number;
         primary_category: string;
         variant_prices: string;
-        menu_variant_prices: string;
+        menu_overrides: number;
       }>(sql`
         select p.description, p.kitchen_name, p.dietary_declarations,
           cast(count(distinct pc.category_id) as integer) as category_count,
@@ -126,22 +126,31 @@ describe("seedCatalogues", () => {
           -- unit_price counts whole cents, so these are counts, not amounts. Each ELEMENT is cast
           -- to text while the ORDER BY stays on the uncast column: element-wise text ordering would
           -- put 1400 before 210, and this keeps the ordering numeric with text elements.
-          json_group_array(distinct cast(pv.unit_price as text) order by pv.unit_price) as variant_prices,
-          json_group_array(distinct cast(mv.unit_price as text) order by mv.unit_price) as menu_variant_prices
+          json_group_array(distinct cast(v.unit_price as text) order by v.unit_price) as variant_prices,
+          (select cast(count(*) as integer) from menu_item_variant_overrides o
+            where o.product_id = p.id) as menu_overrides
         from products p
         join categories c on c.id = p.category_id
         join product_categories pc on pc.product_id = p.id
-        join product_variants pv on pv.product_id = p.id
-        join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id
-        where p.name = 'Café'
+        join products v on v.parent_id = p.id
+        where p.name = 'Café' and p.parent_id is null
         group by p.id, c.name`);
+      const { rows: coffeeVariants } = await tx.execute<{
+        name: string;
+        customer_en: string | null;
+        kitchen_name: string | null;
+      }>(sql`
+        select v.name, v.customer_name->>'en' as customer_en, v.kitchen_name
+        from products v
+        join products p on p.id = v.parent_id
+        where p.name = 'Café'
+        order by v.variant_order`);
       const editorDemo = editorDemoRaw.map((row) => ({
         ...row,
         description:
           row.description === null ? null : (JSON.parse(row.description) as Record<string, string>),
         dietary_declarations: JSON.parse(row.dietary_declarations) as string[],
         variant_prices: JSON.parse(row.variant_prices) as string[],
-        menu_variant_prices: JSON.parse(row.menu_variant_prices) as string[],
       }));
       // The demo exists to show WHICH name each screen reads, so it has to seed products whose three
       // names are three different strings. A seed that derives them all from one authored map cannot
@@ -187,6 +196,7 @@ describe("seedCatalogues", () => {
         drinksRoute,
         charcuterieRoute,
         editorDemo,
+        coffeeVariants,
         threeNames,
         distinctNames,
         customUnit,
@@ -242,8 +252,14 @@ describe("seedCatalogues", () => {
         category_count: 2,
         primary_category: "Drinks",
         variant_prices: ["140", "210"],
-        menu_variant_prices: ["175", "260"],
+        // The menu overrides nothing, so each variant sells at its own price there.
+        menu_overrides: 0,
       },
+    ]);
+    // A variant is named in full, and its three names are its own.
+    expect(res.coffeeVariants).toEqual([
+      { name: "Café solo", customer_en: "Espresso", kitchen_name: "ESPRESSO" },
+      { name: "Café doble", customer_en: "Double espresso", kitchen_name: null },
     ]);
     expect(res.customUnit).toEqual([
       {

@@ -164,14 +164,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // A colour that is not `#rrggbb`, refused by `createCategory`/`updateCategory` before the write.
   "category.color_invalid": 400,
   "menu_item.not_found": 404,
+  // A menu offer asked for a variant, which follows its parent onto the menu instead: a CLIENT
+  // request fault.
+  "menu_item.variant_not_allowed": 400,
   "product.not_found": 404,
   // A product write's own domain validation (`createProduct`/`updateProduct` in `operations.ts`)
   // refused a malformed unit field — a CLIENT request fault → 400. Listed explicitly as the house
   // style requires; the `?? 400` default already covers it.
   "product.invalid": 400,
-  // A product editor save carrying exactly one variant: a product has no variants or at least two, so
-  // this is a CLIENT request fault → 400. Listed explicitly as the house style requires; the `?? 400`
-  // default already covers it.
+  // Retired: nothing throws it since a product may have one variant. Still mapped, as a shipped
+  // code stays registered.
   "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
   // The product editor's kitchen routing (`setProductStation`/`setProductCourse`): an id that names no
@@ -316,6 +318,7 @@ function refuseNegativePrice(value: string, field: string): void {
   if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
+/** A menu's settings for the offer's variants: a `price` of null follows the variant's own. */
 function parseMenuVariants(value: unknown): MenuVariant[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
@@ -324,15 +327,15 @@ function parseMenuVariants(value: unknown): MenuVariant[] {
     if (
       !isPlainObject(entry) ||
       typeof entry.variantId !== "string" ||
-      typeof entry.unitPrice !== "string" ||
-      typeof entry.available !== "boolean"
+      (entry.price !== null && typeof entry.price !== "string") ||
+      typeof entry.offered !== "boolean"
     ) {
       throw new AppError("management.request_invalid", { field: `variants.${index}` });
     }
     return {
       variantId: requireUuidParam(entry.variantId, "ProductVariantId"),
-      unitPrice: entry.unitPrice,
-      available: entry.available,
+      price: entry.price,
+      offered: entry.offered,
     };
   });
 }

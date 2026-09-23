@@ -60,8 +60,10 @@ describe("site content languages", () => {
         ],
         "en",
       );
+      // A variant is a `products` row, reported once, as a variant, with the product it belongs to
+      // — never a second time as a product in its own right.
       expect(await listContentTranslationGaps(tx, "fr")).toEqual([
-        { kind: "variant", id: variant!.id },
+        { kind: "variant", id: variant!.id, productId: product.id },
       ]);
       await setProductVariants(
         tx,
