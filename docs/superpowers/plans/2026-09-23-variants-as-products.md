@@ -315,7 +315,9 @@ Task 2's `available`).
   - a product naming itself as parent → `VARIANT_ONE_LEVEL_REFUSAL`.
   - a new row naming a parent when a variant naming IT was already written (foreign keys deferred) →
     `VARIANT_ONE_LEVEL_REFUSAL`; control: the same order with the new row top-level is accepted.
-  - `INSERT OR REPLACE` of a variant naming another parent, or none → `VARIANT_PARENT_FIXED_REFUSAL`;
+  - `INSERT OR REPLACE` of a variant naming another top-level parent, or none →
+    `VARIANT_PARENT_FIXED_REFUSAL` (naming a variant as the parent is refused first, with
+    `VARIANT_ONE_LEVEL_REFUSAL`);
     control: the same replace naming the parent it already has is accepted.
   - changing a product's `id` → `PRODUCT_ID_FIXED_REFUSAL`, including a variant renamed onto an id a
     waiting child names, and `UPDATE OR REPLACE` onto a variant's id; control: an update writing the
@@ -847,8 +849,8 @@ Spec §15.1, §15.2, §15.4, §4.3, decision 11; V1, V2, V4, V8, V9, V15.
     variants (all Inactive) sells as itself.
   - an Inactive, Unavailable, not-offered or other-parent `variantId` → `product.variant_unavailable`.
   - Review Focus 3: a Wine 125 line fires to the station its PARENT resolves to (product route,
-    then category route), carries the parent's course, shows the PARENT's allergens on the kitchen
-    screen, and takes a preparation route keyed on the parent's product id — each with a Wine 175
+    then category route), carries the parent's course, shows the PARENT's allergens and dietary
+    labels on the kitchen screen, and takes a preparation route keyed on the parent's product id — each with a Wine 175
     control that overrides the field and gets its own value.
   - Review Focus 3, extras: an extras line whose product is a variant inheriting its allergens and
     dietary declarations shows its PARENT's allergens and dietary labels on the kitchen screen
