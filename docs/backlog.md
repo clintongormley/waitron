@@ -2177,7 +2177,7 @@ image constraints under *Detail → Box image*.
   Unavailable or not offered on a menu, a product with no variant sold as itself, a delete
   preview's menus in offer-id order, a product extras read handed a wider attachment map or one
   naming a deleted list, and non-text names and ids in the extras and options contracts; no
-  source file changed; 98.82/99.53/100/97.37); `apps/server` (**PR #TBD**, 2026-09-23 — tests
+  source file changed; 98.82/99.53/100/97.37); `apps/server` (**PR #534**, 2026-09-23 — tests
   for the boot's wiring (account email through the saved SMTP gateway, read on each send; a
   language change refused while a library image has no name in it; a failing tunnel client or log
   directory; the plain-HTTP landing page; and, in setup mode, a provision resumed after its venue
