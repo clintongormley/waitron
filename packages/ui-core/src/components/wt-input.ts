@@ -44,6 +44,10 @@ export class WtInput extends LitElement {
         font: inherit;
       }
 
+      input::placeholder {
+        color: var(--wt-color-text-muted);
+      }
+
       input:disabled {
         ${disabledStyles}
       }

@@ -215,3 +215,10 @@ test("gives each instance's error text an id of its own, distinct from every oth
   expect(errorA.id).toMatch(/^wt-input-error-\d+$/);
   expect(errorB.id).toMatch(/^wt-input-error-\d+$/);
 });
+
+test("the placeholder paints from the muted-text token", async () => {
+  const el = await mount('<wt-input label="Name" placeholder="Coffee"></wt-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
+});
