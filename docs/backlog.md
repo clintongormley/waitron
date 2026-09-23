@@ -2439,9 +2439,12 @@ request boundary on the four catalogue writes, refusing one as `management.reque
 the field, so the product writes store nothing and the menu-item writes answer a 400 rather than a
 500. Still open: `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`)
 still accept and store a negative when called directly — a seed, a script or a future caller — and
-`products.unit_price` still carries no check constraint. Once the in-flight SQLite flip has
-landed, decide whether the screen belongs in the ops or as a `products.unit_price >= 0` check
-beside the sibling price checks the other catalogue tables carry.
+`products.unit_price` still carries no check constraint. The SQLite flip has landed (#489), so this
+is now actionable: decide whether the screen belongs in the ops or as a `products.unit_price >= 0`
+check beside the sibling price checks the other catalogue tables carry. **One thing the flip
+changes about the choice:** a check constraint is now the only thing that would refuse it at the
+database — the column is an integer count of cents and takes silently what `numeric` used to
+refuse — so the ops screen and the constraint are no longer two layers over the same refusal.
 
 **Two price rules disagree about a value that is not negative — OPEN (found 2026-09-21, task N4).**
 `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`) allows at most two decimal places
@@ -3191,12 +3194,17 @@ the one-statement job-claim helpers (P4a — #481; P4b — #483); money to whole
 quantity and rate scales (P6 — #479); constraint-target refusals (P10 — #482); and the two-file
 foreign-key split (P7 — #426). The mechanism, the measurements and the review lessons for each live in
 the PR threads and in `CLAUDE.md`, [conventions-data.md](developers/conventions-data.md) and
-[testing-guide.md](developers/testing-guide.md). **What they leave for the live SQLite flip (task F1,
-lane A) and for later tidy-ups:**
+[testing-guide.md](developers/testing-guide.md).
 
-- **F1, the flip itself,** must settle: how the drain crosses the two database files given
-  `change_log`'s `local` classification — the triggers writing it sit on `venue.db` tables, and the
-  first thing to check has now been checked and it decides the question: SQLite REFUSES a trigger
+**Task F1, the flip itself, LANDED as #489 on 2026-09-23** (main `aabdde6a`). A venue is a directory
+of two SQLite files opened through `node:sqlite`; there is no database server, no roles, no grants,
+no connection string and no container. What the flip cost, what it could not carry and what it
+deliberately deferred are in that pull request and in its commits. **The tidy items T1, T2 and T3 are
+now unblocked.** What the preparation tasks left, with F1's own answers where it found them:
+
+- **How the drain crosses the two database files, given `change_log`'s `local` classification —
+  ANSWERED by F1 and still open as a decision.** The triggers writing it sit on `venue.db` tables,
+  and the thing to check first was checked: SQLite REFUSES a trigger
   body that writes another attached database, both ways round. Measured on Node v26.7.0 against
   `node:sqlite`, 2026-09-22, with `node.db` attached to the venue connection: a qualified
   `insert into node.change_log …` inside a trigger is refused at CREATE with `qualified table names
@@ -3206,12 +3214,11 @@ lane A) and for later tidy-ups:**
   `applyMigrations` puts every set on the venue handle, so after a real migrate `venue.db` holds 121
   tables including `change_log` and `node.db` holds none. So whoever wires the `local` class to
   `node.db` decides this — either `change_log` is reclassified to the file its writers live on, or
-  the triggers stop writing it directly and something above them does (P3); stripping three claim functions in step 16, which no
-  longer end the same way (`claimRows` keeps a conditional update, `claimLock` and `claimLockedRows`
-  become ordinary ordered SELECTs), which rests on a one-writer-at-a-time reading of the write queue
-  the plan asks be decided deliberately when the step runs (P4b); the 66-test disposition of
-  `createPgliteDb` and `describeEachTarget`, the two PGlite doors `useVenueDb` does not cover (P2);
-  and an early-accessor error message that names a function the file no longer calls (plan F1 step 24).
+  the triggers stop writing it directly and something above them does (P3).
+- **The three claim helpers were stripped, and two of them are now identity functions.** `claimRows`
+  still builds a real statement; `claimLock` returns its argument and `claimLockedRows` is a thin
+  wrapper, because the `for update … skip locked` they existed to add is gone. Each has one caller.
+  **Next action:** delete both and inline what they did (T2).
 - **Unfixed pre-existing bug —** `packages/printing` reports an out-of-range `character_table` (CHECK
   `printers_character_table_ck`, SQLSTATE `23514`) to the operator as a `transport_fields` problem,
   because `printers.ts` translates by CLASS not by key; the fix is a per-constraint `refusalOn` target,
