@@ -426,7 +426,16 @@ export async function deactivateMenuItem(
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
 }
 
-export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promise<MenuOffer[]> {
+/**
+ * The Active offers on the given menus. Unavailable (sold-out) products are left out unless the
+ * caller is a management read passing `includeUnavailable`: spec §15.6 lets Available hide an item
+ * from the till, never from the dashboard.
+ */
+export async function listMenuOffers(
+  tx: Transaction,
+  menuIds: string[],
+  options: { includeUnavailable?: boolean } = {},
+): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const rows = await tx
     .select({
@@ -472,7 +481,7 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
         eq(menuSections.active, true),
         eq(catalogues.active, true),
         eq(products.active, true),
-        eq(products.available, true),
+        options.includeUnavailable === true ? undefined : eq(products.available, true),
       ),
     )
     .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);

@@ -70,7 +70,7 @@ async function save(flags: { active: boolean; available: boolean }) {
   return run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, ...flags }, "en"));
 }
 
-/** What the till would be offered, and what the dashboard lists, for the one product. */
+/** What the till would be offered, and what the dashboard lists and manages, for the one product. */
 async function reads() {
   return run(async (tx) => {
     const editor = await readProductEditor(tx, productId);
@@ -79,19 +79,23 @@ async function reads() {
       editor: { active: editor.active, available: editor.available },
       listed: { active: listed!.active, available: listed!.available },
       offers: (await listMenuOffers(tx, [catalogueId])).map((offer) => offer.productId),
+      managed: (await listMenuOffers(tx, [catalogueId], { includeUnavailable: true })).map(
+        (offer) => offer.productId,
+      ),
       sellable: (await listAvailableProducts(tx, locationId)).products.map((p) => p.id),
     };
   });
 }
 
 describe("Active and Available", () => {
-  it("an Unavailable product stays Active and leaves both reads the till sells from", async () => {
+  it("an Unavailable product stays Active, leaves both reads the till sells from and stays managed", async () => {
     await save({ active: true, available: false });
 
     expect(await reads()).toEqual({
       editor: { active: true, available: false },
       listed: { active: true, available: false },
       offers: [],
+      managed: [productId],
       sellable: [],
     });
   });
@@ -103,6 +107,7 @@ describe("Active and Available", () => {
       editor: { active: false, available: true },
       listed: { active: false, available: true },
       offers: [],
+      managed: [],
       sellable: [],
     });
   });
@@ -122,6 +127,7 @@ describe("Active and Available", () => {
       editor: { active: true, available: true },
       listed: { active: true, available: true },
       offers: [productId],
+      managed: [productId],
       sellable: [productId],
     });
   });

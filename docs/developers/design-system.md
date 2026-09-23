@@ -278,17 +278,20 @@ container query cannot read a `--wt-*` token. A column exposes text to the searc
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
 column can still sort by it — its direction is restored with that column or not at all, so the
-starting sort stands whole — and every stored filter value that is a non-empty string. A `filter`
-may name an `initial` option, which it starts on until a choice is made or restored; choosing the
-"all" option over it is then stored as a choice of its own (an empty string), so it survives a reload. A filter
-choice, restored or picked, narrows rows only while its column offers it, and its dropdown then
-shows it. Each time the columns change, every choice is checked against its column's current option
-values. One the options no longer include is cleared — the dropdown returns to its "all" option and
-the stored view is rewritten without it — rather than hiding every row behind a dropdown that reads
-"all". A choice whose column is not rendered, has no `filter`, or has an empty option list (a screen
-still loading the data it builds them from) waits instead: it hides no rows, stays in storage when
-the view is saved for another change, and is checked when the column next has a non-empty list. So
-one `viewKey` can serve two layouts that show different columns.
+starting sort stands whole — and every stored filter value that is a string. A `filter` may name
+an `initial` option, which it starts on until a choice is made or restored; choosing the "all"
+option over it is then stored as a choice of its own (an empty string), so it survives a reload. A
+filter choice, restored or picked, narrows rows only while its column offers it, and its dropdown
+then shows it. Each time the columns change, every choice is checked against its column. A chosen
+option the column's current option values no longer include is cleared — the dropdown returns to
+its "all" option and the stored view is rewritten without it — rather than hiding every row behind
+a dropdown that reads "all". A chosen option whose column is not rendered, has no `filter`, or has
+an empty option list (a screen still loading the data it builds them from) waits instead: it hides
+no rows, stays in storage when the view is saved for another change, and is checked when the column
+next has a non-empty list. So one `viewKey` can serve two layouts that show different columns. A
+stored "all" does not wait: it is kept only while its column is rendered with a `filter` that names
+an `initial`, and otherwise cleared and the stored view rewritten without it, so a layout that
+leaves the column out forgets that "all" was chosen.
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a

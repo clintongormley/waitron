@@ -254,5 +254,7 @@ Delete sends `active: false`, Restore sends `active: true`, and nothing is ever 
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
-`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`). Until
+`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`).
+`listMenuOffers` keeps an Unavailable product's offer only when its caller passes
+`includeUnavailable`, as the menu management route and the venue readiness check do. Until
 variants become products (plan Task 3), a variant carries only its own `available`.

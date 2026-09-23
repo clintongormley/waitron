@@ -971,6 +971,48 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  // Spec §15.6: Available "never hides the item from the dashboard", so the menu management route
+  // keeps a sold-out product's offer; an Inactive product's offer stays hidden, as it was before
+  // the two states were split.
+  it("keeps an Unavailable product's offer on the management offers route and hides an Inactive one", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Management offers");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app) },
+    );
+    const productId = ((await created.json()) as { id: string }).id;
+    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
+      body: { name: { en: "Tapas", es: "Tapas" }, displayOrder: 0 },
+    });
+    const sectionId = ((await section.json()) as { id: string }).id;
+    const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
+      body: { productId, sectionId, grossPrice: "4.50", displayOrder: 0 },
+    });
+    expect(offer.status).toBe(201);
+    const offerId = ((await offer.json()) as { id: string }).id;
+    const offeredIds = async (): Promise<string[]> =>
+      (
+        (await (
+          await send(app, "GET", `/management-api/catalogues/${catalogueId}/offers`)
+        ).json()) as { id: string }[]
+      ).map((row) => row.id);
+
+    const soldOut = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { active: true, available: false }),
+    });
+    expect(soldOut.status).toBe(200);
+    expect(await offeredIds()).toEqual([offerId]);
+
+    const deleted = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { active: false, available: true }),
+    });
+    expect(deleted.status).toBe(200);
+    expect(await offeredIds()).toEqual([]);
+  });
+
   it("creates a product with its kitchen station and course in one save", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Routing catalogue");

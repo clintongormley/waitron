@@ -1146,4 +1146,50 @@ describe("resolvePreparationRoutes", () => {
       ]);
     });
   });
+
+  // Spec §15.6: the till never offers a sold-out (Unavailable) product, but readiness is a setup
+  // check, so a menu whose only product is sold out is not empty and that product still needs a route.
+  it("sells no Unavailable product in a zone while readiness still judges its setup", async () => {
+    const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    await scoped(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Tapas" });
+      const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Tapas" } });
+      const croquetas = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Croquetas",
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+        available: false,
+      });
+      const offer = await createMenuItem(tx, {
+        menuId: menu.id,
+        productId: croquetas.id,
+        sectionId: section.id,
+        grossPrice: "6.00",
+      });
+      await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+
+      expect((await listZoneOffers(tx, cfg, zoneId)).offers).toEqual([]);
+      await expect(resolveZoneOffer(tx, cfg, zoneId, offer.id)).rejects.toMatchObject({
+        code: "service_zone.offer_not_allowed",
+      });
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_missing", zoneId: otherZoneId, zoneName: "Terrace" },
+        {
+          code: "zone.route_missing",
+          zoneId,
+          zoneName: "Dining room",
+          productId: croquetas.id,
+          productName: "Croquetas",
+        },
+      ]);
+
+      await tx.execute(sql`update products set available = true where id = ${croquetas.id}`);
+      expect((await listZoneOffers(tx, cfg, zoneId)).offers.map((row) => row.id)).toEqual([
+        offer.id,
+      ]);
+    });
+  });
 });

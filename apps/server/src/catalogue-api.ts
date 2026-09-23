@@ -765,7 +765,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const rows = await gated(sessionId, (tx) => listMenuOffers(tx, [menuId]));
+      const rows = await gated(sessionId, (tx) =>
+        listMenuOffers(tx, [menuId], { includeUnavailable: true }),
+      );
       return c.json(rows);
     }),
   );

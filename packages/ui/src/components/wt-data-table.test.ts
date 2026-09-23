@@ -1388,6 +1388,16 @@ test("a stored all choice is dropped for a column that has no initial choice", a
   expect(storedFilters("test.plain-all")).toEqual({});
 });
 
+test("a stored all choice does not wait for a column that is not rendered", async () => {
+  sessionStorage.setItem("test.absent-all", JSON.stringify({ filters: { status: "" } }));
+  await tableS({ viewKey: "test.absent-all", columns: [sortableName] });
+  expect(storedFilters("test.absent-all")).toEqual({});
+  cleanup();
+  const again = await tableS({ viewKey: "test.absent-all", columns: initiallyActive });
+  expect(rowKeysS(again)).toEqual(["1"]);
+  expect(statusSelect(again).value).toBe("active");
+});
+
 // The stored choice here is the FIRST of the two options: a dropdown that marked every option as
 // chosen would still show the last one, and pass a test written around the last option.
 test("a restored filter's dropdown shows the choice even when it is not the last option", async () => {
