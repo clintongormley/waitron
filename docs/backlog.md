@@ -2182,32 +2182,53 @@ image constraints under *Detail → Box image*.
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **Comments across the tree still explain themselves in terms of PGlite, a container tier and
-  choosing between targets — none of which exists.** The item is real; its ACTION changed with the
-  storage switch and was rewritten on 2026-09-23.
+- **Comments across the tree explained themselves in terms of PGlite, a container tier and choosing
+  between targets — CLOSED by T2, with one class deliberately left.** The sweep dropped the
+  target-choice framing wherever it presented a decision no code makes, and kept every sentence of the
+  shape "under PGlite this was X, here it is Y", every dated measurement, and every comment where
+  PGlite was the reference ORACLE that proved a SQLite expression equivalent.
 
-  Two beliefs stack up in these comments. The older one is that PGlite cannot check a database
-  permission, which CLAUDE.md §4 corrected on 2026-09-13. The newer one is the whole frame: a
-  comment that says "PGlite, not real Postgres" and then justifies the choice is describing a
-  decision no suite makes any more. CLAUDE.md §4 at HEAD says there is ONE target — a suite that
-  needs a database gets a real one through `useVenueDb` — with nothing lighter to pick and nothing
-  heavier to justify. So the old action, "check whether each suite still needs the container before
-  moving it", asks a question with no answer: there is no container tier, no `describeEachTarget`,
-  and no second target to move to.
+  **Two things about it are worth carrying.** First, this entry's own description of the job was stale
+  in both directions when T2 picked it up: the GRANT and grant-matrix clauses it told the next reader
+  to fix had already been deleted by #490, so a literal reading found nothing; and it sized the job at
+  "around a dozen suites" when the sweep ran to roughly a hundred files across `apps/server` and every
+  package. Second, the sweep's value was not the framing — it was the five or six comments that
+  turned out to be false claims in the present tense, each found only because someone was reading the
+  line anyway. The best of them: a comment asserting that a `useVenueDb` database carries no
+  append-only trigger unless the suite installs one (it installs them itself, and the suite's own
+  statements are `create trigger if not exists`, so both answers look alike until you no-op the loop
+  AND empty the declared list); and two comments claiming PostgreSQL folds a UUID's spelling on cast,
+  where the folding is application code.
 
-  **Next action:** a plain comment sweep, one file at a time, with no test moved. Find candidates
-  with `grep -rn PGlite apps packages scripts` (many hits are legitimate history — a sentence of
-  the shape "under PGlite this was X, here it is Y" is correct and stays). For each one that
-  presents the old world as today's, replace it with what the suite actually establishes now, or
-  delete it. Two of the five files this entry used to name were corrected on
-  `feat/sqlite-slice1-flip` and no longer mention PGlite at all
-  (`apps/server/src/boot.singleton.test.ts`, `apps/server/src/boot.promote.test.ts`), and a third,
-  `packages/db/src/deployment.break-glass.test.ts`, now records the case it LOST rather than the
-  old belief. The two still standing, each opening with "PGlite, not real Postgres … cannot show
-  the GRANT enforcement" and each pointing at a grant matrix and at `scripts/schema-equivalence.sh`
-  for receipts that no longer hold: `packages/db/src/reserved-identity.test.ts` and
-  `packages/db/src/node-identity.test.ts`. Both already call `useVenueDb`, so only the prose is
-  wrong.
+- **Comments naming a PostgreSQL SQLSTATE as today's behaviour — OPEN (split out of the sweep above
+  by T2, 2026-09-23).** `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
+  returns lines across many files, some already converted and many not, and the unconverted ones read
+  in the present tense — a route comment saying a malformed id "`22P02`s → 500" when the column is
+  plain `text` and a malformed id now matches no row. **Why T2 left it:** correcting one honestly
+  means establishing, per ROUTE, what the unscreened path does now — often the same domain error the
+  screen produces, which turns "prevents an opaque 500" into "belt and braces" — and that is a
+  behavioural question, not a comment question. Several of them also sit in TEST TITLES, so the change
+  is not comment-only. **Next action:** its own pass, route by route, with the un-screened path
+  actually exercised rather than reasoned about.
+
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23).**
+  `packages/db/src/constraint-target.sqlite.test.ts` and `migrate.sqlite.test.ts` carry a
+  `.sqlite.` infix that distinguished them from a twin that no longer exists; a `packages/media`
+  test title still says `bytea`; `packages/provisioning`'s error-registry header argues the
+  `provisioning.*` prefix from "a role that cannot be adopted, a grant that did not take", neither of
+  which this engine can have; and `assertIdentifier` in that package has no product caller at all
+  (only its own suite and the barrel re-export), while `generatePassword`'s single caller is
+  `apps/server/src/break-glass.ts`. Each is a rename or a deletion rather than a comment fix.
+
+- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
+  `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
+  stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
+  never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`.
+  `CLAUDE.md` said "only `bench/sqlite-failover` starts a container now", which was false, and T2
+  corrected the rule to name both rigs and the asymmetry. Either stamp the label in that rig or accept
+  cleaning it by hand — but the rig's schema is three storage decisions out of date anyway (its own
+  entry above), so the two decisions belong together.
+
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`)
   — CLOSED 2026-09-19: `apps/server/src/replication-arc.e2e.test.ts` was deleted with the PostgreSQL
   failover machinery, so this cannot recur in that file. The deletion changes nothing about vitest
@@ -2376,25 +2397,17 @@ ASCII-only, and the column is still nullable, so nothing at the compiler stops a
 forgetting it. **Next action:** decide whether the column becomes mandatory — which breaks every
 fixture at the compiler rather than silently — or whether a guard over the write sites is enough.
 
-**CI still carries the shard layout, the Docker switches and the dependencies of a database
-server that is gone — OPEN (found 2026-09-23, task F1's review wave).** Three separate leftovers,
-grouped because they retire together:
+**The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
+review wave; the other two thirds of this entry closed with T2, #TBD).** The shard counts and their
+sizing arguments were all measured against PGlite and none has been re-measured —
+`mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose comment says so explicitly.
+Read the next weekly run's shard durations before treating any of them as current. **This is the part
+T2 could not do**: no local command produces the numbers, so re-cutting the matrix has to wait for a
+real weekly run.
 
-- **`REQUIRE_DOCKER: "1"` is set on `test-heavy` and `test-server` and read by nothing.** Its one
-  reader was `packages/db/src/testing/harness.ts`, deleted with the PostgreSQL test harness;
-  `grep -rn REQUIRE_DOCKER packages apps scripts bench` returns no line. `TESTCONTAINERS_RYUK_DISABLED`
-  sits beside it in the same state. Both workflow comments say they are left set rather than removed
-  and point HERE, which is what this entry is for.
-- **The shard counts and their sizing arguments were measured against PGlite and none has been
-  re-measured** — `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose comment now
-  says so explicitly. Read the next weekly run's shard durations before treating any of them as
-  current.
-- **24 `package.json` files still declare `pg`, `@electric-sql/pglite` or `@testcontainers/postgresql`**,
-  and nothing under `packages/` or `apps/` imports one — the only importers are the two bench rigs.
-  The flip removed two of these declarations and left the rest.
-
-**Next action:** task T2, in one pass — drop the dead switches, drop the dead dependencies, then
-re-time the shards and re-cut the matrix from the new numbers rather than from the old ones.
+Closed by T2: the two dead switches (`REQUIRE_DOCKER` and `TESTCONTAINERS_RYUK_DISABLED`) are out of
+both workflows, and the dead dependency declarations are out of every manifest that did not import
+them — the only two that did, and still do, are the bench rigs.
 
 **An append-only trigger can be dropped, or quietly replaced, from the application's own database
 handle — OPEN (found 2026-09-22, task F1).** PostgreSQL protected an append-only table with two
@@ -3088,7 +3101,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   in `packages/fiscal-verifactu/src/backend.ts`. Safe
   seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs
   a huella-invariance re-run across all three.
-- `scripts/schema-equivalence-fold.test.py` is run by no gate.
 - `tenant.not_found` has no production thrower — keep or remove is an owner call; `mirror-bundle.ts`'s
   `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH` when either package is next
   touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; the SP-3d restore overlapping
@@ -3238,8 +3250,28 @@ no connection string and no container. What the flip cost, what it could not car
 deliberately deferred are in that pull request and in its commits.
 
 **Task T1, the role-assumption sweep, LANDED as #490 on 2026-09-23** (main `fcc2d432`). `asAppUser`
-and its 796 call sites are gone, and so is the prose that described them. **T2 and T3 remain**; T3
+and its 796 call sites are gone, and so is the prose that described them. **Task T2, dropping
+PostgreSQL from the dependencies and the dev stack, is on the branch
+`fix/drop-postgresql-dependencies`.** It takes the cluster out of the box and out of the dev stack,
+the client packages out of every manifest that did not import them, the two unread Docker switches out
+of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
+of `@waitron/db`, and the target-choice framing out of the comments. **T3 is what remains**, and it
 depends on T2.
+
+Two things from T2 worth reading before T3 or anything near the box:
+
+- **The box's throwaway state-volume containers no longer name an image.** They go through
+  `docker compose run --rm --no-deps -T --entrypoint sh app`, so the helper is by construction the
+  image the box runs. The `--entrypoint` is not cosmetic: measured against the real app image, the old
+  call shape appends its arguments to the image's ENTRYPOINT and BOOTS A SERVER, exiting non-zero,
+  which `is_production` reads as "cannot establish" and then refuses every reset as production. The
+  guard suite could not see it — its docker stub matched `*trading.env*` anywhere in the argument
+  string — so the stub now models the entrypoint and a missing override fails behaviourally.
+- **`docker compose up -d` does not remove a service deleted from the file**, and `waitron.sh`
+  overwrites the installed compose file from the ref on every install. Without `--remove-orphans` a box
+  upgrading past T2 keeps `waitron-db-1` running for ever on one warning line. The flag is on the
+  install `up` and the reset's `down` and `up`; the retired `waitron_db` VOLUME is left on disk
+  deliberately, and `deploy/README.md` says so and how to remove it.
 
 The reusable lesson, because it cost four passes: **the selection key kept turning out to be wider
 than the problem.** Sweeping by the IDENTIFIER `asAppUser` found 140 files. A further 44 cited the
@@ -3252,10 +3284,9 @@ it; and a correction must not decrement a count where it should drop it.
 
 **What #490 found and deliberately did not fix**, so T2 and whoever follows do not rediscover it:
 
-- **Stale PGlite prose, around a dozen suites.** They open "PGlite, not real Postgres" or "proven on
-  real Postgres" while calling `useVenueDb`. That went stale with #489, not with #490, and it is a
-  different sweep key. **T2 is the right home** — its own note already says to read every claim
-  stated in prose across the whole range. `scripts/schema-equivalence.md` belongs to the same sweep.
+- **Stale PGlite prose — DONE by T2**, and it was roughly a hundred files rather than the dozen this
+  line guessed at. `scripts/schema-equivalence.{sh,md}` went with it: deleted, not swept, because the
+  script's whole subject was dumping and diffing a PostgreSQL schema.
 - **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
   name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
   Nobody owns this yet; it is a rename-only change and wants its own item.
@@ -3287,10 +3318,13 @@ What the preparation tasks left, with F1's own answers where it found them:
   tables including `change_log` and `node.db` holds none. So whoever wires the `local` class to
   `node.db` decides this — either `change_log` is reclassified to the file its writers live on, or
   the triggers stop writing it directly and something above them does (P3).
-- **The three claim helpers were stripped, and two of them are now identity functions.** `claimRows`
-  still builds a real statement; `claimLock` returns its argument and `claimLockedRows` is a thin
-  wrapper, because the `for update … skip locked` they existed to add is gone. Each has one caller.
-  **Next action:** delete both and inline what they did (T2).
+- **The three claim helpers were stripped, and two of them had become identity functions — CLOSED by
+  T2.** `claimLock` and `claimLockedRows` are deleted and each is inlined into its one caller;
+  `claimRows` stays, because it builds a real `update … returning`. What the deletion turned up is the
+  part worth carrying: payments' suite did NOT catch the claim stamping a column no state guard reads
+  (mutate `settled_at` and all 413 tests passed), so T2 added the missing case — and the draft comment
+  claiming the write queue serialises two forward passes was false, because that caller opens a bare
+  `db.transaction`, which is drizzle's own `begin` and never enters the queue.
 - **Unfixed pre-existing bug —** `packages/printing` reports an out-of-range `character_table` (CHECK
   `printers_character_table_ck`, SQLSTATE `23514`) to the operator as a `transport_fields` problem,
   because `printers.ts` translates by CLASS not by key; the fix is a per-constraint `refusalOn` target,

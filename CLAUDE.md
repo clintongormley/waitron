@@ -578,9 +578,12 @@ browser test** — most of these rules exist because a test passed while proving
   `scripts/guarded-teardowns.test.ts`.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with Ryuk off an INTERRUPTED run
   leaks containers; `pnpm reap` removes them by label and age. Never a blanket `docker volume prune`, and
-  `docker volume inspect` before any manual `rm`. **Only `bench/sqlite-failover` starts a container
-  now** — it is the one place stamping `com.waitron.reapable` (`bench/sqlite-failover/src/store.ts`),
-  so a package suite that seems to hang is not waiting on Docker.
+  `docker volume inspect` before any manual `rm`. **No suite under `packages/` or `apps/` starts a
+  container — the two BENCH rigs are the only starters, and only one of them can be reaped**:
+  `bench/sqlite-failover/src/store.ts` stamps `com.waitron.reapable`, while
+  `bench/pglite-throughput/src/bench.ts` starts a `postgres:18-alpine` with no label at all, so
+  `pnpm reap` cannot see it and an interrupted run of that rig has to be cleaned by hand. A package
+  suite that seems to hang is not waiting on Docker.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND one of the two shapes vitest leaves in `ps` — a
   Vitest 3 process TITLE or a Vitest 4 entrypoint PATH — never a bare `vitest` match.
@@ -593,10 +596,6 @@ browser test** — most of these rules exist because a test passed while proving
   the same package end in `ENOENT`; and a leftover directory inside the package under a non-dot name
   is measured as SOURCE by the next package run, sinking the ratio for reasons unrelated to the code.
   Inspect the resolved selection first. See [testing-guide.md](docs/developers/testing-guide.md).
-- **Reuse a supplied test container before probing Docker again.** A failing `docker info` is not
-  evidence that a container global setup already started is absent.
-- **A container port-binding timeout needs Docker state as well as database logs.** Save
-  `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the fixture.
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline, and
   never a retry as proof of repair.
