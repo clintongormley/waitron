@@ -17,7 +17,7 @@ import {
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, decimal, decimalToCents } from "@waitron/shared";
+import { AppError, decimal, stringToCents } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
@@ -258,8 +258,9 @@ export async function recordSubstitution(
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
       // A money column stores a count of whole cents, converted here at the row. `vat_breakdown`
-      // above is jsonb holding the decimal literals the fiscal record hashes and stays as it is.
-      total: decimalToCents(decimal(input.total)),
+      // above is JSON text holding the decimal literals the fiscal record hashes and stays as it
+      // is.
+      total: stringToCents(input.total),
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,

@@ -3882,13 +3882,14 @@ What the preparation tasks left, with F1's own answers where it found them:
     (2026-09-23, PR #531). **Done:** the two-call write conversion
     `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
     other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
-    them since #475), at 50 sites outside `packages/shared`. Two places keep the two calls: the
-    converters' own tests, because they test the converter; and the fiscal record builders —
-    `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
-    which only those three use — seven sites the unattended campaign run may not change without
-    the owner's review. **OPEN:** swap those seven in a session the owner attends; the golden
-    huella test in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` passed unedited with
-    them swapped, before they were put back. #475 declined it because a helper taking a plain string "would hide that
+    them since #475), at 50 sites outside `packages/shared`. Only the converters' own tests keep
+    the two calls, because they test the converter. The seven sites in the fiscal record builders
+    — `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
+    which only those three use — were held back from #531 for the owner's review and are **DONE**
+    (2026-09-23, branch `chore/fiscal-builders-one-call`, on the owner's "Just do the swap without
+    me"): each helper is `decimalToX(decimal(value))` and nothing more, and the golden huella test
+    in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad` passed unedited.
+    #475 declined it because a helper taking a plain string "would hide that
     validation and invite passing something unchecked"; that does not hold — a helper calling
     `decimal()` inside refused all six malformed strings tried (`abc`, `1e3`, `+1.00`, `01.00`,
     the empty string and a leading space) with `shared.invalid_decimal`, the same as the two
@@ -3904,15 +3905,16 @@ What the preparation tasks left, with F1's own answers where it found them:
     from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
     and a `/ 100` puts a second copy of the scale outside the files
     `packages/shared/src/conventions.test.ts` checks.
-    **Found in this branch's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
+    **Found in #531's review — OPEN, predates it:** `decimalToCents` checks the twelve-digit
     bound BEFORE it rounds to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
     amount with a third decimal place can round past the bound and is accepted:
     `stringToCents("999999999999.995")` returned 100000000000000 (thirteen integer digits) where
     `"1000000000000"` is refused with `shared.decimal_overflow`, measured 2026-09-23. The quantity
     and rate converters check after rounding (`stringToThousandths("999999999.9995")` is refused).
-    Not changed here: `decimalToCents` also serves the fiscal record builders, so the fix waits
-    for a session the owner attends. The `cents.ts` header's "widest amount this system admits"
-    and `docs/developers/conventions-data.md`'s matching sentence describe two-place input only.
+    Not changed in #531 or since: `decimalToCents` also serves the fiscal record builders, so the
+    fix waits for a session the owner attends. The `cents.ts` header's "widest amount this system
+    admits" and `docs/developers/conventions-data.md`'s matching sentence describe two-place input
+    only.
   - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
     PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money

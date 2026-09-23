@@ -19,8 +19,8 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
-  decimalToCents,
   percentOf,
+  stringToCents,
   sumDecimals,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
@@ -266,8 +266,9 @@ export async function recordSale(
   // 0012) — which is exactly what lets the sale be written before payment settles.
   //
   // A money column stores a count of whole cents, so the decimal amount this function was handed
-  // is converted here, at the row. `vat_breakdown` below is NOT converted: it is jsonb holding the
-  // decimal literals the fiscal record hashes, and its bytes must stay the bytes that were filed.
+  // is converted here, at the row. `vat_breakdown` below is NOT converted: it is JSON text holding
+  // the decimal literals the fiscal record hashes, and its bytes must stay the bytes that were
+  // filed.
   const [inserted] = await tx
     .insert(sales)
     .values({
@@ -283,7 +284,7 @@ export async function recordSale(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: decimalToCents(decimal(input.total)),
+      total: stringToCents(input.total),
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
