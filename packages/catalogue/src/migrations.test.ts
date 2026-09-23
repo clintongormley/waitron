@@ -552,8 +552,8 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       const error = await captureError(() =>
         db.insert(menuItemVariantOverrides).values({ ...row, ...values }),
       );
-      expect(isPgError(error, CHECK_VIOLATION), check).toBe(true);
-      expect(pgErrorMessage(error)).toContain(check);
+      expect(isRefusal(error, CHECK_VIOLATION), check).toBe(true);
+      expect(engineErrorMessage(error)).toContain(check);
     }
     // The two ways a row may override something are each accepted on their own.
     await db.insert(menuItemVariantOverrides).values({ ...row, price: null, offered: false });
