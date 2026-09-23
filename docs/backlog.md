@@ -3777,6 +3777,7 @@ any of this code, so you can still read how something worked under PostgreSQL.
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
   nothing, and dropping `wal_autocheckpoint = 0` changes nothing either. So whatever bounds that log
   has to stop or detach the daemon, and doing that on the sale path is what risk 9 forbids.
+  2026-09-23: slice 2 measured what stopping and restarting Litestream does, and what Litestream's own emergency checkpoint does offline — [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 - **The promoted generation and store pointer remain unproven.** The prototype does not stream a
   promoted node's generation or restore by following `current.json`. Cloud recovery orchestration
   is tracked in the [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md);

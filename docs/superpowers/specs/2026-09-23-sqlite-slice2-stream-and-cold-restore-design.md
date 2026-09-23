@@ -452,6 +452,8 @@ Each on 0.5.17, each stating in advance what the failing result would print:
    photos shrunk during planning, not from a venue.
 5. **The pinned binary on Linux, both processor types.** Every prototype run was darwin/arm64.
 
+> **Measured 2026-09-23.** Results, and the values later tasks read — RESTART_RESYNCS, AUTOCHECKPOINT_OFF_NEEDED, LINUX_BINARIES_RUN and arm 2b's reading of truncate-page-n — are in the prototype results note under [Slice 2 measurements](../../research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+
 ### 8.2 Tests
 
 - **Unit:** the S3 client's conditional write against scripted responses ("precondition failed" is a

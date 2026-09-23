@@ -29,7 +29,7 @@ import type { StartedTestContainer } from "testcontainers";
  * "Error response from daemon: pull access denied for minio/minio, repository does not exist or may
  * require 'docker login'".
  */
-const MINIO_IMAGE =
+export const MINIO_IMAGE =
   "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
 
 /**
@@ -41,9 +41,9 @@ const MINIO_IMAGE =
  * characters". That run exercised the PASSWORD rule only — `short` is five characters, which already
  * satisfies the ≥3 user rule; the user rule is MinIO's own hint text, not something this run showed.
  */
-const ROOT_USER = "waitronbench";
-const ROOT_PASSWORD = "waitronbench";
-const BUCKET = "waitron-failover";
+export const ROOT_USER = "waitronbench";
+export const ROOT_PASSWORD = "waitronbench";
+export const BUCKET = "waitron-failover";
 
 export type Store = {
   /** `http://host:port` of this store's MinIO container. */

@@ -30,6 +30,21 @@ pnpm --silent --filter @waitron/bench-sqlite-failover scenarios --json   # the s
 pnpm --filter @waitron/bench-sqlite-failover typecheck
 ```
 
+### Slice 2 probes (2026-09-23)
+
+One-off measurements for the slice-2 spec §8.1, not scenarios: the runner never discovers them, and
+each prints one result line. Their recorded results are in the results note under "Slice 2
+measurements".
+
+```bash
+export TESTCONTAINERS_RYUK_DISABLED=true
+pnpm --filter @waitron/bench-sqlite-failover probe:restart          # 1: restart after an outside fold-back
+pnpm --filter @waitron/bench-sqlite-failover probe:autocheckpoint   # 2 and 2b: automatic fold-back; offline past truncate-page-n
+pnpm --filter @waitron/bench-sqlite-failover probe:restore-points   # 3: surviving restore points (compressed schedule, ~11 min)
+pnpm --filter @waitron/bench-sqlite-failover probe:restore-time     # 4: restore time; add `--image-kib 330` (no `--`: pnpm passes it on) for the largest measured photo
+pnpm --filter @waitron/bench-sqlite-failover probe:linux            # 5: linux/amd64 and linux/arm64 in Docker
+```
+
 **The results are written up in
 [`docs/research/2026-09-16-sqlite-failover-prototype.md`](../../docs/research/2026-09-16-sqlite-failover-prototype.md)**
 — what each scenario had to show, its recorded verdict, the control that makes that verdict a
