@@ -68,9 +68,7 @@ export default defineConfig({
         // Test-only mount/cleanup helper (the ui package excludes its own the same way).
         "src/dashboard/test-helpers.ts",
       ],
-      // The floor bar, until tests bring bookings to the high bar every package is to hold
-      // (CLAUDE.md §2). HIGH_BAR_PACKAGES in scripts/coverage-thresholds.test.ts pins this.
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

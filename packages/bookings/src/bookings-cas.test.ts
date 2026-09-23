@@ -20,14 +20,16 @@
  *
  * Rewriting it into something that passes is what CLAUDE.md §4's "treat 'there is a test' as an
  * unfinished sentence" refuses, so it was not rewritten. What the requirement behind it — a
- * concurrent cancel must not be seated — now rests on is the CAS predicate itself, which is the
- * case below.
+ * concurrent cancel must not be seated — now rests on is the CAS predicate itself: isolated by the
+ * case below, and reached through `seatBooking` by the `bookings.test.ts` case that cancels the
+ * booking inside `openTab`.
  *
  * ## What the surviving case is, unchanged
  *
  * A timing-free, direct isolation of that predicate, with its own control in the other direction.
- * It was written as insurance against the race regressing to a false pass, and it is now the only
- * thing asserting the predicate at all.
+ * It was written as insurance against the race regressing to a false pass. `seatBooking` itself
+ * reaching the predicate after its earlier check has passed is asserted in `bookings.test.ts`, by
+ * the case that cancels the booking inside `openTab`; this file isolates the predicate alone.
  */
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -81,9 +83,8 @@ describe("seatBooking compare-and-swap guard", () => {
     // the SAME statement now matches 1 row. That is the compare-and-swap's whole job: without the
     // status predicate the write would seat a booking that had left `booked`.
     //
-    // This proves the WHERE clause's SEMANTICS, not the wiring inside `seatBooking` — the
-    // genuine-race case that covered the verb reaching this WHERE with a stale read is deleted, and
-    // this file's header says why.
+    // This proves the WHERE clause's SEMANTICS, not the wiring inside `seatBooking`; the wiring is
+    // the `bookings.test.ts` case that cancels the booking inside `openTab`.
     const { cfg, createdBy } = await setupVenue(suite.db);
     const tableId = await seedTable(suite.db, cfg, "CAS-2");
     const { id: bookingId } = await withTransaction(suite.db, (tx: Transaction) =>

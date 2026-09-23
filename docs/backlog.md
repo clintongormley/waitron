@@ -2014,7 +2014,9 @@ image constraints under *Detail → Box image*.
   2026-09-23*.
   Promoted since, one pull request each: `printing` (**PR #500**, 2026-09-23 —
   tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
-  100/100/100/100).
+  100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
+  `booked` inside `openTab`, a location with no row, the passive refresh copy, and the dashboard's
+  single-flight guards; 99.76/100/100/98.38).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2380,6 +2382,17 @@ image constraints under *Detail → Box image*.
 
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
+
+**The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
+bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
+picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
+let a live refresh empty the table list: the dropdown showed no options and the value `""`, and
+confirming still called `seatBooking("bk-1", { tableId: "t-1" })`. The same test found no way to
+reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that branch, and the
+`?? ""` in `#onSeatClick` (after its own early return for an empty table list), are two of the
+three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
+does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
+may make one or both of those branches reachable, or show they can go.
 
 **On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
 (found 2026-09-21, task F1; fixed 2026-09-23 by PR #493).** The flip opened ONE connection per database file,

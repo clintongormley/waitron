@@ -5,7 +5,8 @@ import { BookingApi } from "./client.js";
 // Wire-pin suite: the exact URLs, methods and bodies the booking routes are called with. Moved
 // byte-identical from apps/dashboard/src/api/client.test.ts — the proof the wire did not move when the
 // methods came across onto BookingApi. `new DashboardApi("", stub)` became
-// `new BookingApi(createRequest({ fetchImpl: stub }))`; every assertion below is unchanged.
+// `new BookingApi(createRequest({ fetchImpl: stub }))`; every assertion in those moved cases is
+// unchanged. The `BookingApi — background` block at the end was added afterwards.
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -180,5 +181,49 @@ describe("BookingApi — listTables", () => {
       method: "GET",
       credentials: "include",
     });
+  });
+});
+
+// `background` is the copy the screen's LIVE REFRESHES read through: its GETs are marked passive, so an
+// automatic poll does not count as session activity (CLAUDE.md §3, "Automatic dashboard reads are
+// passive session activity"). Built over the real request primitive like the cases above, so the
+// marker is read off what `fetch` receives: the primitive adds `x-waitron-live: 1` to a passive GET.
+describe("BookingApi — background", () => {
+  it("marks the background copy's GETs passive and leaves the original's GETs active", async () => {
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse([]));
+    const liveData = {} as NonNullable<BookingApi["liveData"]>;
+    const foreground = new BookingApi(
+      createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    );
+    const background = foreground.background;
+
+    await background.listBookings("2026-08-20");
+    await background.listTables();
+    await foreground.listBookings("2026-08-20");
+    await foreground.listTables();
+
+    const calls = fetchImpl.mock.calls as [string, RequestInit][];
+    expect(calls.map(([url, init]) => [url, init.method])).toEqual([
+      ["/management-api/bookings?date=2026-08-20", "GET"],
+      ["/management-api/tables", "GET"],
+      ["/management-api/bookings?date=2026-08-20", "GET"],
+      ["/management-api/tables", "GET"],
+    ]);
+    for (const [, init] of calls.slice(0, 2)) {
+      expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+    }
+    // The original's GETs carry no headers at all — the exact init the wire-pin cases above expect.
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/management-api/bookings?date=2026-08-20", {
+      method: "GET",
+      credentials: "include",
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, "/management-api/tables", {
+      method: "GET",
+      credentials: "include",
+    });
+    // The copy carries the same live-data source.
+    expect(background.liveData).toBe(liveData);
+    expect(background).not.toBe(foreground);
   });
 });
