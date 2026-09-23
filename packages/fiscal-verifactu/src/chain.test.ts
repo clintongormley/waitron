@@ -253,9 +253,10 @@ describe("appendToChain", () => {
     //
     // THE CONTROL HAS NOW BEEN RUN, and it says this case does NOT discriminate the savepoint on
     // this engine: replacing `tx.transaction((nested) => attemptAppend(nested, …))` with a plain
-    // `attemptAppend(tx, …)` leaves this case PASSING. Two other cases go red under that deletion
-    // and neither is evidence either — both stub `tx` with a `transaction` method and nothing
-    // else, so they fail because the stub has no other method, not because the savepoint matters.
+    // `attemptAppend(tx, …)` leaves this case PASSING. The cases that stub `tx` go red under that
+    // deletion and none of them is evidence either — each stub has a `transaction` method and
+    // nothing else, so they fail because the stub has no other method, not because the savepoint
+    // matters.
     //
     // So this is a case about exhaustion surfacing as a structured error, and the savepoint is
     // held by nothing here. Its remaining job (undoing what a losing attempt wrote before the
@@ -263,7 +264,10 @@ describe("appendToChain", () => {
     // write an attempt makes, and the only earlier write is `readChainHead` creating a missing
     // head row, which is idempotent. CLAUDE.md §4, "a proof-by-deletion belongs to the SHAPE of
     // the code it was taken against" — the shape changed and the proof did not survive it.
-    // The next case reaches that job by staging the earlier write itself, and holds it.
+    // "lands the record on the retry after a refused first attempt" shows a rollback to the
+    // attempt's savepoint removing a write, but its wrapper, like the stubs, has only a
+    // `transaction` method, so deleting appendToChain's savepoint fails it for that reason alone
+    // and the savepoint is still held by no case.
     const occupied = await seedSale(pg.db, till, 1);
     await pg.db.insert(registrosFacturacion).values({
       tillId: till.tillId,
@@ -297,20 +301,56 @@ describe("appendToChain", () => {
     });
   });
 
+  it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
+    const saleId = await seedSale(pg.db, till, 1);
+    // Every savepoint attempt loses its race. Stubbing tx.transaction is the only way to reach
+    // exhaustion deterministically: contention cannot produce three collisions here, because one
+    // write transaction runs on the venue file at a time (chain.concurrency.test.ts's `holds a
+    // second appender on the same chain until the first commits` watches the second body fail to
+    // START), and the case above reaches three real refusals only by occupying the position first,
+    // with no concurrency at all. appendToChain touches only tx.transaction on this path, so the
+    // stub is exactly that one method and nothing else — a wider fake would let the test keep
+    // passing if the retry loop started doing something else.
+    const alwaysCollides = {
+      transaction: () =>
+        Promise.reject(
+          // The `errcode` + `message` pair this engine reports for a unique-index collision, not
+          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal
+          // "rejects a second record claiming an occupied chain position" asserts on, so the stub
+          // and the database agree.
+          Object.assign(new Error("UNIQUE constraint failed: registros_facturacion.node_id"), {
+            cause: {
+              errcode: 2067,
+              message:
+                "UNIQUE constraint failed: registros_facturacion.node_id, registros_facturacion.secuencia",
+            },
+          }),
+        ),
+    } as never;
+
+    const error = await appendToChain(
+      alwaysCollides,
+      till.nodeId,
+      altaFor(till.tillId, saleId, 1, 1),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("chain.append_contention");
+    expect((error as AppError).params).toEqual({
+      nodeId: till.nodeId,
+      attempts: 3,
+    });
+  });
+
   it("lands the record on the retry after a refused first attempt, and the refused attempt leaves nothing behind", async () => {
-    // The middle of the loop, between the two ends the cases around it hold: one refusal the
-    // database really issued, then a clean second attempt. The first attempt's savepoint plants a
-    // record at the position the attempt is about to compute (the chain head still says 0), so the
-    // attempt's own insert is refused by the position's unique index; rolling back to the
-    // savepoint takes the planted record with it, and the second attempt passes straight through.
-    // The only thing wrapped is `transaction`, the one method appendToChain calls on `tx`.
-    //
-    // Controls run 2026-09-23, each restored: `MAX_APPEND_ATTEMPTS = 1` fails this case with
-    // `chain.append_contention`, and rethrowing every error from the loop fails it with the raw
-    // unique refusal. Planting the record BEFORE the first savepoint opens, instead of inside it,
-    // fails it with `chain.append_contention` — the retry lands only because the rollback removed
-    // what the refused attempt wrote. (Dropping the savepoint from `appendToChain` also fails it,
-    // but only because the wrapper has no `select`; that is not evidence.)
+    // The middle of the loop, between the first-attempt cases at the top of this block and the
+    // exhaustion cases above: one refusal the database really issued, then a clean second attempt.
+    // The first attempt's savepoint plants a record at the position the attempt is about to compute
+    // (the chain head still says 0), so the attempt's own insert is refused by the position's
+    // unique index; rolling back to the savepoint takes the planted record with it, and the second
+    // attempt passes straight through. The only thing wrapped is `transaction`, the one method
+    // appendToChain calls on `tx`.
+    // The controls that fail it are in the pull request that added it.
     const decoy = await seedSale(pg.db, till, 1);
     const saleId = await seedSale(pg.db, till, 2);
     let calls = 0;
@@ -368,52 +408,16 @@ describe("appendToChain", () => {
       .where(eq(registrosFacturacion.nodeId, till.nodeId));
     expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
     expect(result.secuencia).toBe(1);
-    const head = await pg.db.transaction((tx) => readChainHead(tx, till.nodeId));
-    expect(head).toEqual({
-      secuencia: 1,
-      ultimoRegistroId: result.id,
-      ultimaHuella: result.huella,
-    });
-  });
-
-  it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
-    const saleId = await seedSale(pg.db, till, 1);
-    // Every savepoint attempt loses its race. Stubbing tx.transaction is the only way to reach
-    // exhaustion deterministically: contention cannot produce three collisions here, because one
-    // write transaction runs on the venue file at a time (chain.concurrency.test.ts's `holds a
-    // second appender on the same chain until the first commits` watches the second body fail to
-    // START), and the case above reaches three real refusals only by occupying the position first,
-    // with no concurrency at all. appendToChain touches only tx.transaction on this path, so the
-    // stub is exactly that one method and nothing else — a wider fake would let the test keep
-    // passing if the retry loop started doing something else.
-    const alwaysCollides = {
-      transaction: () =>
-        Promise.reject(
-          // The `errcode` + `message` pair this engine reports for a unique-index collision, not
-          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal the case
-          // above now asserts on, so the stub and the database agree.
-          Object.assign(new Error("UNIQUE constraint failed: registros_facturacion.node_id"), {
-            cause: {
-              errcode: 2067,
-              message:
-                "UNIQUE constraint failed: registros_facturacion.node_id, registros_facturacion.secuencia",
-            },
-          }),
-        ),
-    } as never;
-
-    const error = await appendToChain(
-      alwaysCollides,
-      till.nodeId,
-      altaFor(till.tillId, saleId, 1, 1),
-    ).catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe("chain.append_contention");
-    expect((error as AppError).params).toEqual({
-      nodeId: till.nodeId,
-      attempts: 3,
-    });
+    const { rows: head } = await pg.db.execute<{
+      secuencia: number;
+      ultimo_registro_id: string;
+      ultima_huella: string;
+    }>(sql`
+      select secuencia, ultimo_registro_id, ultima_huella from cadenas where node_id = ${till.nodeId}
+    `);
+    expect(head).toEqual([
+      { secuencia: 1, ultimo_registro_id: result.id, ultima_huella: result.huella },
+    ]);
   });
 
   it("does not retry an error that is not a chain collision", async () => {
