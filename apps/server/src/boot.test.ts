@@ -2451,9 +2451,9 @@ describe("startServer, against a migrated venue directory", () => {
       },
     });
     const [registroId] = seeded.registroIds;
+    const claimedAt = new Date(Date.now() - 1_000).toISOString();
     await sharedDb.execute(sql`
-      update envios set estado = 'enviando', intentos = 1,
-        enviado_en = ${new Date(Date.now() - 1_000).toISOString()}
+      update envios set estado = 'enviando', intentos = 1, enviado_en = ${claimedAt}
       where registro_id = ${registroId}
     `);
 
