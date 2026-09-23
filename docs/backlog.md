@@ -3330,8 +3330,8 @@ PostgreSQL from the dependencies and the dev stack, LANDED as #492 on 2026-09-23
 `fc8753a6`). It takes the cluster out of the box and out of the dev stack,
 the client packages out of every manifest that did not import them, the two unread Docker switches out
 of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
-of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, is the last task
-in the slice-1 plan**, and with it slice 1 is done.
+of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, LANDED as #494 on
+2026-09-23** (main `5093bbfe`) — the last task in the slice-1 plan, and with it slice 1 is done.
 
 **What T3 measured, and why no bar moved.** The whole workspace was run — 46 members green at their
 current bars, 1,065 test files and 13,784 tests, plus the root project's 54 files and 3,255 tests —
