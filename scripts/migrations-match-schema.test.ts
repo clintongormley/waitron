@@ -112,13 +112,30 @@ function generate(packageDir: string, config: DrizzleConfig, outDir: string) {
   });
 }
 
-/** A readable account of a run that did not exit 0. */
+/** A readable account of a run, for an assertion message. */
 function describeRun(run: ReturnType<typeof generate>): string {
   return (
     `status ${String(run.status)}, signal ${String(run.signal)}` +
     (run.error === undefined ? "" : `, ${run.error.message}`) +
-    `\n${run.stdout}\n${run.stderr}`
+    `\n--- stdout\n${run.stdout}\n--- stderr\n${run.stderr}`
   );
+}
+
+/**
+ * What drizzle-kit v0.31.10 prints when `generate` reaches the end: the first when the schema
+ * matches the head snapshot, the second when it wrote a migration (`writeResult` in its `bin.cjs`).
+ *
+ * The exit status alone is not evidence. Measured 2026-09-23: a schema module that throws at import,
+ * and a column rename (which makes drizzle-kit ask an interactive question and fail with
+ * `Interactive prompts require a TTY terminal`), each printed the error, exited 0 and left the copy
+ * untouched, so a check reading the status and the files passed both.
+ */
+const COMPLETED = ["No schema changes, nothing to migrate", "Your SQL migration file"];
+
+/** Why a run does not count as a completed generation, or `undefined` when it does. */
+function generationFailure(run: ReturnType<typeof generate>): string | undefined {
+  if (run.status === 0 && COMPLETED.some((marker) => run.stdout.includes(marker))) return undefined;
+  return `drizzle-kit generate did not report finishing (${COMPLETED.join(" / ")}): ${describeRun(run)}`;
 }
 
 const sets = migrationSets(repoRoot);
@@ -154,7 +171,7 @@ describe("every migration set matches its package's TypeScript schema", () => {
       const copy = join(scratch, set.replaceAll("/", "__"));
       cpSync(join(repoRoot, set), copy, { recursive: true });
       const run = generate(packageDir, config as unknown as DrizzleConfig, copy);
-      expect(run.status, `${set}: drizzle-kit generate failed — ${describeRun(run)}`).toBe(0);
+      expect(generationFailure(run), set).toBeUndefined();
       expect(
         differences(join(repoRoot, set), copy),
         `${set}: the committed migrations do not match the TypeScript schema — run ` +
@@ -191,9 +208,72 @@ describe("negative control", () => {
       writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
 
       const run = generate(packageDir, config, copy);
-      expect(run.status, describeRun(run)).toBe(0);
+      expect(generationFailure(run)).toBeUndefined();
       const found = differences(join(repoRoot, set), copy);
       expect(found.some((line) => /^new: [^/]+\.sql$/.test(line))).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+/**
+ * A generation that fails without saying so must still fail the check. Both cases run on a copy of
+ * a set other than identity's, so the committed tree is never touched: one points drizzle-kit at a
+ * throwaway schema module that throws at import, the other renames a column in the copy's head
+ * snapshot, which makes drizzle-kit ask whether the column was renamed. Each run leaves the copy as
+ * it found it, which is why the file comparison alone cannot see them.
+ */
+describe("negative control: a generation that did not finish", () => {
+  const set = join("packages", "bookings", "drizzle");
+  const packageDir = join(repoRoot, dirname(set));
+
+  it(
+    "is refused when the schema module throws at import",
+    async () => {
+      const config = (await loadConfig(packageDir)) as unknown as DrizzleConfig;
+      const copy = join(scratch, "control-throws");
+      cpSync(join(repoRoot, set), copy, { recursive: true });
+      const throwing = join(scratch, "throwing-schema.ts");
+      writeFileSync(throwing, 'throw new Error("negative control: schema import failed");\n');
+
+      const run = generate(packageDir, { ...config, schema: relative(packageDir, throwing) }, copy);
+      expect(differences(join(repoRoot, set), copy)).toEqual([]);
+      expect(generationFailure(run) ?? "accepted as finished").toContain(
+        "negative control: schema import failed",
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "is refused when drizzle-kit stops to ask whether a column was renamed",
+    async () => {
+      const config = (await loadConfig(packageDir)) as unknown as DrizzleConfig;
+      const copy = join(scratch, "control-prompt");
+      cpSync(join(repoRoot, set), copy, { recursive: true });
+
+      const head = headSnapshot(repoRoot, set);
+      if (head.kind !== "file") throw new Error(`${set}: no head snapshot (${head.kind})`);
+      const snapshotPath = join(copy, relative(set, head.path));
+      const snapshot = JSON.parse(readFileSync(snapshotPath, "utf8")) as {
+        tables: Record<string, { columns: Record<string, { name: string }> }>;
+      };
+      const columns = snapshot.tables.bookings?.columns;
+      const column = columns?.booking_time;
+      if (columns === undefined || column === undefined) {
+        throw new Error(`${set}: head snapshot has no bookings.booking_time column`);
+      }
+      delete columns.booking_time;
+      columns.booking_time_before = { ...column, name: "booking_time_before" };
+      writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+      const edited = join(scratch, "control-prompt-edited");
+      cpSync(copy, edited, { recursive: true });
+
+      const run = generate(packageDir, config, copy);
+      expect(differences(edited, copy)).toEqual([]);
+      expect(generationFailure(run) ?? "accepted as finished").toContain(
+        "Interactive prompts require a TTY",
+      );
     },
     TEST_TIMEOUT_MS,
   );
