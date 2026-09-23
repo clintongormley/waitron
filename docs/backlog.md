@@ -2080,7 +2080,7 @@ image constraints under *Detail → Box image*.
   holds an empty journal and no `.sql` file, so its set builds nothing. Each call site states the
   factory's blind spots that reach its own set.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
-  longer build — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).** No set's SQL references
+  longer build — DONE (2026-09-23, PR #516).** No set's SQL references
   `tenants` (`` grep -ln 'REFERENCES `tenants`' packages/*/drizzle/*.sql `` matches no file), so each
   site now says what an experiment showed. Two experiments, both undone afterwards. First,
   `useVenueDb` was made to apply its sets in REVERSE, then with core REMOVED, and the whole suite of
@@ -3532,14 +3532,14 @@ it; and a correction must not decrement a count where it should drop it.
 - **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
   name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
   Nobody owns this yet; it is a rename-only change and wants its own item.
-- **The discarded `cfg` parameters — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).**
+- **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls
   `requireVenueCfg`, because each verb it runs takes `cfg` itself. Other `void cfg` lines remain in
   `apps/server/src` (`git grep -n 'void cfg;' apps/server/src`), unchanged. Some are `asApp` test
   helpers of the same shape as the one fixed; the rest are other test helpers and production
   functions (`apps/server/src/working-order.ts` holds several) that take `cfg` and discard it.
-- **Three dangling pointers — DONE (2026-09-23, branch `chore/slice1-code-cleanups`), with one
+- **Three dangling pointers — DONE (2026-09-23, PR #516), with one
   left on purpose.** `apps/server/src/testing/global-setup.ts` was no longer cited anywhere under
   `apps`, `packages` or `scripts`; the four `git show origin/main:…/testing/global-setup.ts`
   pointers of the same kind (in `packages/core`, `packages/scheduler`, `packages/credentials`), and
@@ -3565,10 +3565,10 @@ it; and a correction must not decrement a count where it should drop it.
   pointers in shipped `drizzle/` SQL, such as `packages/media/drizzle/0001_image_references.sql`
   and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
-  claim — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).** Neither set needs core to have
+  claim — DONE (2026-09-23, PR #516).** Neither set needs core to have
   run first; both now say so, with the experiment in the `tenants` foreign key entry above.
-- **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (2026-09-23, branch
-  `chore/slice1-code-cleanups`).** #492 had already reworded "no matches" to "only these three
+- **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (2026-09-23, PR
+  #516).** #492 had already reworded "no matches" to "only these three
   comment lines", and that held when run: `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages
   scripts deploy .github` printed the block's own three lines. The block is now only the gap it
   leaves — nothing shows a refused promote write fails closed, and no test asserts
@@ -3632,7 +3632,7 @@ What the preparation tasks left, with F1's own answers where it found them:
   the boot, and a 2026-08-20 single-fork receipt the coverage runs now contradict). Each must be
   corrected against its own package's suites, read not run.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
-  was deleted on 2026-09-23 (branch `chore/slice1-code-cleanups`). The file's real-SumUp case
+  was deleted on 2026-09-23 (PR #516). The file's real-SumUp case
   seals no credential and passes, because the seat reads its credential only on first use; that
   case's name and the file header had said otherwise and now do not. Twelve plans hold a
   `usePgliteDb` designating sketch with no `useVenueDb` pointer, and one twin
