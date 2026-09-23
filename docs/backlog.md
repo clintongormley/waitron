@@ -449,12 +449,15 @@ reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails 
 **Next in this slice: branch 2, variants as products** (spec
 `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4). It folds variants into
 `products` behind a `parent_id` and removes `product_variants` and `menu_item_variants`. The SQLite
-flip it waited for has landed. **Planned 2026-09-23** as seven pull requests, branches
-`feat/variants-<slug>`: [the plan](superpowers/plans/2026-09-23-variants-as-products.md), which also
-lists twelve decisions it takes where the spec is silent. Queued on campaign lane B
-(`~/waitron-campaign-b`), not yet armed. **Its first task makes every existing venue impossible to
-upgrade** (measured: the migration aborts on a venue `main` already migrated), so once it lands every
-dev venue needs `wa-wt reset demo <name>` and no provisioned box takes the image without a wipe.
+flip it waited for has landed. **The owner revised the design on 2026-09-23** (spec §15: a parent
+with variants is never sold itself, variants print under their own names and follow their parent
+onto every menu, prices fall back from the most specific one set, and Active and Available become two
+states). **Planned the same day** as nine pull requests, branches `feat/variants-<slug>`:
+[the plan](superpowers/plans/2026-09-23-variants-as-products.md). Queued on campaign lane B
+(`~/waitron-campaign-b`), not yet armed. **Two of its tasks cannot upgrade a venue that holds data**
+(measured): Task 1's migration aborts outright, and Task 4's reports success while emptying the
+menus' extras attachments and variant price overrides. So every dev venue needs
+`wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
 order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
