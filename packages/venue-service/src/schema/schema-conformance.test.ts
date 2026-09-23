@@ -20,11 +20,12 @@ describeSchemaConformance({
   // Core, then catalogue: `drizzle/0000_baseline.sql` has foreign keys into core's `locations`,
   // `floor_zones`, `devices`, `catalogues`, `categories`, `products`, `kitchen_stations`,
   // `working_orders` and `working_order_lines`, and into catalogue's `menu_items`. It creates no
-  // trigger.
+  // trigger. It is the list this package's own database suites apply, `src/migrations.test.ts`
+  // among them; `src/routes.test.ts` adds identity after this set, which no table here references.
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: VENUE_SERVICE_MIGRATIONS,
   declarations,
-  // False: every value-set column here — `default_service_mode`, both `service_mode`s,
+  // False: every value-set text column here — `default_service_mode`, both `service_mode`s,
   // `hardware_unit` and `vat_class` — is a plain `label()` beside its own hand-written check, not
   // the `enumText`/`enumCheck` pair; `service.ts` says why above `departments.default_service_mode`.
   declaresClosedVocabularies: false,

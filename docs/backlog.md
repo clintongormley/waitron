@@ -2049,11 +2049,12 @@ image constraints under *Detail → Box image*.
   `credentials`, `scheduler`, `identity`, `bookings` and `venue-service` have had one since, and
   none found drift; re-run the command for the current list. `bookings` and `venue-service` have no
   `src/schema/index.ts` barrel, so each call site hands the factory the one file its
-  `drizzle.config.ts` generates from (`src/schema/bookings.ts`, `src/schema/service.ts`). `identity`'s is blind to one thing that matters there: three
-  `persons` unique indexes are over a folded-key expression, and the factory compares an expression
-  index by name, uniqueness, filter and where the expression sits among its parts, never by what it
-  says — measured by changing `foldedKey`'s `lower` to `upper` in `src/schema/persons.ts`, which
-  left the suite at 13 of 13. Of the rest, `fiscal-verifactu` carries a `src/schema/index.ts`
+  `drizzle.config.ts` generates from (`src/schema/bookings.ts`, `src/schema/service.ts`).
+  `identity`'s is blind to one thing that matters there: three `persons` unique indexes are over a
+  folded-key expression, and the factory compares an expression index by name, uniqueness, filter
+  and where the expression sits among its parts, never by what it says — measured by changing
+  `foldedKey`'s `lower` to `upper` in `src/schema/persons.ts`, which left the suite at 13 of 13. Of
+  the rest, `fiscal-verifactu` carries a `src/schema/index.ts`
   barrel, its own migration set and a `src/schema-ownership.test.ts` beside it, which is everything
   a call site needs to be written from, so it is roughly ten lines now that the factory exists.
   (That is not a comparison with the four that landed: `catalogue` has no `schema-ownership.test.ts`
