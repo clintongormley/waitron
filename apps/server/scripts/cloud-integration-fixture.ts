@@ -1,3 +1,4 @@
+import { createCloudConnection } from "../src/cloud-client.js";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -115,6 +116,26 @@ await writeFile(
   }),
   { mode: 0o600 },
 );
+// Only the parent integration process can submit synthetic adapter observations over IPC.
+const cloud = createCloudConnection({
+  stateDir: root,
+  origin: env.WAITRON_CLOUD_ORIGIN!,
+  localVenueId: env.WAITRON_TILL_LOCATION_ID!,
+  environment: "test",
+});
+process.on("message", (message: unknown) => {
+  if (
+    !message ||
+    typeof message !== "object" ||
+    !("report" in message) ||
+    !Array.isArray(message.report)
+  )
+    return;
+  void cloud.report(message.report).then(
+    (status) => process.send?.({ status }),
+    () => process.send?.({ error: "report_failed" }),
+  );
+});
 let closing = false;
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.on(signal, () => {

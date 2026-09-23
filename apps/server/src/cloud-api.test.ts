@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -220,4 +220,81 @@ it("rejects malformed or extra browser inputs and reports an unconfigured server
     (await app.request("/management-api/cloud/complete", { method: "POST", headers, body: "{}" }))
       .status,
   ).toBe(400);
+});
+
+it("refresh and revoke require a live manager and exact Origin; revoke rechecks after a pending exchange", async () => {
+  const { installationFixture } = await import("../test/cloud-installation-fixture.js");
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager"),
+      staff = await person("staff");
+    let primary = true;
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection: f.client,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const send = (action: string, cookie = manager.cookie, origin = "https://venue.test") =>
+      app.request("/management-api/cloud/" + action, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}",
+      });
+    for (const action of ["refresh", "revoke"]) {
+      expect((await send(action, "")).status).toBe(401);
+      expect((await send(action, staff.cookie)).status).toBe(403);
+      expect((await send(action, manager.cookie, "https://attacker.test")).status).toBe(403);
+    }
+    expect((await send("refresh")).status).toBe(200);
+    primary = false;
+    expect((await send("refresh")).status).toBe(409);
+    primary = true;
+    let release = () => {};
+    let entered = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    f.delay(async () => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, manager.id));
+    });
+    const refreshing = f.client.refresh();
+    await started;
+    const oldActivity = new Date(Date.now() - 60000).toISOString();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: oldActivity })
+      .where(eq(managementSessions.id, manager.session));
+    const revoking = send("revoke");
+    try {
+      await vi.waitFor(async () => {
+        const [row] = await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.id, manager.session));
+        expect(row!.lastSeenAt).not.toBe(oldActivity);
+      });
+    } finally {
+      release();
+    }
+    await refreshing;
+    expect((await revoking).status).toBe(403);
+    expect(f.requests.some((v) => v[2] === "revoke")).toBe(false);
+    f.delay(async () => {});
+    await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+    primary = false;
+    expect((await send("revoke")).status).toBe(200);
+    expect((await f.client.status()).installation?.state).toBe("revoked");
+  } finally {
+    await f.close();
+  }
 });

@@ -68,7 +68,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       return c.json({ ...status, configured: !!deps.connection, isPrimary: deps.isPrimary() });
     }),
   );
-  for (const action of ["start", "check", "complete"] as const)
+  for (const action of ["start", "check", "complete", "refresh", "revoke"] as const)
     app.post(`/management-api/cloud/${action}`, (c) =>
       run(c, log, async () => {
         if (c.req.header("origin") !== deps.managementOrigin)
@@ -104,16 +104,20 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         )
           throw new AppError("cloud.request_invalid", {});
         const client = connection();
-        if (action !== "check") primary();
+        if (action !== "check" && action !== "revoke") primary();
         const result =
-          action === "start"
-            ? await client.start(data.restart === true)
-            : action === "check"
-              ? await client.check()
-              : await client.complete(data as unknown as CloudChoice, async () => {
-                  await authorize(c, true);
-                  primary();
-                });
+          action === "refresh"
+            ? await client.refresh()
+            : action === "revoke"
+              ? await client.revoke(() => authorize(c, true))
+              : action === "start"
+                ? await client.start(data.restart === true)
+                : action === "check"
+                  ? await client.check()
+                  : await client.complete(data as unknown as CloudChoice, async () => {
+                      await authorize(c, true);
+                      primary();
+                    });
         await authorize(c, true);
         return c.json({ ...result, configured: true, isPrimary: deps.isPrimary() });
       }),

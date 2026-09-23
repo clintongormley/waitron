@@ -158,3 +158,123 @@ it("keeps Start again available after an unavailable request and a later network
   await flush(el);
   expect(el.shadowRoot!.querySelector("#restart")).not.toBeNull();
 });
+
+for (const locale of ["en", "es"] as const)
+  it(`${locale} shows independent service health and explicitly confirms stopping Cloud access`, async () => {
+    setLocale(locale);
+    const calls: string[] = [];
+    let lost = true;
+    const state = {
+      state: "complete",
+      configured: true,
+      isPrimary: true,
+      code: "",
+      legalBusinessName: "Sol SL",
+      installation: {
+        state: "active",
+        revision: 2,
+        lastContactAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+        services: [
+          {
+            service: "remote_access",
+            state: "ready",
+            health: "healthy",
+            failure: null,
+            observedAt: new Date().toISOString(),
+          },
+          {
+            service: "continuous_backup",
+            state: "unconfigured",
+            health: "unknown",
+            failure: null,
+            observedAt: null,
+          },
+          {
+            service: "retained_snapshots",
+            state: "failed",
+            health: "failed",
+            failure: "storage",
+            observedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    };
+    const api = new DashboardApi("", async (url) => {
+      calls.push(String(url));
+      if (String(url).endsWith("/revoke")) {
+        if (lost) {
+          lost = false;
+          return Response.json(
+            { error: { code: "cloud.unavailable", params: {} } },
+            { status: 503 },
+          );
+        }
+        state.installation.state = "revoked";
+      }
+      return Response.json(state);
+    });
+    const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+      api,
+    });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(locale === "en" ? "Working" : "Funcionando");
+    expect(el.shadowRoot!.textContent).toContain(
+      locale === "en" ? "Not configured" : "Sin configurar",
+    );
+    click(el, "stop-access");
+    await flush(el);
+    expect(calls.filter((v) => v.endsWith("/revoke"))).toHaveLength(0);
+    click(el, "cancel-stop");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("#confirm-stop")).toBeNull();
+    click(el, "stop-access");
+    await flush(el);
+    await expectNoA11yViolations(host);
+    click(el, "confirm-stop");
+    click(el, "confirm-stop");
+    await flush(el);
+    expect(calls.filter((v) => v.endsWith("/revoke"))).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("#confirm-stop")).not.toBeNull();
+    click(el, "confirm-stop");
+    await flush(el);
+    expect(el.shadowRoot!.textContent).toContain(
+      locale === "en" ? "Cloud access stopped" : "Acceso a Cloud detenido",
+    );
+    expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
+  });
+
+it("ages a displayed observation without extending the login or requesting Cloud", async () => {
+  setLocale("en");
+  let calls = 0;
+  const api = new DashboardApi("", async () => {
+    calls++;
+    return Response.json({
+      state: "complete",
+      configured: true,
+      isPrimary: true,
+      code: "",
+      installation: {
+        state: "active",
+        revision: 0,
+        lastContactAt: new Date().toISOString(),
+        leaseExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+        services: [
+          {
+            service: "remote_access",
+            state: "ready",
+            health: "healthy",
+            failure: null,
+            observedAt: new Date(Date.now() - 299500).toISOString(),
+          },
+        ],
+      },
+    });
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain("Working");
+  await expect.poll(() => el.shadowRoot!.textContent, { timeout: 2000 }).not.toContain("Working");
+  expect(el.shadowRoot!.textContent).toContain("Health unknown");
+  expect(calls).toBe(1);
+});

@@ -1284,6 +1284,19 @@ export type BackupFreshness =
   { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
+  installation?: {
+    state: "pending" | "active" | "unavailable" | "revoked";
+    revision: number;
+    lastContactAt: string | null;
+    leaseExpiresAt: string | null;
+    services: {
+      service: "remote_access" | "continuous_backup" | "retained_snapshots";
+      state: "unconfigured" | "provisioning" | "ready" | "failed";
+      health: "unknown" | "healthy" | "degraded" | "failed";
+      failure: string | null;
+      observedAt: string | null;
+    }[];
+  };
   configured: boolean;
   isPrimary: boolean;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
@@ -3029,6 +3042,12 @@ export class DashboardApi {
 
   // ── Backup admin (recovery-key wizard) ────────────────────────────────────────────────────────
 
+  refreshCloudConnection(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/refresh", "POST", {});
+  }
+  revokeCloudConnection(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/revoke", "POST", {});
+  }
   getCloudStatus(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/status", "GET");
   }
