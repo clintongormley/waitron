@@ -2060,7 +2060,9 @@ image constraints under *Detail → Box image*.
   none of and one with two declines sharing an incident, and the dashboard forms' single-flight,
   dismiss, default-callback and error-copy paths; 100/100/100/100); `server-kit` (**PR #515**,
   2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
-  certificate with no CN, and refusing a second close; 100/100/100/98).
+  certificate with no CN, and refusing a second close; 100/100/100/98); `sync-enrolment` (**PR
+  #518**, 2026-09-23 — tests for a drop and re-create inside one migration file and for table names
+  read without regard to case; 100/100/100/100).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

@@ -30,6 +30,30 @@ describe("tablesCreatedBy", () => {
     ).toEqual(new Set(["t"]));
   });
 
+  // Within ONE file too: the scanner collects every CREATE before every DROP, so only sorting by
+  // position gets a drop followed by a re-create in the same file right.
+  it("honours order within one file: drop, then create again leaves the table present", () => {
+    expect(
+      tablesCreatedBy([
+        'CREATE TABLE "t" (id text);',
+        'DROP TABLE "t";\nCREATE TABLE "t" (id text, extra text);',
+      ]),
+    ).toEqual(new Set(["t"]));
+  });
+
+  // SQLite matches table names without regard to case: on node:sqlite (Node v26.7.0),
+  // `DROP TABLE devices` removed a table created as `"Devices"`, and `CREATE TABLE tills` after
+  // `CREATE TABLE Tills` was refused "table tills already exists".
+  it("reads table names without regard to case, reporting them in lower case", () => {
+    expect(
+      tablesCreatedBy([
+        'CREATE TABLE "Devices" (id text);',
+        "CREATE TABLE Tills (id text);",
+        "DROP TABLE devices;",
+      ]),
+    ).toEqual(new Set(["tills"]));
+  });
+
   it("accepts DROP TABLE IF EXISTS and a schema qualifier", () => {
     expect(
       tablesCreatedBy(['CREATE TABLE "t" (id uuid);', 'DROP TABLE IF EXISTS "public"."t";']),
