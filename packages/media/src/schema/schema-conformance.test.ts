@@ -2,15 +2,13 @@
 // (`@waitron/db/testing/schema-conformance.js`), which is where the machinery, what it compares and
 // each of its limits are described. What is here is what is true of the media set in particular.
 //
-// Two facts the factory cannot state for a set it has not seen. Both check constraints in
+// Three facts the factory cannot state for a set it has not seen. Both check constraints in
 // `drizzle/0000_baseline.sql` are written with a `CONSTRAINT <name>` clause, so `checksInDdl`'s
-// blindness to an anonymous check reaches nothing here. And the one `unique()` declaration in
-// `images.ts` is given a name, so the unnamed-constraint refusal reaches nothing either.
-//
-// What this suite does NOT see: the eight triggers `drizzle/0001_image_references.sql` creates. The
-// factory compares tables, columns, keys, indexes and checks, and never reads a trigger. Those eight
-// stand in for the two foreign keys `products.image` and `category_details.image` cannot declare,
-// and their guard is `../image-references.test.ts`.
+// blindness to an anonymous check reaches nothing here. The one `unique()` declaration in
+// `images.ts` is given a name, so the unnamed-constraint refusal reaches nothing either. And the
+// factory never reads a trigger, so the eight `drizzle/0001_image_references.sql` creates are
+// outside this suite; they stand in for the two foreign keys `products.image` and
+// `category_details.image` cannot declare, and their guard is `../image-references.test.ts`.
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
@@ -23,7 +21,10 @@ describeSchemaConformance({
   subjectName: "media",
   // Core, then catalogue: `drizzle/0001_image_references.sql` creates triggers ON core's `products`
   // and catalogue's `category_details`, and a trigger on a table that does not exist yet is refused
-  // when the migration runs. Neither media table has a key into another set.
+  // when the migration runs. Neither media table has a key into another set. It is the list this
+  // package's own database suites apply, `src/image-references.test.ts` among them;
+  // `src/routes.test.ts` and `src/routes-authorization.test.ts` add identity before media, which no
+  // media SQL names.
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: MEDIA_MIGRATIONS,
   declarations,
