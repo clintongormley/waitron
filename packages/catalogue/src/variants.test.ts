@@ -13,6 +13,7 @@ import {
 } from "./operations.js";
 import {
   listProductVariants,
+  listProductVariantsForProducts,
   setProductVariants,
   listMenuVariants,
   setMenuVariants,
@@ -371,5 +372,74 @@ it("refuses a variant of a product that is Active but Unavailable", async () => 
 
   await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
     code: "product.unavailable",
+  });
+});
+
+describe("resolving a menu offer's line", () => {
+  it("refuses an offer id no menu item holds", async () => {
+    const missing = "00000000-0000-4000-8000-0000000000cc";
+    await expect(run((tx) => resolveMenuVariant(tx, missing, null))).rejects.toMatchObject({
+      code: "menu_item.not_found",
+      params: { menuItemId: missing },
+    });
+  });
+
+  it("sells a product with no variant as itself, at the menu's price", async () => {
+    expect(await run((tx) => resolveMenuVariant(tx, offerId, null))).toEqual({
+      variantId: null,
+      name: "Coffee",
+      customerName: null,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+      unitPrice: "8.00",
+    });
+  });
+
+  it("refuses a variant that is Unavailable, or that this menu does not offer", async () => {
+    const [small, large] = await run((tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [{ ...variant("Small", "2.00"), available: false }, variant("Large", "3.00")],
+        "en",
+      ),
+    );
+    await run((tx) =>
+      setMenuVariants(tx, offerId, [{ variantId: large!.id, price: null, offered: false }]),
+    );
+
+    for (const refused of [small!, large!]) {
+      await expect(run((tx) => resolveMenuVariant(tx, offerId, refused.id))).rejects.toMatchObject({
+        code: "product.variant_unavailable",
+        params: { variantId: refused.id },
+      });
+    }
+  });
+
+  it("prices a variant with no price of its own at the offer's price", async () => {
+    const [small] = await run((tx) =>
+      setProductVariants(tx, productId, [{ ...variant("Small", "2.00"), unitPrice: null }], "en"),
+    );
+
+    expect(await run((tx) => resolveMenuVariant(tx, offerId, small!.id))).toMatchObject({
+      variantId: small!.id,
+      unitPrice: "8.00",
+    });
+  });
+});
+
+describe("reading the variants of no products", () => {
+  it("asks the database nothing for an empty product list", async () => {
+    // A stub whose `select` throws pins "no query at all": a query against the real connection
+    // would also answer an empty map.
+    const refuses = {
+      select: () => {
+        throw new Error("listProductVariantsForProducts queried the database for no products");
+      },
+    } as unknown as Transaction;
+
+    expect(await listProductVariantsForProducts(refuses, [])).toEqual(new Map());
   });
 });

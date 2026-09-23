@@ -5,6 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import { menuItems } from "./schema/menu.js";
 import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
@@ -564,5 +565,50 @@ describe("option lists in the catalogue's configuration transfer", () => {
     const classified = new Set(CATALOGUE_CLASSIFICATION.map(({ table }) => table));
 
     expect(transferred.filter((table) => !classified.has(table))).toEqual([]);
+  });
+});
+
+describe("the menus a list's delete preview names", () => {
+  it("lists the menu offers in offer-id order, not in the products' name order", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    await seedTenant(fx.db);
+    // Offer ids chosen against the products' alphabetical order, so the preview's own query order
+    // (by product name) and the offer-id order it promises are different answers.
+    const offerIds = {
+      alpha: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      beta: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      gamma: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    };
+    await run(async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Deli" });
+      const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
+      for (const [name, offerId] of Object.entries(offerIds)) {
+        const product = await createProduct(tx, {
+          catalogueId: catalogue.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "12.00",
+          vatClass: "reduced",
+        });
+        await writeProductModifiers(tx, product.id, [{ kind: "options", id: created.id }]);
+        await tx.insert(menuItems).values({
+          id: offerId,
+          menuId: catalogue.id,
+          productId: product.id,
+          sectionId: section.id,
+          grossPrice: 1200,
+        });
+      }
+    });
+
+    const dependants = await run((tx) => optionListDependants(tx, created.id));
+
+    expect(dependants.products.map((product) => product.name)).toEqual(["alpha", "beta", "gamma"]);
+    expect(dependants.menus).toEqual([
+      { id: offerIds.beta, name: "beta" },
+      { id: offerIds.gamma, name: "gamma" },
+      { id: offerIds.alpha, name: "alpha" },
+    ]);
   });
 });

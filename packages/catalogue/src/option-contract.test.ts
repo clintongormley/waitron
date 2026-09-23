@@ -489,3 +489,36 @@ describe("option selections at order time", () => {
     );
   });
 });
+
+describe("option contract field shapes", () => {
+  it("refuses a body, a label or an answer that is not an object", () => {
+    for (const body of [null, "Cooked", [cooked]]) {
+      expect(() => parseOptionListInput(body)).toThrowError(
+        expect.objectContaining({ code: "options.invalid", params: { field: "optionList" } }),
+      );
+    }
+    expect(() => parseOptionListInput({ ...cooked, labels: [mediumRare, "Blue"] })).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "labels.1" } }),
+    );
+    expect(() => validateOptionSelections([list()], [cookedId])).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "optionSelections" } }),
+    );
+  });
+
+  it("refuses a kitchen name that is not text, on the list and on a label", () => {
+    expect(() => parseOptionListInput({ ...cooked, kitchenName: 42 })).toThrowError(
+      expect.objectContaining({ code: "options.invalid", params: { field: "kitchenName" } }),
+    );
+    expect(() =>
+      parseOptionListInput({
+        ...cooked,
+        labels: [{ ...mediumRare, kitchenName: false }, wellDone],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "options.invalid",
+        params: { field: "labels.0.kitchenName" },
+      }),
+    );
+  });
+});

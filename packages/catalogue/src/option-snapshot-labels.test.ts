@@ -141,3 +141,16 @@ describe("staffOptionSnapshotLabels", () => {
     ).toEqual(["Punto galego: Pouco feito galego"]);
   });
 });
+
+describe("a snapshot whose staff map holds no entry", () => {
+  it("prints empty text for each side rather than the word undefined", () => {
+    const empty = snapshot({
+      listName: {},
+      labelName: {},
+      listKitchenName: null,
+      labelKitchenName: null,
+    });
+    expect(staffOptionSnapshotLabels([empty])).toEqual([": "]);
+    expect(optionSnapshotLabels([empty])).toEqual([": "]);
+  });
+});
