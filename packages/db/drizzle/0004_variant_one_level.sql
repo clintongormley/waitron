@@ -30,7 +30,7 @@
 
 create trigger products_variant_one_level_insert before insert on products
 begin
-  select raise(abort, 'a variant''s parent must be a product with no parent')
+  select raise(abort, 'a variant''s parent must be a product with no parent, and a variant cannot have variants of its own')
   where new.parent_id is not null
     and (new.parent_id = new.id
       or (select parent_id from products where id = new.parent_id) is not null

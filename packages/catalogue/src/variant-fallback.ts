@@ -9,11 +9,13 @@ import { productUnits } from "./schema/units.js";
  * §15.3).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
- * variant leaves NULL reads as its parent's value; one it sets reads as its own. The three names
- * are never inherited — a blank customer or kitchen name falls back to the variant's OWN staff
- * name, the rule every product follows — nor is anything that says what the row is (`id`,
- * `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`, `sold_alone`), or
- * when it was written.
+ * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exceptions are
+ * the category list, the reporting category and the unit, which a variant inherits by having NO
+ * `product_categories` or `product_units` row of its own (V12) — see the owner joins at the end.
+ * The three names are never inherited — a blank customer or kitchen name falls back to the
+ * variant's OWN staff name, the rule every product follows — nor is anything that says what the row
+ * is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`,
+ * `sold_alone`), or when it was written.
  *
  * The catalogue's product reads, and the order path's read of an extras item, take their inherited
  * values from here, so the nullability of the four columns a variant may leave blank (`vat_class`,
@@ -25,6 +27,18 @@ import { productUnits } from "./schema/units.js";
 
 /** The parent row of a variant, joined as `parent`. A LEFT join: a top-level product has none. */
 export const parentProducts = alias(products, "parent");
+
+const builder = new QueryBuilder();
+const ownUnit = alias(productUnits, "own_unit");
+const ownCategory = alias(productCategories, "own_category");
+
+/** Whether the `products` row being read has `product_categories` rows of its own. */
+const hasOwnCategories = exists(
+  builder
+    .select({ one: sql`1` })
+    .from(ownCategory)
+    .where(eq(ownCategory.productId, products.id)),
+);
 
 /**
  * `coalesce(product.x, parent.x)`. `.mapWith(column)` keeps the column's own decoding, which the
@@ -49,6 +63,15 @@ function owned<C extends AnyColumn>(column: C, parentColumn: AnyColumn): SQL<C["
 }
 
 /**
+ * The reporting category, taken from the SAME product as the category list
+ * ({@link categoryOwnerId}) rather than by coalesce: a variant with category rows of its own and no
+ * reporting category reads its own null, never a parent's category that is not in its list.
+ */
+const reportingCategoryId = sql<string | null>`case
+  when ${products.parentId} is null or ${hasOwnCategories} then ${products.categoryId}
+  else ${parentProducts.categoryId} end`.mapWith(products.categoryId);
+
+/**
  * Each inherited field's EFFECTIVE value, keyed by the `products` property it replaces. Valid only
  * in a query that reads `products` unaliased and left-joins {@link parentProducts} on
  * `parentProducts.id = products.parentId`.
@@ -58,7 +81,7 @@ export const effectiveProductColumns = {
   vatClass: owned(products.vatClass, parentProducts.vatClass),
   pricingUnit: owned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
-  categoryId: inherited(products.categoryId, parentProducts.categoryId),
+  categoryId: reportingCategoryId,
   stationId: inherited(products.stationId, parentProducts.stationId),
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
@@ -76,7 +99,11 @@ export const INHERITED_KEYS = Object.keys(
   effectiveProductColumns,
 ) as readonly (keyof typeof effectiveProductColumns)[];
 
-/** The same rule over rows already in memory: a null inherited key takes the parent's value. */
+/**
+ * The same rule over rows already in memory: a null inherited key takes the parent's value. It sees
+ * only the two rows, never their category rows, so it takes a null `categoryId` as the parent's even
+ * where {@link effectiveProductColumns} would keep the variant's own.
+ */
 export function inheritFromParent<T extends Record<string, unknown>>(
   variant: T,
   parent: T | null,
@@ -86,10 +113,6 @@ export function inheritFromParent<T extends Record<string, unknown>>(
   for (const key of INHERITED_KEYS) if (out[key] === null) out[key] = parent[key];
   return out as T;
 }
-
-const builder = new QueryBuilder();
-const ownUnit = alias(productUnits, "own_unit");
-const ownCategory = alias(productCategories, "own_category");
 
 /**
  * The product whose `product_units` row applies to the `products` row being read: its own when it
@@ -110,9 +133,6 @@ export const unitOwnerId = sql<string | null>`case when ${exists(
  * The product whose `product_categories` rows apply: its own when it has any, otherwise its
  * parent's — the same rule as {@link unitOwnerId}, for category membership.
  */
-export const categoryOwnerId = sql<string | null>`case when ${exists(
-  builder
-    .select({ one: sql`1` })
-    .from(ownCategory)
-    .where(eq(ownCategory.productId, products.id)),
-)} then ${products.id} else ${products.parentId} end`;
+export const categoryOwnerId = sql<
+  string | null
+>`case when ${hasOwnCategories} then ${products.id} else ${products.parentId} end`;

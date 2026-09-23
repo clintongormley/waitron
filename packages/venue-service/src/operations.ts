@@ -999,6 +999,9 @@ async function resolvePreparationRouteOutcomes(
   const outcomes = new Map<string, PreparationRouteOutcome>();
   if (ids.length === 0) return outcomes;
   await resolveZoneContext(tx, cfg, zoneId);
+  // The RAW category, not the variant fallback: a variant that inherits its category would miss its
+  // parent's product and category routes — Task 5 of the variants-as-products plan
+  // (docs/superpowers/plans/2026-09-23-variants-as-products.md) fixes it.
   const productRows = await tx
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)

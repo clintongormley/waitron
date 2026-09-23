@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, invoiceSeries, locations, tills, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -17,7 +18,16 @@ import {
 } from "../src/operations.js";
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createUnit } from "../src/units.js";
-import { units } from "../src/schema/units.js";
+import { productUnits, units } from "../src/schema/units.js";
+
+/** The unit a product's OWN `product_units` row names, or null when it has none (it reads as Each). */
+export async function storedUnitId(tx: Transaction, productId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ unitId: productUnits.unitId })
+    .from(productUnits)
+    .where(eq(productUnits.productId, productId));
+  return row?.unitId ?? null;
+}
 
 export interface SeededVenue {
   locationId: string;

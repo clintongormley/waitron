@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   kitchenCourses,
@@ -28,7 +28,12 @@ import { productCategories } from "./schema/categories.js";
 import { menuItems } from "./schema/menu.js";
 import { productUnits } from "./schema/units.js";
 import { createUnit } from "./units.js";
-import { INHERITED_KEYS, inheritFromParent } from "./variant-fallback.js";
+import {
+  effectiveProductColumns,
+  INHERITED_KEYS,
+  inheritFromParent,
+  parentProducts,
+} from "./variant-fallback.js";
 import { seedVenue } from "../test/fixtures.js";
 
 /**
@@ -45,6 +50,15 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 const PARENT_ALLERGENS = { sulphites: { presence: "contains" as const } };
 const PARENT_DIET_DERIVATION = { origins: ["plant"], pending: false };
+const PARENT_RECIPE_DERIVATION = { allergens: PARENT_ALLERGENS, pending: false };
+// Wine 175's own value for every inherited field, each different from the parent's, so a read that
+// takes the parent's where the variant has its own fails.
+const W175_PUBLISHED_ALLERGENS = { milk: { presence: "contains" as const } };
+const W175_MANUAL_ALLERGENS = { eggs: { presence: "may_contain" as const } };
+const W175_RECIPE_DERIVATION = { allergens: W175_MANUAL_ALLERGENS, pending: true };
+const W175_DIET_DERIVATION = { origins: ["dairy"], pending: true };
+const W175_DIET_OVERRIDE = { vegetarian: "yes" as const };
+const W175_DIET = { vegan: "no" as const, vegetarian: "yes" as const, contains: ["dairy"] };
 
 interface Fixture {
   locationId: string;
@@ -56,6 +70,8 @@ interface Fixture {
   largeGlass: string;
   stationId: string;
   courseId: string;
+  ownStationId: string;
+  ownCourseId: string;
   parentId: string;
   wine125: string;
   wine175: string;
@@ -80,13 +96,19 @@ beforeEach(async () => {
       { name: { en: "large glass" }, precision: 0, abbreviation: { en: "lg" } },
       "en",
     );
-    const [station] = await tx
+    const [station, ownStation] = await tx
       .insert(kitchenStations)
-      .values({ locationId: venue.locationId, name: "Bar" })
+      .values([
+        { locationId: venue.locationId, name: "Bar" },
+        { locationId: venue.locationId, name: "Cellar" },
+      ])
       .returning({ id: kitchenStations.id });
-    const [course] = await tx
+    const [course, ownCourse] = await tx
       .insert(kitchenCourses)
-      .values({ locationId: venue.locationId, name: "Drinks" })
+      .values([
+        { locationId: venue.locationId, name: "Drinks" },
+        { locationId: venue.locationId, name: "Dessert wine" },
+      ])
       .returning({ id: kitchenCourses.id });
     const parent = await createProduct(tx, {
       catalogueId: catalogue.id,
@@ -105,7 +127,12 @@ beforeEach(async () => {
     });
     await tx
       .update(products)
-      .set({ stationId: station!.id, courseId: course!.id, dietDerivation: PARENT_DIET_DERIVATION })
+      .set({
+        stationId: station!.id,
+        courseId: course!.id,
+        dietDerivation: PARENT_DIET_DERIVATION,
+        recipeDerivation: PARENT_RECIPE_DERIVATION,
+      })
       .where(eq(products.id, parent.id));
     // Every inherited field null — dietary declarations as an EXPLICIT null, which is what makes
     // it inherit (an omitted one takes the column's `[]` default; see the case below) — and no
@@ -122,7 +149,7 @@ beforeEach(async () => {
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
-    // Its own price, VAT, image, names, unit and category; everything else inherited.
+    // Its own value for every inherited field, and its own names, unit row and category row.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -132,11 +159,20 @@ beforeEach(async () => {
         name: "Wine 175",
         customerName: { en: "Large glass of house wine" },
         kitchenName: "W175",
-        pricingUnit: null,
+        description: { en: "A sweet red from Toro" },
+        pricingUnit: "weight",
         unitPrice: 550,
         vatClass: "general",
-        dietaryDeclarations: null,
+        dietaryDeclarations: ["vegetarian"],
         image: "large.jpg",
+        stationId: ownStation!.id,
+        courseId: ownCourse!.id,
+        allergens: W175_PUBLISHED_ALLERGENS,
+        manualAllergens: W175_MANUAL_ALLERGENS,
+        recipeDerivation: W175_RECIPE_DERIVATION,
+        dietDerivation: W175_DIET_DERIVATION,
+        dietOverride: W175_DIET_OVERRIDE,
+        diet: W175_DIET,
         variantOrder: 1,
       })
       .returning({ id: products.id });
@@ -153,6 +189,8 @@ beforeEach(async () => {
       largeGlass: largeGlass.id,
       stationId: station!.id,
       courseId: course!.id,
+      ownStationId: ownStation!.id,
+      ownCourseId: ownCourse!.id,
       parentId: parent.id,
       wine125: wine125!.id,
       wine175: wine175!.id,
@@ -195,11 +233,16 @@ describe("listProducts reads a variant's blanks from its parent", () => {
       kitchenName: "W175",
       unitPrice: "5.50",
       vatClass: "general",
+      pricingUnit: "weight",
       image: "large.jpg",
       categoryId: f.bottles,
       categoryIds: [f.bottles],
       unitId: f.largeGlass,
-      description: { en: "A dry white from Rueda" },
+      description: { en: "A sweet red from Toro" },
+      allergens: W175_PUBLISHED_ALLERGENS,
+      manualAllergens: W175_MANUAL_ALLERGENS,
+      dietOverride: W175_DIET_OVERRIDE,
+      dietaryDeclarations: ["vegetarian"],
     });
   });
 
@@ -246,9 +289,60 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       customerName: { en: "Large glass of house wine" },
       kitchenName: "W175",
       vatClass: "general",
+      pricingUnit: "weight",
       unit: { id: f.largeGlass },
       category: "Bottles",
-      courseId: f.courseId,
+      allergens: W175_PUBLISHED_ALLERGENS,
+      diet: W175_DIET,
+      dietOverride: W175_DIET_OVERRIDE,
+      dietDerivation: W175_DIET_DERIVATION,
+      dietaryDeclarations: ["vegetarian"],
+      courseId: f.ownCourseId,
+    });
+  });
+});
+
+describe("a variant's reporting category comes from the product whose category rows apply", () => {
+  // Having no `product_categories` row is how a variant stores "inherit the parent's categories"
+  // (V12), so the reporting category follows the same owner as the list. A variant with rows of its
+  // own and no reporting category (legal: `replaceProductCategories` takes an explicit null primary
+  // beside a non-empty list) reads its OWN null, never the parent's category outside its list.
+  it("reads its own blank reporting category beside category rows of its own", async () => {
+    const wine250 = await run(async (tx) => {
+      const [row] = await tx
+        .insert(products)
+        .values({
+          catalogueId: f.catalogueId,
+          parentId: f.parentId,
+          name: "Wine 250",
+          categoryId: null,
+          pricingUnit: null,
+          unitPrice: null,
+          vatClass: null,
+          dietaryDeclarations: null,
+        })
+        .returning({ id: products.id });
+      await tx.insert(productCategories).values({ productId: row!.id, categoryId: f.bottles });
+      const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
+      await tx
+        .insert(menuItems)
+        .values({ menuId: f.menuId, productId: row!.id, sectionId: section.id, grossPrice: 700 });
+      return row!.id;
+    });
+
+    const listed = (await run((tx) => listProducts(tx, f.catalogueId))).find(
+      (p) => p.id === wine250,
+    );
+    expect(listed).toMatchObject({
+      categoryId: null,
+      primaryCategoryId: null,
+      categoryIds: [f.bottles],
+    });
+    const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
+    expect(offers.find((o) => o.productId === wine250)!.category).toBeNull();
+    expect(await run((tx) => readProductEditor(tx, wine250))).toMatchObject({
+      primaryCategoryId: null,
+      categoryIds: [f.bottles],
     });
   });
 });
@@ -330,7 +424,65 @@ describe("readProductEditor", () => {
       primaryCategoryId: f.wines,
     });
   });
+
+  it("shows a variant's own values where it sets them", async () => {
+    const value = await run((tx) => readProductEditor(tx, f.wine175));
+    expect(value).toMatchObject({
+      name: "Wine 175",
+      customerName: { en: "Large glass of house wine" },
+      kitchenName: "W175",
+      unitPrice: "5.50",
+      vatClass: "general",
+      description: { en: "A sweet red from Toro" },
+      image: "large.jpg",
+      allergens: W175_MANUAL_ALLERGENS,
+      dietaryDeclarations: ["vegetarian"],
+      stationId: f.ownStationId,
+      courseId: f.ownCourseId,
+      unitId: f.largeGlass,
+      categoryIds: [f.bottles],
+      primaryCategoryId: f.bottles,
+    });
+  });
 });
+
+describe("effectiveProductColumns, entry by entry", () => {
+  // Every entry read straight, for the parent and both variants: Wine 125 (every field blank)
+  // must read the parent's value and Wine 175 (every field set, each different from the parent's)
+  // its own. An entry with its two sides swapped fails one of the two.
+  it("reads the parent's value for a blank field and the variant's own for a set one", async () => {
+    const raw = await run((tx) =>
+      tx
+        .select({ id: products.id, ...pickRaw() })
+        .from(products)
+        .where(inArray(products.id, [f.parentId, f.wine175])),
+    );
+    const effective = await run((tx) =>
+      tx
+        .select({ id: products.id, ...effectiveProductColumns })
+        .from(products)
+        .leftJoin(parentProducts, eq(parentProducts.id, products.parentId))
+        .where(inArray(products.id, [f.wine125, f.wine175])),
+    );
+    const parentRaw = raw.find((row) => row.id === f.parentId)!;
+    const wine175Raw = raw.find((row) => row.id === f.wine175)!;
+    const byId = new Map(effective.map((row) => [row.id, row]));
+    for (const key of INHERITED_KEYS) {
+      // The fixture's own guarantee: a set, DIFFERENT value on each side of every entry.
+      expect(parentRaw[key], key).not.toBeNull();
+      expect(wine175Raw[key], key).not.toEqual(parentRaw[key]);
+      expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
+      expect(byId.get(f.wine175)![key], key).toEqual(wine175Raw[key]);
+    }
+  });
+});
+
+/** Each inherited column's STORED value, keyed like {@link effectiveProductColumns}. */
+function pickRaw() {
+  return Object.fromEntries(INHERITED_KEYS.map((key) => [key, products[key]])) as {
+    [K in (typeof INHERITED_KEYS)[number]]: (typeof products)[K];
+  };
+}
 
 describe("createProduct", () => {
   it("returns the values of the top-level product it created", async () => {

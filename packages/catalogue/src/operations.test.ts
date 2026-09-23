@@ -52,8 +52,8 @@ import {
   updateProduct,
 } from "./operations.js";
 import type { AvailableProduct } from "./operations.js";
-import { createUnit, EACH_UNIT, readProductUnitId } from "./units.js";
-import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
+import { createUnit, EACH_UNIT } from "./units.js";
+import { seedCatalogueFixture, seedVenue, storedUnitId, useCatalogueDb } from "../test/fixtures.js";
 
 // Query behaviour. Each case starts with empty authoring tables.
 const fx = useCatalogueDb();
@@ -369,7 +369,7 @@ describe("catalogue operations", () => {
       });
       expect(created.pricingUnit).toBe("each");
       expect(created.unit).toEqual(EACH_UNIT);
-      expect(await readProductUnitId(tx, created.id)).toBeNull();
+      expect(await storedUnitId(tx, created.id)).toBeNull();
     });
   });
 
@@ -385,7 +385,7 @@ describe("catalogue operations", () => {
         vatClass: "reduced",
       });
       await updateProduct(tx, created.id, { unitId: null });
-      expect(await readProductUnitId(tx, created.id)).toBeNull();
+      expect(await storedUnitId(tx, created.id)).toBeNull();
       const [after] = await tx
         .select({ p: products.pricingUnit })
         .from(products)
@@ -406,7 +406,7 @@ describe("catalogue operations", () => {
         vatClass: "reduced",
       });
       await updateProduct(tx, created.id, { unitPrice: "25.00" });
-      expect(await readProductUnitId(tx, created.id)).toBe(kgUnitId);
+      expect(await storedUnitId(tx, created.id)).toBe(kgUnitId);
     });
   });
 
@@ -421,7 +421,7 @@ describe("catalogue operations", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      expect(await readProductUnitId(tx, created.id)).toBeNull();
+      expect(await storedUnitId(tx, created.id)).toBeNull();
       expect(created.pricingUnit).toBe("each");
     });
   });

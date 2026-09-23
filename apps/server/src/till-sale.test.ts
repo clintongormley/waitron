@@ -1190,10 +1190,16 @@ describe("ordering extras and options — parent + child lines", () => {
     });
   }
 
-  // A variant may be an extras item like any product. This one leaves its VAT and price blank, so
-  // its child line is taxed and priced at its PARENT's — Bacon's reduced 10% and 3.00, where the
-  // dish is general — and named by the variant's OWN staff name, never Bacon's.
-  it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
+  /**
+   * Sells a Tostada (4.00, super-reduced 4%) with one extra: a variant of Bacon (reduced 10%, 3.00)
+   * holding the given price and VAT of its own, or blanks. Three different rates, so a child line
+   * taxed at the dish's, the parent's or the variant's own rate each reads differently.
+   */
+  async function sellVariantAsExtra(own: {
+    name: string;
+    unitPrice: number | null;
+    vatClass: "general" | null;
+  }) {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
     const seeded = await withTransaction(suite.db, async (tx) => {
@@ -1206,10 +1212,10 @@ describe("ordering extras and options — parent + child lines", () => {
         .values({
           catalogueId: bacon!.catalogueId,
           parentId: v.baconId,
-          name: "Bacon doble staff",
+          name: own.name,
           pricingUnit: null,
-          unitPrice: null,
-          vatClass: null,
+          unitPrice: own.unitPrice,
+          vatClass: own.vatClass,
           dietaryDeclarations: null,
         })
         .returning({ id: products.id });
@@ -1219,7 +1225,7 @@ describe("ordering extras and options — parent + child lines", () => {
         name: "Tostada",
         pricingUnit: "each",
         unitPrice: "4.00",
-        vatClass: "general",
+        vatClass: "super_reduced",
       });
       const list = await createExtraList(
         tx,
@@ -1251,12 +1257,35 @@ describe("ordering extras and options — parent + child lines", () => {
       tender: { method: "cash", amount: "10.00" },
       workingOrderId,
     });
-
-    // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
-    expect(result.total).toBe("7.00");
-    // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
     const child = (await filedLinesOf(workingOrderId)).find((line) => line.parentLineId !== null)!;
+    return { total: result.total, child };
+  }
+
+  // A variant may be an extras item like any product (Review Focus 1). One that leaves its VAT and
+  // price blank is taxed and priced at its PARENT's, and named by its OWN staff name, never Bacon's.
+  it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
+    const { total, child } = await sellVariantAsExtra({
+      name: "Bacon doble staff",
+      unitPrice: null,
+      vatClass: null,
+    });
+    // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
+    expect(total).toBe("7.00");
+    // 3.00 gross at 10% is 2.73 net: 273 in cents, and the rate 1000 in basis points.
     expect(child).toMatchObject({ name: "Bacon doble staff", unitPrice: 273, vatRate: 1000 });
+  });
+
+  // ...and one that sets its own keeps them: general 21% and 3.50, not Bacon's 10% and 3.00.
+  it("a variant picked as an extra files its OWN VAT and price when it sets them", async () => {
+    const { total, child } = await sellVariantAsExtra({
+      name: "Bacon triple staff",
+      unitPrice: 350,
+      vatClass: "general",
+    });
+    // 4.00 dish + 3.50 of its own = 7.50 gross.
+    expect(total).toBe("7.50");
+    // 3.50 gross at 21% is 2.89 net (3.50 / 1.21 = 2.8926): 289 in cents, the rate 2100.
+    expect(child).toMatchObject({ name: "Bacon triple staff", unitPrice: 289, vatRate: 2100 });
   });
 
   it("a WALK-UP files the dish's options answers onto the dish's own sale_line", async () => {
