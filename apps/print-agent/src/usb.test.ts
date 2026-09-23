@@ -143,8 +143,24 @@ describe("readUsbPrinters", () => {
   it("omits make/model when the device dir has no manufacturer/product", async () => {
     const root = await writeSysfsFixture({ lp: "lp0", serial: "SN-BARE" });
     roots.push(root);
-    expect(await readUsbPrinters(root)).toEqual([
+    // `toStrictEqual`, because `toEqual` would also accept a `make: undefined` key.
+    expect(await readUsbPrinters(root)).toStrictEqual([
       { transport: "usb", localKey: "SN-BARE", devicePath: `${root}/dev/usb/lp0` },
+    ]);
+  });
+
+  it("skips a device whose serial file is empty — an empty serial is no identity", async () => {
+    const root = await writeSysfsFixture({ lp: "lp0", serial: "", manufacturer: "Epson" });
+    roots.push(root);
+    expect(await readUsbPrinters(root)).toEqual([]);
+  });
+
+  it("returns only the usbmisc entries named lp…, skipping another device such as hiddev0", async () => {
+    const root = await writeSysfsFixture({ lp: "lp0", serial: "SN-PRINTER" });
+    roots.push(root);
+    await addPrinter(root, { lp: "hiddev0", serial: "SN-KEYBOARD" });
+    expect(await readUsbPrinters(root)).toEqual([
+      { transport: "usb", localKey: "SN-PRINTER", devicePath: `${root}/dev/usb/lp0` },
     ]);
   });
 

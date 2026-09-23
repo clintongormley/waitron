@@ -45,6 +45,15 @@ it("destroys a silent socket when its deadline expires", async () => {
   expect(socket.destroy).toHaveBeenCalledOnce();
 });
 
+it("settles on the first event: a late error after the connection is accepted changes nothing", async () => {
+  const socket = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+  const answer = connectTcp("10.0.0.1", 9100, 1000, () => socket as unknown as Socket);
+  socket.emit("connect");
+  socket.emit("error", new Error("reset after accept"));
+  expect(await answer).toBe(true);
+  expect(socket.destroy).toHaveBeenCalledOnce();
+});
+
 it("contains a synchronous dial failure", async () => {
   expect(
     await connectTcp("10.0.0.1", 9100, 10, () => {

@@ -2018,7 +2018,10 @@ image constraints under *Detail → Box image*.
   `booked` inside `openTab`, a location with no row, the passive refresh copy, and the dashboard's
   single-flight guards; 99.76/100/100/98.38); `tunnel` (**PR #506**, 2026-09-23 — tests for a
   repeated `ack`, a frame the client ignores before `go`, and the test relays surviving a peer's
-  connection reset; 100/100/100/100).
+  connection reset; 100/100/100/100); `print-agent-app` (**PR #508**, 2026-09-23 — tests for
+  malformed mDNS packets, out-of-range subnet addresses, non-printer usbmisc entries, a late socket
+  event, an IPP reply cut off mid-body, and the setup page's fallbacks and non-text form fields;
+  99.23/99.65/98.4/97.83).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a

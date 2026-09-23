@@ -125,6 +125,20 @@ describe("createSetupApp — GET /", () => {
     expect(html).not.toContain('class="muted"');
   });
 
+  it("unreachable names the server it follows, else the saved address, else 'the server'", async () => {
+    const render = async (over: Partial<AgentStatus>): Promise<string> => {
+      const status: AgentStatus = { phase: "unreachable", serverUrl: null, current: null, ...over };
+      return (await createSetupApp(deps({ status: () => status })).request("/")).text();
+    };
+    expect(
+      await render({ serverUrl: "https://saved.test", current: "https://live.test" }),
+    ).toContain("Can't reach https://live.test right now");
+    expect(await render({ serverUrl: "https://saved.test" })).toContain(
+      "Can't reach https://saved.test right now",
+    );
+    expect(await render({})).toContain("Can't reach the server right now");
+  });
+
   it("escapes a lastError so a server-sent message cannot inject markup", async () => {
     const status: AgentStatus = {
       phase: "unreachable",
@@ -175,6 +189,44 @@ describe("createSetupApp — POST /setup", () => {
     expect(res.status).toBe(400);
     expect(saveConfig).not.toHaveBeenCalled();
     expect(await res.text()).toContain('name="serverUrl"');
+  });
+
+  it("refuses an address that parses but is not http(s), and saves nothing", async () => {
+    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
+    const app = createSetupApp(deps({ saveConfig }));
+    const res = await app.request("/setup", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "serverUrl=ftp%3A%2F%2Fbox.test&name=Barra",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("That is not a valid http(s) address: ftp://box.test");
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
+
+  it("treats an uploaded file in place of the address as an empty address, and saves nothing", async () => {
+    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
+    const app = createSetupApp(deps({ saveConfig }));
+    const body = new FormData();
+    body.append("serverUrl", new File(["https://box.test"], "url.txt"));
+    body.append("name", "Barra");
+    const res = await app.request("/setup", { method: "POST", body });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain(
+      'name="serverUrl" type="url" placeholder="https://box.local" value=""',
+    );
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
+
+  it("treats an uploaded file in place of the name as no name, and saves the default", async () => {
+    const saveConfig = vi.fn<(c: AgentConfig) => Promise<void>>(async () => {});
+    const app = createSetupApp(deps({ saveConfig, defaultName: "kitchen-pi" }));
+    const body = new FormData();
+    body.append("serverUrl", "https://box.test");
+    body.append("name", new File(["Barra"], "name.txt"));
+    const res = await app.request("/setup", { method: "POST", body });
+    expect(res.status).toBe(303);
+    expect(saveConfig).toHaveBeenCalledWith({ serverUrl: "https://box.test", name: "kitchen-pi" });
   });
 
   it("refuses the save (405) when the address is locked by env", async () => {
@@ -266,6 +318,47 @@ describe("createSetupApp — Bluetooth pairing", () => {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: "mac=",
     });
+    expect(res.status).toBe(400);
+    expect(pairBluetooth).not.toHaveBeenCalled();
+  });
+
+  it("POST /bluetooth/scan labels a found device by its MAC when it has no name, and as an unknown device when it has neither", async () => {
+    const app = createSetupApp(
+      deps({
+        scanBluetooth: async () => [
+          { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" },
+          { transport: "bluetooth" },
+        ],
+      }),
+    );
+    const html = await (await app.request("/bluetooth/scan", { method: "POST" })).text();
+    expect(html).toContain(
+      '<li><span>AA:BB:CC:DD:EE:FF <span class="muted">AA:BB:CC:DD:EE:FF</span></span>',
+    );
+    expect(html).toContain('<li><span>unknown device <span class="muted"></span></span>');
+    expect(html).toContain('<input type="hidden" name="mac" value="">');
+  });
+
+  it("POST /bluetooth/pair names the MAC it was asked to pair when the host reports no key, and a generic reason when it gives none", async () => {
+    const pair = async (result: { ok: boolean }): Promise<string> => {
+      const app = createSetupApp(deps({ pairBluetooth: async () => result }));
+      const res = await app.request("/bluetooth/pair", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "mac=AA%3ABB%3ACC%3ADD%3AEE%3AFF",
+      });
+      return res.text();
+    };
+    expect(await pair({ ok: true })).toContain("Paired AA:BB:CC:DD:EE:FF.");
+    expect(await pair({ ok: false })).toContain("Could not pair AA:BB:CC:DD:EE:FF: pairing failed");
+  });
+
+  it("POST /bluetooth/pair with an uploaded file in place of the MAC returns 400 and pairs nothing", async () => {
+    const pairBluetooth = vi.fn(async () => ({ ok: true, localKey: "x" }));
+    const app = createSetupApp(deps({ pairBluetooth }));
+    const body = new FormData();
+    body.append("mac", new File(["AA:BB:CC:DD:EE:FF"], "mac.txt"));
+    const res = await app.request("/bluetooth/pair", { method: "POST", body });
     expect(res.status).toBe(400);
     expect(pairBluetooth).not.toHaveBeenCalled();
   });

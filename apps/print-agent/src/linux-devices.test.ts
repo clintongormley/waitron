@@ -130,6 +130,41 @@ describe("createLinuxDevices — visibleDevices()", () => {
   });
 });
 
+// `toStrictEqual`, because `toEqual` would also accept a `make: undefined` key.
+describe("createLinuxDevices — devices that report no make or model", () => {
+  beforeEach(async () => {
+    const deviceDir = join(root, "devices", "pci0000:00", "0000:00:14.0", "usb1", "1-lp0");
+    await rm(join(deviceDir, "manufacturer"));
+    await rm(join(deviceDir, "product"));
+  });
+
+  it("lists a USB printer with no manufacturer or product, and a paired printer with no name, by key alone", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      // The Bluetooth entry does not fully pin `pairedLocal`'s no-name path: were it to set
+      // `model: undefined`, `dropPath` would drop the key again and this would still pass.
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
+      btDevicePath: () => "/dev/rfcomm0",
+    });
+    expect(await devices.visibleDevices()).toStrictEqual([
+      { transport: "usb", localKey: "B120300001" },
+      { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" },
+    ]);
+  });
+
+  it("scans a USB printer with no manufacturer or product by key alone", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth(),
+      scanNetwork: async () => [],
+    });
+    expect(await devices.scan(["usb"])).toStrictEqual([
+      { transport: "usb", localKey: "B120300001" },
+    ]);
+  });
+});
+
 describe("createLinuxDevices — scan()", () => {
   const netHit: DiscoveredDevice = {
     transport: "network_tcp",

@@ -139,4 +139,57 @@ describe("parsePdlResponse", () => {
     header.writeUInt16BE(1, 6); // ancount = 1, no record follows
     expect(parsePdlResponse(header)).toEqual([]);
   });
+
+  // An SRV answer for `Star` whose rdata is priority/weight/port 9100 followed by `target` bytes.
+  function srvAnswer(w: DnsWriter, target: number[]): DnsWriter {
+    const fixed = [...new DnsWriter().u16(0).u16(0).u16(9100).build()];
+    w.name("Star._pdl-datastream._tcp.local").u16(33).u16(1).u32(120);
+    return w.u16(fixed.length + target.length).raw(...fixed, ...target);
+  }
+
+  it("discards the whole packet when a record's data runs past the end of the packet", () => {
+    // The A record claims four address bytes and carries two. Read short, it would be skipped and the
+    // SRV reported against its bare target name; the packet is malformed, so nothing is reported.
+    const w = new DnsWriter();
+    w.u16(0).u16(0x8400).u16(0).u16(2).u16(0).u16(0);
+    srvAnswer(w, [...new DnsWriter().name("star.local").build()]);
+    w.name("star.local").u16(1).u16(1).u32(120).u16(4).raw(192, 168);
+    expect(parsePdlResponse(w.build())).toEqual([]);
+  });
+
+  it("drops a TXT string whose length runs past the record, keeping the attributes before it", () => {
+    const w = new DnsWriter();
+    w.u16(0).u16(0x8400).u16(0).u16(2).u16(0).u16(0);
+    srvAnswer(w, [...new DnsWriter().name("star.local").build()]);
+    // `usb_MDL=TM` is ten bytes behind a length byte claiming twenty: a cut-off string, not a model.
+    const txt = [
+      ...txtRdata(["usb_MFG=EPSON"]),
+      20,
+      ..."usb_MDL=TM".split("").map((c) => c.charCodeAt(0)),
+    ];
+    w.name("Star._pdl-datastream._tcp.local")
+      .u16(16)
+      .u16(1)
+      .u32(120)
+      .u16(txt.length)
+      .raw(...txt);
+    expect(parsePdlResponse(w.build())).toEqual([
+      { transport: "network_tcp", host: "star.local", port: 9100, name: "Star", make: "EPSON" },
+    ]);
+  });
+
+  it("returns no devices, rather than spinning, for a compression pointer that points at itself", () => {
+    const w = new DnsWriter();
+    w.u16(0).u16(0x8400).u16(0).u16(1).u16(0).u16(0);
+    w.raw(0xc0, 12); // the record's name, at offset 12, is a pointer to offset 12
+    w.u16(33).u16(1).u32(120).u16(0);
+    expect(parsePdlResponse(w.build())).toEqual([]);
+  });
+
+  it("returns no devices when the SRV target ends in half a compression pointer", () => {
+    // The target's last byte opens a pointer whose second byte is missing. Followed anyway, it would
+    // land on offset 0, the header, and report a printer at an empty host.
+    const w = srvAnswer(new DnsWriter().u16(0).u16(0x8400).u16(0).u16(1).u16(0).u16(0), [0xc0]);
+    expect(parsePdlResponse(w.build())).toEqual([]);
+  });
 });
