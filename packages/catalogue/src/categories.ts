@@ -1,9 +1,10 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
+import { isTopLevelProduct, productWithId, type ProductScope } from "./variant-fallback.js";
 import "./errors.js";
 
 export interface Category {
@@ -227,9 +228,11 @@ export async function categoryDependants(tx: Transaction, id: string): Promise<C
     routes,
   };
 }
+/** A product's OWN memberships: a variant with none inherits its parent's (V12). */
 export async function readProductCategories(
   tx: Transaction,
   productId: string,
+  scope: ProductScope = "top-level",
 ): Promise<ProductCategoryMembership> {
   const [product] = await tx
     .select({
@@ -238,17 +241,19 @@ export async function readProductCategories(
     })
     .from(products)
     .leftJoin(productCategories, eq(productCategories.productId, products.id))
-    .where(and(eq(products.id, productId), isNull(products.parentId)))
+    .where(productWithId(productId, scope))
     .groupBy(products.id);
   if (!product) throw new AppError("product.not_found", { productId });
   return product;
 }
+/** Replace a product's own memberships; on a variant, an empty set returns it to inheriting. */
 export async function replaceProductCategories(
   tx: Transaction,
   productId: string,
   input: ProductCategoryInput,
+  scope: ProductScope = "top-level",
 ): Promise<ProductCategoryMembership> {
-  const current = await readProductCategories(tx, productId);
+  const current = await readProductCategories(tx, productId, scope);
   if (
     !Array.isArray(input.categoryIds) ||
     new Set(input.categoryIds).size !== input.categoryIds.length
@@ -305,7 +310,7 @@ export async function addProductsToCategory(
   const found = await tx
     .select({ id: products.id, primaryCategoryId: products.categoryId })
     .from(products)
-    .where(and(inArray(products.id, productIds), isNull(products.parentId)));
+    .where(and(inArray(products.id, productIds), isTopLevelProduct));
   if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
   await tx
     .insert(productCategories)

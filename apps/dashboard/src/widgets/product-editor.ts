@@ -577,7 +577,7 @@ export class ProductEditor extends LitElement {
       errors.primary = t("editor.reporting_category_invalid");
     if (!this.taxes.some((tax) => tax.id === this.draft.vatClass))
       errors.tax = t("editor.tax_required");
-    if (this.draft.variants.length === 0 && !isProductPrice(this.draft.unitPrice))
+    if (this.draft.variants.length === 0 && !isProductPrice(this.draft.unitPrice ?? ""))
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
       if (!variant.name.trim()) errors[`variant-${index}-name`] = t("editor.variant_name_required");
@@ -625,7 +625,7 @@ export class ProductEditor extends LitElement {
     if (this.draft.variants.length === 0) {
       // Check the price HERE, while its field is still on screen. Once it has been folded into a
       // variant the field is gone, and an invalid value would have nowhere left to be corrected.
-      if (!isProductPrice(this.draft.unitPrice)) {
+      if (!isProductPrice(this.draft.unitPrice ?? "")) {
         this.errors = { ...this.errors, "unit-price": t("editor.price_invalid") };
         this.#focusField = "unit-price";
         return;
@@ -850,7 +850,7 @@ export class ProductEditor extends LitElement {
   private renderNutrition() {
     const summary = [
       ...Object.keys(this.draft.allergens ?? {}).map((code) => allergenName(code)),
-      ...this.draft.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)),
+      ...(this.draft.dietaryDeclarations ?? []).map((label) => t(`editor.diet.${label}`)),
     ].join(SUMMARY_SEPARATOR);
     return html`<wt-disclosure
       data-section="nutrition"

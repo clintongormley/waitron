@@ -126,8 +126,14 @@ export interface Product {
  * The product-editor write body's product half, as `parseProductEditorInput` validates it. The kitchen
  * routing (`stationId`/`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
  * as {@link ProductEditorBody}, the complete body the editor sends.
+ *
+ * On a VARIANT every inherited field may be blank — `null`, or an empty category list — and a blank
+ * reads as the parent's value (spec §4.4, §9.1). On a product with no parent, `unitPrice`, `vatClass`
+ * and `dietaryDeclarations` are required.
  */
 export interface ProductEditorInput {
+  /** A product's parent never changes (V10): absent, or the stored parent, is accepted. */
+  parentId?: string | null;
   name: string;
   customerName: Record<string, string> | null;
   /** Whether the product may be sold on its own. Required in the editor body, like `available` — the
@@ -137,19 +143,21 @@ export interface ProductEditorInput {
   kitchenName: string | null;
   image: string | null;
   unitId: string | null;
-  unitPrice: string;
+  unitPrice: string | null;
   /** Writes `products.active`; Delete sends false and Restore true. Required, like `available`. */
   active: boolean;
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
-  vatClass: VatClass;
+  vatClass: VatClass | null;
+  /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
   categoryIds: string[];
   primaryCategoryId: string | null;
-  /** The ordered extras and options lists to attach, replacing whatever the product carries today. */
+  /** The ordered extras and options lists to attach, replacing whatever the product carries today.
+   * Empty on a variant, which offers its parent's (spec §4.4). */
   modifiers: ProductModifierRef[];
   allergens: ProductAllergens | null;
-  dietaryDeclarations: DietaryLabel[];
+  dietaryDeclarations: DietaryLabel[] | null;
 }
 
 /** A product editor body's optional kitchen routing: absent leaves it alone, `null` clears it. */
@@ -162,10 +170,28 @@ export interface ProductRouting {
  * transaction so a station this venue lacks rolls the product back rather than leaving it unrouted. */
 export type ProductEditorBody = ProductEditorInput & ProductRouting;
 
-/** The product-editor READ shape (`GET /management-api/products/:id/editor`): the input fields, the
- * product id, the persisted variants (each with an id), and the resolved kitchen routing. */
-export type ProductEditorValue = Omit<ProductEditorInput, "variants"> & {
+/** A parent's value for each field its variants inherit — what a variant's blank field reads as. */
+export interface InheritedValues {
+  description: Record<string, string> | null;
+  image: string | null;
+  unitPrice: string;
+  vatClass: VatClass;
+  unitId: string | null;
+  categoryIds: string[];
+  primaryCategoryId: string | null;
+  stationId: string | null;
+  courseId: string | null;
+  allergens: ProductAllergens | null;
+  dietaryDeclarations: DietaryLabel[];
+}
+
+/** The product-editor READ shape (`GET /management-api/products/:id/editor`): the input fields as
+ * stored — a variant's blanks blank — the product id, the persisted variants (each with an id), the
+ * stored kitchen routing and, on a variant, its parent's values in `inherited`. */
+export type ProductEditorValue = Omit<ProductEditorInput, "variants" | "parentId"> & {
   id: string;
+  parentId: string | null;
+  inherited: InheritedValues | null;
   variants: ProductVariant[];
   stationId: string | null;
   courseId: string | null;

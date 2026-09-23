@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -84,6 +84,8 @@ it("saves and reads the canonical editor shape with independent content and vari
   expect(saved).toEqual({
     ...input,
     id: saved.id,
+    parentId: null,
+    inherited: null,
     variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id, active: true })),
     stationId: null,
     courseId: null,
@@ -332,4 +334,238 @@ it.each([
   // Nothing here says "allergens" or "dietary", so a refusal of either cannot reach a field on the
   // editor's Nutrition section.
   expect(Object.keys(params as Record<string, unknown>)).not.toContain("field");
+});
+
+describe("a variant's own page", () => {
+  // The parent and its variant carry DIFFERENT values on every field a case reads, and three
+  // different names each, so a read or write that takes the wrong row fails.
+  let parentId: string;
+  let variantId: string;
+  let categories: { parent: string; own: string };
+  let kgUnitId: string;
+  beforeEach(async () => {
+    const setup = await withTransaction(fx.db, async (tx) => {
+      const parentCategory = await createCategory(tx, { name: { en: "Coffee" } }, "en");
+      const ownCategory = await createCategory(tx, { name: { en: "Espresso" } }, "en");
+      const kg = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        "en",
+      );
+      await tx.execute(sql`update units set hardware_unit = 'kg' where id = ${kg.id}`);
+      const parent = await saveProductEditor(
+        tx,
+        null,
+        catalogueId,
+        {
+          ...input,
+          unitId: kg.id,
+          categoryIds: [parentCategory.id],
+          primaryCategoryId: parentCategory.id,
+          allergens: { milk: { presence: "contains" } },
+          variants: [
+            {
+              name: "Small",
+              customerName: { en: "Small coffee" },
+              kitchenName: "SM",
+              image: null,
+              unitPrice: "2.00",
+              available: true,
+            },
+          ],
+        },
+        "en",
+      );
+      return { parent, parentCategory: parentCategory.id, ownCategory: ownCategory.id, kg: kg.id };
+    });
+    parentId = setup.parent.id;
+    variantId = setup.parent.variants[0]!.id;
+    categories = { parent: setup.parentCategory, own: setup.ownCategory };
+    kgUnitId = setup.kg;
+  });
+
+  const read = (id: string) => withTransaction(fx.db, (tx) => readProductEditor(tx, id));
+  const save = (id: string, body: unknown) =>
+    withTransaction(fx.db, (tx) => saveProductEditor(tx, id, catalogueId, body, "en"));
+  const storedRow = async (id: string) =>
+    (
+      await fx.db
+        .select({
+          unitPrice: products.unitPrice,
+          vatClass: products.vatClass,
+          pricingUnit: products.pricingUnit,
+          categoryId: products.categoryId,
+          manualAllergens: products.manualAllergens,
+          dietaryDeclarations: products.dietaryDeclarations,
+        })
+        .from(products)
+        .where(eq(products.id, id))
+    )[0];
+
+  it("reads a variant's own names and its blanks as blanks, with its parent's values beside them", async () => {
+    expect(await read(variantId)).toEqual({
+      id: variantId,
+      parentId,
+      name: "Small",
+      customerName: { en: "Small coffee" },
+      kitchenName: "SM",
+      soldAlone: true,
+      active: true,
+      available: true,
+      description: null,
+      image: null,
+      unitId: null,
+      unitPrice: "2.00",
+      vatClass: null,
+      categoryIds: [],
+      primaryCategoryId: null,
+      allergens: null,
+      dietaryDeclarations: null,
+      stationId: null,
+      courseId: null,
+      modifiers: [],
+      variants: [],
+      inherited: {
+        description: { en: "Freshly roasted" },
+        image: null,
+        unitPrice: "9.00",
+        vatClass: "reduced",
+        unitId: kgUnitId,
+        categoryIds: [categories.parent],
+        primaryCategoryId: categories.parent,
+        stationId: null,
+        courseId: null,
+        allergens: { milk: { presence: "contains" } },
+        dietaryDeclarations: ["vegan"],
+      },
+    });
+    const parent = await read(parentId);
+    expect(parent.parentId).toBeNull();
+    expect(parent.inherited).toBeNull();
+  });
+
+  it("keeps a blank blank when the read value is saved back unchanged", async () => {
+    const value = await read(variantId);
+    expect(await save(variantId, value)).toEqual(value);
+    expect(await storedRow(variantId)).toEqual({
+      unitPrice: 200,
+      vatClass: null,
+      pricingUnit: null,
+      categoryId: null,
+      manualAllergens: null,
+      dietaryDeclarations: null,
+    });
+  });
+
+  it("overrides an inherited field with a value, and a blank returns it to inheriting", async () => {
+    const value = await read(variantId);
+    const overridden = await save(variantId, {
+      ...value,
+      unitPrice: "2.50",
+      vatClass: "general",
+      unitId: input.unitId,
+      categoryIds: [categories.own],
+      primaryCategoryId: categories.own,
+      allergens: { eggs: { presence: "may_contain" } },
+      dietaryDeclarations: ["halal"],
+    });
+    expect(overridden).toMatchObject({
+      unitPrice: "2.50",
+      vatClass: "general",
+      unitId: input.unitId,
+      categoryIds: [categories.own],
+      primaryCategoryId: categories.own,
+      allergens: { eggs: { presence: "may_contain" } },
+      dietaryDeclarations: ["halal"],
+      inherited: value.inherited,
+    });
+    expect(await storedRow(variantId)).toMatchObject({ pricingUnit: "each" });
+    const cleared = await save(variantId, value);
+    expect(cleared).toEqual(value);
+    expect(await storedRow(variantId)).toEqual({
+      unitPrice: 200,
+      vatClass: null,
+      pricingUnit: null,
+      categoryId: null,
+      manualAllergens: null,
+      dietaryDeclarations: null,
+    });
+    // A blank price follows the parent's, and the parent's own list shows it blank.
+    const blankPrice = await save(variantId, { ...value, unitPrice: null });
+    expect(blankPrice.unitPrice).toBeNull();
+    expect((await read(parentId)).variants[0]!.unitPrice).toBeNull();
+  });
+
+  it("leaves the parent, its variants list and its attached lists as they were", async () => {
+    const before = await read(parentId);
+    await save(variantId, { ...(await read(variantId)), vatClass: "zero", active: false });
+    const after = await read(parentId);
+    expect(after).toEqual({ ...before, variants: [] });
+  });
+
+  it.each([
+    ["a different parent", () => crypto.randomUUID()],
+    ["no parent", () => null],
+  ])("refuses a variant's body naming %s", async (_label, parent) => {
+    await expect(
+      save(variantId, { ...inheritingBody(), parentId: parent() }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
+  });
+
+  it("accepts a variant's body naming its own parent", async () => {
+    await expect(
+      save(variantId, { ...inheritingBody(), parentId: parentId.toUpperCase() }),
+    ).resolves.toMatchObject({ parentId });
+  });
+
+  it("refuses a parent named on a product with none, on an update and on a create", async () => {
+    await expect(save(parentId, { ...input, parentId })).rejects.toMatchObject({
+      code: "product.invalid",
+      params: { field: "parentId" },
+    });
+    await expect(
+      withTransaction(fx.db, (tx) =>
+        saveProductEditor(tx, null, catalogueId, { ...input, parentId }, "en"),
+      ),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
+  });
+
+  it.each(["vatClass", "unitPrice"] as const)(
+    "refuses a blank %s on a product with no parent",
+    async (field) => {
+      await expect(save(parentId, { ...input, [field]: null })).rejects.toMatchObject({
+        code: "product.invalid",
+        params: { field },
+      });
+    },
+  );
+
+  it("refuses variants or attached lists on a variant", async () => {
+    await expect(
+      save(variantId, { ...inheritingBody(), variants: input.variants }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "variants" } });
+    const list = await withTransaction(fx.db, (tx) =>
+      createOptionList(tx, { name: "Milk", labels: [{ name: "Oat" }] }, "en"),
+    );
+    await expect(
+      save(variantId, { ...inheritingBody(), modifiers: [{ kind: "options", id: list.id }] }),
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "modifiers" } });
+  });
+
+  /** A variant body that inherits every field. */
+  function inheritingBody() {
+    return {
+      ...input,
+      name: "Small",
+      customerName: null,
+      kitchenName: null,
+      description: null,
+      unitId: null,
+      unitPrice: null,
+      vatClass: null,
+      variants: [],
+      allergens: null,
+      dietaryDeclarations: null,
+    };
+  }
 });

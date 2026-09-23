@@ -15,6 +15,7 @@ import {
   listMenuOffers,
   parentJoin,
   parentProducts,
+  productWithId,
   type MenuOffer,
 } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
@@ -851,7 +852,7 @@ async function validatePreparationRoute(
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.id, input.productId), isNull(products.parentId)));
+      .where(productWithId(input.productId, "top-level"));
     if (product === undefined) {
       throw new AppError("route.subject_not_found", { subject: "product", id: input.productId });
     }

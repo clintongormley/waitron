@@ -2,7 +2,6 @@ import { nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, isNull } from "drizzle-orm";
 import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/shared";
 import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
@@ -55,6 +54,7 @@ import {
   type MenuVariant,
   readProductEditor,
   saveProductEditor,
+  productWithId,
   isModifierListKind,
   readProductModifiers,
   writeProductModifiers,
@@ -628,11 +628,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   ): Promise<ProductEditorValue> => {
     if (routing.stationId === undefined && routing.courseId === undefined) return saved;
     const cfg = requireVenueCfg(deps);
+    // `saveProductEditor` has already found the product, a variant included.
     if (routing.stationId !== undefined) {
-      await setProductStation(tx, cfg, saved.id, routing.stationId);
+      await setProductStation(tx, cfg, saved.id, routing.stationId, "any");
     }
     if (routing.courseId !== undefined) {
-      await setProductCourse(tx, cfg, saved.id, routing.courseId);
+      await setProductCourse(tx, cfg, saved.id, routing.courseId, "any");
     }
     return readProductEditor(tx, saved.id);
   };
@@ -648,7 +649,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     const [row] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.id, id), isNull(products.parentId)));
+      .where(productWithId(id, "top-level"));
     if (row === undefined) {
       throw new AppError("authorization.not_permitted", { permission: CATALOGUE_WRITE_PERMISSION });
     }

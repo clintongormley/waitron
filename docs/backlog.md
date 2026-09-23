@@ -514,13 +514,19 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   shows them behind a filter; the translation-gap check skips Inactive variants for the same reason
   (`packages/catalogue/src/content-languages.ts`) and Task 7 must revisit it.
 - **A variant's id is refused by the management routes that read or write a product by id**, each
-  answering as it does for an id naming no product (the recipe route answers `product.not_found`),
-  until Task 6 opens a variant's own page. The check is written separately in eleven places with
-  four different answers, and four catalogue functions that write a product by id carry none of
-  their own (`applyRecipeDerivation`, `applyDietDerivation`, `deactivateProduct`,
-  `assignProductUnit`; every route that reaches them is guarded). **Next action (Task 6):** put the
-  check in one shared function, and re-test the product editor's unit and category reads for a
-  variant, whose Task 1 assertions this task retired.
+  answering as it does for an id naming no product (the recipe route answers `product.not_found`) —
+  except the product editor's two routes, which since Task 6 are a variant's own page. The
+  "is this a top-level product" check now lives in one function, `productWithId`
+  (`packages/catalogue/src/variant-fallback.ts`), used by the catalogue's by-id reads and writes,
+  `apps/server/src/catalogue-api.ts`, `apps/server/src/kitchen.ts` and
+  `packages/venue-service/src/operations.ts`; every route's answer is unchanged.
+  `createMenuItem` (its own `menu_item.variant_not_allowed`) and `setProductRecipe`
+  (`packages/recipes/src/recipes.ts`, which asks the opposite question) still write their own. Of
+  the four writers that had no check: `applyRecipeDerivation` and `applyDietDerivation` now refuse
+  a variant (`product.not_found`), because a variant has no recipe of its own, and republish the
+  variants of a parent whose derivation changes. `assignProductUnit` and `deactivateProduct` are
+  left without one: a variant's own page gives it its own unit through the first, and the second
+  (which nothing outside the tests calls) makes a row Inactive, which a variant may be (V6).
 - **The menu offer editor accepts a price such as `007.5` that the server then refuses** — its
   pattern (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `PRICE`) is looser
   than `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`). **Next action:** use one rule
@@ -576,10 +582,10 @@ rows: **this task needs no venue reset of its own.** What it left open:
 - **A held order brought back to the till shows a variant line with its PARENT's VAT class,
   category and allergens.** The till reads them from the offer snapshot saved in
   `working_line_contexts`, which is the parent's. Filing is unaffected — the price and rate billed
-  come from the line's own stored values — and today the product editor sets only a variant's names, photo, price and
-  availability (`packages/catalogue/src/product-editor-input.ts`), never its VAT, category or
-  allergens. **Next action (Task 6, which opens a variant's own page):** save or read the
-  chosen variant's values for a retrieved line.
+  come from the line's own stored values. Since Task 6 a variant's own page can give it its own VAT
+  class, category and allergens, so a retrieved line can now show values that differ from what was
+  billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
+  variant's values for a retrieved line.
 - **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
   (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
   the line's. I believe this predates the branch: #537 leaves that check untouched. The till now

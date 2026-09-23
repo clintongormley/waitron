@@ -394,16 +394,69 @@ describe("readOfferedModifiers", () => {
 });
 
 describe("readProductEditor", () => {
-  // The editor reads a product, never a variant: a variant's id names no product there, whether
-  // it inherits every field (Wine 125) or sets its own (Wine 175).
-  it("refuses a variant's id, and reads its parent", async () => {
-    for (const variantId of [f.wine125, f.wine175]) {
-      await expect(run((tx) => readProductEditor(tx, variantId))).rejects.toMatchObject({
-        code: "product.not_found",
-        params: { productId: variantId },
-      });
-    }
+  // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
+  // inherited field beside them (spec §4.4, §9.1). Wine 125 has no unit or category row and so
+  // inherits both; Wine 175 has its own.
+  const parentValues = () => ({
+    description: { en: "A dry white from Rueda" },
+    image: "parent.jpg",
+    unitPrice: "4.00",
+    vatClass: "reduced",
+    unitId: f.glass,
+    categoryIds: [f.wines],
+    primaryCategoryId: f.wines,
+    stationId: f.stationId,
+    courseId: f.courseId,
+    allergens: PARENT_ALLERGENS,
+    dietaryDeclarations: ["vegan"],
+  });
+
+  it("reads a variant that inherits every field as blank, its parent's values beside them", async () => {
+    expect(await run((tx) => readProductEditor(tx, f.wine125))).toMatchObject({
+      parentId: f.parentId,
+      name: "Wine 125",
+      customerName: null,
+      kitchenName: null,
+      description: null,
+      image: null,
+      unitPrice: null,
+      vatClass: null,
+      unitId: null,
+      categoryIds: [],
+      primaryCategoryId: null,
+      stationId: null,
+      courseId: null,
+      allergens: null,
+      dietaryDeclarations: null,
+      inherited: parentValues(),
+    });
+  });
+
+  it("reads a variant's own value for every field it sets, never its parent's", async () => {
+    expect(await run((tx) => readProductEditor(tx, f.wine175))).toMatchObject({
+      parentId: f.parentId,
+      name: "Wine 175",
+      customerName: { en: "Large glass of house wine" },
+      kitchenName: "W175",
+      description: { en: "A sweet red from Toro" },
+      image: "large.jpg",
+      unitPrice: "5.50",
+      vatClass: "general",
+      unitId: f.largeGlass,
+      categoryIds: [f.bottles],
+      primaryCategoryId: f.bottles,
+      stationId: f.ownStationId,
+      courseId: f.ownCourseId,
+      allergens: W175_MANUAL_ALLERGENS,
+      dietaryDeclarations: ["vegetarian"],
+      inherited: parentValues(),
+    });
+  });
+
+  it("reads the parent itself with no parent and nothing inherited", async () => {
     await expect(run((tx) => readProductEditor(tx, f.parentId))).resolves.toMatchObject({
+      parentId: null,
+      inherited: null,
       name: "Wine by the glass",
       unitPrice: "4.00",
       vatClass: "reduced",

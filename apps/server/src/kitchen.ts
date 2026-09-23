@@ -1,7 +1,7 @@
 // Side-effect only: keeps this host's `station.*`/`course.*` codes (errors.ts) reachable from the file
 // that throws them — the reachability convention tables.ts/till-sale.ts follow. See errors.ts.
 import "./errors.js";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   categories,
@@ -12,6 +12,7 @@ import {
   products,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { productWithId, type ProductScope } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
 
 // KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs
@@ -280,22 +281,21 @@ export async function setCategoryStation(
  * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product
  * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
  * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
- * and the UPDATE names the product by id (an absent `productId`, or a variant's, is a no-op — the
- * route checks only that the id is well-formed, and KDS-1 mints no `product.not_found`).
+ * and the UPDATE names the product by id (an absent `productId`, or a variant's unless `scope` is
+ * `"any"`, is a no-op — the route checks only that the id is well-formed, and KDS-1 mints no
+ * `product.not_found`). Only a variant's own page (the product editor) passes `"any"`.
  */
 export async function setProductStation(
   tx: Transaction,
   cfg: TillConfig,
   productId: string,
   stationId: string | null,
+  scope: ProductScope = "top-level",
 ): Promise<void> {
   if (stationId !== null) {
     await requireLiveStation(tx, cfg, stationId);
   }
-  await tx
-    .update(products)
-    .set({ stationId })
-    .where(and(eq(products.id, productId), isNull(products.parentId)));
+  await tx.update(products).set({ stationId }).where(productWithId(productId, scope));
 }
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
@@ -559,20 +559,18 @@ export async function deactivateCourse(
  * course a line falls to at ring time when the line carries no override. Same shape as
  * {@link setProductStation}: a non-null `courseId` must be a LIVE course of this venue
  * ({@link requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE names
- * the product by id (an absent `productId`, or a variant's, is a no-op — the route checks only
- * that the id is well-formed, and KDS-2 mints no `product.not_found`).
+ * the product by id (an absent `productId`, or a variant's unless `scope` is `"any"`, is a no-op —
+ * the route checks only that the id is well-formed, and KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,
   cfg: TillConfig,
   productId: string,
   courseId: string | null,
+  scope: ProductScope = "top-level",
 ): Promise<void> {
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
-  await tx
-    .update(products)
-    .set({ courseId })
-    .where(and(eq(products.id, productId), isNull(products.parentId)));
+  await tx.update(products).set({ courseId }).where(productWithId(productId, scope));
 }

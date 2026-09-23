@@ -1,6 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, centsToDecimal } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { categoryIdArray, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
@@ -8,61 +8,95 @@ import { createProduct, updateProduct } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { productCategories } from "./schema/categories.js";
 import { productUnits } from "./schema/units.js";
-import {
-  categoryOwnerJoin,
-  effectiveProductColumns as effective,
-  parentJoin,
-  parentProducts,
-  unitOwnerJoin,
-} from "./variant-fallback.js";
+import { priceOrNull } from "./offer-price.js";
+import { productWithId } from "./variant-fallback.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
-import type { ProductEditorValue } from "./product-types.js";
-export type { ProductEditorValue } from "./product-types.js";
+import type { InheritedValues, ProductEditorValue } from "./product-types.js";
+export type { InheritedValues, ProductEditorValue } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
-/** The product's own names and flags, and its EFFECTIVE inherited values (`variant-fallback.ts`). */
+/** The row as stored: a variant's blanks read blank here, never as its parent's. */
 const columns = {
   id: products.id,
+  parentId: products.parentId,
   name: products.name,
   customerName: products.customerName,
   soldAlone: products.soldAlone,
-  description: effective.description,
+  description: products.description,
   kitchenName: products.kitchenName,
-  image: effective.image,
-  unitPrice: effective.unitPrice,
+  image: products.image,
+  unitPrice: products.unitPrice,
   active: products.active,
   available: products.available,
-  vatClass: effective.vatClass,
-  allergens: effective.manualAllergens,
-  dietaryDeclarations: effective.dietaryDeclarations,
-  stationId: effective.stationId,
-  courseId: effective.courseId,
+  vatClass: products.vatClass,
+  allergens: products.manualAllergens,
+  dietaryDeclarations: products.dietaryDeclarations,
+  stationId: products.stationId,
+  courseId: products.courseId,
   unitId: productUnits.unitId,
-  primaryCategoryId: effective.categoryId,
+  primaryCategoryId: products.categoryId,
   categoryIds: categoryIdArray,
 };
 
-export async function readProductEditor(
-  tx: Transaction,
-  productId: string,
-): Promise<ProductEditorValue> {
+async function readStored(tx: Transaction, productId: string) {
   const [row] = await tx
     .select(columns)
     .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(productCategories, categoryOwnerJoin)
-    .where(and(eq(products.id, productId), isNull(products.parentId)))
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
   return {
     ...row,
-    unitPrice: centsToDecimal(row.unitPrice),
-    vatClass: row.vatClass as VatClass,
-    dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
+    unitPrice: priceOrNull(row.unitPrice),
+    vatClass: row.vatClass as VatClass | null,
+    dietaryDeclarations:
+      row.dietaryDeclarations === null
+        ? null
+        : validateDietaryDeclarations(row.dietaryDeclarations),
+  };
+}
+
+/** A parent's value for each field its variants inherit. A parent has no parent of its own, so
+ * `products_top_level_owns_ck` sets its price, VAT class and dietary declarations. */
+async function readInherited(tx: Transaction, parentId: string): Promise<InheritedValues> {
+  const parent = await readStored(tx, parentId);
+  return {
+    description: parent.description,
+    image: parent.image,
+    unitPrice: parent.unitPrice!,
+    vatClass: parent.vatClass!,
+    unitId: parent.unitId,
+    categoryIds: parent.categoryIds,
+    primaryCategoryId: parent.primaryCategoryId,
+    stationId: parent.stationId,
+    courseId: parent.courseId,
+    allergens: parent.allergens,
+    dietaryDeclarations: parent.dietaryDeclarations!,
+  };
+}
+
+/** A product's editor value, or a variant's: its own stored values, and its parent's beside them. */
+export async function readProductEditor(
+  tx: Transaction,
+  productId: string,
+): Promise<ProductEditorValue> {
+  const row = await readStored(tx, productId);
+  if (row.parentId !== null) {
+    return {
+      ...row,
+      inherited: await readInherited(tx, row.parentId),
+      modifiers: [],
+      variants: [],
+    };
+  }
+  return {
+    ...row,
+    inherited: null,
     // `readProductModifiers` keys its map by the LOWER-CASED product id the uuid column hands back,
     // so an upper-cased `productId` argument would find nothing; lower-case it for the lookup.
     modifiers: (await readProductModifiers(tx, [productId])).get(productId.toLowerCase()) ?? [],
@@ -80,22 +114,17 @@ export async function saveProductEditor(
   input: unknown,
   fallbackLanguage: string,
 ): Promise<ProductEditorValue> {
-  const value = parseProductEditorInput(input);
-  // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
-  // must satisfy the enabled languages. A blank one is legal (it falls back to `name`), so only a
-  // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
-  // default-language entry.
-  if (value.customerName !== null)
-    await validateContentTranslations(tx, value.customerName, fallbackLanguage);
+  let storedParentId: string | null = null;
   if (productId !== null) {
     // A plain existence read. It took `for update` on PostgreSQL, to serialise two saves of the
     // same product; one write transaction runs on the venue file at a time, so there is no second
     // save — the pattern is stated once on `assertExtraListForWrite` (extras.ts).
     const [product] = await tx
-      .select({ id: products.id })
+      .select({ parentId: products.parentId })
       .from(products)
-      .where(and(eq(products.id, productId), isNull(products.parentId)));
+      .where(productWithId(productId, "any"));
     if (!product) throw new AppError("product.not_found", { productId });
+    storedParentId = product.parentId;
   } else {
     const [catalogue] = await tx
       .select({ id: catalogues.id })
@@ -103,6 +132,16 @@ export async function saveProductEditor(
       .where(eq(catalogues.id, catalogueId));
     if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
+  const isVariant = storedParentId !== null;
+  const value = parseProductEditorInput(input, { isVariant });
+  if (value.parentId !== undefined && value.parentId !== storedParentId)
+    throw new AppError("product.invalid", { field: "parentId" });
+  // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
+  // must satisfy the enabled languages. A blank one is legal (it falls back to `name`), so only a
+  // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
+  // default-language entry.
+  if (value.customerName !== null)
+    await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId === null) {
     const created = await createProduct(tx, {
       catalogueId,
@@ -112,14 +151,15 @@ export async function saveProductEditor(
       description: value.description,
       kitchenName: value.kitchenName,
       unitId: value.unitId,
-      unitPrice: value.unitPrice,
-      vatClass: value.vatClass,
+      // The parser refuses a blank on a product with no parent, which every created one is.
+      unitPrice: value.unitPrice!,
+      vatClass: value.vatClass!,
       active: value.active,
       available: value.available,
       soldAlone: value.soldAlone,
       ...(value.image === null ? {} : { image: value.image }),
       ...(value.allergens === null ? {} : { allergens: value.allergens }),
-      dietaryDeclarations: value.dietaryDeclarations,
+      dietaryDeclarations: value.dietaryDeclarations!,
     });
     productId = created.id;
   } else {
@@ -139,11 +179,16 @@ export async function saveProductEditor(
       dietaryDeclarations: value.dietaryDeclarations,
     });
   }
-  await replaceProductCategories(tx, productId, {
-    categoryIds: value.categoryIds,
-    primaryCategoryId: value.primaryCategoryId,
-  });
-  await setProductVariants(tx, productId, value.variants, fallbackLanguage);
-  await writeProductModifiers(tx, productId, value.modifiers);
+  const scope = isVariant ? "any" : "top-level";
+  await replaceProductCategories(
+    tx,
+    productId,
+    { categoryIds: value.categoryIds, primaryCategoryId: value.primaryCategoryId },
+    scope,
+  );
+  if (!isVariant) {
+    await setProductVariants(tx, productId, value.variants, fallbackLanguage);
+    await writeProductModifiers(tx, productId, value.modifiers);
+  }
   return readProductEditor(tx, productId);
 }

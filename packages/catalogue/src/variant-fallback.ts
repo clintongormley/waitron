@@ -1,4 +1,4 @@
-import { eq, exists, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, eq, exists, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias, QueryBuilder } from "drizzle-orm/sqlite-core";
 import { products } from "@waitron/db";
 import { productCategories } from "./schema/categories.js";
@@ -34,6 +34,23 @@ import { productUnits } from "./schema/units.js";
  * too, and preparation routes (`packages/venue-service/src/operations.ts`) read their CATEGORY from
  * here.
  */
+
+/** A `products` row with no parent: a product in its own right, never a variant. */
+export const isTopLevelProduct = isNull(products.parentId);
+
+/**
+ * Which rows a read or write of ONE product by id may find. `"top-level"` finds only a product with
+ * no parent, so a variant's id answers exactly as an id that names no product; `"any"` finds a
+ * variant too. Only a variant's own page (`product-editor.ts`) and the writers it calls pass `"any"`.
+ */
+export type ProductScope = "top-level" | "any";
+
+/** The `where` for product `productId` within `scope`. */
+export function productWithId(productId: string, scope: ProductScope): SQL {
+  return scope === "any"
+    ? eq(products.id, productId)
+    : and(eq(products.id, productId), isTopLevelProduct)!;
+}
 
 /** The parent row of a variant, joined as `parent`. A LEFT join: a top-level product has none. */
 export const parentProducts = alias(products, "parent");

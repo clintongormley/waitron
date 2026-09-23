@@ -202,8 +202,20 @@ else its own price, else its parent's price on that menu, else its parent's own 
 leave any product's price blank (`menu_items.gross_price` is nullable), which means the product's
 own price; the menu screen shows that price as the empty field's hint. `setProductVariants`
 (`packages/catalogue/src/variants.ts`) and the storage beneath it accept a variant with no price of
-its own; the product-editor save refuses one (`price()` in
+its own; the parent's product-editor save still refuses one in its variants list (`price()` in
 `packages/catalogue/src/product-editor-input.ts`).
+
+A variant also has its own product page: the product editor's routes read and save a variant's id.
+The value it reads is the variant's own row, a field it leaves blank read blank, and its parent's
+value for each of those fields in `inherited`; saving a blank keeps the field inheriting, and saving
+a value overrides it for that variant alone. A variant's body may leave its price, tax rate and
+dietary declarations blank, which a product with no parent may not; it carries no variants and no
+extras or options lists of its own; and its parent never changes, so a body naming a different
+`parentId` is refused (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`). A variant's
+published allergens stay blank, and so read as its parent's, until it sets allergens of its own, and
+its published diet likewise until it sets a diet override of its own; once set, each is computed over
+the parent's recipe-derived values and recomputed when those change (`republishOverlays`,
+`packages/catalogue/src/operations.ts`).
 
 A variant is sold as the product it is. A product with an Active variant is never sold as itself
 when rung up from a menu offer (`product.variant_required`); the bare-`productId` path does not

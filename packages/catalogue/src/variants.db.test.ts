@@ -317,7 +317,7 @@ describe("the product editor", () => {
   });
 });
 
-describe("a variant's id is not a product's id to the product-by-id functions", () => {
+describe("a variant's id is not a product's id to the product-by-id functions but its own page", () => {
   async function variantOfParent() {
     const f = await fixture();
     const [w125] = await app((tx) =>
@@ -328,12 +328,13 @@ describe("a variant's id is not a product's id to the product-by-id functions", 
   }
   const notFound = (productId: string) => ({ code: "product.not_found", params: { productId } });
 
-  it("reads and saves a product's editor, never a variant's", async () => {
+  // The editor is the one exception: it is a variant's own page too (spec §4.4).
+  it("reads and saves a variant's own editor, and never takes a product's body for it", async () => {
     const f = await variantOfParent();
-    await expect(app((tx) => readProductEditor(tx, f.variantId))).rejects.toMatchObject(
-      notFound(f.variantId),
-    );
+    const value = await app((tx) => readProductEditor(tx, f.variantId));
+    expect(value).toMatchObject({ id: f.variantId, parentId: f.parentId, vatClass: null });
     const parent = await app((tx) => readProductEditor(tx, f.parentId));
+    // The parent's body names no parent, so it is refused on the variant (V10), writing nothing.
     await expect(
       app((tx) =>
         saveProductEditor(
@@ -344,8 +345,14 @@ describe("a variant's id is not a product's id to the product-by-id functions", 
           "en",
         ),
       ),
-    ).rejects.toMatchObject(notFound(f.variantId));
+    ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
+    await expect(
+      app((tx) =>
+        saveProductEditor(tx, f.variantId, f.catalogueId, { ...value, vatClass: "general" }, "en"),
+      ),
+    ).resolves.toMatchObject({ id: f.variantId, vatClass: "general" });
+    expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: "general" });
     await expect(
       app((tx) => saveProductEditor(tx, f.parentId, f.catalogueId, parent, "en")),
     ).resolves.toMatchObject({ id: f.parentId });

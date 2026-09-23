@@ -1418,7 +1418,7 @@ it("shows the resolver's rates, including a fractional rate supplied by a contro
   expect(options()).toHaveLength(4);
   for (const option of options()) {
     expect(option.textContent).toContain(
-      `(${Number(resolveVatRate(option.value as ProductEditorDraft["vatClass"]))}%)`,
+      `(${Number(resolveVatRate(option.value as NonNullable<ProductEditorDraft["vatClass"]>))}%)`,
     );
   }
   expect([...options()].find((option) => option.value === "zero")!.textContent).toBe(
