@@ -136,8 +136,9 @@ export interface DrainResult {
   nextDueAt: Date | null;
   /**
    * Whether this pass found due work and attempted it — 1 if it did, whether it submitted, deferred
-   * to a gate, or landed in `skipped`; 0 for a no-work pass, which read no certificate. One database
-   * files for one taxpayer, so the only values are 0 and 1; it stays a COUNT because the
+   * to a gate, or landed in `skipped`; 0 for a pass that found no work or never looked for any, and
+   * read no certificate. One database files for one taxpayer, so the only values are 0 and 1; it
+   * stays a COUNT because the
    * awaiting-fiscal-certificate flag (`apps/server/src/pass.ts`) keys off `> 0` — a no-work pass
    * must not clear it, since a pass that exercised no cert is no evidence the cert has arrived.
    */
@@ -148,11 +149,13 @@ export interface DrainResult {
   recordsHalted: number; // records rejected or otherwise stopped
   incidentsRaised: number;
   /**
-   * A pass that abandoned the work it found — its transport could not be built, or its sweep threw.
-   * Mirrors `TickResult.skipped` in `@waitron/scheduler`, and for the same reason: a failure like
-   * this has no ledger row of its own to carry it, so reporting it here is the alternative to
-   * swallowing it. NEVER silent — due fiscal work this pass could not submit is an unmet legal
-   * obligation. At most one entry: one database files for one taxpayer.
+   * A pass that abandoned the work it found — its transport could not be built, or its sweep
+   * threw — or, from the host's wrapper (`apps/server/src/restart-reset.ts`), a pass whose restart
+   * reset failed, so no work was looked for. Mirrors `TickResult.skipped` in `@waitron/scheduler`,
+   * and for the same reason: a failure like this has no ledger row of its own to carry it, so
+   * reporting it here is the alternative to swallowing it. NEVER silent — due fiscal work this pass
+   * could not submit is an unmet legal obligation. At most one entry: one database files for one
+   * taxpayer.
    */
   skipped: { errorCode: string }[];
 }

@@ -10,6 +10,8 @@ const contribution = (id: string): FiscalContribution => ({
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
   // These tests exercise slot SELECTION only; the runtime submission seat is never invoked here.
   drain: () => Promise.reject(new Error("fiscal-slot selection tests never run the drain seat")),
+  resetInFlight: () =>
+    Promise.reject(new Error("fiscal-slot selection tests never run the reset seat")),
 });
 
 const CORE = fakeModule("core");

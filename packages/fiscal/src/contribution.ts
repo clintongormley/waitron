@@ -46,6 +46,13 @@ export interface FiscalContribution {
   /** One runtime submission pass. A regime with nothing to submit (id "none") returns the empty
    * DrainResult. The sale-path backend (makeBackend) never contacts an authority; this does. */
   drain(deps: FiscalDutyDeps, now: Date): Promise<DrainResult>;
+  /** Returns every submission a previous run left in flight to the queue, with no wait. The
+   * server's trading loop calls it before its first `drain` on a node that files
+   * (`apps/server/src/restart-reset.ts`), and again after a failed attempt: only then can nothing
+   * in flight belong to a live pass of this process. The fiscal readiness check's drain of its own
+   * test database does not call it. Required, not optional like `provisioningSecret`, so a regime
+   * that files cannot omit it; a regime that files nothing has nothing to reset. */
+  resetInFlight(deps: { readonly db: Database }, now: Date): Promise<void>;
   /** The provision-time secret this regime seals into a fresh venue's vault (a Veri*Factu venue's
    * AEAT signing certificate; absent for a regime that files nothing). The host holds the opaque
    * blob and the vault ring but does not know the regime's shape, so it reaches the regime through

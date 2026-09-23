@@ -140,6 +140,7 @@ import { mountSetup } from "./setup-api.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
 import { runFiscalDrain } from "./onboarding-policy.js";
+import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -2314,6 +2315,26 @@ export async function startServer(
   // is no batch of changes to miss, which is why no snapshot refresh is broadcast on startup.
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
 
+  // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
+  // resolver (one TLS pool for the pass, released in its own `finally`) and runs
+  // the pass. The host injects only the vault ring, the deployment identity and the cadence —
+  // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
+  // against the database at boot, and the regime's `entorno` guard refuses any due registro
+  // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
+  //
+  // The restart reset runs only on a node that files: the pass below calls this drain behind both
+  // `singletonPass` and the submission policy.
+  const fiscalDrain = resetBeforeFirstDrain({
+    reset: (at) => enabledFiscal.resetInFlight({ db }, at),
+    drain: (at) =>
+      enabledFiscal.drain(
+        { db, ring, environment: config.environment, skipRetryMs: config.skipRetryMs, log },
+        at,
+      ),
+    skipRetryMs: config.skipRetryMs,
+    log,
+  });
+
   const controller = new AbortController();
   const loop = runLoop({
     // The fiscal/settlement duties (drain/reconcile) run ONLY when this node holds the singletons
@@ -2344,28 +2365,7 @@ export async function startServer(
         (at) =>
           runPass(
             {
-              // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
-              // resolver (one TLS pool for the pass, released in its own `finally`) and runs
-              // the pass. The host injects only the vault ring, the deployment identity and the cadence —
-              // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
-              // against the database at boot, and the regime's `entorno` guard refuses any due registro
-              // whose own `entorno` disagrees or is unrecorded. `boot.ts` names no regime package.
-              drain: (at2) =>
-                runFiscalDrain(
-                  config,
-                  (at3) =>
-                    enabledFiscal.drain(
-                      {
-                        db,
-                        ring,
-                        environment: config.environment,
-                        skipRetryMs: config.skipRetryMs,
-                        log,
-                      },
-                      at3,
-                    ),
-                  at2,
-                ),
+              drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
               // Asked per pass, not at boot: a credential provisioned while the host runs is served
               // on the next pass rather than after a restart. An unprovisioned purpose means there
               // is nothing to reconcile, so the pass reports an empty tick rather than running a

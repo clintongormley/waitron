@@ -11,6 +11,7 @@ const contribution = (id: string): FiscalContribution => ({
   activationReadiness: "not-applicable",
   makeBackend: () => ({ id }) as unknown as FiscalBackend,
   drain: () => Promise.reject(new Error("slot-selection tests never run the drain seat")),
+  resetInFlight: () => Promise.reject(new Error("slot-selection tests never run the reset seat")),
 });
 
 const mod = (

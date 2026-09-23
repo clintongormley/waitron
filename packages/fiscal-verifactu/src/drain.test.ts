@@ -8,7 +8,13 @@ import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
-import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
+import {
+  DEFAULT_SKIP_RETRY_MS,
+  backoffMs,
+  drain,
+  resetInFlightClaims,
+  type DrainDeps,
+} from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
@@ -340,10 +346,9 @@ describe("drain — flow control (envio_flujo)", () => {
 });
 
 /**
- * Task 8: a row left `enviando` proves a process crashed between T1 (claim, committed) and T2
- * (persist) — this is exactly what the T1/T2 split (Task 6) makes possible to recover: T1's commit
- * is what leaves a real, committed `enviando` row behind for a LATER drain() to find, rather than
- * an in-flight uncommitted claim that simply vanishes with the crashed process.
+ * A row left `enviando` past `RECUPERACION_ENVIANDO_MS` is a claim abandoned while this process
+ * stays up: T1 (claim) committed and no T2 (persist) followed, so a LATER drain() finds a real,
+ * committed row. A restart's claims are requeued by `resetInFlightClaims` instead.
  *
  * Every update/select below filters explicitly by the seeded fixture's own chain (`ownChain`),
  * unlike the brief's own inline sample — this file's shared `pg.db` accumulates rows from every
@@ -355,9 +360,9 @@ describe("drain — stale claim recovery", () => {
   it("recovers a stale enviando row back to pendiente with incidencia set, then resubmits it this same pass", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    // Simulate the crash: T1 committed (estado -> 'enviando') but the process died before T2
-    // could persist a response. enviado_en is stamped well over RECUPERACION_ENVIANDO_MS (5 min)
-    // in the past, so THIS drain() pass must recover it rather than leave it stuck forever.
+    // Simulate an abandoned claim: T1 committed (estado -> 'enviando') and no T2 persisted a
+    // response. enviado_en is stamped well over RECUPERACION_ENVIANDO_MS (5 min) in the past, so
+    // THIS drain() pass must recover it rather than leave it stuck forever.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
@@ -385,9 +390,9 @@ describe("drain — stale claim recovery", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
-    // enviado_en 1 minute ago — well within RECUPERACION_ENVIANDO_MS (5 min). Models a genuinely
-    // in-flight submission (mid network round-trip in another process), not a crash: recovering
-    // this would resubmit a record someone else may still be about to persist a CSV for.
+    // enviado_en 1 minute ago — well within RECUPERACION_ENVIANDO_MS (5 min). Models a slow
+    // submission in this process still waiting on AEAT, not an abandoned claim: recovering this
+    // would resubmit a record its own T2 may still be about to persist a CSV for.
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
@@ -407,6 +412,68 @@ describe("drain — stale claim recovery", () => {
     );
     expect(rows.rows[0]?.estado).toBe("enviando");
     expect(rows.rows[0]?.incidencia).toBe(false);
+  });
+});
+
+describe("resetInFlightClaims — the restart reset (topology design §5.2)", () => {
+  const now = new Date("2026-07-21T00:01:00Z");
+
+  /** Leaves the seeded rows as a previous run's claim: `enviando`, stamped one second ago. */
+  const claimOneSecondAgo = (seeded: SeededDrain) =>
+    withTransaction(pg.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 1_000).toISOString()}
+        where ${ownChain(seeded)}
+      `),
+    );
+
+  const stateOf = async (seeded: SeededDrain) =>
+    decodeFlags(
+      await withTransaction(pg.db, (tx) =>
+        tx.execute<{ estado: string; incidencia: number; proximo_intento_en: string }>(sql`
+          select estado, incidencia, proximo_intento_en from envios where ${ownChain(seeded)}
+        `),
+      ),
+    ).rows;
+
+  it("files a claim a previous run left behind on the next pass, with no five-minute wait", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await claimOneSecondAgo(seeded);
+
+    await resetInFlightClaims(pg.db, now);
+    const result = await drain(drainDeps(staticResolver(aeat.client())), now);
+
+    expect(result.recordsSubmitted).toBe(1);
+    const rows = await stateOf(seeded);
+    expect(rows[0]?.estado).toBe("aceptado");
+    expect(rows[0]?.incidencia).toBe(true);
+  });
+
+  it("returns the claim to pendiente, due now, with incidencia raised", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await claimOneSecondAgo(seeded);
+
+    await resetInFlightClaims(pg.db, now);
+
+    expect(await stateOf(seeded)).toEqual([
+      { estado: "pendiente", incidencia: true, proximo_intento_en: now.toISOString() },
+    ]);
+  });
+
+  it("leaves pendiente, aceptado and detenido rows alone", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 3 });
+    const [, second, third] = seeded.registroIds;
+    await withTransaction(pg.db, async (tx) => {
+      await tx.execute(sql`update envios set estado = 'aceptado' where registro_id = ${second}`);
+      await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${third}`);
+    });
+    const before = await stateOf(seeded);
+    expect(before.map((row) => row.estado).sort()).toEqual(["aceptado", "detenido", "pendiente"]);
+
+    await resetInFlightClaims(pg.db, now);
+
+    expect(await stateOf(seeded)).toEqual(before);
   });
 });
 

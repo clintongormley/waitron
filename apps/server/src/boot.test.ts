@@ -2436,6 +2436,52 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  // The restart reset (topology design §5.2): a claim a previous run left `enviando` one second
+  // ago is not stale by the drain's five-minute rule, so only the boot's reset returns it to
+  // `pendiente`. No `fiscal.aeat` credential is sealed, so the drain then skips and the reset is the
+  // only write the row sees.
+  it("returns a previous run's in-flight claim to pendiente on its first pass", async () => {
+    const port = await freePort();
+    const seeded = await seedPendingEnvios(sharedDb, {
+      count: 1,
+      identity: {
+        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nif: "90000000K",
+      },
+    });
+    const [registroId] = seeded.registroIds;
+    const claimedAt = new Date(Date.now() - 1_000).toISOString();
+    await sharedDb.execute(sql`
+      update envios set estado = 'enviando', intentos = 1, enviado_en = ${claimedAt}
+      where registro_id = ${registroId}
+    `);
+
+    try {
+      const server = await withCapturedStdout(async (lines) => {
+        const started = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+        });
+        await waitForEvent(lines, "loop.sleeping");
+        return started;
+      });
+      try {
+        const rows = await sharedDb.execute<{ estado: string; incidencia: number }>(
+          sql`select estado, incidencia from envios where registro_id = ${registroId}`,
+        );
+        expect(rows.rows).toEqual([{ estado: "pendiente", incidencia: 1 }]);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+    }
+  }, 60_000);
+
   // F4 (2026-07-27 fix wave): `boot.ts`'s `drain` closure builds a fresh `aeatClientResolver`
   // every pass and releases it via `finally { await resolver.closeAll() }` — the fix this whole
   // branch exists to land, and the one line of it with no test at all before this one. Every OTHER

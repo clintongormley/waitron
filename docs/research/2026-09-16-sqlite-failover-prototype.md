@@ -514,6 +514,7 @@ Stated together, because each is something a reader would otherwise assume the g
   is written into the topology design §5.2 and it is **not built**. Today the only reset of a sale left
   that way is `recoverStaleClaims`'s five-minute one in `packages/fiscal-verifactu/src/drain.ts`, plus
   the backoff that returns a sale whose submission threw — read on 2026-09-17, not run.
+  **2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed.
 - **Own the cloud-generation/pointer case, or write down that nothing covers it.**
 - **Measure the sales-a-day rate** before quoting S4's days-per-GiB at anyone; 250 is an assumption.
 - **Re-run everything on a litestream or MinIO bump.** The verdicts do not carry across a version.
@@ -528,7 +529,7 @@ Two design decisions this measurement hands to slice 2:
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
-  restart reset above.
+  restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
 
 ---
 

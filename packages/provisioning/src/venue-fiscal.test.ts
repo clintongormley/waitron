@@ -21,6 +21,7 @@ function contribution(id: string): FiscalContribution {
       incidentsRaised: 0,
       skipped: [],
     }),
+    resetInFlight: async () => {},
   };
 }
 

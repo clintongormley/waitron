@@ -283,6 +283,7 @@ The crux fiscal-safety scenario. Fleshes out `applyTail`'s terminal-state-wins r
 >    Resolving its in-flight submissions first is explicitly NOT required there: the receiver deals
 >    with such a row — its drain's five-minute reset today, and the boot reset §5.2 requires for the
 >    copy it inherited through the stream, once that is built.
+>    **2026-09-23: the boot reset is built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
 
 **Files:**
 - Modify: `bench/sqlite-failover/src/model.ts` (complete `drainPass` terminal-state handling and `applyTail`'s `envios` terminal-state-wins branch)

@@ -32,6 +32,12 @@ describe("FISCAL_NONE_SLOT", () => {
     });
   });
 
+  it("resetInFlight has nothing to reset and touches no database", async () => {
+    await expect(
+      FISCAL_NONE_SLOT.resetInFlight({ db: {} as never }, new Date()),
+    ).resolves.toBeUndefined();
+  });
+
   it("declares no provisioning secret", () => {
     expect(FISCAL_NONE_SLOT.provisioningSecret).toBeUndefined();
   });
