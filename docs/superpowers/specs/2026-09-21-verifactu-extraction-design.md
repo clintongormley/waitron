@@ -62,6 +62,15 @@ Everything under `packages/verifactu` except build artefacts:
 `fast-xml-parser` version-equivalence harness. It exists to test verifactu's XML parsing, so it belongs
 with the library, not in Waitron.
 
+> 2026-09-23: that identification was wrong, and both files are now deleted. They were the
+> PostgreSQL schema-equivalence proof for the 2026-09-05 RLS squash — the script applied two migration
+> trees to two `postgres:18-alpine` containers as a non-superuser owner role, `pg_dump`ed both and
+> diffed the normalised dumps — and had nothing to do with `fast-xml-parser`, which no file in this
+> tree imports and no manifest declares. Neither file could run once the storage switch removed the
+> PostgreSQL migration sets, so task T2 of
+> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` deleted both, and
+> `scripts/schema-equivalence-fold.test.py` with them: it only exercised the script's own normaliser.
+
 ### 2.2 The build (new — the monorepo never needed one)
 
 The monorepo consumes verifactu as raw TypeScript (`main` → `./src/index.ts`). A published package

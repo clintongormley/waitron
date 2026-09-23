@@ -311,10 +311,10 @@ shard ran four test workers plus the main process on a four-vCPU runner **with a
 container alongside**. That last part is no longer true of the shard you would reproduce it on.
 `test-server` starts no container at all now — `grep -rn 'Container\|testcontainers\|docker'` over
 `apps/server/scripts/dev-setup.test.ts` and `apps/server/scripts/dev-onboard.test.ts`, the two files
-the job's own comment still names as container starters, returns nothing on 2026-09-23, and no other
-file under `apps/server` imports a Testcontainers package. The worker count is unchanged
-(`apps/server/vitest.config.ts` sets `maxWorkers: 4`), so if the signature returns, the one load
-source this theory rested on is gone and the theory has to be rebuilt rather than reused.
+that used to start one, returns nothing on 2026-09-23, and no other file under `apps/server` imports
+a Testcontainers package. The worker count is unchanged (`apps/server/vitest.config.ts` sets
+`maxWorkers: 4`), so if the signature returns, the one load source this theory rested on is gone and
+the theory has to be rebuilt rather than reused.
 
 **What to do when you meet it.** Keep the job's log and its printed counts BEFORE you re-run: nobody
 knows the cause, and a second sighting's log is the cheapest evidence there is. The house rule, in

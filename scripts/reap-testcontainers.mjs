@@ -2,20 +2,23 @@ import { execFileSync } from "node:child_process";
 
 // Reap STALE waitron Testcontainers resources.
 //
-// Why this exists: containers here are started with `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory
-// locally — Ryuk hangs on this machine, CLAUDE.md §4), which disables Testcontainers' own reaper. A
-// caller that finishes normally stops its own container; an INTERRUPTED run (Ctrl-C, a timeout
-// SIGTERM, a crash) leaves a running container and its anonymous volume behind, un-reaped. Over many
-// interrupted runs these accumulate and bloat the Docker daemon, which slows container ops and adds
-// host-side overhead. This script is the compensating reaper (the manual `pnpm reap`).
+// Why this exists: the one caller left that starts a container, `bench/sqlite-failover`, runs with
+// `TESTCONTAINERS_RYUK_DISABLED=true` (mandatory locally — Ryuk hangs on this machine, CLAUDE.md
+// §4), which disables Testcontainers' own reaper. A caller that finishes normally stops its own
+// container; an INTERRUPTED run (Ctrl-C, a timeout SIGTERM, a crash) leaves a running container and
+// its anonymous volume behind, un-reaped. Over many interrupted runs these accumulate and bloat the
+// Docker daemon, which slows container ops and adds host-side overhead. This script is the
+// compensating reaper (the manual `pnpm reap`).
 //
 // SAFETY — two guards, because a running orphan and a running IN-USE container look identical:
 //  1. LABEL. It removes only containers carrying `com.waitron.reapable`, never the generic
 //     `org.testcontainers` label that every testcontainers container in every project shares. One
-//     helper stamps it today, `startStore` in `bench/sqlite-failover/src/store.ts` — that is the
-//     whole answer to `grep -rn com.waitron.reapable` outside this script and its own suite, taken
-//     2026-09-22. So another repo's containers — and this repo's compose dev DB, which is not a
-//     testcontainer at all — are out of scope.
+//     helper stamps it today, `startStore` in `bench/sqlite-failover/src/store.ts`. Taken 2026-09-23,
+//     `grep -rn com.waitron.reapable` finds that stamp and no other executable one outside this
+//     script and its own suite — every remaining hit is prose (this repo's docs and the bench
+//     README, plus historical plans quoting PostgreSQL fixtures the storage switch deleted). So
+//     another repo's containers — and this repo's compose dev DB, which is not a testcontainer at
+//     all — are out of scope.
 //  2. AGE. Of those, it removes only ones older than STALE_CONTAINER_MS. A container younger than that
 //     may belong to a watch-mode vitest running RIGHT NOW in another terminal (its container lives for
 //     the whole process, which is necessarily younger than the threshold when freshly started), so it

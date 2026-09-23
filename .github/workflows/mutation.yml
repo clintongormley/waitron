@@ -111,18 +111,13 @@ jobs:
   # No thresholds.break is configured HERE, and that is on purpose: a break in
   # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
   # well-tested files passes while the package as a whole sits far below the bar. The package is
-  # gated once, on the merged score, by the `mutation-db-aggregate` job below. The REQUIRE_DOCKER
-  # set below is unread — no suite in this package starts a container any more (on 2026-09-23
-  # `grep -rn 'from "testcontainers"' packages apps` returns no line at all) — and is left in place
-  # for the same reason as its twin in ci.yml, where the note on test-heavy explains it.
+  # gated once, on the merged score, by the `mutation-db-aggregate` job below.
   mutation-db:
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     runs-on: ubuntu-latest
-    env:
-      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v7
 
