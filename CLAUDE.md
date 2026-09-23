@@ -174,6 +174,12 @@ hook, or how tests are scheduled:
   `deploy/` changed — and wherever it does run it builds them without opening one, so a bundle that
   renders nothing passes anyway. Cost: the vite 6 → 8 bundler replacement had to take its build
   evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
+- **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
+  esbuild command whose bundle can reach `@waitron/media` names `--external:sharp`, and the box
+  image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`, weaker
+  than its name (it reads package.json TEXT and follows `dependencies` only), the bundle-smoke grep
+  in `.github/workflows/ci.yml`, and image-smoke's sharp step. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** GitHub keeps only one PENDING
   run per group and a newer push cancels the waiting one, which `cancel-in-progress` never reaches.
   Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and

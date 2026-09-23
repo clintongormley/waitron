@@ -270,6 +270,30 @@ What that leaves open:
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
+**Photos are shrunk on upload (slice 2, Task 0, 2026-09-23; branch `feat/sqlite-slice2-image-shrink`,
+not yet landed).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
+stripped of its metadata (GPS position included) and stored as WebP at quality 80 by `prepareImage`
+(`packages/media/src/prepare.ts`), which the upload route calls before it opens the write
+transaction (`packages/media/src/routes.ts`). Measured on ten real food photos by the slice-2 plan's
+Task 0 drafter, a stored photo averages 171 KiB, so 5,000 take about 0.87 GB instead of about 18 GB.
+sharp does the work; every server bundle leaves it out (`--external:sharp`) and the box image
+carries it in `/app/node_modules`.
+
+What it leaves open:
+
+- **The upload limit is 20 MB (owner decision 2026-09-23, up from 5 MB).** It limits what may be
+  uploaded, not what is stored, and so bounds only the decode: a 100-megapixel picture raised memory
+  by about 29 MiB when decoded (the plan drafter's measurement), and `MAX_INPUT_PIXELS` refuses
+  anything larger. What current phones produce has not been measured.
+- **The library grid loads the full 1600-pixel copy for each tile.** The screen asks for 24 photos a
+  page (`packages/media/src/dashboard/image-library.ts`), about 4 MB at the average size, fetched as
+  the tiles scroll into view and cached afterwards. A small thumbnail copy would help over slow
+  Wi-Fi. Next action: decide whether the grid needs one.
+- **Dev venues seeded before this keep full-size tiles** until `wa-wt reset demo <name>`.
+- **libvips is LGPL-3.0-or-later** and now ships in the box image, with its licence texts, its
+  notices and a written source offer in `/app/third-party/` (`deploy/third-party/`). The legal
+  advisor is asked to confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
+
 **Product categories — LANDED #340 (2026-09-13).** A product can belong to several categories without
 its sales being double-counted; at most one membership is primary and names the order line and the
 kitchen route. Categories get their own page at `/manage/categories` with translation, a picture, a
@@ -4211,6 +4235,16 @@ What the preparation tasks left, with F1's own answers where it found them:
     the engine could never produce stay hand-written on purpose. A few other suites still build
     engine-shaped refusals by hand, among them `packages/provisioning/src/cli.test.ts` and
     `packages/scheduler/src/store.concurrency.test.ts`; converting them was not part of P10.
+
+**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)). When it is done, the
+venue streams its database to a bucket the owner supplies, and a dead box is rebuilt from that bucket
+with one recovery kit; none of that is built yet. The tasks land one pull request each, in the plan's
+order.
+
+- **Task 0, shrink every uploaded photo — built on `feat/sqlite-slice2-image-shrink`, not yet
+  landed.** What it does and what it leaves open are under the image library in Track A.
+- **Next action:** Task 1a (per-machine rows keyed by node id), once Task 0 lands.
 
 ---
 
