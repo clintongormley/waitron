@@ -2043,33 +2043,25 @@ image constraints under *Detail → Box image*.
   does not assume it has already caught something here. What it replaced: P6 got away with a one-off
   probe of `workforce-es` (its only scaled column had no default and appeared in none of its table's
   constraints), and #475 found its instances by hand.
-- **The migration sets that did NOT get a call site are still unguarded — OPEN (2026-09-23), being
-  closed one set per pull request.** To list them, take every set with
+- **Every migration set that builds a table now has a call site — DONE (2026-09-23), one set per
+  pull request.** To check, take every set with
   `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
-  packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
-  `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
-  `credentials`, `scheduler`, `identity`, `bookings`, `venue-service` and `media` have had one
-  since, and none found drift; re-run the command for the current list. `bookings`,
-  `venue-service` and `media` have no `src/schema/index.ts` barrel, so each call site hands the
-  factory the one file its `drizzle.config.ts` generates from (`src/schema/bookings.ts`,
-  `src/schema/service.ts`, `src/schema/images.ts`). `media`'s is blind to the eight triggers
-  `drizzle/0001_image_references.sql` creates, because the factory never reads a trigger; those
-  are guarded by `packages/media/src/image-references.test.ts`.
-  `identity`'s is blind to one thing that matters there: three `persons` unique indexes are over a
-  folded-key expression, and the factory compares an expression index by name, uniqueness, filter
-  and where the expression sits among its parts, never by what it says — measured by changing
-  `foldedKey`'s `lower` to `upper` in `src/schema/persons.ts`, which left the suite at 13 of 13. Of
-  the rest, `fiscal-verifactu` carries a `src/schema/index.ts`
-  barrel, its own migration set and a `src/schema-ownership.test.ts` beside it, which is everything
-  a call site needs to be written from, so it is roughly ten lines now that the factory exists.
-  (That is not a comparison with the four PR #491 landed: `catalogue` has no `schema-ownership.test.ts`
-  and did not need one — the declarations and the set are what the factory reads.) The sets without a call
-  site were left out deliberately, not overlooked: a set getting its first guard may also turn up
-  real drift, and fixing unrelated schema drift would have turned a guard branch into a
-  schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory holds
+  packages holding a `src/schema/schema-conformance.test.ts`; run on 2026-09-23 after the last one,
+  that leaves `fiscal-none` alone. `fiscal-none` needs no suite — its `drizzle/` directory holds
   `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
-  for a declaration to be compared against. **Next action:** `fiscal-verifactu` is the one set left
-  that needs a call site; add it, and treat any drift it reports as its own piece of work.
+  for a declaration to be compared against. The seven added were `credentials`, `scheduler`,
+  `identity`, `bookings`, `venue-service`, `media` and `fiscal-verifactu`, and **none found drift**
+  — each went in over a clean tree and was proven by deleting a declared foreign key or index.
+  `bookings`, `venue-service` and `media` have no `src/schema/index.ts` barrel, so each call site
+  hands the factory the one file its `drizzle.config.ts` generates from (`src/schema/bookings.ts`,
+  `src/schema/service.ts`, `src/schema/images.ts`). Two blind spots reach these sets. The factory
+  never reads a trigger: `media`'s eight in `drizzle/0001_image_references.sql` are guarded by
+  `packages/media/src/image-references.test.ts`, and `fiscal-verifactu`'s append-only pair on
+  `registros_facturacion` by `packages/fiscal-verifactu/src/inmutabilidad.test.ts` and
+  `scripts/append-only-triggers.test.ts`. And it compares an expression index by name, uniqueness,
+  filter and where the expression sits among its parts, never by what it says — which reaches
+  `identity`'s three folded-key `persons` unique indexes, measured by changing `foldedKey`'s `lower`
+  to `upper` in `src/schema/persons.ts`, which left that suite at 13 of 13.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
   longer build — OPEN (2026-09-23).** In `packages/credentials`, `src/migrations.ts` says core
   must migrate first because of "the baseline's `tenants` foreign key", and
