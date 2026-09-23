@@ -2219,6 +2219,17 @@ image constraints under *Detail → Box image*.
   which this engine can have; and `assertIdentifier` in that package has no product caller at all
   (only its own suite and the barrel re-export), while `generatePassword`'s single caller is
   `apps/server/src/break-glass.ts`. Each is a rename or a deletion rather than a comment fix.
+  Two more the sweep left, both found by the review wave rather than by the sweep's own keys, and
+  both invisible to a grep over comments because they live in STRINGS and in IDENTIFIERS:
+  `apps/server/src/device-session.test.ts` and `apps/server/src/management-api-passkey.test.ts`
+  still name the engine in test TITLES (`(real Postgres)`, `before it reaches Postgres`) — those
+  strings are what CI prints, so somebody may be grepping them; and the handle a suite binds
+  `useVenueDb` to is still called `pg` (`pg.db`) across a large share of the suites that use it,
+  which is the widest surviving spelling of the old engine among IDENTIFIERS — prose mentions are
+  far more numerous and are not rename candidates. Both are
+  mechanical renames with no behaviour attached. Run
+  `grep -rln 'const pg = useVenueDb\|pg\.db' --include='*.test.ts' packages apps` for the current
+  set rather than trusting a number written here.
 
 - **Two fiscal-package comments that need a probe, not a reword — OPEN (T2, 2026-09-23).**
   `packages/fiscal-verifactu/src/chain.test.ts`'s header says a previous test's committed rows are
@@ -2226,7 +2237,17 @@ image constraints under *Detail → Box image*.
   `registros_facturacion` anyway because the append-only trigger blocks it. Both look stale against
   `packages/db/src/testing/venue-db.ts`, where `resetPerTest` DEFAULTS to true and the reset drops
   every trigger, deletes every migrated table and recreates the triggers — but discriminating the two
-  readings needs a run, and T2 was comments-only in that package by design (`RUNNER.md` H2). The same
+  readings needs a run, which T2 did not do. (T2's own summary called its fiscal diff comments-only.
+  That was wrong, and the run-it review seat caught it: the package also changes executable code, in
+  `drain.ts` and in its manifest. Do not trust a list of the pieces — take it from the diff, with
+  `git diff <base> -- packages/fiscal-verifactu/ | grep -E "^[+-]" | grep -vE "^[+-]\s*(\*|//|/\*)"`.
+  What T2 did in `drain.ts` was take out a call to a row-locking helper in `@waitron/db` and put a
+  plain `select` in its place; the helper had already been reduced to exactly that select, so the
+  statement the drainer sends is unchanged. Nothing there touches what `RUNNER.md` H2 protects, and
+  that was checked rather than assumed — listing every write statement in the file with
+  `grep -nEo "(insert into|update|delete from) +[a-z_]+" packages/fiscal-verifactu/src/drain.ts`,
+  none of them names `registros_facturacion`, which appears only in joins, one subquery and prose,
+  so the drainer computes no huella, allocates no invoice number and writes no chain.) The same
   reseed prose survives in `drain.test.ts` and `write-path.e2e.test.ts`. Separately,
   `drain.test.ts` describes a `VerifactuBackend.drain` method; the class has no such method, and the
   drain pass reaches it through the fiscal slot. **Next action:** one probe for the reset question,
@@ -2236,8 +2257,10 @@ image constraints under *Detail → Box image*.
   `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
   stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
   never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`.
-  `CLAUDE.md` said "only `bench/sqlite-failover` starts a container now", which was false, and T2
-  corrected the rule to name both rigs and the asymmetry. Either stamp the label in that rig or accept
+  `CLAUDE.md` said "only `bench/sqlite-failover` starts a container now", which was false. T2
+  corrected it, and the rule there now states the asymmetry as a property and points at
+  [ci-and-gates.md](developers/ci-and-gates.md), which carries the receipt naming each rig.
+  Either stamp the label in that rig or accept
   cleaning it by hand — but the rig's schema is three storage decisions out of date anyway (its own
   entry above), so the two decisions belong together.
 
