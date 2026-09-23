@@ -38,6 +38,13 @@ describe("FISCAL_NONE_SLOT", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("binds no authority endpoint into activation evidence, for no secret or a certificate secret", () => {
+    const target = FISCAL_NONE_SLOT.activationReadinessTarget!;
+    expect(target(undefined)).toBeNull();
+    // A secret the verifactu slot turns into its preproduction AEAT endpoint.
+    expect(target({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" })).toBeNull();
+  });
+
   it("declares no provisioning secret", () => {
     expect(FISCAL_NONE_SLOT.provisioningSecret).toBeUndefined();
   });
