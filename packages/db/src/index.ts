@@ -176,15 +176,17 @@ export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
  * Testing infrastructure exported for reuse by a module package's OWN test suite: the small,
- * dependency-light readers every immutability suite in this repo is built from. Nothing that
- * drags a test-only dependency in with it belongs here — it would become a transitive dependency of
- * the production surface for every consumer of this package.
+ * dependency-light readers every immutability suite in this repo is built from, and the crafted
+ * engine refusal a translator's unit test hands in. Nothing that drags a test-only dependency in
+ * with it belongs here — it would become a transitive dependency of the production surface for
+ * every consumer of this package.
  *
  * `packages/fiscal-verifactu`'s `inmutabilidad.test.ts` is the first consumer outside this package:
  * it reproduces `immutability.test.ts`'s pattern against its own module-owned table and needs the
  * same wrapped-driver-error readers this package's own suite uses.
  */
 export { captureError, driverErrorCode, engineErrorMessage } from "./testing/errors.js";
+export { refusalError, type Refusal, type RefusalError } from "./testing/refusals.js";
 
 // english-only.ts's GENERIC_PACKAGES/SPANISH_WORDS/findSpanish/sourceFilesIn are deliberately
 // NOT re-exported here, despite costing nothing at runtime in isolation. `english-only.ts`

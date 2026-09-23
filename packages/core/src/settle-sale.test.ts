@@ -7,6 +7,7 @@ import {
   isRefusal,
   driverErrorCode,
   POST_SETTLEMENT_REFUSAL,
+  refusalError,
   sales,
   saleSettlements,
   saleVoids,
@@ -373,7 +374,7 @@ describe("settleSale — error propagation", () => {
     // already-settled. Mirrors record-void.test.ts's identical "propagates a database error that is
     // not a unique violation" stub for recordVoid's analogous catch/rethrow. A hand-built
     // Transaction stub rather than the suite's real handle: there is no second schema-level constraint on
-    // `sale_settlements` to provoke a genuinely different SQLSTATE, so this drives settleSale's own
+    // `sale_settlements` to provoke a genuinely different refusal, so this drives settleSale's own
     // catch/rethrow branch directly. A tenderless (€0) settlement so the ONLY insert reached is the
     // `sale_settlements` one that rejects — no tender insert runs before it.
     let selects = 0;
@@ -407,21 +408,20 @@ describe("settleSale — error propagation", () => {
   });
 
   it("translates the tenders post-settlement guard to sale.already_settled", async () => {
-    // The OTHER concurrent-loser interleaving, driven directly. The real-PG race above forces the
-    // loser onto the `sale_settlements` UNIQUE; here the winner has already COMMITTED, so the
-    // loser's tender INSERT trips the `tenders_reject_post_settlement` trigger instead. That
-    // trigger fires iff a settlement row already exists for the sale, so its refusal on the tender
-    // insert always means "already settled" and must surface as `sale.already_settled` — the same
-    // code the UNIQUE path maps to — rather than a raw driver error a retry/idempotency caller
-    // would not recognise. A hand-built Transaction stub (like the rethrow test above): the
-    // deterministic post-commit interleaving is awkward to force on a live DB, and this drives
-    // settleSale's own tenders-insert catch/translate branch directly. Tenders are PRESENT (unlike
-    // the €0 rethrow test) so the tenders INSERT — the one the trigger fires on — is reached.
+    // The OTHER concurrent-loser interleaving, driven directly. The "two settlements started
+    // together" case above refuses its loser at the pre-check; here the pre-check sees no
+    // settlement and the winner has COMMITTED before the tender insert, so the loser's tender
+    // INSERT trips the `tenders_reject_post_settlement` trigger instead. That trigger fires iff a
+    // settlement row already exists for the sale, so its refusal on the tender insert always means
+    // "already settled" and must surface as `sale.already_settled` — the same code the UNIQUE path
+    // maps to — rather than a raw driver error a retry/idempotency caller would not recognise. A
+    // hand-built Transaction stub (like the rethrow test above): the deterministic post-commit
+    // interleaving is awkward to force on a live DB, and this drives settleSale's own
+    // tenders-insert catch/translate branch directly. Tenders are PRESENT (unlike the €0 rethrow
+    // test) so the tenders INSERT — the one the trigger fires on — is reached.
     //
-    // The refused error carries what a `RAISE(ABORT, …)` really arrives with on this engine: the
-    // raise text as the message, and `errcode` 1811. Measured 2026-09-22 against `node:sqlite` on
-    // Node v26.7.0; the refusal is driven for real in
-    // `packages/db/src/constraint-target.sqlite.test.ts`.
+    // The refused error is the trigger's refusal, from `refusalError`, whose own suite holds it
+    // equal to the engine's.
     let selects = 0;
     const fakeTx = {
       select: () => ({
@@ -441,9 +441,7 @@ describe("settleSale — error propagation", () => {
           Promise.reject(
             // The trigger's own words, read from the one place that declares them, so this case
             // cannot pass against a wording the migration no longer raises.
-            Object.assign(new Error(POST_SETTLEMENT_REFUSAL), {
-              errcode: 1811,
-            }),
+            refusalError({ trigger: POST_SETTLEMENT_REFUSAL }),
           ),
       }),
     } as unknown as Transaction;
@@ -471,11 +469,12 @@ describe("settleSale — error propagation", () => {
     // SAME result code the post-settlement trigger's raise arrives under, because SQLite implements
     // `ON DELETE RESTRICT` with an internal trigger of its own. Only the wording separates the two,
     // so this case fails unless the translation reads the message and not just the code. Control
-    // run 2026-09-22: with the message replaced by the trigger's exact words and nothing else
-    // changed, it fails on `expected AppError: sale.already_settled to not be an instance of
-    // AppError`. Tenders are present so the tenders INSERT is the one reached.
+    // run 2026-09-23: with `{ restrict: true }` replaced by `{ trigger: POST_SETTLEMENT_REFUSAL }`
+    // and nothing else changed, it fails on
+    // `expected AppError: sale.already_settled { …(2) } to not be an instance of AppError`. Tenders
+    // are present so the tenders INSERT is the one reached.
     let selects = 0;
-    const refused = Object.assign(new Error("FOREIGN KEY constraint failed"), { errcode: 1811 });
+    const refused = refusalError({ restrict: true });
     const fakeTx = {
       select: () => ({
         from: () => ({

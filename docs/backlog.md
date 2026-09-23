@@ -3767,13 +3767,21 @@ What the preparation tasks left, with F1's own answers where it found them:
   slice-1 spec carries a stale "211 files" in four more places; and
   `superpowers/plans/2026-09-03-membership-slice-3-distribution.md` designates
   `apps/server/src/membership-adopt.test.ts`, which does not exist.
-- **Deferred cleanups, each with its reason in its PR** — P4a's hand-written holder/waiter contention
-  scaffold (sharing it means editing `packages/db/src/testing/lifecycle.ts`) and its minutes-long
-  lock-clause negative control; a `refusalError({ sqlstate, table, columns })` helper the P10 refusal
-  tests could share; P6's deferred codec, constant and optional-shape merges; P5's three declined
-  review suggestions; and P7's three (assert `drizzle-kit generate` is a no-op; unify the three
-  root-project schema readers into `packages/sync-enrolment/src/migration-tables.ts`; the twice-built
-  table-to-class map).
+- **Deferred cleanups, each with its reason in its PR** — P6's deferred codec, constant and
+  optional-shape merges; P5's three declined review suggestions; and P7's three (assert
+  `drizzle-kit generate` is a no-op; unify the three root-project schema readers into
+  `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
+  - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
+    **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
+    contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,
+    went with it; #489 deleted both, so there is nothing left to share or bound (receipt:
+    `git show aabdde6a8 --summary` prints `delete mode` for both).
+  - The P10 shared refusal helper — **DONE** (2026-09-23, PR #527): `refusalError` in
+    `packages/db/src/testing/refusals.ts`, whose suite provokes each refusal for real and holds the
+    crafted one equal to it. Eight test files build their engine-shaped refusals with it; the fakes
+    the engine could never produce stay hand-written on purpose. A few other suites still build
+    engine-shaped refusals by hand, among them `packages/provisioning/src/cli.test.ts` and
+    `packages/scheduler/src/store.concurrency.test.ts`; converting them was not part of P10.
 
 ---
 

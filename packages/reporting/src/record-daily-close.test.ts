@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, constraintTarget, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  constraintTarget,
+  refusalError,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -283,10 +289,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
 
     const error = await captureError(() => record("2026-08-05", []));
     expect(isAppError(error)).toBe(false); // NOT translated to close.already_closed
-    // The raw unique violation surfaces, and it is the SEQUENCE key's. This asserted the SQLSTATE
-    // `23505`; on this engine `code` is the fixed `"ERR_SQLITE_ERROR"` for every failure alike, so
-    // that spelling would pass for a refusal of any kind. The key names which index collided,
-    // which is what the case is about — strictly more than the SQLSTATE said.
+    // The raw unique violation surfaces, and it is the SEQUENCE key's. The key is asserted rather
+    // than `code`, which is the fixed `"ERR_SQLITE_ERROR"` for every refusal alike.
     expect(constraintTarget(error)).toEqual({
       table: "daily_closes",
       columns: ["node_id", "sequence_no"],
@@ -301,11 +305,10 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     // business_day) — with sequence_no moved clear — so the refusal is the business-day key's and
     // not the sequence key's.
     //
-    // `id` is named and bound, where it used to be left to the column's default. It has to be: the
-    // default is a JavaScript `$defaultFn(newId)` on this engine and a raw INSERT never reaches
-    // one, so the row was refused `NOT NULL constraint failed: daily_closes.id` and the case read
-    // back the id as the key — passing the result code it then asserted, and proving nothing about
-    // the business-day key.
+    // `id` is named and bound because its default is a JavaScript `$defaultFn(newId)` that a raw
+    // INSERT never reaches. Left out, the row is refused `NOT NULL constraint failed:
+    // daily_closes.id` and the case reads back the id as the key, proving nothing about the
+    // business-day key.
     await record("2026-08-04", []);
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
@@ -329,27 +332,12 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
 
 describe("isBusinessDayConflict", () => {
   // Crafted errors, no database — the walk's branches are cheap to cover directly, exactly as
-  // @waitron/db's own suite does for its (structurally identical) predicate.
-  //
-  // THE CRAFTED SHAPE IS A QUOTATION, not a guess. It was PostgreSQL's `{ code: "23505", table,
-  // detail: "Key (…)=(…) already exists." }`; this engine reports an extended RESULT CODE on
-  // `errcode` and names the key in the MESSAGE, with `code` fixed at `"ERR_SQLITE_ERROR"` for every
-  // failure alike. Measured 2026-09-22 on Node v26.7.0 against `node:sqlite`, one real refusal per
-  // row, on a table with exactly this schema's two unique indexes:
-  //
-  //   business-day key  errcode 2067  "UNIQUE constraint failed: daily_closes.node_id, daily_closes.business_day"
-  //   sequence key      errcode 2067  "UNIQUE constraint failed: daily_closes.node_id, daily_closes.sequence_no"
-  //   primary key       errcode 1555  "UNIQUE constraint failed: daily_closes.id"
-  //   foreign key       errcode  787  "FOREIGN KEY constraint failed"
-  //
-  // The two real-refusal cases above pin the same shape through the driver, which is what stops
-  // this block proving only that the parser reads the craft.
-  const uniqueOn = (columns: readonly string[]) =>
-    `UNIQUE constraint failed: ${columns.map((c) => `daily_closes.${c}`).join(", ")}`;
-  const conflict = {
-    errcode: 2067,
-    message: uniqueOn(["node_id", "business_day"]),
-  };
+  // @waitron/db's own suite does for its (structurally identical) predicate. Each comes from
+  // `refusalError`, whose own suite holds it equal to the engine's; the two real-refusal cases above
+  // pin the same shapes through the driver.
+  const conflict = refusalError({
+    unique: { table: "daily_closes", columns: ["node_id", "business_day"] },
+  });
 
   it("recognises a bare business-day unique violation", () => {
     expect(isBusinessDayConflict(conflict)).toBe(true);
@@ -361,24 +349,27 @@ describe("isBusinessDayConflict", () => {
 
   it("does NOT match a sequence-key collision (same code and table, different columns)", () => {
     expect(
-      isBusinessDayConflict({ errcode: 2067, message: uniqueOn(["node_id", "sequence_no"]) }),
+      isBusinessDayConflict(
+        refusalError({ unique: { table: "daily_closes", columns: ["node_id", "sequence_no"] } }),
+      ),
     ).toBe(false);
   });
 
   it("does NOT match the same columns on a different table", () => {
     expect(
-      isBusinessDayConflict({
-        errcode: 2067,
-        message:
-          "UNIQUE constraint failed: daily_close_chain.node_id, daily_close_chain.business_day",
-      }),
+      isBusinessDayConflict(
+        refusalError({
+          unique: { table: "daily_close_chain", columns: ["node_id", "business_day"] },
+        }),
+      ),
     ).toBe(false);
   });
 
   it("does NOT match a non-unique error on the same table and columns", () => {
-    // 787 is a foreign-key refusal. It carries no key at all in its own message, so the message is
-    // kept as the unique one's on purpose: what must reject it is the CLASS, not the text.
-    expect(isBusinessDayConflict({ ...conflict, errcode: 787 })).toBe(false);
+    // Hand-built, because the engine never writes it: 787 is a foreign-key refusal, whose own
+    // message names no key, so the unique one's message is kept on purpose — what must reject it is
+    // the CLASS, not the text.
+    expect(isBusinessDayConflict({ errcode: 787, message: conflict.message })).toBe(false);
   });
 
   it("terminates on a self-referential cause chain", () => {
@@ -398,6 +389,6 @@ describe("isBusinessDayConflict", () => {
   it("returns false for null and non-object values", () => {
     expect(isBusinessDayConflict(null)).toBe(false);
     expect(isBusinessDayConflict(undefined)).toBe(false);
-    expect(isBusinessDayConflict(uniqueOn(["node_id", "business_day"]))).toBe(false);
+    expect(isBusinessDayConflict(conflict.message)).toBe(false);
   });
 });

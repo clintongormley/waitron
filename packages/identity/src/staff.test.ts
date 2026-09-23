@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, refusalError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
@@ -248,12 +248,9 @@ describe("setEmail", () => {
 // the translator's branches directly with crafted errors — no DB — so each re-throw branch is
 // covered deterministically, including shapes a real collision cannot easily produce.
 //
-// The crafted errors carry THIS engine's words: `errcode` (a number) and a message SQLite writes,
-// where they used to carry PostgreSQL's `code: "23505"` with the table and key in a `detail`
-// string. That rewrite is not cosmetic — every case below except the first would have gone on
-// PASSING unread after the engine changed, because a matcher that can never match re-throws
-// everything, and four of these five cases assert a re-throw. Each message below is a shape driven
-// against the migrated database in person-constraints.db.test.ts.
+// Each crafted refusal comes from `refusalError`, whose own suite holds it equal to the engine's.
+// Four of these five cases assert a re-throw, which a matcher that can never match also passes, so
+// the one translating case is what shows the matcher reads these shapes at all.
 // asEmailTaken is exported from staff.ts for exactly this, not from the package barrel.
 describe("asEmailTaken", () => {
   // A layer carrying the result code and no message at all: the engine always writes one, but a
@@ -272,15 +269,7 @@ describe("asEmailTaken", () => {
   it("translates a collision on the login-email index", () => {
     let thrown: unknown;
     try {
-      asEmailTaken(
-        {
-          cause: {
-            errcode: 2067,
-            message: "UNIQUE constraint failed: index 'persons_tenant_email_uq'",
-          },
-        },
-        "o@x.com",
-      );
+      asEmailTaken({ cause: refusalError({ uniqueIndex: "persons_tenant_email_uq" }) }, "o@x.com");
     } catch (e) {
       thrown = e;
     }
@@ -290,15 +279,11 @@ describe("asEmailTaken", () => {
   // A unique violation on a DIFFERENT persons key (the id PK here, or any index added later) must
   // NOT be mislabelled person.email_taken — it is re-thrown untouched. Proof-by-deletion: drop the
   // index gate in asEmailTaken and this fails (the error becomes person.email_taken). (Copilot,
-  // PR #172.) The primary key arrives under its own result code, 1555 rather than 2067, and names
-  // the table and column rather than an index — both shapes are driven in
-  // person-constraints.db.test.ts.
+  // PR #172.) The primary key arrives under its own result code and names the table and column
+  // rather than an index.
   it("re-throws a unique violation on a persons key that is not the email index", () => {
     const original = {
-      cause: {
-        errcode: 1555,
-        message: "UNIQUE constraint failed: persons.id",
-      },
+      cause: refusalError({ primaryKey: { table: "persons", column: "id" } }),
     };
     let thrown: unknown;
     try {
@@ -309,18 +294,14 @@ describe("asEmailTaken", () => {
     expect(thrown).toBe(original);
   });
 
-  // A collision on another table's email index is not this refusal. The
-  // discriminator moved with the engine: it was the TABLE reported beside the key, and it is now
-  // the index's NAME, which carries the table because SQLite keeps every index in one namespace
+  // A collision on another table's email index is not this refusal. The index's NAME is the
+  // discriminator, and it identifies the table because SQLite keeps every index in one namespace
   // per database — a second `CREATE UNIQUE INDEX persons_tenant_email_uq` on another table is
-  // refused `index persons_tenant_email_uq already exists` (driven on node:sqlite, Node v26.7.0,
-  // /tmp/f1-index-namespace-probe.mjs).
+  // refused `index persons_tenant_email_uq already exists` (driven 2026-09-23 on node:sqlite, Node
+  // v26.7.0).
   it("re-throws a collision on another table's email index", () => {
     const original = {
-      cause: {
-        errcode: 2067,
-        message: "UNIQUE constraint failed: index 'invitees_email_uq'",
-      },
+      cause: refusalError({ uniqueIndex: "invitees_email_uq" }),
     };
     let thrown: unknown;
     try {
@@ -335,7 +316,7 @@ describe("asEmailTaken", () => {
   // asks the CLASS as well as the name, so this can never be read as an index collision.
   it("re-throws a non-unique error unchanged", () => {
     const original = {
-      cause: { errcode: 1299, message: "NOT NULL constraint failed: persons.display_name" },
+      cause: refusalError({ notNull: { table: "persons", column: "display_name" } }),
     };
     let thrown: unknown;
     try {

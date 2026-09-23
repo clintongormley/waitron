@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
+import { captureError, constraintTarget, isUniqueViolation, refusalError } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
@@ -306,20 +306,14 @@ describe("appendToChain", () => {
     // START), and the case above reaches three real refusals only by occupying the position first,
     // with no concurrency at all. appendToChain touches only tx.transaction on this path, so the
     // stub is exactly that one method and nothing else — a wider fake would let the test keep
-    // passing if the retry loop started doing something else.
+    // passing if the retry loop started doing something else. The forged rejection is the
+    // chain-position index's refusal, from `refusalError`, whose own suite holds it equal to the
+    // engine's.
     const alwaysCollides = {
       transaction: () =>
         Promise.reject(
-          // The `errcode` + `message` pair this engine reports for a unique-index collision, not
-          // the PostgreSQL SQLSTATE this used to carry. Copied from the real refusal
-          // "rejects a second record claiming an occupied chain position" asserts on, so the stub
-          // and the database agree.
-          Object.assign(new Error("UNIQUE constraint failed: registros_facturacion.node_id"), {
-            cause: {
-              errcode: 2067,
-              message:
-                "UNIQUE constraint failed: registros_facturacion.node_id, registros_facturacion.secuencia",
-            },
+          refusalError({
+            unique: { table: "registros_facturacion", columns: ["node_id", "secuencia"] },
           }),
         ),
     } as never;
@@ -420,8 +414,13 @@ describe("appendToChain", () => {
     // A foreign-key violation retried three times is three identical failures reported as
     // contention, sending whoever reads the incident after a race that never happened.
     const saleId = await seedSale(pg.db, till, 1);
+    const refusal = refusalError({ foreignKey: true });
+    let calls = 0;
     const alwaysFk = {
-      transaction: () => Promise.reject(Object.assign(new Error("fk"), { code: "23503" })),
+      transaction: () => {
+        calls++;
+        return Promise.reject(refusal);
+      },
     } as never;
 
     const error = await appendToChain(
@@ -430,8 +429,8 @@ describe("appendToChain", () => {
       altaFor(till.tillId, saleId, 1, 1),
     ).catch((caught: unknown) => caught);
 
-    expect(error).not.toBeInstanceOf(AppError);
-    expect(error).toMatchObject({ code: "23503" });
+    expect(calls).toBe(1);
+    expect(error).toBe(refusal);
   });
 });
 
