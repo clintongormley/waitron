@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
-  CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
   isPgError,
@@ -15,9 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
-  // Core is not needed by these cases: every one passed with core removed from this list, and with
-  // the two sets reversed (measured 2026-09-23). It is listed first, in manifest order.
-  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  migrations: [SCHEDULER_MIGRATIONS],
 });
 
 /**

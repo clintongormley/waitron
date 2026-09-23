@@ -13,10 +13,8 @@ import { applyVenue } from "./venue-apply.js";
 // (`venue-apply.pg.test.ts`) was deleted with the PostgreSQL deployment model: there are no roles
 // left for it to be about.
 //
-// The full manifest is migrated (identity before fiscal; sync before fiscal, which fiscal's SP-3a
-// 0014 capture migration needs): applyVenue
-// now seeds an admin `persons` row, so identity's set has to be migrated here too. (`persons` no
-// longer has a foreign key onto `tenants` — the column it used to carry is gone.)
+// The full manifest is migrated. applyVenue seeds an admin `persons` row
+// (`./venue-apply.ts`), so identity's set has to be among them.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });

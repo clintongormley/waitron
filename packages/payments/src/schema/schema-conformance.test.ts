@@ -13,8 +13,10 @@ import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "payments",
-  // Core first: these tables carry foreign keys into its `sales`, `nodes` and `devices`. It is the
-  // list this package's own database suites apply, `src/migrations.test.ts` among them.
+  // Core, because these tables carry foreign keys into its `sales`, `nodes`, `devices` and
+  // `working_orders`, so this is the database those keys resolve in. Not because the migration
+  // needs it: with an empty list the set still builds and every case still passes (measured
+  // 2026-09-23).
   prerequisites: [CORE_MIGRATIONS],
   subject: PAYMENTS_MIGRATIONS,
   declarations: barrel,

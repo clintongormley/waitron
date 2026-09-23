@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
-  CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   captureError,
   isPgError,
@@ -14,9 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core is not needed by these cases: every one passed with core removed from this list, and with
-  // the two sets reversed (measured 2026-09-23). It is listed first, in manifest order.
-  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  migrations: [CREDENTIALS_MIGRATIONS],
 });
 
 /** A well-formed row body, so each test below varies exactly one thing. */
@@ -154,7 +151,7 @@ describe("the credentials migration set", () => {
  *
  * Both also lost their subject. `credential_tenants(text)` was created by
  * `drizzle/0001_credentials_baseline_sql.sql` (`git show
- * aabdde6a8^:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which this branch
+ * aabdde6a8^:packages/credentials/drizzle/0001_credentials_baseline_sql.sql`), which #489
  * deleted, and this engine defines no SQL functions of its own. The whole set is now one
  * `CREATE TABLE` (`packages/credentials/drizzle/0000_baseline.sql`).
  *

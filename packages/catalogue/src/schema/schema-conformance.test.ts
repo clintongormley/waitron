@@ -14,8 +14,9 @@ import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "catalogue",
-  // Core first: these tables carry foreign keys into its `categories` and `products`. It is the
-  // list this package's own database suites apply, `src/migrations.test.ts` among them.
+  // Core, because these tables carry foreign keys into its `catalogues`, `categories` and
+  // `products`, so this is the database those keys resolve in. Not because the migration needs it:
+  // with an empty list the set still builds and every case still passes (measured 2026-09-23).
   prerequisites: [CORE_MIGRATIONS],
   subject: CATALOGUE_MIGRATIONS,
   declarations: barrel,

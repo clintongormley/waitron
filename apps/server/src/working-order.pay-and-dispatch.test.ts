@@ -1794,8 +1794,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   // leaves its station queue. The end-to-end proof through `collectOrder` (not a raw UPDATE): fire a
   // placed order to the default station, confirm it queues, collect it, and confirm it drops — with the
   // fiscal result byte-unchanged. Both modes are pinned: Mode T settles through `fileImmediateSale`,
-  // Mode I through the direct settle UPDATE, and BOTH must stamp `collected_at` in the SAME placed →
-  // settled transition (the enforce_transition trigger rejects a settled → settled edit).
+  // Mode I through the direct settle UPDATE, and both stamp `collected_at` in the UPDATE that
+  // settles the order; these cases check only that it ends up set.
   it("Mode T: collectOrder stamps collected_at, dropping the order from its station queue, fiscal result unchanged", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);

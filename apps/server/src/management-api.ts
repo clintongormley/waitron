@@ -482,7 +482,8 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 }
 
 /**
- * The authorize gate the venue-configuration routes run their database work through: open a
+ * The authorize gate the zone, table, table-placement, station, station-assignment, bump-mode,
+ * course, product-course and fire-control routes run their database work through: open a
  * transaction, confirm the caller's management session carries `venue.configure`, then run `fn`.
  * The route's own `requireManagementSession` (→ 401) runs before this.
  */

@@ -92,8 +92,9 @@ async function migrateEverySet(
 ): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
-    // Ordering is the runtime's responsibility and nothing enforces it — core carries `tenants`,
-    // which every other set has a foreign key to. The manifest states that order out loud.
+    // Sets apply in the order the caller passes. Boot derives it from each module's declared
+    // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
+    // come before media, whose triggers are on core's `products`.
     for (const set of options) {
       await runMigrations(store.venue, set);
       await assertSetApplied(store.venue, set);

@@ -655,9 +655,8 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
  * UPDATE — passed `true` ONLY by `collectOrder`'s Mode-T branch (a counter collect hands the order to
  * the customer, so it must leave its station queue). A walk-up/retrieved pay (`payWorkingOrder`) and a
  * Mode-P prepay (which settles BEFORE `sendToPrep` fires) leave it `false`, so `collected_at` stays
- * NULL and the order — once fired — stays on the station queue until it is actually collected. Stamping
- * it here rather than in a later UPDATE is required: a settled → settled edit is rejected by
- * `working_orders_enforce_transition`. NON-FISCAL — the alta path never reads it (H2 huella-identity).
+ * NULL and the order — once fired — stays on the station queue until it is actually collected.
+ * NON-FISCAL — the alta path never reads it (H2 huella-identity).
  */
 async function fileImmediateSale(
   tx: Transaction,
@@ -1112,9 +1111,8 @@ async function finalizeCapture(
       // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
       // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
       // A counter collect (`markCollected`, the order was `placed`) ALSO stamps the order-level
-      // `collected_at` handover marker in this same transition — a later UPDATE would be settled →
-      // settled, which the trigger rejects. Same instant as `settled_at`; NON-FISCAL (the alta path
-      // never reads it). A walk-up `open` → settle leaves it NULL.
+      // `collected_at` handover marker in this same transition, at the same instant as `settled_at`;
+      // NON-FISCAL (the alta path never reads it). A walk-up `open` → settle leaves it NULL.
       await tx
         .update(workingOrders)
         .set({

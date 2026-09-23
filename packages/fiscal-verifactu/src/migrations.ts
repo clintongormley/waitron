@@ -4,9 +4,10 @@ import { FISCAL_CLASSIFICATION } from "./classification.js";
 
 /**
  * This package's migration set. Exported as data rather than as a `runFiscalMigrations()`
- * function because ordering is the RUNTIME's responsibility — nothing in Drizzle enforces that
- * core migrations run before module ones, and a function that ran them itself would invite a
- * caller to run it first. Handing back a descriptor makes the caller state the order out loud.
+ * function because ordering across packages is the RUNTIME's responsibility, and a descriptor makes
+ * the caller state that order out loud. The set migrates before or after core alike (measured
+ * 2026-09-23 through `applyMigrations`), but the code needs core PRESENT: `liveSeriesBases` reads
+ * core's `invoice_series` (`./reserved-series.ts:55`).
 
  * `appendOnlyTables` is the third field a caller needs and drizzle does not: the tables this set's
  * own module declared `appendOnly()`. It travels WITH the set because that is the only level at

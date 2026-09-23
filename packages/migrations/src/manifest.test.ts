@@ -7,7 +7,7 @@ import { isAppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
 describe("the migration manifest", () => {
-  it("puts core first, because media creates triggers on core's `products` table", () => {
+  it("puts core first; media, which creates triggers on core's `products`, will not migrate without it", () => {
     expect(manifestSets()[0]?.name).toBe("core");
   });
 

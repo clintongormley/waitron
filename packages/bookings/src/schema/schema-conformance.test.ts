@@ -16,10 +16,11 @@ import * as declarations from "./bookings.js";
 
 describeSchemaConformance({
   subjectName: "bookings",
-  // Core first: `bookings` carries foreign keys into its `locations`, `dining_tables` and
+  // Core, because `bookings` carries foreign keys into its `locations`, `dining_tables` and
   // `working_orders`, and `drizzle/0000_baseline.sql` names no other set's table and creates no
-  // trigger. Most of the package's other database suites apply the whole manifest
-  // (`src/testing/migrations.ts`); this set needs only core.
+  // trigger, so this is the database those keys resolve in. Not because the migration needs it:
+  // with an empty list the set still builds and every case still passes (measured 2026-09-23). Most
+  // of the package's other database suites apply the whole manifest (`src/testing/migrations.ts`).
   prerequisites: [CORE_MIGRATIONS],
   subject: BOOKINGS_MIGRATIONS,
   declarations,

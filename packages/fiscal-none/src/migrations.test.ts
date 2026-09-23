@@ -8,7 +8,8 @@ import { FISCAL_NONE_MIGRATIONS } from "./migrations.js";
 // on top of core. useVenueDb runs the migrations in a beforeAll, so reaching a test body at all
 // means the empty set applied without a drizzle error.
 const suite = useVenueDb({
-  // Core first — nothing enforces cross-package ordering, so it is explicit here.
+  // Core is listed because the probe is of the empty set applied on top of it, in manifest order;
+  // the case also passes with core left out (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, FISCAL_NONE_MIGRATIONS],
 });
 

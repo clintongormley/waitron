@@ -10,9 +10,10 @@ import { createCardProviderPool } from "./card-provider-pool.js";
 
 // The pool's own contract (build-once, cache, evict-to-rebuild, unknown-id, propagate-a-build-
 // failure) is provider-agnostic, so most cases here use a FAKE CardProviderContribution with a spy
-// `build` — deterministic call counting with no vault I/O. One case wires the real SumUp seat to
-// prove the pool threads its deps into a real seat's `build`; that seat reads its credential only on
-// first use (`packages/payments-sumup/src/card-provider.ts:88`), so the case seals none.
+// `build` — deterministic call counting with no vault I/O. One case builds the real SumUp seat
+// through the pool and checks it is returned and cached; the deps the pool passes are not
+// exercised, because that seat reads its credential only on first use (`deferredClient` in
+// `packages/payments-sumup/src/card-provider.ts`), so the case seals none.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",

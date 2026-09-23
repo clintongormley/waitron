@@ -2088,14 +2088,25 @@ image constraints under *Detail → Box image*.
   table: main.products`, because `media/drizzle/0001_image_references.sql` creates triggers ON
   core's `products`. So: `scheduler` and `identity`'s `migrations.ts` say the set migrates before
   core; `credentials`' says the same, plus that the code needs core present (`credentialProvisioned`
-  reads `tenants`, the drain reads `change_log`); the two `migrations.test.ts` comments say core is
-  not needed by their cases; the manifest test is now "puts core first, because media creates
-  triggers on core's `products` table"; the two `workforce-es` suites name the setup's seeds and
+  reads `tenants`, the drain reads `change_log`); the two `migrations.test.ts` suites no longer
+  list core; the manifest test is now "puts core first; media, which creates triggers on core's
+  `products`, will not migrate without it"; the two `workforce-es` suites name the setup's seeds and
   `convenio_config`'s `locations` key; and the two demo scripts say only that the filter keeps
-  manifest order. No production order changed. Left with the same shape and not touched: the "must
-  run before these" reasons in `packages/workforce/src/migrations.ts`,
-  `packages/workforce-es/src/migrations.ts` and `packages/payments/src/migrations.ts` — each of those
-  sets also migrated cleanly before core in the second experiment.
+  manifest order. No production order changed. The same reason, or "ordering is the runtime's job
+  and nothing enforces it" beside a list, was then corrected in more places, rechecked the same
+  day: `applyMigrations` applied `workforce` ahead of identity and core, and `workforce-es`,
+  `payments` and `fiscal-verifactu` ahead of core, all cleanly, while `media` in the same run was
+  refused. So those four `migrations.ts` now say their set migrates before or after core, with
+  `payments` and `fiscal-verifactu` naming the core table their code reads; `workforce`'s
+  `migrations.test.ts` names the seeds its cases need core for (without core it fails `no such
+  table: tenants`, then `locations`), and `fiscal-none`'s says its case passes without core; the
+  `schema-conformance.test.ts` comments of `workforce`, `payments`, `catalogue` and `bookings` say
+  their prerequisites are the database the set's keys resolve in, not something the migration
+  needs (each suite passes with an empty list); the worked example in
+  `docs/developers/testing-guide.md` now points at workforce's conformance call site; and
+  `packages/migrations/src/apply.ts`'s loop comment says sets apply in the order the caller passes,
+  which boot derives from each module's declared `requires` (`orderedMigrationSets`), and gives
+  media's triggers on core's `products` as the reason core must come first.
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,
@@ -3519,7 +3530,9 @@ it; and a correction must not decrement a count where it should drop it.
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls
   `requireVenueCfg`, because each verb it runs takes `cfg` itself. Other `void cfg` lines remain in
-  `apps/server/src` (`git grep -n 'void cfg;' apps/server/src`); nobody has looked at them.
+  `apps/server/src` (`git grep -n 'void cfg;' apps/server/src`), unchanged. Some are `asApp` test
+  helpers of the same shape as the one fixed; the rest are other test helpers and production
+  functions (`apps/server/src/working-order.ts` holds several) that take `cfg` and discard it.
 - **Three dangling pointers — DONE (2026-09-23, branch `chore/slice1-code-cleanups`), with one
   left on purpose.** `apps/server/src/testing/global-setup.ts` was no longer cited anywhere under
   `apps`, `packages` or `scripts`; the four `git show origin/main:…/testing/global-setup.ts`
@@ -3537,8 +3550,14 @@ it; and a correction must not decrement a count where it should drop it.
   the boot path's ahead check reports a database hash the image does not ship
   (`packages/provisioning/src/schema-ahead.ts`), so an already-migrated box would read as ahead —
   traced, not run.
-  Other `origin/main:` pointers remain (`git grep -n 'origin/main:' -- apps packages`); nobody
-  has checked what each one resolves to today.
+  Every other `git show origin/main:<path>` pointer under `apps`, `packages`, `scripts` and
+  `docs/developers` (outside `drizzle/`) whose path no longer exists on `origin/main` now reads
+  `aabdde6a8^:<path>`, the parent of the commit that deleted it, and each resolves. The pointers in
+  `packages/bookings/src/bookings-cas.test.ts` and `packages/media/src/images.test.ts` name files
+  that still exist but no longer hold the deleted cases, so they were repointed to `aabdde6a8^:` as
+  well. Also left: the
+  pointers in shipped `drizzle/` SQL, such as `packages/media/drizzle/0001_image_references.sql`
+  and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
   claim — DONE (2026-09-23, branch `chore/slice1-code-cleanups`).** Neither set needs core to have
   run first; both now say so, with the experiment in the `tenants` foreign key entry above.

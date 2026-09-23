@@ -29,9 +29,10 @@ import {
 
 const suite = useVenueDb({
   resetPerTest: false,
-  // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity (persons —
-  // employments/time_entries FK it), then workforce. Ordering across packages is the runtime's job
-  // and nothing enforces it, so it is explicit here.
+  // Core for the setup, which seeds its `tenants`, and for the cases, which seed its `locations`
+  // and `nodes` (`seedLocation`, `seedNode`); identity for `persons`, which the first cases write
+  // and workforce's tables reference. Listed in manifest order; the suite also passes with the
+  // list reversed (measured 2026-09-23).
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
@@ -49,9 +50,9 @@ function rowIdentity() {
   return sql`${newId()}, ${nowIso()}`;
 }
 
-// persons is created by the IDENTITY migration set (relocated out of workforce), which this suite
-// layers under WORKFORCE because employments/time_entries FK it. These integration checks prove the
-// combined [core, identity, workforce] stack lands persons correctly under workforce.
+// persons is created by the IDENTITY migration set, which this suite applies with WORKFORCE because
+// employments/time_entries reference it. These integration checks prove the combined
+// [core, identity, workforce] stack lands persons correctly.
 describe("persons, from the identity migration set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
