@@ -10,8 +10,29 @@ the organisation and business, then choose **Connect this venue**. The server ch
 your local permission and its primary role again before signing the final request.
 
 Connected means the installation is registered. Remote access and backups remain
-unconfigured until their service setup is implemented. No account or Cloud call is
+unconfigured until their service setup is implemented. The screen shows configuration
+and observed health separately; a five-minute-old observation reads Health unknown.
+No account or Cloud call is
 added to the sale path.
+
+## Refresh or stop Cloud access
+
+After you connect, the primary server checks Cloud once a minute. It obtains a signed
+one-hour access lease and renews it with ten minutes left. Every request also uses
+the installation private key; copying a lease does not grant access. Background work
+never extends your management login. Choose **Refresh status** to check immediately.
+
+A Cloud outage keeps the last known configuration and shows that status is unavailable.
+Pending requests are saved before sending, so a restart can recover a renewal or stop
+request whose response was lost. The server treats a revoked installation separately
+and does not silently generate another identity.
+
+Choose **Stop Cloud access**, read the consequences, then confirm. You need a live
+local manager session. You can stop access even after this node loses its primary
+role. This stops new Cloud control requests and credential grants, preserves the venue
+and stored backups, and leaves local trading and subscriptions alone. It does not
+cancel billing. The remote-access and backup adapters will enforce their own scoped
+credentials when those services are implemented.
 
 ## Configure the Cloud destination
 
@@ -49,10 +70,15 @@ path when following [Cloud's local-pairing guide](https://github.com/waitron-io/
 The runner starts two actual Waitron servers through
 `apps/server/scripts/cloud-integration-fixture.ts`, each with disposable SQLite files,
 plus the Cloud API and browser. It verifies the two approval screens, a server restart,
-a lost committed reply and rejection of crossed installation proofs. The fixture uses
+a lost committed pairing reply and rejection of crossed installation proofs. It also
+loses renewal and revocation responses after Cloud commits, restarts Waitron, and
+checks that its real worker recovers both. Independent service configurations and
+synthetic adapter observations stay with their intended venues; revoking one
+installation leaves the other connected. These observations test the status protocol,
+not an actual tunnel or restorable backup. The fixture uses
 demo mode and does not configure fiscal/payment providers or create invoices.
 
 The local Cloud write routes accept only the configured management origin. Open the
 screen at `WAITRON_MANAGEMENT_ORIGIN`; the later remote-access integration must
 configure its staff hostname consistently. An automatic status read leaves your
-session idle time unchanged. Clicking Check connection counts as your activity.
+session idle time unchanged. Clicking Check connection or Refresh status counts as your activity.

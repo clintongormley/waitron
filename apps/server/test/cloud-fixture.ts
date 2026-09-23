@@ -1,11 +1,18 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createPublicKey, verify, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 
-export async function cloudFixture() {
+export async function cloudFixture(
+  machine?: (
+    values: unknown[],
+    saved: Record<string, unknown>,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ) => Promise<void>,
+) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-client-"));
   const requests: unknown[][] = [];
   let replyPatch: Record<string, unknown> = {};
@@ -30,6 +37,23 @@ export async function cloudFixture() {
       signature: string;
     };
     const values = JSON.parse(Buffer.from(payload, "base64url").toString()) as string[];
+    if (values[0] === "waitron-cloud-machine-v1" && machine) {
+      const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
+      expect(
+        verify(
+          null,
+          Buffer.from(payload, "base64url"),
+          createPublicKey({
+            key: Buffer.from(saved.publicKey, "base64url"),
+            format: "der",
+            type: "spki",
+          }),
+          Buffer.from(signature, "base64url"),
+        ),
+      ).toBe(true);
+      await machine(values, saved, req, res);
+      return;
+    }
     expect(
       verify(
         null,

@@ -1,3 +1,4 @@
+import { runCloudWorker } from "./cloud-worker.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -2132,24 +2133,24 @@ export async function startServer(
   // box's persisted secret files (config.stateDir) into a passphrase-encrypted bundle. Mounted in the
   // trading branch only — a setup box has no provisioned identity to recover.
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
+  const cloudConnection = cloudOrigin
+    ? createCloudConnection({
+        stateDir: config.stateDir,
+        origin: cloudOrigin,
+        localVenueId: till.locationId,
+        environment: config.environment === "production" ? "production" : "test",
+      })
+    : undefined;
+  const cloudPrimary = () =>
+    holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   mountCloudApi(
     app,
     {
       db,
       managementOrigin: config.managementOrigin,
       // Roles can change live; fencing takes effect through a server restart.
-      isPrimary: () =>
-        holders.mode.current === "primary" &&
-        holders.singletonRole.current === "primary" &&
-        !fenced,
-      connection: cloudOrigin
-        ? createCloudConnection({
-            stateDir: config.stateDir,
-            origin: cloudOrigin,
-            localVenueId: till.locationId,
-            environment: config.environment === "production" ? "production" : "test",
-          })
-        : undefined,
+      isPrimary: cloudPrimary,
+      connection: cloudConnection,
     },
     log,
   );
@@ -2452,6 +2453,15 @@ export async function startServer(
     getAddresses: boxAddresses,
     log,
   });
+  const cloudController = new AbortController();
+  const cloudWorker = cloudConnection
+    ? runCloudWorker({
+        connection: cloudConnection,
+        signal: cloudController.signal,
+        isPrimary: cloudPrimary,
+        onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
+      })
+    : undefined;
   return makeStartedServer(
     server,
     health,
@@ -2459,6 +2469,8 @@ export async function startServer(
     {
       stopWork: async () => {
         controller.abort();
+        cloudController.abort();
+        await cloudWorker;
         unsubscribeFromChanges();
         liveEvents.close();
         // Stop the outbound tunnel client — its own controller, aborted here so close() never leaves it

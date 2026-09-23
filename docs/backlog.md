@@ -88,8 +88,14 @@ completion reply and swapped installation proof refusal. Cloud and local approva
 remain separate; the local server checks live manager permission and serving-primary
 status before final signing. Installation keys stay in node-local state.
 
-Next on this integration track: credential renewal/status/revocation, local remote
-access, then SQLite/Litestream backup and replacement recovery. Connected does not
+Installation credentials now use key-bound one-hour leases, with a background refresh
+worker, cached status and explicit owner/manager revocation. Pending operations survive
+lost replies and restarts; the real two-server runner proves renewal and revocation
+recovery without changing fiscal authority. Both languages show service configuration
+and observed health separately. Observations are synthetic until service adapters exist.
+
+Next on this integration track: local remote access, then SQLite/Litestream backup
+and replacement recovery. Connected does not
 mean those services are configured. Cloud service ownership stays in the Cloud
 backlog; this repository owns its adapter, screen and node-side behavior. Public
 hosting, ingress controls and Cloud audit/retention remain deployment work.

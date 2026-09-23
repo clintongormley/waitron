@@ -51,10 +51,12 @@ export class CloudServicesScreen extends LitElement {
   @state() private busy = false;
   @state() private error: string | undefined;
   @state() private requestUnavailable = false;
+  @state() private confirmingStop = false;
   #generation = 0;
   override connectedCallback() {
     super.connectedCallback();
     this.busy = false;
+    this.confirmingStop = false;
     void this.#run(() => this.api.getCloudStatus());
   }
   override disconnectedCallback() {
@@ -70,6 +72,7 @@ export class CloudServicesScreen extends LitElement {
       const result = await request();
       if (generation === this.#generation) {
         this.status = result;
+        if (result.installation?.state === "revoked") this.confirmingStop = false;
         this.requestUnavailable = false;
       }
     } catch (error) {
@@ -96,6 +99,90 @@ export class CloudServicesScreen extends LitElement {
         legalBusinessId: s.legalBusinessId!,
       }),
     );
+  }
+  #installation(s: CloudConnectionStatus) {
+    const installation = s.installation;
+    const date = (value: string | null | undefined) =>
+      value
+        ? html`<time datetime=${value}>${new Date(value).toLocaleString()}</time>`
+        : t("cloud.never_contacted");
+    const names = {
+      remote_access: "cloud.remote",
+      continuous_backup: "cloud.continuous",
+      retained_snapshots: "cloud.snapshots",
+    } as const;
+    const services = installation?.services.length
+      ? installation.services
+      : (["remote_access", "continuous_backup", "retained_snapshots"] as const).map((service) => ({
+          service,
+          state: "unconfigured" as const,
+          health: "unknown" as const,
+        }));
+    return html`<p role="status">${t(`cloud.access_${installation?.state ?? "pending"}`)}</p>
+      <dl>
+        <dt>${t("cloud.last_contact")}</dt>
+        <dd>${date(installation?.lastContactAt)}</dd>
+        <dt>${t("cloud.access_expires")}</dt>
+        <dd>${date(installation?.leaseExpiresAt)}</dd>
+        ${services.map(
+          (service) =>
+            html`<dt>${t(names[service.service])}</dt>
+              <dd>
+                ${t(`cloud.state_${service.state}`)} ·
+                ${t(`cloud.health_${installation?.state === "revoked" ? "unknown" : service.health}`)}
+              </dd>`,
+        )}
+      </dl>
+      ${
+        installation?.state === "revoked"
+          ? nothing
+          : html`
+              ${
+                s.isPrimary
+                  ? html`<wt-button
+                      id="refresh"
+                      .disabled=${this.busy}
+                      @click=${() => {
+                        void this.#run(() => this.api.refreshCloudConnection());
+                      }}
+                      >${t("cloud.refresh")}</wt-button
+                    >`
+                  : nothing
+              }
+              ${
+                this.confirmingStop
+                  ? html`<div role="group" aria-label=${t("cloud.stop")}>
+                      <p>${t("cloud.stop_help")}</p>
+                      <wt-form-actions>
+                        <wt-button
+                          id="cancel-stop"
+                          .disabled=${this.busy}
+                          @click=${() => {
+                            this.confirmingStop = false;
+                          }}
+                          >${t("cloud.cancel_stop")}</wt-button
+                        >
+                        <wt-button
+                          id="confirm-stop"
+                          .disabled=${this.busy}
+                          @click=${() => {
+                            void this.#run(() => this.api.revokeCloudConnection());
+                          }}
+                          >${t("cloud.confirm_stop")}</wt-button
+                        >
+                      </wt-form-actions>
+                    </div>`
+                  : html`<wt-button
+                      id="stop-access"
+                      .disabled=${this.busy}
+                      @click=${() => {
+                        this.confirmingStop = true;
+                      }}
+                      >${t("cloud.stop")}</wt-button
+                    >`
+              }
+            `
+      }`;
   }
   override render() {
     const s = this.status;
@@ -129,12 +216,7 @@ export class CloudServicesScreen extends LitElement {
                     : s.state === "complete"
                       ? html`<p role="status">${t("cloud.connected")}</p>
                           <p>${s.legalBusinessName}</p>
-                          <dl>
-                            <dt>${t("cloud.remote")}</dt>
-                            <dd>${t("cloud.unconfigured")}</dd>
-                            <dt>${t("cloud.backups")}</dt>
-                            <dd>${t("cloud.unconfigured")}</dd>
-                          </dl>`
+                          ${this.#installation(s)}`
                       : html`
                           ${
                             s.state === "awaiting_cloud"

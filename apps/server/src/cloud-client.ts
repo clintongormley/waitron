@@ -1,4 +1,12 @@
 import {
+  installationClient,
+  projectCloudInstallation,
+  readCloudInstallation,
+  type CloudInstallationState,
+  type CloudInstallationStatus,
+  type CloudObservation,
+} from "./cloud-installation.js";
+import {
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -32,6 +40,7 @@ export interface CloudPairingView {
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
   code: string;
+  installation?: CloudInstallationStatus;
   openCloudUrl?: string;
 }
 export interface CloudChoice {
@@ -45,7 +54,8 @@ export interface CloudConnectionOptions {
   localVenueId: string;
   environment: "test" | "production";
 }
-interface SavedState {
+export interface SavedCloudState {
+  lifecycle?: CloudInstallationState;
   version: 1;
   origin: string;
   privateKey: string;
@@ -87,7 +97,7 @@ export function loadCloudOrigin(env: NodeJS.ProcessEnv): string | undefined {
     });
   }
 }
-function readView(value: unknown, state: SavedState): CloudPairingView {
+function readView(value: unknown, state: SavedCloudState): CloudPairingView {
   if (
     !record(value) ||
     value.requestId !== state.requestId ||
@@ -154,10 +164,10 @@ const activePaths = new Set<string>();
 /** One server process owns a node state directory. Calls within that process share this write gate. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), "cloud-connection.json");
-  async function read(): Promise<SavedState | undefined> {
+  async function read(): Promise<SavedCloudState | undefined> {
     try {
       const info = await lstat(path);
-      if (!info.isFile() || info.size > 16384 || (info.mode & 0o077) !== 0) throw new Error();
+      if (!info.isFile() || info.size > 65536 || (info.mode & 0o077) !== 0) throw new Error();
       const value: unknown = JSON.parse(await readFile(path, "utf8"));
       if (
         !record(value) ||
@@ -183,15 +193,17 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           value.publicKey
       )
         throw new Error();
-      const state = value as unknown as SavedState;
+      const state = value as unknown as SavedCloudState;
       if (state.view !== undefined) state.view = readView(state.view, state);
+      if (state.lifecycle !== undefined)
+        state.lifecycle = readCloudInstallation(state.lifecycle, state);
       return state;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
       throw new AppError("cloud.state_invalid", {});
     }
   }
-  async function save(state: SavedState) {
+  async function save(state: SavedCloudState) {
     await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
     const temporary = `${path}.${randomUUID()}.tmp`;
     try {
@@ -213,7 +225,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       await rm(temporary, { force: true });
     }
   }
-  function project(state: SavedState | undefined): CloudConnectionStatus {
+  function project(state: SavedCloudState | undefined): CloudConnectionStatus {
     if (!state) return { state: "not_connected", code: "" };
     return {
       state: "awaiting_cloud",
@@ -223,10 +235,11 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...state.view,
       code: state.view?.state === "complete" ? "" : state.code,
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
+      ...(state.view?.registration ? { installation: projectCloudInstallation(state) } : {}),
     };
   }
   async function exchange(
-    state: SavedState,
+    state: SavedCloudState,
     action: "start" | "status" | "complete",
     choice?: CloudChoice,
   ): Promise<CloudPairingView> {
@@ -294,6 +307,30 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   return {
     async status() {
       return project(await read());
+    },
+    async refresh(signal?: AbortSignal) {
+      return run(async () => {
+        const state = await read();
+        if (!state?.view?.registration) return project(state);
+        await installationClient(state, save).refresh(signal);
+        return project(state);
+      });
+    },
+    async revoke(authorize: () => Promise<void>, signal?: AbortSignal) {
+      return run(async () => {
+        const state = await read();
+        if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
+        await installationClient(state, save).revoke(authorize, signal);
+        return project(state);
+      });
+    },
+    async report(services: CloudObservation[], observedAt = Date.now(), signal?: AbortSignal) {
+      return run(async () => {
+        const state = await read();
+        if (!state?.view?.registration) throw new AppError("cloud.binding_conflict", {});
+        await installationClient(state, save).report(services, observedAt, signal);
+        return project(state);
+      });
     },
     async start(restart = false) {
       return run(async () => {
