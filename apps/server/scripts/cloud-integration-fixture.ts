@@ -20,10 +20,13 @@ if (
 await mkdir(root, { recursive: true, mode: 0o700 });
 const envPath = join(root, "fixture-env.json");
 let env: NodeJS.ProcessEnv;
-try {
-  env = JSON.parse(await readFile(envPath, "utf8")) as NodeJS.ProcessEnv;
-} catch (error) {
+const savedEnv = await readFile(envPath, "utf8").catch((error: unknown) => {
   if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  return undefined;
+});
+if (savedEnv !== undefined) {
+  env = JSON.parse(savedEnv) as NodeJS.ProcessEnv;
+} else {
   const venueDir = join(root, "venue"),
     migrationsRoot = join(root, "migrations");
   const sets = manifestSets(),
