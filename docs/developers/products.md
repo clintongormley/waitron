@@ -25,40 +25,47 @@ exception named under _What a sold line freezes_ below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
 name falls back to Name. They do not fall back to each other, and a product with a customer-facing
-name but no kitchen name still prints its staff Name to the kitchen. The same is true of the
-variant's three fields, independently of the product's — which is the part that surprises people. A
-variant that has a customer-facing name but no kitchen name, on a product that has both, sends
-`Café con leche · Large` to the kitchen: the product half resolved its kitchen name, the variant half
-fell back to its staff name.
+name but no kitchen name still prints its staff Name to the kitchen.
 
-**The variant's name is appended to the product's with `" · "`.** "Coffee" plus the variant "Large"
-is `Coffee · Large`. A line that names no variant renders exactly as it would have before variants
-existed — same bytes, no trailing separator.
+**A variant is named in full and shown under its own names alone** (spec
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §15.2). "Wine by the glass" has the
+variants "Wine 125" and "Wine 175", and a line sold as Wine 125 reads `Wine 125` on the till, the
+tab, the kitchen ticket, the kitchen screens, the receipt and the sales report. A variant's names
+are never inherited: a blank customer or kitchen name falls back to the VARIANT's staff name, never
+to the parent's. A line that names no variant renders exactly as it did before variants existed.
 
 The three resolvers, one per audience:
 
-- `staffPresentationName` — the staff join. Takes only the two staff names, so a caller holding a
-  row with nothing else on it does not have to invent four empty fields.
+- `staffPresentationName` — the variant's staff name, else the product's. Takes only the two staff
+  names, so a caller holding a row with nothing else on it does not have to invent four empty fields.
 - `customerPresentationText` — applies the blank-falls-back-to-Name rule to the customer-facing
   maps, and hands back the product's map and the variant's map still separate.
-- `kitchenPresentationName` — the kitchen name with its fallback, joined. Like
-  `staffPresentationName` it takes no locale: a kitchen name carries no per-language text, so there
-  is nothing to resolve against.
+- `kitchenPresentationName` — the variant's kitchen name falling back to its staff name, else the
+  product's kitchen name falling back to its staff name. Like `staffPresentationName` it takes no
+  locale: a kitchen name carries no per-language text, so there is nothing to resolve against.
 
-Joining two already-resolved customer maps into one is `joinCustomerPresentationText`, which is
-separate because its callers are rendering something already *sold* — see below.
+Turning the two frozen customer maps of a sold line into the one label a receipt prints is
+`joinCustomerPresentationText`, which is separate because its callers are rendering something
+already *sold* — see below.
 
 ## What a sold line freezes
 
 A line freezes what it was sold as and never reads the catalogue again, so editing a product does not
 rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
 
-- `name` — the product's staff name at add time. This is what the basket and a retrieved tab show
-  after the product has been renamed or deleted.
+- `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. This is
+  what the basket and a retrieved tab show after the product has been renamed or deleted.
 - `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
   then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
-- `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the same four
-  facts for the chosen variant, plus the product's kitchen name.
+- `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
+  variant's own three names as the variant row holds them, plus the product's (the parent's)
+  kitchen name. A locale the variant's customer text leaves blank is filled with the variant's staff
+  name when the line is priced (`priceOrderLines`, `apps/server/src/working-order.ts`). Keeping both
+  sets is what lets a report group variant lines under their parent.
+
+The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
+or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
+names and no catalogue id at all (spec decision 11); neither table has a `variant_id` column.
 - `option_snapshots` — the diner's answers to the options lists this dish offered, each one frozen
   as the list's three names and the chosen label's three names, and no ids at all
   (`OptionSnapshot`, `packages/shared/src/option-selection.ts`). So this column carries
@@ -67,7 +74,8 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
   columns above like any other line.
 
 Because both halves had their fallback applied *before* being frozen, nothing falls back again at
-render time. `joinCustomerPresentationText` only joins.
+render time, except that `joinCustomerPresentationText` falls back to the variant's frozen staff
+name for a variant map with no text at all.
 
 **An options answer is the exception to that, deliberately.** `buildLineExtras`
 (`apps/server/src/modifier-selection.ts`) freezes the list's and the label's customer-facing map
@@ -105,15 +113,15 @@ Where each one surfaces:
 
 | Surface | Reads | Code |
 | --- | --- | --- |
-| Receipt line — the goods identification, art. 7.1.e | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
+| Receipt line — the goods identification, art. 7.1.e | the variant's frozen customer map on a variant line, else the product's | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
 | Kitchen ticket | the four frozen staff and kitchen names, plus each frozen answer's kitchen names falling back to its staff names | `apps/server/src/kitchen-print.ts` |
 | Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
-| A table tab's line list | the staff names, joined server-side | `readTabLines`, `apps/server/src/working-order.ts` |
+| A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Printed allergen sheet | the live product's customer-facing name | `apps/till/src/screens/till-allergen-screen.ts` |
-| Top-sellers report | the frozen staff names, joined | `packages/reporting/src/top-sellers.ts` |
+| Top-sellers report | the frozen staff names, resolved | `packages/reporting/src/top-sellers.ts` |
 
 Two of those rows are worth reading twice.
 
@@ -121,7 +129,7 @@ A cook sees the same name whether the order arrives on paper or on a screen: the
 queue and the pass all resolve through `kitchenPresentationName`. What that resolver is *given*,
 though, depends on how the line was added. A line added from a menu offer carries the product's and
 the variant's kitchen names, so a venue that types a short kitchen name sees it on all three
-surfaces, and one that leaves it blank sees the staff name.
+surfaces, and one that leaves it blank sees the staff name — the variant's, on a variant line.
 
 **A line added by bare `productId` carries neither.** That is the shape the till's three
 line-carrying routes — `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders` — fall back
@@ -178,7 +186,16 @@ The editor still keeps its own draft at **no variants, or at least two**, with a
 
 A variant shares the product's unit, tax rate, categories, modifiers and allergen and dietary
 declarations. It has its own name (all three of them) and availability, and its own price and image
-only where it sets them. On a menu it is charged the most specific price set
+only where it sets them.
+
+A variant is sold as the product it is. A product with an Active variant is never rung up as itself
+(`product.variant_required`); on the till it is one button, and tapping it opens its variants with
+the first available one chosen, each labelled with its difference from the parent's price ("+€1.50")
+where it has one; a product none of whose variants is available here gets no button. The line is
+priced and taxed at the variant's own values, its parent's where it leaves one blank, and reaches the
+kitchen as its parent would: the parent's product-level preparation route, and the station, course,
+category, allergens and dietary labels read through `effectiveProductColumns`
+(`packages/catalogue/src/variant-fallback.ts`), unless the variant sets its own. On a menu it is charged the most specific price set
 (`resolveOfferPrice`, `packages/catalogue/src/offer-price.ts`): that menu's price for the variant,
 else its own price, else its parent's price on that menu, else its parent's own price. A menu may
 leave any product's price blank (`menu_items.gross_price` is nullable), which means the product's

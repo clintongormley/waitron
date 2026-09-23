@@ -22,10 +22,14 @@ function trimQuantityForDisplay(quantity: string): string {
  */
 export function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
   return priced.lines.map((line, i) => ({
-    // The identification of the goods (art. 7.1.e) is the product AND the variant: a filed line
-    // freezes the two customer maps in separate columns, so the label the receipt prints is the two
-    // joined. The join itself belongs to `product-presentation.ts` and is never rebuilt here.
-    descriptions: joinCustomerPresentationText(line.descriptions, line.variantDescriptions ?? null),
+    // The identification of the goods (art. 7.1.e): a line sold as a variant is printed under the
+    // variant's own customer text (spec §15.2), which `product-presentation.ts` resolves from the
+    // two frozen maps; it is never rebuilt here.
+    descriptions: joinCustomerPresentationText(
+      line.descriptions,
+      line.variantDescriptions ?? null,
+      line.variantName ?? null,
+    ),
     // The dish's frozen options answers, straight off the filed line: the receipt prints these
     // stored names and never re-reads the catalogue for them. The displayed TEXT is still chosen at
     // print time — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`)

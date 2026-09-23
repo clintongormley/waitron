@@ -1211,8 +1211,20 @@ it("asks for the variant of a weighed dish whose only question is one", async ()
   const product: TillProduct = {
     ...jamon,
     variants: [
-      { id: "v-iberico", name: "Ibérico", unitPrice: "30.00", available: true },
-      { id: "v-serrano", name: "Serrano", unitPrice: "10.00", available: true },
+      {
+        id: "v-iberico",
+        name: "Ibérico",
+        unitPrice: "30.00",
+        unitPriceDifference: "20.00",
+        available: true,
+      },
+      {
+        id: "v-serrano",
+        name: "Serrano",
+        unitPrice: "10.00",
+        unitPriceDifference: null,
+        available: true,
+      },
     ],
   };
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });

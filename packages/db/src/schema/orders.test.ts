@@ -497,13 +497,12 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id and variant_id as catalogue-shaped identifiers", async () => {
-    // The mutable draft keeps product_id — the dish's on a top-level line, the PICKED extra's on a
-    // child line. variant_id records which variant was selected; it is copied into the filed line as a
-    // snapshot identifier without a catalogue FK. Names and prices are snapshotted by value, so
-    // neither identifier lets a catalogue edit change a completed record. The extras and options a
-    // line answered point at nothing: `option_snapshots` holds names, and a pick becomes a child line
-    // naming its product.
+  it("carries only product_id as a catalogue-shaped identifier", async () => {
+    // The mutable draft keeps product_id — the dish's on a top-level line (the chosen variant when
+    // one was chosen, spec §4.3), the PICKED extra's on a child line. Names and prices are
+    // snapshotted by value, so the identifier lets no catalogue edit change a completed record. The
+    // extras and options a line answered point at nothing: `option_snapshots` holds names, and a
+    // pick becomes a child line naming its product.
     // `pragma_table_info` for `information_schema.columns`; it reports the same column NAMES, and
     // names are all this case reads, so nothing changes about what it catches.
     const cols = await rows<{ name: string }>(
@@ -514,7 +513,7 @@ describe("working_order_lines", () => {
       .map((c) => c.name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["product_id", "variant_id"]);
+    expect(references).toEqual(["product_id"]);
   });
 
   it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {

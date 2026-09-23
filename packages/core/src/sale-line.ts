@@ -31,8 +31,6 @@ export interface RecordSaleLine {
    * the chosen label's three names. Copied onto `sale_lines.option_snapshots`; presentation only,
    * never part of the fiscal hash. */
   optionSnapshots?: OptionSnapshot[];
-  /** Selected product variant and its presentation facts, frozen with the line. */
-  variantId?: string | null;
   /** The variant's staff-facing name (the mirror of `name`); `null` when the line names no variant. */
   variantName?: string | null;
   /** The variant's customer-facing text, locale -> text (the mirror of `descriptions`), snapshotted

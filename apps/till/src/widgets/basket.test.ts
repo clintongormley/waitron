@@ -130,7 +130,7 @@ describe("till-basket", () => {
     }
   });
 
-  it("joins the chosen variant's staff name onto the line, not its customer translation", async () => {
+  it("names the line by the chosen variant's staff name, not its customer translation", async () => {
     const previousLocale = currentLocale();
     setLocale("es-ES");
     setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
@@ -146,7 +146,7 @@ describe("till-basket", () => {
         "1",
       );
       const { el } = await mountWidget<TillBasket>("till-basket", { store });
-      expect(el.shadowRoot!.querySelector(".line > .name")!.textContent).toBe("Café · Large");
+      expect(el.shadowRoot!.querySelector(".line > .name")!.textContent).toBe("Large");
     } finally {
       setLocale(previousLocale);
     }
@@ -942,7 +942,15 @@ it("offers no Edit on a line whose only question was its variant", async () => {
   const store = new WorkingOrderStore();
   const product: TillProduct = {
     ...cafe,
-    variants: [{ id: "v-large", name: "Grande", unitPrice: "2.00", available: true }],
+    variants: [
+      {
+        id: "v-large",
+        name: "Grande",
+        unitPrice: "2.00",
+        unitPriceDifference: "0.50",
+        available: true,
+      },
+    ],
     variantId: "v-large",
     variantName: "Grande",
   };

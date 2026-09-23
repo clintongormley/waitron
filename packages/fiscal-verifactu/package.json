@@ -28,6 +28,7 @@
   "devDependencies": {
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "@waitron/catalogue": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/server-kit": "workspace:*",

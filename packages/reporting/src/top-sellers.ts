@@ -20,8 +20,8 @@ import type { TopSeller, TopSellersInput } from "./types.js";
  * at sale time IS the bucket (architecture §6); a later catalogue rename can never reach back into a
  * completed row. Both columns are in the key because a product's variants are separate sellers: a
  * large coffee and a small one are ranked apart, which is what an operator is asking when they ask
- * what sold. The returned `name` is the two joined via `staffPresentationName`, so the row carries the
- * same label a till button shows. Same exclusions and predicates as the VAT roll-up
+ * what sold. The returned `name` is resolved by `staffPresentationName` — the variant's own name on a
+ * variant line — so the row carries the same label the till's basket shows. Same exclusions and predicates as the VAT roll-up
  * (`aggregateVatByRate`): the node predicate applies only when `nodeId` is given, and
  * `activeSalesClause` drops voided sales and
  * F3-canje substitutes. Corrections (rectificativas) are NOT excluded — their negative lines net the

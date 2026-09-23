@@ -79,8 +79,8 @@ export function extraGross(line: OrderLine, extra: SelectedExtra): Decimal {
 }
 
 /**
- * Whether tapping this product has anything to ask before it can be rung up: an available variant to
- * choose, or an offered list to answer.
+ * Whether tapping this product has anything to ask before it can be rung up: a variant to choose (a
+ * product with variants is never sold as itself, spec §15.1), or an offered list to answer.
  *
  * The two surfaces that ADD a line both read this — the product grid's tap and tender-pay's weighed
  * quantity — because both hand the picker's own `detail.product` to `addProduct`, so a variant the
@@ -97,7 +97,7 @@ export function extraGross(line: OrderLine, extra: SelectedExtra): Decimal {
 export function needsModifierPicker(
   product: Pick<TillProduct, "variants" | "offeredModifiers">,
 ): boolean {
-  if ((product.variants ?? []).some((variant) => variant.available)) return true;
+  if ((product.variants ?? []).length > 0) return true;
   return (product.offeredModifiers ?? []).length > 0;
 }
 

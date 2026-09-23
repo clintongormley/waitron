@@ -319,7 +319,8 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // The ordered attachment list a dish exposes, carried straight through from the source
       // `TillProduct` so a fixture that offers a list reaches the grid and the picker.
       offeredModifiers: product.offeredModifiers ?? [],
-      variants: (product.variants ?? []) as ZoneOfferCatalogue["offers"][number]["variants"],
+      variants: (product.variants ??
+        []) as unknown as ZoneOfferCatalogue["offers"][number]["variants"],
       courseId: product.courseId ?? null,
     })),
   };
@@ -678,6 +679,7 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
+          variants: [],
         },
         {
           id: "offer-happy-hour",
@@ -699,6 +701,7 @@ describe("till-app", () => {
           dietDerivation: null,
           dietOverride: null,
           courseId: null,
+          variants: [],
         },
       ],
     });

@@ -276,7 +276,6 @@ beforeAll(() => {
  *  column's own JSON read mapping (measured 2026-09-22 against `menu_sections.name` in
  *  `catalogue-api.test.ts`, which came back as `{"en":"Drinks",…}` rather than an object). */
 type StoredNames = {
-  variant_id: string;
   name: string;
   variant_name: string | null;
   kitchen_name: string | null;
@@ -336,17 +335,16 @@ describe("recordTillSale", () => {
       -- amount. The integer cast that used to sit on this column only normalised node-postgres's
       -- answer to a number; the column is an integer column on this engine and the driver already
       -- hands back a number, so the cast is dropped rather than replaced. The count is unchanged.
-      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+      select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, unit_price_gross
       from working_order_lines
       union all
-      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+      select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, null
       from sale_lines
       order by unit_price_gross nulls last`,
     );
     const names = {
-      variant_id: variantIds!.double,
       name: "Agua mineral",
       variant_name: "Doble",
       kitchen_name: "COLD BAR",
@@ -358,6 +356,19 @@ describe("recordTillSale", () => {
       { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
+    // The open order's line names the variant as its product; the filed line keeps the frozen
+    // names and no catalogue reference at all (spec decision 11), so neither table has a
+    // `variant_id` column.
+    const orderLines = await suite.db.execute<{ product_id: string }>(
+      sql`select product_id from working_order_lines`,
+    );
+    expect(orderLines.rows).toEqual([{ product_id: variantIds!.double }]);
+    for (const table of ["sale_lines", "working_order_lines"]) {
+      const columns = await suite.db.execute<{ name: string }>(
+        sql`select name from pragma_table_info(${table})`,
+      );
+      expect(columns.rows.map((column) => column.name)).not.toContain("variant_id");
+    }
   });
   // Spec §15.5: a variant follows its parent onto the menu; with nothing set for it there, it is
   // charged its own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
@@ -419,8 +430,9 @@ describe("recordTillSale", () => {
         },
       }),
     ).join("\n");
-    expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Agua mineral · Doble ración" });
-    expect(paper).toContain("Agua mineral · Doble ración");
+    expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Doble ración" });
+    expect(paper).toContain("Doble ración");
+    expect(paper).not.toContain("Agua mineral");
   });
 
   it("keeps distinct variants and their parked facts after live catalogue edits", async () => {
@@ -487,13 +499,12 @@ describe("recordTillSale", () => {
     });
     expect(result.total).toBe("8.90");
     const stored = await suite.db.execute<StoredNames>(sql`
-      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+      select name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions
       from sale_lines
       order by line_no`);
     expect(stored.rows.map(decodeNames)).toEqual([
       {
-        variant_id: variantIds!.double,
         name: "Agua mineral",
         variant_name: "Doble",
         kitchen_name: "COLD BAR",
@@ -502,7 +513,6 @@ describe("recordTillSale", () => {
         variant_descriptions: { [LOCALE]: "Doble ración" },
       },
       {
-        variant_id: variantIds!.unavailable,
         name: "Agua mineral",
         variant_name: "Fuera",
         kitchen_name: "COLD BAR",

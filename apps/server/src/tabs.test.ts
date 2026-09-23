@@ -1048,7 +1048,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
       },
     ];
     // The customer-facing map is planted alongside the staff names and must NOT come back: a tab's
-    // line list is what a waiter reads, so it shows the staff pair.
+    // line list is what a waiter reads, so it shows the variant's staff name.
     await tx
       .update(workingOrderLines)
       .set({
@@ -1060,7 +1060,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
       })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
-      name: "Recorded coffee · Large",
+      name: "Large",
       optionSnapshots,
     });
   });

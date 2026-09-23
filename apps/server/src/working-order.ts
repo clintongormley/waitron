@@ -58,7 +58,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import {
   expandDietaryDeclarations,
-  listProductVariantsForProducts,
   listAvailableProducts,
   priceBasket,
   priceBasketWithOptions,
@@ -78,7 +77,7 @@ import type {
   AttachedModifiers,
   BasketItemWithOptions,
   AvailableProduct,
-  ProductPresentation,
+  SelectedVariant,
   DietaryLabel,
   DietProfile,
   LockedLine,
@@ -325,11 +324,6 @@ async function priceOrderLines(
       offerBySelectionId.set(line.menuItemId, offer);
     }
   }
-  const productVariantsByProduct = usesOffers
-    ? await listProductVariantsForProducts(tx, [
-        ...new Set([...offerBySelectionId.values()].map((offer) => offer.productId)),
-      ])
-    : new Map();
   const available = usesOffers
     ? [...offerBySelectionId.values()].map((offer) => ({
         id: offer.id,
@@ -395,17 +389,19 @@ async function priceOrderLines(
     if (baseProduct === undefined) {
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
+    // The DISH: the offer's product, whose extras and options lists a variant offers as its own
+    // (spec §4.4). The line itself is sold as the chosen variant when there is one.
     const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
     const offer = offerBySelectionId.get(line.productId);
-    // The three names this line freezes. An OFFER may name a variant, so it resolves through
-    // `selectMenuVariant` (which also refuses one not offered here now); the plain catalogue read
-    // never names a variant and carries no kitchen name, so it fills the same shape with nulls. Both
-    // then go through `product-presentation.ts`, the ONE home of the blank-falls-back-to-the-staff-name
-    // rule — nothing here re-implements it.
-    const presentation: ProductPresentation & { variantId: string | null; unitPrice: string } =
+    // What this line sells, and the three names it freezes. An OFFER may name a variant, so it
+    // resolves through `selectMenuVariant`, which also refuses one not offered here now and returns
+    // the chosen row's effective selling values; the plain catalogue read never names a variant and
+    // carries no kitchen name, so it fills the same shape with the product's own. Both then go
+    // through `product-presentation.ts`, the ONE home of the blank-falls-back-to-the-staff-name rule.
+    const selection: SelectedVariant<AvailableProduct["unit"], string> =
       offer === undefined
         ? {
-            variantId: null,
+            productId: underlyingProductId,
             name: baseProduct.name,
             customerName: baseProduct.customerName,
             kitchenName: null,
@@ -413,26 +409,36 @@ async function priceOrderLines(
             variantCustomerName: null,
             variantKitchenName: null,
             unitPrice: baseProduct.unitPrice,
+            unit: baseProduct.unit,
+            vatClass: baseProduct.vatClass,
+            category: baseProduct.category,
+            courseId: baseProduct.courseId,
           }
-        : selectMenuVariant(
-            offer,
-            productVariantsByProduct.get(offer.productId) ?? [],
-            line.variantId ?? null,
-          );
+        : selectMenuVariant(offer, line.variantId ?? null);
     if (!usesOffers && line.variantId !== undefined) {
       throw new AppError("management.request_invalid", { field: "variantId" });
     }
-    const customerText = customerPresentationText(presentation, contentConfig.defaultLanguage);
+    const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
     const product = {
       ...baseProduct,
-      name: presentation.name,
-      unitPrice: presentation.unitPrice,
+      name: selection.name,
+      unitPrice: selection.unitPrice,
+      unit: selection.unit,
+      // On the offer path the pricing unit is read off the unit the line carries, as it always was
+      // for an offer (see the weighed-dish refusal below).
+      pricingUnit: usesOffers
+        ? selection.unit.hardwareUnit === null
+          ? ("each" as const)
+          : ("weight" as const)
+        : baseProduct.pricingUnit,
+      vatClass: selection.vatClass as VatClass,
+      category: selection.category,
+      courseId: selection.courseId,
       descriptions: customerText.product,
-      variantId: presentation.variantId,
-      variantName: presentation.variantName,
+      variantName: selection.variantName,
       variantDescriptions: customerText.variant,
-      variantKitchenName: presentation.variantKitchenName,
-      kitchenName: presentation.kitchenName,
+      variantKitchenName: selection.variantKitchenName,
+      kitchenName: selection.kitchenName,
     };
 
     // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
@@ -511,7 +517,7 @@ async function priceOrderLines(
     // CHILD row inherits none (no ticket_item, KDS coursing is per dish).
     lineMeta.push({
       kind: "parent",
-      productId: underlyingProductId,
+      productId: selection.productId,
       menuItemId: line.menuItemId ?? null,
       courseId: line.courseId ?? product.courseId ?? null,
       note,
@@ -558,7 +564,9 @@ async function priceOrderLines(
 
   // New lines snapshot the location's receipt languages. Locked and issued lines keep their stored
   // text. The VARIANT's customer text is re-keyed alongside the product's, because
-  // `working_order_lines_check_variant_locales` holds it to the same configured invoice locales.
+  // `working_order_lines_check_variant_locales` holds it to the same configured invoice locales, and
+  // a locale its text leaves blank takes the variant's own staff name — the name a variant line is
+  // printed under (spec §15.2), never the parent's.
   for (const line of priced.lines) {
     line.descriptions = toInvoiceLineDescriptions(
       line.descriptions,
@@ -566,10 +574,15 @@ async function priceOrderLines(
       contentConfig.defaultLanguage,
     );
     if (line.variantDescriptions != null) {
-      line.variantDescriptions = toInvoiceLineDescriptions(
-        line.variantDescriptions,
-        invoiceLocales,
-        contentConfig.defaultLanguage,
+      const variantName = line.variantName ?? "";
+      line.variantDescriptions = Object.fromEntries(
+        Object.entries(
+          toInvoiceLineDescriptions(
+            line.variantDescriptions,
+            invoiceLocales,
+            contentConfig.defaultLanguage,
+          ),
+        ).map(([locale, text]) => [locale, text.trim() === "" ? variantName : text]),
       );
     }
   }
@@ -645,7 +658,6 @@ async function priceOrderLines(
       // product's and its variant's names through `priceBasketWithOptions` and a CHILD's variant fields
       // stay null, and the invoice re-key above rewrote the two customer maps on that row in place —
       // so the priced row is the only copy holding the re-keyed text.
-      variantId: line.variantId ?? null,
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
       variantKitchenName: line.variantKitchenName ?? null,
@@ -701,7 +713,6 @@ export async function readLockedLines(
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
-      variantId: workingOrderLines.variantId,
       variantName: workingOrderLines.variantName,
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
@@ -746,7 +757,6 @@ export async function readLockedLines(
     unitName: line.unitName,
     unitPrecision: line.unitPrecision,
     parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
-    variantId: line.variantId,
     variantName: line.variantName,
     variantDescriptions: line.variantDescriptions,
     variantKitchenName: line.variantKitchenName,
@@ -1200,19 +1210,20 @@ export async function fireLines(
   const defaultStationId = fallback?.id ?? null;
 
   // Read the legacy product and category station overrides in one batch. A missing category yields a
-  // null route; modifier children have already been removed from this list.
-  // RAW columns until variants-as-products Task 5: an inheriting variant gets the default station.
+  // null route; modifier children have already been removed from this list. A variant line routes
+  // by its EFFECTIVE station and category, so it goes where its parent would unless it sets its own.
   const productIds = [
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
   const routes = await tx
     .select({
       productId: products.id,
-      productStationId: products.stationId,
+      productStationId: effectiveProductColumns.stationId,
       categoryStationId: categories.stationId,
     })
     .from(products)
-    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .leftJoin(parentProducts, parentJoin)
+    .leftJoin(categories, eq(categories.id, effectiveProductColumns.categoryId))
     .where(inArray(products.id, productIds));
   const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
 
@@ -2044,7 +2055,7 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
  *  `quantity` is a three-place decimal string and `unitPriceGross` a two-place one, each converted
  *  from the whole number its column stores by the mapping in {@link readTabLines}. */
 export interface TabLine {
-  /** The line's frozen STAFF label — `working_order_lines.name` joined to `variant_name` with " · ".
+  /** The line's frozen STAFF label — `variant_name` on a variant line, else `working_order_lines.name`.
    * A table tab's line list is what a waiter reads while serving, so it carries the same name the
    * till's product buttons and basket carry, not the customer-facing text a receipt prints. */
   name: string;
@@ -2142,7 +2153,7 @@ export async function readTabLines(
   // working order and this read takes the whole order, so no such row is expected — an expectation
   // from reading the inserts, not a case any test here reaches.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
-  // The tab shows one label per line, so the line's two frozen staff names are joined into it, and
+  // The tab shows one label per line, resolved from the line's two frozen staff names, and
   // the two stored counts become the decimal strings every consumer of `TabLine` reads — cents for
   // the amount, thousandths for the quantity. Neither row id belongs on this wire: `id` appears
   // nowhere below, being only the KEY of `lineNoById` above, and `parent_line_id` is read once and
@@ -2533,7 +2544,6 @@ async function carveOffLines(
       category: workingOrderLines.category,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
-      variantId: workingOrderLines.variantId,
       variantName: workingOrderLines.variantName,
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
@@ -2692,7 +2702,6 @@ async function carveOffLines(
         category: line.category,
         unitName: line.unitName,
         unitPrecision: line.unitPrecision,
-        variantId: line.variantId,
         variantName: line.variantName,
         variantDescriptions: line.variantDescriptions,
         variantKitchenName: line.variantKitchenName,
@@ -2907,7 +2916,10 @@ export interface HeldOrder {
     optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;
+    /** The dish: on a line sold as a variant, the variant's parent. */
     productId: string | null;
+    /** The variant the line was sold as, absent when it names none. */
+    variantId?: string;
     quantity: string;
     /** The dish's extras, one entry per CHILD line, each carrying what that line froze: the picked
      * product, its three names, the price it was sold at and how many per dish. These are VALUES, not
@@ -2925,6 +2937,7 @@ export interface HeldOrder {
       id: string;
       productId: string;
       menuItemId: string;
+      variantId?: string;
       /** The staff-facing name frozen onto the line at add time — what the till's basket renders. */
       name: string;
       /** The line's frozen customer-facing text, locale -> text. */
@@ -3031,23 +3044,33 @@ export async function getHeldOrder(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
-        variantId: workingOrderLines.variantId,
+        // A line sold as a variant names the variant as its product; the dish the till rebuilds is
+        // its parent, with the variant chosen on it, as the till built it at add time.
+        parentProductId: products.parentId,
         variantName: workingOrderLines.variantName,
         variantKitchenName: workingOrderLines.variantKitchenName,
         kitchenName: workingOrderLines.kitchenName,
         name: workingOrderLines.name,
       })
       .from(workingOrderLines)
+      .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
     // become decimal literals here, at the row, so nothing below this line handles a count — the
     // `HeldOrder` this builds carries the same decimal strings the till has always received.
-    const lineRows = storedLines.map((line) => ({
-      ...line,
-      quantity: thousandthsToDecimal(line.quantity),
-      unitPriceGross: centsToDecimal(line.unitPriceGross),
-    }));
+    const lineRows = storedLines.map(({ parentProductId, ...line }) => {
+      // A child line's product is the pick itself, a variant or not, and is kept as it is.
+      const variantId =
+        line.parentLineId === null && parentProductId !== null ? line.productId : null;
+      return {
+        ...line,
+        productId: variantId === null ? line.productId : parentProductId,
+        variantId,
+        quantity: thousandthsToDecimal(line.quantity),
+        unitPriceGross: centsToDecimal(line.unitPriceGross),
+      };
+    });
 
     const contextByLine = new Map(
       (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
@@ -3099,8 +3122,8 @@ export async function getHeldOrder(
             productId: line.productId,
             menuItemId: context.menuItemId,
             // The three names the line froze at add time, each kept apart from the others and from
-            // the variant's: the till's basket joins and shows the STAFF pair, and a surface that
-            // shows customer text joins the customer pair instead.
+            // the variant's: the till's basket shows the variant's STAFF name on a variant line, and
+            // a surface that shows customer text resolves the customer pair instead.
             name: line.name,
             customerName: line.descriptions,
             ...(line.variantId === null ? {} : { variantId: line.variantId }),
@@ -3196,11 +3219,15 @@ export async function updateHeldOrder(
         optionSnapshots: workingOrderLines.optionSnapshots,
         parentLineId: workingOrderLines.parentLineId,
         productId: workingOrderLines.productId,
+        // Set when the line was sold as a variant: the dish is then the variant's parent, which
+        // holds the extras and options lists a variant offers (spec §4.4).
+        parentProductId: products.parentId,
         unitPriceGross: workingOrderLines.unitPriceGross,
         quantity: workingOrderLines.quantity,
         note: workingOrderLines.note,
       })
       .from(workingOrderLines)
+      .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
@@ -3231,26 +3258,31 @@ export async function updateHeldOrder(
     /**
      * The stored parent a requested line would keep, or `null` when it is not the same line at
      * all. Every check here is free — the line's position, the id the client named, its note, and
-     * which dish it names — so an edit that changes any of them reaches the replacement path below
-     * without paying for the catalogue reads the ANSWERS comparison needs.
+     * which product it sells — so an edit that changes any of them reaches the replacement path
+     * below without paying for the catalogue reads the ANSWERS comparison needs. `productId` in the
+     * result is the DISH, whose lists the answers are checked against.
      */
     const sameLines = req.lines.map((line, index) => {
       const stored = storedParents[index];
-      const productId = stored?.productId;
+      const soldId = stored?.productId;
       if (
         stored === undefined ||
-        productId === null ||
-        productId === undefined ||
+        soldId === null ||
+        soldId === undefined ||
         line.workingOrderLineId !== stored.id ||
         (line.note?.trim() ?? null) !== stored.note
       ) {
         return null;
       }
+      const productId = stored.parentProductId ?? soldId;
       const context = contextByLine.get(stored.id);
+      // An offer line sells the variant it names, else the offer's own product.
       const sameIdentity =
         line.menuItemId !== undefined
-          ? context?.menuItemId === line.menuItemId && line.productId === undefined
-          : line.productId === productId && line.menuItemId === undefined;
+          ? context?.menuItemId === line.menuItemId &&
+            line.productId === undefined &&
+            (line.variantId ?? productId) === soldId
+          : line.productId === soldId && line.menuItemId === undefined;
       return sameIdentity ? { stored, productId, menuItemId: context?.menuItemId ?? null } : null;
     });
     const sameBasket =
@@ -3318,8 +3350,9 @@ export async function updateHeldOrder(
       });
     }
     // A line whose quantity RISES sells more of its dish and of every extra it carries, so each of
-    // their product rows must be Active and Available (spec §15.6). The line's variant and the menu
-    // offer's own switches are not re-checked on a raise. One that is not sends the edit to the
+    // their product rows must be Active and Available (spec §15.6). The dish is the variant's
+    // parent on a variant line; the variant itself and the menu offer's own switches are not
+    // re-checked on a raise. One that is not sends the edit to the
     // replacement path, whose sellable reads refuse it. A kept or lowered quantity is not
     // re-checked: existing work is not cancelled (2026-09-20 spec §10). One read for the basket.
     const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
@@ -3918,8 +3951,8 @@ export interface StationQueueItem {
   state: TicketState;
   /** The dish's frozen options answers (spec §2.3); empty when it answered none. */
   optionSnapshots?: OptionSnapshot[];
-  /** The dish's frozen KITCHEN label — `kitchen_name` falling back to `name`, joined to the variant's
-   * with " · ". The same name the printed kitchen ticket carries (`apps/server/src/kitchen-print.ts`):
+  /** The dish's frozen KITCHEN label — `kitchen_name` falling back to `name`, the variant's own on a
+   * variant line. The same name the printed kitchen ticket carries (`apps/server/src/kitchen-print.ts`):
    * a cook reads one name whether the ticket came off a printer or off a screen. */
   name: string;
   quantity: string;
@@ -4033,19 +4066,19 @@ async function readQueueSubItems(
 
   // ONE child read: the extras' descriptions from the child lines, in `line_no` (selection) order —
   // the indented sub-text the KDS renders under each dish, plus each EXTRA's OWN allergens and
-  // dietary labels, taken from the PRODUCT the child line names (LEFT join, so a child whose product
-  // row has gone still renders its frozen text). Shown beside the dish's own; no fold, because the
-  // dish's figures and each extra's are independent.
-  // RAW columns until variants-as-products Task 5: an inheriting variant extra SILENTLY shows none.
+  // dietary labels, taken from the PRODUCT the child line names — a variant's effective ones — (LEFT
+  // join, so a child whose product row has gone still renders its frozen text). Shown beside the
+  // dish's own; no fold, because the dish's figures and each extra's are independent.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
-      addAllergens: products.allergens,
-      dietaryDeclarations: products.dietaryDeclarations,
+      addAllergens: effectiveProductColumns.allergens,
+      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(workingOrderLines.parentLineId, parentLineIds))
     .orderBy(workingOrderLines.lineNo);
   for (const child of childRows) {
@@ -4060,18 +4093,18 @@ async function readQueueSubItems(
     modifiersByParent.set(child.parentLineId!, mods);
   }
 
-  // Each parent line's OWN allergens and diet — the PARENT line's product (LEFT join: a null base is
-  // allowed and yields `pending: true`). No modifier contribution: each dish shows its own
-  // recipe-derived figures, and each extra's own list is shown separately.
-  // RAW columns, as above: an inheriting variant dish reads allergens unreviewed and no labels.
+  // Each parent line's OWN allergens and diet — the PARENT line's product, a variant's effective
+  // ones (LEFT join: a null base is allowed and yields `pending: true`). No modifier contribution:
+  // each dish shows its own recipe-derived figures, and each extra's own list is shown separately.
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,
-      allergens: products.allergens,
-      dietaryDeclarations: products.dietaryDeclarations,
+      allergens: effectiveProductColumns.allergens,
+      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
     .where(inArray(workingOrderLines.id, parentLineIds));
   for (const p of parents) {
     const allergens = (p.allergens ?? {}) as ProductAllergens;
@@ -4202,8 +4235,8 @@ export async function listStationQueue(
       id: row.itemId,
       workingOrderLineId: row.workingOrderLineId,
       state: row.state,
-      // One label per queue item: the line's frozen kitchen names, each falling back to its staff
-      // name, joined — the same resolver the printed kitchen ticket uses.
+      // One label per queue item: the line's frozen kitchen name falling back to its staff name — the
+      // same resolver the printed kitchen ticket uses.
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
       // `working_order_lines.quantity` stores a count of whole thousandths; this row is where it

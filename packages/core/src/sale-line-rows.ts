@@ -33,7 +33,6 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     vatRate: stringToBasisPoints(line.vatRate),
     lineTotal: stringToCents(line.lineTotal),
     category: line.category ?? null,
-    variantId: line.variantId ?? null,
     variantName: line.variantName ?? null,
     variantDescriptions: line.variantDescriptions ?? null,
     variantKitchenName: line.variantKitchenName ?? null,

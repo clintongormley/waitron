@@ -195,12 +195,12 @@ describe("computeTopSellers", () => {
       ],
     });
 
-    // Three rows, not two: the two coffees are different sellers, and each carries the STAFF label
-    // ("Coffee · Double"/"Coffee · Single"), never the customer text ("Café · Doble"/"Café ·
-    // Sencillo"). Collapsing them onto `name` alone would sum 5 + 2 into one "Coffee".
+    // Three rows, not two: the two coffees are different sellers, and each carries the variant's
+    // STAFF name ("Double"/"Single"), never the customer text. Collapsing them onto `name` alone
+    // would sum 5 + 2 into one "Coffee".
     expect(await run()).toEqual([
-      { name: "Coffee · Double", quantity: "5.000", total: "50.00" },
-      { name: "Coffee · Single", quantity: "2.000", total: "20.00" },
+      { name: "Double", quantity: "5.000", total: "50.00" },
+      { name: "Single", quantity: "2.000", total: "20.00" },
       { name: toastName, quantity: "1.000", total: "10.00" },
     ]);
   });

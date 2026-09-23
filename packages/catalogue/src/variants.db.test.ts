@@ -16,11 +16,10 @@ import {
   setMenuVariants,
   setProductVariants,
   selectMenuVariant,
-  type ProductVariant,
   type ProductVariantInput,
 } from "./variants.js";
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
-import { createUnit } from "./units.js";
+import { createUnit, EACH_UNIT } from "./units.js";
 import {
   addProductsToCategory,
   createCategory,
@@ -595,20 +594,26 @@ it("a variant removed while its override is being written ends Inactive, the ove
   ).toEqual([{ variantId: w125!.id }]);
 });
 
-// selectMenuVariant is the pure core of menu-variant resolution — no DB. It returns the six name
-// pieces (product staff/customer/kitchen and variant staff/customer/kitchen) separately, in the
-// exact shape product-presentation.ts consumes, so the display join and fallback are never
-// re-implemented here.
-describe("selectMenuVariant returns the six product and variant name pieces", () => {
-  const large: ProductVariant = {
+// selectMenuVariant is the pure core of menu-variant resolution — no DB. It decides from the offer
+// alone (V1, V15): an offer listing any variant must name one, and the chosen one must be listed as
+// sellable here now. It returns the six name pieces in the shape product-presentation.ts consumes,
+// and the chosen row's product id and EFFECTIVE selling values, so the order path prices and routes
+// the line from them.
+const glass = { ...EACH_UNIT, id: "66666666-6666-4666-8666-666666666666" };
+const bottle = { ...EACH_UNIT, id: "77777777-7777-4777-8777-777777777777" };
+
+describe("selectMenuVariant resolves the chosen product and its parent's names", () => {
+  const large = {
     id: "11111111-1111-1111-1111-111111111111",
     name: "Large",
     customerName: { en: "Large cup" },
     kitchenName: "LG",
-    image: null,
-    unitPrice: "3.00",
+    unitPrice: "3.50",
     available: true,
-    active: true,
+    unit: bottle,
+    vatClass: "reduced" as const,
+    category: "Hot drinks",
+    courseId: "88888888-8888-4888-8888-888888888888",
   };
   const offer = {
     productId: "22222222-2222-2222-2222-222222222222",
@@ -616,13 +621,17 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
     customerName: { en: "Fresh Coffee" },
     kitchenName: "BAR COFFEE",
     unitPrice: "8.00",
-    variants: [{ id: large.id, unitPrice: "3.50", available: true }],
+    unit: glass,
+    vatClass: "general" as const,
+    category: "Drinks",
+    courseId: null,
+    variants: [large],
   };
 
-  it("carries the product's names and the chosen variant's own three names", () => {
-    const selected = selectMenuVariant(offer, [large], large.id);
+  it("carries the parent's names, the chosen variant's own three names, and the variant's effective values", () => {
+    const selected = selectMenuVariant(offer, large.id);
     expect(selected).toEqual({
-      variantId: large.id,
+      productId: large.id,
       name: "Coffee",
       customerName: { en: "Fresh Coffee" },
       kitchenName: "BAR COFFEE",
@@ -630,19 +639,23 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
       variantCustomerName: { en: "Large cup" },
       variantKitchenName: "LG",
       unitPrice: "3.50",
+      unit: bottle,
+      vatClass: "reduced",
+      category: "Hot drinks",
+      courseId: large.courseId,
     });
-    // The selection is a ProductPresentation superset, so T4's resolvers own the join/fallback.
-    expect(staffPresentationName(selected)).toBe("Coffee · Large");
+    // The selection is a ProductPresentation superset, so the resolvers there own the naming.
+    expect(staffPresentationName(selected)).toBe("Large");
     expect(customerPresentationText(selected, "en")).toEqual({
       product: { en: "Fresh Coffee" },
       variant: { en: "Large cup" },
     });
   });
 
-  it("leaves all three variant name pieces null when no variant is chosen", () => {
-    const selected = selectMenuVariant({ ...offer, variants: [] }, [], null);
+  it("sells the offer's own product, with its own values, when it lists no variant", () => {
+    const selected = selectMenuVariant({ ...offer, variants: [] }, null);
     expect(selected).toEqual({
-      variantId: null,
+      productId: offer.productId,
       name: "Coffee",
       customerName: { en: "Fresh Coffee" },
       kitchenName: "BAR COFFEE",
@@ -650,33 +663,40 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
       variantCustomerName: null,
       variantKitchenName: null,
       unitPrice: "8.00",
+      unit: glass,
+      vatClass: "general",
+      category: "Drinks",
+      courseId: null,
     });
     expect(staffPresentationName(selected)).toBe("Coffee");
   });
 
-  // V1: a product whose variants were all removed sells as itself.
-  it("sells a product whose every variant is Inactive as itself", () => {
-    const removed = { ...large, active: false };
-    expect(selectMenuVariant({ ...offer, variants: [] }, [removed], null)).toMatchObject({
-      variantId: null,
-      unitPrice: "8.00",
-    });
-    expect(() => selectMenuVariant(offer, [large], null)).toThrow(
-      expect.objectContaining({ code: "product.variant_required" }),
-    );
+  // V1: an offer lists only Active variants, so a product whose variants were all removed lists
+  // none and sells as itself; one listing any, even an unavailable one, must name one.
+  it("requires a variant whenever the offer lists one, available or not", () => {
+    for (const variants of [[large], [{ ...large, available: false }]]) {
+      expect(() => selectMenuVariant({ ...offer, variants }, null)).toThrow(
+        expect.objectContaining({
+          code: "product.variant_required",
+          params: { productId: offer.productId },
+        }),
+      );
+    }
   });
 });
 
 describe("selectMenuVariant refuses a variant it may not sell", () => {
-  const small: ProductVariant = {
+  const small = {
     id: "33333333-3333-4333-8333-333333333333",
     name: "Small",
     customerName: null,
     kitchenName: null,
-    image: null,
-    unitPrice: "2.00",
+    unitPrice: "2.50",
     available: true,
-    active: true,
+    unit: glass,
+    vatClass: "general" as const,
+    category: null,
+    courseId: null,
   };
   const offer = {
     productId: "44444444-4444-4444-8444-444444444444",
@@ -684,29 +704,27 @@ describe("selectMenuVariant refuses a variant it may not sell", () => {
     customerName: null,
     kitchenName: null,
     unitPrice: "8.00",
-    variants: [{ id: small.id, unitPrice: "2.50", available: true }],
+    unit: glass,
+    vatClass: "general" as const,
+    category: null,
+    courseId: null,
+    variants: [small],
   };
   const refused = expect.objectContaining({
     code: "product.variant_unavailable",
     params: { variantId: small.id },
   });
 
-  it("refuses a variant that is Unavailable on the product", () => {
-    expect(() => selectMenuVariant(offer, [{ ...small, available: false }], small.id)).toThrow(
-      refused,
-    );
+  // `available` on an offer's variant is Active, Available AND offered on this menu.
+  it("refuses a variant the offer lists as not sellable here now", () => {
+    expect(() =>
+      selectMenuVariant({ ...offer, variants: [{ ...small, available: false }] }, small.id),
+    ).toThrow(refused);
   });
 
-  it("refuses a variant this menu does not offer now", () => {
-    const withdrawn = { ...offer, variants: [{ ...offer.variants[0]!, available: false }] };
-    expect(() => selectMenuVariant(withdrawn, [small], small.id)).toThrow(refused);
-    expect(() => selectMenuVariant({ ...offer, variants: [] }, [small], small.id)).toThrow(refused);
-  });
-
-  it("refuses a variant that is no longer Active", () => {
+  // An Inactive variant, or another product's, is never listed under this offer.
+  it("refuses a variant the offer does not list", () => {
     const other = { ...small, id: "55555555-5555-4555-8555-555555555555" };
-    expect(() => selectMenuVariant(offer, [{ ...small, active: false }, other], small.id)).toThrow(
-      refused,
-    );
+    expect(() => selectMenuVariant({ ...offer, variants: [other] }, small.id)).toThrow(refused);
   });
 });

@@ -9,36 +9,32 @@ export interface ProductPresentation {
   variantKitchenName: string | null;
 }
 
-// The middot join is the one place "product" and "variant" become one displayed name.
-function join(product: string, variant: string | null): string {
-  return variant ? `${product} · ${variant}` : product;
-}
+// A variant is named in full (spec §15.2), so a line naming one is shown under the VARIANT's names
+// alone, and a blank one falls back to the variant's own staff name, never to the parent's. A line
+// naming no variant is shown under the product's names.
 
 // Takes only the two staff names, not a whole `ProductPresentation`, so a caller holding a row with
-// nothing else on it — a top-sellers row, an image-usage row, a tab line — reaches the one join
-// without inventing four empty fields.
+// nothing else on it — a top-sellers row, an image-usage row, a tab line — needs no empty fields.
 export function staffPresentationName(
   p: Pick<ProductPresentation, "name" | "variantName">,
 ): string {
-  return join(p.name, p.variantName);
+  return p.variantName || p.name;
 }
 
 /**
- * The ONE customer-facing label for a line and its variant, joined per locale — the printed
- * receipt's line, where the goods are identified for the diner (art. 7.1.e;
- * `apps/server/src/receipt-lines.ts` is what calls this). It is NOT what AEAT is sent. A filed
- * record carries no per-line text at all: the only description of what was sold in it is one
- * `DescripcionOperacion` string for the whole sale, taken from `locations.operation_description`
- * (`packages/core/src/record-sale.ts` reads it as `descriptionOfOperation`,
- * `packages/fiscal-verifactu/src/backend.ts` files it), and `SaleForFiscalRecord` has no per-line
- * field for this text to travel in. It takes the two SNAPSHOT maps a sold line froze
- * (`descriptions` and `variant_descriptions`), not a live catalogue row, because the caller is
- * rendering something already sold.
+ * The ONE customer-facing label for a sold line — the printed receipt's line, where the goods are
+ * identified for the diner (art. 7.1.e; `apps/server/src/receipt-lines.ts` is what calls this). It
+ * is NOT what AEAT is sent. A filed record carries no per-line text at all: the only description of
+ * what was sold in it is one `DescripcionOperacion` string for the whole sale, taken from
+ * `locations.operation_description` (`packages/core/src/record-sale.ts` reads it as
+ * `descriptionOfOperation`, `packages/fiscal-verifactu/src/backend.ts` files it), and
+ * `SaleForFiscalRecord` has no per-line field for this text to travel in. It takes the two SNAPSHOT
+ * maps a sold line froze (`descriptions` and `variant_descriptions`) and the variant's frozen staff
+ * name, not a live catalogue row, because the caller is rendering something already sold.
  *
- * Each side has already had its own fallback applied by {@link customerPresentationText} before
- * being frozen, so nothing falls back again here. A locale missing from one of the maps resolves
- * through `resolveSnapshotText`, which takes any stored language rather than printing a blank half
- * of a name; a variant map that resolves to nothing at all leaves the product's text alone.
+ * For a line naming a variant, each locale is the variant's text: a locale missing from its map
+ * resolves through `resolveSnapshotText`, which takes any stored language, then falls back to the
+ * variant's staff name. The product's text is used only when neither exists.
  *
  * `variant` is `null` for a line that names no variant, and the result is then the product map
  * unchanged — so a no-variant line renders byte-identically to a line that never had a variant
@@ -47,16 +43,16 @@ export function staffPresentationName(
 export function joinCustomerPresentationText(
   product: Readonly<Record<string, string>>,
   variant: Readonly<Record<string, string>> | null,
+  variantName: string | null,
 ): Record<string, string> {
   if (variant === null) return { ...product };
   const locales = new Set([...Object.keys(product), ...Object.keys(variant)]);
   return Object.fromEntries(
     [...locales].map((locale) => [
       locale,
-      join(
+      resolveSnapshotText(variant, locale, locale) ||
+        variantName ||
         resolveSnapshotText(product, locale, locale),
-        resolveSnapshotText(variant, locale, locale) || null,
-      ),
     ]),
   );
 }
@@ -94,8 +90,6 @@ export function customerPresentationText(
 export function kitchenPresentationName(
   p: Pick<ProductPresentation, "name" | "kitchenName" | "variantName" | "variantKitchenName">,
 ): string {
-  const product = p.kitchenName?.trim() || p.name;
-  if (p.variantName === null) return product;
-  const variant = p.variantKitchenName?.trim() || p.variantName;
-  return join(product, variant);
+  if (p.variantName) return p.variantKitchenName?.trim() || p.variantName;
+  return p.kitchenName?.trim() || p.name;
 }

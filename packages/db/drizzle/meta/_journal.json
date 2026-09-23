@@ -43,6 +43,13 @@
       "when": 1790165350442,
       "tag": "0005_product_available",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790187918870,
+      "tag": "0006_boring_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

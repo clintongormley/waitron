@@ -50,7 +50,7 @@ export type ImageUsage =
       id: string;
       productId: string;
       catalogueId: string;
-      /** The product and variant staff names joined by `staffPresentationName`. */
+      /** The variant's staff name, as `staffPresentationName` names a variant. */
       name: string;
       /** The variant AND its product are Active. */
       active: boolean;
@@ -181,7 +181,6 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
           kind: "variant",
           ...row,
           productId: parentId,
-          // The " · " join lives in product-presentation.ts and is called, never rewritten here.
           name: staffPresentationName({ name: parentName!, variantName: name }),
           active: active && parentActive === true,
         };

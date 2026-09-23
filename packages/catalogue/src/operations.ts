@@ -30,7 +30,7 @@ import type { PricingUnit, VatClass } from "./pricing.js";
 import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { listProductVariantsForProducts, type ProductVariant } from "./variants.js";
+import { variantsOfProducts, type ProductVariant } from "./variants.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import {
   assignProductUnit,
@@ -908,7 +908,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     rows.map((row) => row.id),
   );
   // A variant is listed under its parent, never on its own, and only while it is Active.
-  const variantsByProduct = await listProductVariantsForProducts(
+  const variantsByProduct = await variantsOfProducts(
     tx,
     rows.map((row) => row.id),
   );

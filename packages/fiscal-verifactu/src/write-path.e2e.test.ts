@@ -7,9 +7,30 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { incidents, newId, saleLines, sales, withTransaction } from "@waitron/db";
+import {
+  incidents,
+  newId,
+  products,
+  saleLines,
+  sales,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
+import {
+  createCatalogue,
+  createMenuItem,
+  createMenuSection,
+  createProduct,
+  customerPresentationText,
+  listMenuOffers,
+  priceBasket,
+  selectMenuVariant,
+  setProductVariants,
+  type BasketItem,
+  type MenuOffer,
+} from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { tillId as brandTillId } from "@waitron/shared";
+import { decimal, tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -695,5 +716,182 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
     });
 
     expect({ huella, importe_total, cuota_total }).toEqual(GOLDEN);
+  });
+});
+
+describe("a variant line is filed at its own effective VAT rate", () => {
+  // Review Focus 1 of the variants-as-products plan: a variant leaving its VAT blank is taxed at its
+  // PARENT's rate, and one setting its own at its own. A wrong rate on a filed invoice cannot be
+  // repaired (CLAUDE.md §5), so the rate is read back from the filed record, not from the pricer.
+  //
+  // The basket is composed the way the order path composes it (`priceOrderLines`,
+  // `apps/server/src/working-order.ts`): from what `selectMenuVariant` resolves for the chosen
+  // variant — its names, price and effective selling values.
+  async function wineOffer(tx: Transaction) {
+    const menu = await createCatalogue(tx, { name: "Barra" });
+    const section = await createMenuSection(tx, { menuId: menu.id, name: { "es-ES": "Vinos" } });
+    const parent = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Wine by the glass",
+      customerName: { "es-ES": "Vino de la casa" },
+      kitchenName: "VINO",
+      unitId: null,
+      unitPrice: "4.00",
+      vatClass: "reduced",
+    });
+    const [wine125, wine175] = await setProductVariants(
+      tx,
+      parent.id,
+      [
+        {
+          name: "Wine 125",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "4.50",
+          available: true,
+        },
+        {
+          name: "Wine 175",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "5.50",
+          available: true,
+        },
+      ],
+      "es-ES",
+    );
+    await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, wine175!.id));
+    await createMenuItem(tx, {
+      menuId: menu.id,
+      sectionId: section.id,
+      productId: parent.id,
+      grossPrice: null,
+    });
+    const [offer] = await listMenuOffers(tx, [menu.id]);
+    return { offer: offer!, wine125: wine125!.id, wine175: wine175!.id };
+  }
+
+  function lineFor(offer: MenuOffer, variantId: string): BasketItem {
+    const selected = selectMenuVariant(offer, variantId);
+    const text = customerPresentationText(selected, "es-ES");
+    return {
+      product: { ...selected, descriptions: text.product, variantDescriptions: text.variant },
+      quantity: "1",
+    };
+  }
+
+  it("files a 10% line for the variant inheriting its parent's VAT and a 21% line for the one setting its own", async () => {
+    const desglose = await withTransaction(pg.db, async (tx) => {
+      const { offer, wine125, wine175 } = await wineOffer(tx);
+      const priced = priceBasket([lineFor(offer, wine125), lineFor(offer, wine175)]);
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({
+          tillId,
+          nodeId,
+          seriesId,
+          total: priced.total,
+          lines: priced.lines,
+          vatBreakdown: priced.vatBreakdown,
+          settlement: { kind: "deferred" },
+        }),
+      );
+      const [row] = await tx
+        .select({ desglose: registrosFacturacion.desglose })
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.saleId, saleId));
+      return row!.desglose as { TipoImpositivo: string; BaseImponibleOimporteNoSujeto: string }[];
+    });
+
+    expect(
+      desglose.map(({ TipoImpositivo, BaseImponibleOimporteNoSujeto }) => ({
+        TipoImpositivo,
+        BaseImponibleOimporteNoSujeto,
+      })),
+    ).toEqual([
+      { TipoImpositivo: "10.00", BaseImponibleOimporteNoSujeto: "4.09" },
+      { TipoImpositivo: "21.00", BaseImponibleOimporteNoSujeto: "4.55" },
+    ]);
+  });
+});
+
+describe("a variant's names are not part of the huella", () => {
+  // The variant counterpart of verify.test.ts's "entorno is not part of the huella": the filed
+  // sale line keeps the variant's frozen names (spec §4.3), and none of them may reach the
+  // fingerprint. Two sales differing ONLY in the variant's three names must hash the same. Each is
+  // recorded and read back inside a transaction that is then ROLLED BACK, as the parent_line_id block
+  // above does, so the second re-allocates the same `A/1` against the same empty chain.
+  const ROLLBACK = new Error("rollback: huella captured");
+  const PINNED_NIF = "29999998K";
+
+  async function huellaFor(variant: {
+    name: string;
+    descriptions: Record<string, string>;
+    kitchenName: string;
+  }): Promise<string> {
+    const seeded = await seedTenantWithSif(pg.db, { nif: PINNED_NIF });
+    let huella: string | undefined;
+    await withTransaction(pg.db, async (tx) => {
+      const { saleId } = await recordSale(
+        tx,
+        backend,
+        saleInput({
+          tillId: seeded.tillId,
+          nodeId: seeded.nodeId,
+          seriesId: seeded.seriesId,
+          total: "4.50",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Wine by the glass",
+              descriptions: { "es-ES": "Vino de la casa" },
+              kitchenName: "VINO",
+              variantName: variant.name,
+              variantDescriptions: variant.descriptions,
+              variantKitchenName: variant.kitchenName,
+              quantity: "1",
+              unitPrice: "4.09",
+              vatRate: "10.00",
+              lineTotal: "4.09",
+            },
+          ],
+          vatBreakdown: [{ rate: decimal("10.00"), base: decimal("4.09"), tax: decimal("0.41") }],
+          settlement: { kind: "deferred" },
+        }),
+      );
+      const { rows } = await tx.execute<{ huella: string }>(
+        sql`select huella from registros_facturacion where sale_id = ${saleId}`,
+      );
+      huella = rows[0]!.huella;
+      // Without this, a regression that stopped storing the variant's names would leave both
+      // huellas equal for the wrong reason.
+      const [line] = await tx
+        .select({ variantName: saleLines.variantName })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, saleId));
+      expect(line!.variantName).toBe(variant.name);
+      throw ROLLBACK;
+    }).catch((error) => {
+      if (error !== ROLLBACK) throw error;
+    });
+    return huella!;
+  }
+
+  it("hashes identically for two sales that differ only in the variant's names", async () => {
+    const a = await huellaFor({
+      name: "Wine 125",
+      descriptions: { "es-ES": "Copa 125 ml" },
+      kitchenName: "V125",
+    });
+    const b = await huellaFor({
+      name: "Wine 175",
+      descriptions: { "es-ES": "Copa 175 ml" },
+      kitchenName: "V175",
+    });
+    expect(a).toBe(b);
   });
 });

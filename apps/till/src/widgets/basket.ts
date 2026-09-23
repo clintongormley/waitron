@@ -294,7 +294,7 @@ export class TillBasket extends LitElement {
     this.store.removeLine(index);
   }
 
-  /** The line's own label: the STAFF name, with any chosen variant joined on. A new line reads it
+  /** The line's own label: the STAFF name, the chosen variant's own when there is one. A new line reads it
    * from the live catalogue product; a retrieved line reads the name frozen onto it at add time. It
    * is plain text either way, so it needs no language fallback. */
   #lineName(line: OrderLine): string {

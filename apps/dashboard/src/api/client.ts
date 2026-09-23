@@ -1126,7 +1126,7 @@ export interface Till {
 // compile break.
 
 /** One top-sellers row (mirrors `@waitron/reporting`'s `TopSeller`) — the frozen `sale_lines`
- * STAFF name (`name`/`variant_name`, joined via `staffPresentationName`; CLAUDE.md's three-name
+ * STAFF name (`name`/`variant_name`, resolved by `staffPresentationName`; CLAUDE.md's three-name
  * table) plus its summed quantity and total, both decimal strings. A sales report shows the staff
  * name, so there is no locale map to resolve here. */
 export interface TopSellerRow {

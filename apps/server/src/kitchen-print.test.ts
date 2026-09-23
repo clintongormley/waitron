@@ -1026,13 +1026,14 @@ async function ticketWithNames(frozen: {
   return decodeTicket(jobs[0]!.payload);
 }
 
-it("prints the frozen kitchen names of the product and the selected variant", async () => {
+it("prints the selected variant's frozen kitchen name alone", async () => {
   const paper = await ticketWithNames({
     kitchenName: "COF",
     variantName: "Large",
     variantKitchenName: "LG",
   });
-  expect(paper).toContain("COF · LG");
+  expect(paper).toContain("LG");
+  expect(paper).not.toContain("COF");
   expect(paper).not.toContain("Coffee");
 });
 
@@ -1042,17 +1043,19 @@ it("falls back to the variant's staff name when it has no kitchen name", async (
     variantName: "Large",
     variantKitchenName: null,
   });
-  expect(paper).toContain("COF · Large");
+  expect(paper).toContain("Large");
+  expect(paper).not.toContain("COF");
 });
 
 // The product's kitchen name falls back to its STAFF name, not to the customer-facing text the
-// receipt prints — a cook reads the name the till buttons carry.
+// receipt prints — a cook reads the name the till buttons carry. A variant line prints the variant's
+// name alone, so this is a line with no variant.
 it("falls back to the product's staff name when it has no kitchen name", async () => {
   const paper = await ticketWithNames({
     kitchenName: null,
-    variantName: "Large",
-    variantKitchenName: "LG",
+    variantName: null,
+    variantKitchenName: null,
   });
-  expect(paper).toContain("Coffee · LG");
+  expect(paper).toContain("Coffee");
   expect(paper).not.toContain("Café recién hecho");
 });

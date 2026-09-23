@@ -34,9 +34,9 @@ import { locations, tenants, tills } from "./tenants.js";
  *    (`packages/db/src/schema/columns.ts`'s `enumType`/`enumCheck`), so the set is established by
  *    writing each label and refusing a third, and the constraint's own text is read as the
  *    enumeration.
- *  - `sale_lines.variant_id`'s foreign-key absence was read out of `information_schema`'s three
- *    constraint views by COLUMN. `pragma foreign_key_list` answers the same question, but SQLite
- *    stores no constraint NAME, so nothing here could name the key if one appeared.
+ *  - a catalogue foreign key's absence from `sale_lines` was read out of `information_schema`'s
+ *    three constraint views by COLUMN. `pragma foreign_key_list` answers the same question, but
+ *    SQLite stores no constraint NAME, so nothing here could name the key if one appeared.
  */
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -513,16 +513,16 @@ describe("sales — immutability", () => {
     expect(engineErrorMessage(remove)).toBe("sales is append-only");
   });
 
-  it("carries only the chosen variant snapshot identifier, with no live catalogue link", () => {
+  it("carries no catalogue identifier and no live catalogue link", () => {
     const catalogueShapedIds = columnsOf(suite.db, "sale_lines")
       .map((c) => c.name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(n));
-    expect(catalogueShapedIds).toEqual(["variant_id"]);
+    expect(catalogueShapedIds).toEqual([]);
 
-    const variantForeignKeys = suite.db
+    const catalogueForeignKeys = suite.db
       .all<{ from: string }>(sql.raw(`select "from" from pragma_foreign_key_list('sale_lines')`))
-      .filter((key) => key.from === "variant_id");
-    expect(variantForeignKeys).toEqual([]);
+      .filter((key) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(key.from));
+    expect(catalogueForeignKeys).toEqual([]);
   });
 });
 
@@ -720,13 +720,11 @@ describe("sales — corrective link and negative total", () => {
  * a top-level line leaves it NULL.
  *
  * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors sale_lines_sale_fk);
- * a NULL parent satisfies it, so ordinary lines are untouched. sale_lines carries NO reference to
- * any extras or options table: the one catalogue-shaped id a filed line keeps is `variant_id`, the
- * snapshot of the chosen variant, and it carries no foreign key back to the catalogue — everything
- * else the line holds is frozen names. The "carries only the chosen variant snapshot identifier"
- * test above guards that, and is weaker than its name: it matches sale_lines' column NAMES against
- * a regex, so a catalogue reference added under a name that does not end in one of those words is
- * invisible to it.
+ * a NULL parent satisfies it, so ordinary lines are untouched. sale_lines carries NO catalogue
+ * reference at all — the chosen variant is kept as its frozen names (spec decision 11). The
+ * "carries no catalogue identifier" test above guards that, and is weaker than its name: it matches
+ * sale_lines' column NAMES against a regex, so a catalogue reference added under a name that does
+ * not end in one of those words is invisible to it.
  */
 describe("sale_lines — parent line self-link", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

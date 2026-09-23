@@ -147,4 +147,14 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       { name: "variant_name", type: "TEXT", notnull: 0 },
     ]);
   });
+
+  it("keeps no variant id on either line table: the open line's product_id names the variant", () => {
+    for (const table of ["working_order_lines", "sale_lines"]) {
+      const names = db
+        .all<{ name: string }>(sql`select name from pragma_table_info(${table})`)
+        .map((c) => c.name);
+      expect(names).toContain("variant_name");
+      expect(names).not.toContain("variant_id");
+    }
+  });
 });

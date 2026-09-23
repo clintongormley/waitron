@@ -1,4 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
+import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 
 /**
  * The browser-side face of the till's HTTP API — one thin `fetch` wrapper per server route
@@ -315,7 +316,8 @@ export interface TillProduct {
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
   variantId?: string;
-  /** The selected variant's staff-facing name — plain text, joined onto {@link name} for display. */
+  /** The selected variant's staff-facing name — plain text; a line naming a variant is shown under
+   * it alone (spec §15.2). */
   variantName?: string;
   /** The selected variant's customer-facing text, locale -> text; null when it has none. */
   variantCustomerName?: Record<string, string> | null;
@@ -328,6 +330,9 @@ export interface TillProduct {
     kitchenName?: string | null;
     image?: string | null;
     unitPrice: string;
+    /** The variant's price minus its parent's on this menu, negative when cheaper, null when the
+     * two are equal — computed for the picker's "+€1.50" label; nothing stores it (spec §15.3). */
+    unitPriceDifference: string | null;
     available: boolean;
   }[];
   /**
@@ -473,10 +478,16 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
     // `variants`, `offeredModifiers` and `dietaryDeclarations` are always present on a `MenuOffer`
-    // (the server sends them for every offer), so they are assigned directly rather than
+    // (the server sends them for every offer), so they are read directly rather than
     // spread-when-present. The offered lists are passed through in the order they arrive: that is
     // the product's own attachment order, which nothing on the till re-sorts.
-    variants: offer.variants,
+    variants: offer.variants.map((variant) => {
+      const difference = subtractDecimal(decimal(variant.unitPrice), decimal(offer.unitPrice));
+      return {
+        ...variant,
+        unitPriceDifference: compareDecimal(difference, decimal("0")) === 0 ? null : difference,
+      };
+    }),
     offeredModifiers: offer.offeredModifiers,
     dietaryDeclarations: offer.dietaryDeclarations,
     diet: offer.diet,
@@ -785,7 +796,7 @@ export interface StationQueueItem {
   state: TicketState;
   /**
    * The line's snapshotted KITCHEN name, resolved server-side — the kitchen name falling back to the
-   * staff name, joined to the variant's the same way, so the display reads the dish as "2× Paella"
+   * staff name, the variant's own on a variant line, so the display reads the dish as "2× Paella"
    * and reads it identically to the printed ticket.
    */
   name: string;
@@ -1279,8 +1290,8 @@ export interface TabResult {
  * strings as the server sends them.
  */
 export interface TabLine {
-  /** The line's frozen STAFF label — the product's name joined to the variant's with " · ", resolved
-   * server-side. A tab's line list is what a waiter reads, so it carries the same name the product
+  /** The line's frozen STAFF label — the variant's name on a variant line, else the product's,
+   * resolved server-side. A tab's line list is what a waiter reads, so it carries the same name the product
    * buttons and the basket carry, never the customer-facing text a receipt prints. Absent only on a
    * fixture that omits it, which falls back to the live catalogue name. */
   name?: string;

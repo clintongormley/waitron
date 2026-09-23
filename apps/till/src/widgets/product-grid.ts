@@ -10,6 +10,13 @@ import type { TillProduct } from "../api/client.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
+/** A product with variants is sold only as one of them, so one whose variants are all unavailable
+ * here has nothing to sell and gets no tile (spec §15.4). */
+function hasSomethingToSell(product: TillProduct): boolean {
+  const variants = product.variants ?? [];
+  return variants.length === 0 || variants.some((variant) => variant.available);
+}
+
 /**
  * The wall of tappable product tiles — the till's primary input surface. One `<wt-button>` per
  * product (44px tap target + focus ring for free), showing the product's name in the current locale
@@ -19,7 +26,7 @@ import type { WorkingOrderStore } from "../state/working-order.js";
  * Tapping is driven by the selected unit:
  *  - a whole, non-hardware tile that offers nothing rings up one straight away —
  *    `store.addProduct(product, "1")`, the common tap;
- *  - a whole, non-hardware tile that offers an extras or options list, or a variant, opens the
+ *  - a whole, non-hardware tile that offers an extras or options list, or has variants, opens the
  *    modifier picker instead, and rings the dish with the answers once the operator confirms;
  *  - a fractional or hardware-mapped tile needs quantity entry, so it BROADCASTS the pick
  *    (`emit("product-selected", …)`) for the keypad. It does not touch the basket itself.
@@ -105,7 +112,7 @@ export class TillProductGrid extends LitElement {
       this.columns === undefined ? nothing : `grid-template-columns: repeat(${this.columns}, 1fr);`;
     return html`
       <div class="grid" style=${gridStyle}>
-        ${this.products.map(
+        ${this.products.filter(hasSomethingToSell).map(
           (product) => html`
             <wt-button class="tile" @click=${() => this.#pick(product)}>
               <span class="name">${productName(product)}</span>

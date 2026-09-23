@@ -603,49 +603,92 @@ describe("till-modifier-picker", () => {
   });
 
   describe("variants", () => {
-    it("requires an available variant, lists its STAFF name and rings its menu price", async () => {
+    const wine = (
+      id: string,
+      unitPrice: string,
+      unitPriceDifference: string | null,
+      available = true,
+    ) => ({
+      id,
+      name: `${id} staff`,
+      customerName: { en: `${id} menu`, es: `${id} carta` },
+      kitchenName: `${id} KDS`,
+      unitPrice,
+      unitPriceDifference,
+      available,
+    });
+    // The parent's price is 4.00: "Wine 125" is dearer, "Wine 100" cheaper, "Wine 150" the same.
+    const wineProduct: TillProduct = {
+      ...cafe,
+      name: "Vino",
+      unitPrice: "4.00",
+      menuItemId: "offer-wine",
+      variants: [
+        wine("Wine 100", "3.50", "-0.50", false),
+        wine("Wine 125", "5.50", "1.50"),
+        wine("Wine 150", "4.00", null),
+      ],
+    };
+
+    const radios = (picker: TillModifierPicker) => [
+      ...picker.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="product-variant"]'),
+    ];
+
+    it("lists the variants only, never the parent, by their STAFF names", async () => {
+      const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
+      expect(radios(picker).map((radio) => radio.value)).toEqual([
+        "Wine 100",
+        "Wine 125",
+        "Wine 150",
+      ]);
+      const text = picker.shadowRoot!.querySelector("fieldset")!.textContent!;
+      expect(text).toContain("Wine 125 staff");
+      expect(text).not.toContain("Wine 125 carta");
+      expect(text).not.toContain("Vino");
+    });
+
+    it("preselects the first available variant in variant order, so Add is enabled at once", async () => {
       const store = new WorkingOrderStore();
-      const variantProduct: TillProduct = {
-        ...cafe,
-        menuItemId: "offer-coffee",
-        variants: [
-          {
-            id: "single",
-            name: "Single",
-            customerName: { en: "Single cup", es: "Taza sencilla" },
-            kitchenName: "SGL",
-            unitPrice: "1.75",
-            available: true,
-          },
-          {
-            id: "double",
-            name: "Double",
-            customerName: { en: "Double cup", es: "Taza doble" },
-            kitchenName: "DBL",
-            unitPrice: "2.60",
-            available: false,
-          },
-        ],
-      };
-      const { el, picker } = await openPicker(variantProduct, "Café", store);
-      expect(addButton(picker).disabled).toBe(true);
-      expect(picker.shadowRoot!.textContent).not.toContain("Double");
-      expect(picker.shadowRoot!.textContent).not.toContain("Taza doble");
-      expect(picker.shadowRoot!.textContent).toContain("Single");
-      expect(picker.shadowRoot!.textContent).not.toContain("Taza sencilla");
-      picker.shadowRoot!.querySelector<HTMLInputElement>('[value="single"]')!.click();
-      await picker.updateComplete;
-      expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.75"));
+      const { el, picker } = await openPicker(wineProduct, "Vino", store);
+      expect(radios(picker).map((radio) => radio.checked)).toEqual([false, true, false]);
+      expect(addButton(picker).disabled).toBe(false);
       addButton(picker).click();
       await el.updateComplete;
       expect(store.lines[0]!.product).toMatchObject({
-        name: "Café",
-        variantId: "single",
-        variantName: "Single",
-        variantCustomerName: { en: "Single cup", es: "Taza sencilla" },
-        variantKitchenName: "SGL",
-        unitPrice: "1.75",
+        name: "Vino",
+        variantId: "Wine 125",
+        variantName: "Wine 125 staff",
+        variantCustomerName: { en: "Wine 125 menu", es: "Wine 125 carta" },
+        variantKitchenName: "Wine 125 KDS",
+        unitPrice: "5.50",
       });
+    });
+
+    it("shows an unavailable variant disabled", async () => {
+      const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
+      expect(radios(picker).map((radio) => radio.disabled)).toEqual([true, false, false]);
+    });
+
+    it("labels a variant priced above or below its parent with the difference, and one at the same price with none", async () => {
+      const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
+      const differences = [
+        ...picker.shadowRoot!.querySelectorAll<HTMLElement>("fieldset label.option"),
+      ].map((option) => option.querySelector(".price-difference")?.textContent?.trim() ?? null);
+      expect(differences).toEqual([
+        `\u2212${formatMoney("0.50")}`,
+        `+${formatMoney("1.50")}`,
+        null,
+      ]);
+    });
+
+    it("rings the chosen variant's price after another is picked", async () => {
+      const store = new WorkingOrderStore();
+      const { el, picker } = await openPicker(wineProduct, "Vino", store);
+      radios(picker)[2]!.click();
+      await picker.updateComplete;
+      addButton(picker).click();
+      await el.updateComplete;
+      expect(store.lines[0]!.product).toMatchObject({ variantId: "Wine 150", unitPrice: "4.00" });
     });
   });
 

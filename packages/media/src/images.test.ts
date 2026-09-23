@@ -243,8 +243,8 @@ describe("metadata, labels and references", () => {
           id: variant!.id,
           productId: product!.id,
           catalogueId: menu!.id,
-          // The product and variant staff names, joined by `staffPresentationName`.
-          name: "Bread \u00b7 Large",
+          // The variant's own staff name, which is how `staffPresentationName` names a variant.
+          name: "Large",
           active: true,
         },
       ];
@@ -340,9 +340,9 @@ describe("metadata, labels and references", () => {
       });
       expect(await listImageUsages(tx, image.id)).toEqual([
         { kind: "product", id: "p-on", catalogueId, name: "Bread", active: true },
-        variant("a-kept", "p-on", "Bread \u00b7 Large", true),
-        variant("a-of-inactive", "p-off", "Cake \u00b7 Slice", false),
-        variant("a-removed", "p-on", "Bread \u00b7 Small", false),
+        variant("a-kept", "p-on", "Large", true),
+        variant("a-of-inactive", "p-off", "Slice", false),
+        variant("a-removed", "p-on", "Small", false),
       ]);
     });
   });

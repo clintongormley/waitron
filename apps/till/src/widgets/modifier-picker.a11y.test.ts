@@ -82,6 +82,32 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with variants listed, one unavailable and two with a price difference", async () => {
+    setLocale("es-ES");
+    const variant = (
+      id: string,
+      unitPrice: string,
+      unitPriceDifference: string | null,
+      available: boolean,
+    ) => ({ id, name: `Vino ${id}`, unitPrice, unitPriceDifference, available });
+    const { host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: {
+          ...burger,
+          offeredModifiers: [],
+          variants: [
+            variant("100", "7.50", "-0.50", false),
+            variant("125", "9.50", "1.50", true),
+            variant("150", "8.00", null, true),
+          ],
+        },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations once a list is at its allowance (disabled controls)", async () => {
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillModifierPicker>(
