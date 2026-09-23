@@ -544,6 +544,39 @@ Give its question-mark button a localized `aria-label`. It opens on click, stays
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
 `wt-input`'s `help` slot to align it beside that field's label.
 
+#### A field that falls back to another value
+
+Some fields store a value only to override one they would otherwise take from somewhere else — a
+variant's VAT, unit, station or photo from its parent product, an extra's price from its product's
+(spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §9.1). Such a field is
+**empty while it falls back**, and shows the value it falls back to as a hint, so the operator sees
+what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
+a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
+required.
+
+- **Text and price fields** (`wt-input`, `wt-price-input`, a `<textarea>`): the fallback value is the
+  field's `placeholder`. Both primitives paint it `--wt-color-text-muted`; a bespoke `<textarea>`
+  needs its own `::placeholder` rule with that token, because Chromium's default grey measured
+  3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the 4.5:1 text needs. axe does not check placeholder
+  contrast, so an a11y test for a new hinted field measures the ratio itself
+  (`packages/ui-core/src/components/wt-input.a11y.test.ts`).
+- **A `<select>`**: the FIRST option has an empty value and reads "Same as &lt;fallback value&gt;"
+  (`editor.same_as`, e.g. "Same as Reduced (10%)"); when there is nothing to name, "Same as the main
+  product" (`editor.same_as_parent`). Mark it chosen with `.selected` while the stored value is null,
+  like every option built from an expression. A choice that means "none" on a record of its own
+  (the product editor's "Each" unit, "— none —" station) is left out where the empty value already
+  means "fall back": offering both would read as one thing and save as another.
+- **Any other control** (a category picker, the allergen and dietary picker, an image): a muted
+  hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
+  goes away once the record sets its own. An image shows the fallback picture itself under the hint
+  (`dashboard-image-upload`'s `inheritedImage`), with no Remove action, because there is nothing of
+  the record's own to remove. A control whose empty state could also mean "none" (an allergen set,
+  a dietary set) saves an emptied choice as `null` — "falls back" — never as an empty set, which
+  would declare the record free of what the fallback contains.
+
+A name is never hinted this way: a variant's names are its own (§15.2), and a blank one falls back
+to the record's own staff name, which the catalogue owns.
+
 ### Fold a long form into collapsible sections with summaries
 
 A form that shows everything an entity can carry becomes one long stack of cards, and the fields

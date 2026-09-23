@@ -213,8 +213,17 @@ export class CatalogueScreen extends LitElement {
     this.editorOpen = true;
   }
 
+  /** Whether a loaded product, or a variant nested under one, has this id: a variant has its own
+   * page, and the list read carries it only under its parent. */
+  #knows(productId: string): boolean {
+    return this.products.some(
+      ({ id, variants }) =>
+        id === productId || variants.some((variant) => variant.id === productId),
+    );
+  }
+
   async #openProduct(productId: string): Promise<void> {
-    if (!this.products.some(({ id }) => id === productId)) return;
+    if (!this.#knows(productId)) return;
     this.#resetEditorState();
     this.editorOpen = false;
     this.editorValue = null;
@@ -233,7 +242,7 @@ export class CatalogueScreen extends LitElement {
 
   async #openLinkedProduct(): Promise<void> {
     const id = this.#linkedProduct;
-    if (id === null || !this.products.some((product) => product.id === id)) return;
+    if (id === null || !this.#knows(id)) return;
     this.#linkedProduct = null;
     await this.#openProduct(id);
   }
@@ -487,6 +496,10 @@ export class CatalogueScreen extends LitElement {
           this.#child.open(event.detail.kind);
         }}
         @wt-edit-related=${this.#editRelated}
+        @wt-open-product=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          void this.#openProduct(event.detail.productId);
+        }}
       ></dashboard-product-editor>
       <wt-modal
         data-test="delete-dialog"

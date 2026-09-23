@@ -126,18 +126,21 @@ export function productEditorField(field: string, defaultLanguage: string): stri
  *
  * Focus goes to the input for the language the SERVER named, not the first one on screen: that is
  * the only input whose emptiness refused the save. A variant's names are edited in its own window,
- * so a variant's problem belongs to its ROW.
+ * so a variant's problem belongs to its ROW. The server checks only the variants saved Active
+ * (`setProductVariants`, packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
  */
 export function productEditorTranslationField(
   value: {
     customerName: LocalizedText | null;
-    variants: readonly { customerName: LocalizedText | null }[];
+    variants: readonly { customerName: LocalizedText | null; active: boolean }[];
   },
   language: string,
 ): string | null {
   const missing = (text: LocalizedText | null) => text !== null && !(text[language] ?? "").trim();
   if (missing(value.customerName)) return `customer-name-${language}`;
-  const index = value.variants.findIndex((variant) => missing(variant.customerName));
+  const index = value.variants.findIndex(
+    (variant) => variant.active && missing(variant.customerName),
+  );
   return index === -1 ? null : `variant-${index}-name`;
 }
 
@@ -174,6 +177,10 @@ function emptyDraft(): ProductEditorDraft {
  * `packages/catalogue/src/product-presentation.ts`, never to a screen. The kitchen routing (station
  * and course) travels in this form's own submitted value, so a station this venue does not have
  * rolls the product back instead of leaving it half saved.
+ *
+ * Opened on a VARIANT (its read carries `inherited`), the same form is the variant's own page: every
+ * field the variant may leave blank shows blank, with the parent's value as its hint (spec §4.4,
+ * §9.1), and there is no Modifiers or Variants section. The names are never hinted (§15.2).
  */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
@@ -204,6 +211,10 @@ export class ProductEditor extends LitElement {
       .bordered-group {
         display: flex;
         flex-direction: column;
+        /* A fieldset is at least as wide as its widest content by default, which let the variants
+           table push the pricing group past the dialog's edge at phone width instead of scrolling
+           inside its own wrapper. */
+        min-inline-size: 0;
         gap: var(--wt-space-3);
         margin: 0;
         padding: var(--wt-space-4);
@@ -270,6 +281,18 @@ export class ProductEditor extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
+      }
+      textarea::placeholder {
+        color: var(--wt-color-text-muted);
+      }
+      .nutrition-hints {
+        gap: var(--wt-space-1);
+        margin-top: var(--wt-space-3);
+      }
+      .hint {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
       textarea:focus-visible {
         outline: var(--wt-focus-ring);
@@ -479,6 +502,27 @@ export class ProductEditor extends LitElement {
   private get language() {
     return this.locales[0] ?? "en";
   }
+  /** The parent's values, on a variant's own page; null on a product of its own. */
+  private get inherited() {
+    return this.value?.inherited ?? null;
+  }
+  /** A variant's hint for a field it leaves blank. A parent with nothing to name there still says
+   * where the value comes from, rather than showing a blank that reads as "none". */
+  private sameAs(value: string | null | undefined): string {
+    return value ? t("editor.same_as").replace("{value}", value) : t("editor.same_as_parent");
+  }
+  private hint(test: string, text: string) {
+    return html`<p class="hint" data-test=${test}>${text}</p>`;
+  }
+  private taxLabel(tax: { label: string; rate: string }) {
+    return `${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)`;
+  }
+  private categoryLabel(id: string) {
+    const category = this.categories.find((category) => category.id === id);
+    return category
+      ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
+      : t("editor.missing_choice");
+  }
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
   }
@@ -491,7 +535,8 @@ export class ProductEditor extends LitElement {
    * column header both show. Never empty: a product with no stored unit is sold by the each, and
    * that is what it reads as. */
   private get unitShortLabel(): string {
-    const unit = this.units.find((unit) => unit.id === this.draft.unitId);
+    const unitId = this.draft.unitId ?? this.inherited?.unitId ?? null;
+    const unit = this.units.find((unit) => unit.id === unitId);
     if (!unit) return t("editor.unit_each");
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
@@ -508,21 +553,12 @@ export class ProductEditor extends LitElement {
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
     this.draft = { ...this.draft, [key]: value };
   }
-  /**
-   * The draft never holds exactly ONE variant: a lone variant folds back into the product's own
-   * price and its row disappears. Only the price folds back — with no variants the product's own
-   * Available switch is what governs.
-   */
-  private setVariants(variants: EditorVariant[]): void {
-    if (variants.length === 1) {
-      this.draft = {
-        ...this.draft,
-        unitPrice: variants[0]!.unitPrice ?? this.draft.unitPrice,
-        variants: [],
-      };
-      return;
-    }
-    this.change("variants", variants);
+  /** Replaces one variant in the draft by its index in the whole list. */
+  private changeVariant(index: number, next: (variant: EditorVariant) => EditorVariant): void {
+    this.change(
+      "variants",
+      this.draft.variants.map((variant, i) => (i === index ? next(variant) : variant)),
+    );
   }
   private related(event: Event, kind: ProductChildKind) {
     event.stopPropagation();
@@ -575,9 +611,15 @@ export class ProductEditor extends LitElement {
       !this.draft.categoryIds.includes(this.draft.primaryCategoryId)
     )
       errors.primary = t("editor.reporting_category_invalid");
-    if (!this.taxes.some((tax) => tax.id === this.draft.vatClass))
+    const variantPage = this.inherited !== null;
+    // On a variant a blank VAT class and a blank price read the parent's; set, they must be valid.
+    const blankPrice = !(this.draft.unitPrice ?? "").trim();
+    if (
+      !(variantPage && this.draft.vatClass === null) &&
+      !this.taxes.some((tax) => tax.id === this.draft.vatClass)
+    )
       errors.tax = t("editor.tax_required");
-    if (this.draft.variants.length === 0 && !isProductPrice(this.draft.unitPrice ?? ""))
+    if (!(variantPage && blankPrice) && !isProductPrice(this.draft.unitPrice ?? ""))
       errors["unit-price"] = t("editor.price_invalid");
     for (const [index, variant] of this.draft.variants.entries()) {
       if (!variant.name.trim()) errors[`variant-${index}-name`] = t("editor.variant_name_required");
@@ -593,6 +635,8 @@ export class ProductEditor extends LitElement {
     }
     this.submitted = true;
     const value = this.currentValue;
+    delete value.inherited;
+    if (variantPage && blankPrice) value.unitPrice = null;
     if (restore) value.active = true;
     value.name = value.name.trim();
     value.kitchenName = value.kitchenName?.trim() || null;
@@ -620,27 +664,6 @@ export class ProductEditor extends LitElement {
   private addVariant(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
-    // The first Add turns the plain price into a "Regular" variant; the window that opens is for
-    // the SECOND one, so a product that gains variants always has at least two.
-    if (this.draft.variants.length === 0) {
-      // Check the price HERE, while its field is still on screen. Once it has been folded into a
-      // variant the field is gone, and an invalid value would have nowhere left to be corrected.
-      if (!isProductPrice(this.draft.unitPrice ?? "")) {
-        this.errors = { ...this.errors, "unit-price": t("editor.price_invalid") };
-        this.#focusField = "unit-price";
-        return;
-      }
-      this.change("variants", [
-        {
-          name: t("editor.variant_regular"),
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: this.draft.unitPrice,
-          available: this.draft.available,
-        },
-      ]);
-    }
     this.variantIndex = null;
     this.variantOpen = true;
   }
@@ -648,9 +671,6 @@ export class ProductEditor extends LitElement {
   private closeVariant(): void {
     this.variantOpen = false;
     this.variantIndex = null;
-    // A cancelled first Add leaves the lone "Regular" variant behind; folding it back here is what
-    // makes cancelling a true undo.
-    this.setVariants(this.draft.variants);
   }
 
   private submitVariant(event: CustomEvent<{ value: EditorVariant }>): void {
@@ -662,21 +682,16 @@ export class ProductEditor extends LitElement {
         : this.draft.variants.map((variant, i) => (i === index ? event.detail.value : variant));
     this.variantOpen = false;
     this.variantIndex = null;
-    this.setVariants(variants);
+    this.change("variants", variants);
   }
 
   private renderCategories() {
-    const chips = this.draft.categoryIds.map((id) => {
-      const category = this.categories.find((category) => category.id === id);
-      return {
-        id,
-        reporting: id === this.draft.primaryCategoryId,
-        color: category?.color ?? "",
-        path: category
-          ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-          : t("editor.missing_choice"),
-      };
-    });
+    const chips = this.draft.categoryIds.map((id) => ({
+      id,
+      reporting: id === this.draft.primaryCategoryId,
+      color: this.categories.find((category) => category.id === id)?.color ?? "",
+      path: this.categoryLabel(id),
+    }));
     return html`<div class="group" data-section="categories">
       <span class="group-label">${t("editor.categories")}</span>
       <div class="chips">
@@ -711,8 +726,21 @@ export class ProductEditor extends LitElement {
           >${t("editor.add_category")}</wt-button
         >
       </div>
+      ${this.categoriesHint()}
       <span class="error" id="primary-error">${this.error("primary")}</span>
     </div>`;
+  }
+
+  /** A variant with no categories of its own is in its parent's, reporting category included (V12),
+   * so the two are named together. */
+  private categoriesHint() {
+    const parent = this.inherited;
+    if (!parent || this.draft.categoryIds.length) return nothing;
+    const list = parent.categoryIds.map((id) => this.categoryLabel(id)).join(", ");
+    const reporting = parent.primaryCategoryId
+      ? `${SUMMARY_SEPARATOR}${t("editor.reporting_category")}: ${this.categoryLabel(parent.primaryCategoryId)}`
+      : "";
+    return this.hint("categories-hint", `${this.sameAs(list)}${reporting}`);
   }
 
   private renderKitchen() {
@@ -738,7 +766,7 @@ export class ProductEditor extends LitElement {
         ${this.renderRouting(
           "product-station",
           t("product.station"),
-          t("product.no_station"),
+          this.blankChoice(t("product.no_station"), this.stations, this.inherited?.stationId),
           this.stations,
           this.draft.stationId,
           (id) => this.change("stationId", id),
@@ -746,13 +774,24 @@ export class ProductEditor extends LitElement {
         ${this.renderRouting(
           "product-course",
           t("product.course"),
-          t("product.no_course"),
+          this.blankChoice(t("product.no_course"), this.courses, this.inherited?.courseId),
           this.courses,
           this.draft.courseId,
           (id) => this.change("courseId", id),
         )}
       </div>
     </wt-disclosure>`;
+  }
+
+  /** What a routing select's empty choice means: none, on a product of its own; the parent's
+   * choice, on a variant. */
+  private blankChoice(
+    none: string,
+    choices: ProductRoutingChoice[],
+    parentId: string | null | undefined,
+  ): string {
+    if (this.inherited === null) return none;
+    return this.sameAs(choices.find(({ id }) => id === parentId)?.name);
   }
 
   private renderRouting(
@@ -816,6 +855,7 @@ export class ProductEditor extends LitElement {
             html`<label
               >${t("editor.description")} (${locale})<textarea
                 name=${`description-${locale}`}
+                placeholder=${this.inherited?.description?.[locale] ?? ""}
                 .value=${this.draft.description?.[locale] ?? ""}
                 @input=${(event: Event) => {
                   event.stopPropagation();
@@ -832,6 +872,7 @@ export class ProductEditor extends LitElement {
             ? html`<dashboard-image-upload
                 .api=${this.api}
                 .image=${this.draft.image}
+                .inheritedImage=${this.inherited?.image ?? null}
                 @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
                   event.stopPropagation();
                   this.change("image", event.detail.image);
@@ -845,6 +886,34 @@ export class ProductEditor extends LitElement {
         }
       </div>
     </wt-disclosure>`;
+  }
+
+  private nutritionHints() {
+    const parent = this.inherited;
+    if (!parent) return nothing;
+    return html`<div class="group nutrition-hints">
+      ${
+        this.draft.allergens === null
+          ? this.hint(
+              "allergens-hint",
+              `${t("modifiers.allergens")}: ${this.sameAs(
+                Object.keys(parent.allergens ?? {})
+                  .map((code) => allergenName(code))
+                  .join(", "),
+              )}`,
+            )
+          : nothing
+      }${
+        this.draft.dietaryDeclarations === null
+          ? this.hint(
+              "dietary-hint",
+              `${t("modifiers.dietary_preferences")}: ${this.sameAs(
+                parent.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)).join(", "),
+              )}`,
+            )
+          : nothing
+      }
+    </div>`;
   }
 
   private renderNutrition() {
@@ -863,75 +932,144 @@ export class ProductEditor extends LitElement {
         .dietaryOptions=${dietaryLabels}
         .value=${{
           allergens: Object.keys(this.draft.allergens ?? {}),
-          dietary: this.draft.dietaryDeclarations,
+          dietary: this.draft.dietaryDeclarations ?? [],
         }}
         @wt-change=${(
           event: CustomEvent<{
-            value: { allergens: string[]; dietary: ProductEditorDraft["dietaryDeclarations"] };
+            value: { allergens: string[]; dietary: DietaryLabel[] };
           }>,
         ) => {
           event.stopPropagation();
+          const { allergens: codes, dietary } = event.detail.value;
           const allergens = Object.fromEntries(
-            event.detail.value.allergens.map((code) => [
+            codes.map((code) => [
               code,
               this.draft.allergens?.[code] ??
                 this.value?.allergens?.[code] ?? { presence: "contains" as const },
             ]),
           );
+          // On a variant an empty choice is blank, which reads the parent's: saved as an empty
+          // overlay it would declare the variant free of every allergen its parent contains.
+          const variantPage = this.inherited !== null;
           this.draft = {
             ...this.draft,
-            allergens,
-            dietaryDeclarations: event.detail.value.dietary,
+            allergens: variantPage && !codes.length ? null : allergens,
+            dietaryDeclarations: variantPage && !dietary.length ? null : dietary,
           };
         }}
       ></dashboard-allergen-dietary-picker>
+      ${this.nutritionHints()}
     </wt-disclosure>`;
   }
 
-  private renderPrice() {
-    const unitLabel = this.unitShortLabel;
-    return html`<fieldset class="bordered-group" data-section="price">
-      <legend>${t("editor.pricing")}</legend>
-      <label
-        >${t("product.vat")} *<select
+  private renderTax() {
+    const parent = this.inherited;
+    const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
+    return html`<label
+        >${t("product.vat")}${parent ? nothing : " *"}<select
           name="tax"
-          aria-required="true"
+          aria-required=${parent ? "false" : "true"}
           aria-invalid=${this.error("tax") ? "true" : "false"}
           aria-describedby="tax-error"
           @change=${(event: Event) => {
             event.stopPropagation();
+            const value = (event.target as HTMLSelectElement).value;
             this.change(
               "vatClass",
-              (event.target as HTMLSelectElement).value as ProductEditorDraft["vatClass"],
+              parent && value === ""
+                ? null
+                : (value as NonNullable<ProductEditorDraft["vatClass"]>),
             );
           }}
         >
-          <option value="">${t("editor.choose")}</option>
-          ${this.taxes.map((tax) => html`<option value=${tax.id} .selected=${tax.id === this.draft.vatClass}>${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)</option>`)}
+          ${
+            parent
+              ? html`<option value="" .selected=${this.draft.vatClass === null}>
+                  ${this.sameAs(parentTax ? this.taxLabel(parentTax) : null)}
+                </option>`
+              : html`<option value="">${t("editor.choose")}</option>`
+          }
+          ${this.taxes.map((tax) => html`<option value=${tax.id} .selected=${tax.id === this.draft.vatClass}>${this.taxLabel(tax)}</option>`)}
         </select></label
-      ><span class="error" id="tax-error">${this.error("tax")}</span>
-      ${
-        this.draft.variants.length === 0
-          ? html`<wt-price-input
-              name="unit-price"
-              label=${priceLabel(unitLabel)}
-              unit=${t("editor.per_unit").replace("{unit}", unitLabel)}
-              required
-              ?disabled=${this.suspended}
-              .value=${this.draft.unitPrice}
-              .error=${this.error("unit-price")}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.change("unitPrice", event.detail.value);
-              }}
-              @wt-unit-click=${(event: Event) => {
-                event.stopPropagation();
-                this.unitPickerOpen = true;
-              }}
-            ></wt-price-input>`
-          : html`<dashboard-variant-table
+      ><span class="error" id="tax-error">${this.error("tax")}</span>`;
+  }
+
+  /** The unit dropdown behind the price field's button. On a variant its empty choice is the
+   * parent's unit, so the synthetic "Each" — which means NO unit on a product of its own — is not
+   * offered: it would read as one thing and save as another. */
+  private renderUnit() {
+    const parent = this.inherited;
+    const parentUnit = parent && this.units.find((unit) => unit.id === parent.unitId);
+    const blank = parent
+      ? this.sameAs(parentUnit ? this.unitLabel(parentUnit) : t("editor.unit_each"))
+      : t("editor.unit_each");
+    return html`<label
+        >${t("product.unit")}<select
+          name="unit"
+          aria-invalid=${this.error("unit") ? "true" : "false"}
+          aria-describedby="unit-error"
+          @change=${(event: Event) => {
+            event.stopPropagation();
+            this.change("unitId", (event.target as HTMLSelectElement).value || null);
+            this.unitPickerOpen = false;
+          }}
+        >
+          <option value="" .selected=${this.draft.unitId === null}>${blank}</option>
+          ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
+        </select></label
+      ><span class="error" id="unit-error">${this.error("unit")}</span>
+      <div class="row">
+        <wt-button
+          variant="secondary"
+          data-test="add-unit"
+          ?disabled=${this.suspended}
+          @click=${(event: Event) => this.related(event, "unit")}
+          >${t("editor.add_unit")}</wt-button
+        >
+      </div>`;
+  }
+
+  private renderPrice() {
+    const unitLabel = this.unitShortLabel;
+    const parent = this.inherited;
+    const base = this.draft.variants.some((variant) => variant.active);
+    return html`<fieldset class="bordered-group" data-section="price">
+      <legend>${t("editor.pricing")}</legend>
+      ${this.renderTax()}
+      <wt-price-input
+        name="unit-price"
+        label=${
+          base ? t("editor.base_price_unit").replace("{unit}", unitLabel) : priceLabel(unitLabel)
+        }
+        unit=${t("editor.per_unit").replace("{unit}", unitLabel)}
+        placeholder=${parent?.unitPrice ?? ""}
+        ?required=${parent === null}
+        ?disabled=${this.suspended}
+        .value=${this.draft.unitPrice ?? ""}
+        .error=${this.error("unit-price")}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.change("unitPrice", event.detail.value);
+        }}
+        @wt-unit-click=${(event: Event) => {
+          event.stopPropagation();
+          this.unitPickerOpen = true;
+        }}
+      ></wt-price-input>
+      ${this.unitOpen ? this.renderUnit() : nothing}
+      ${parent ? nothing : this.renderVariants(unitLabel)}
+    </fieldset>`;
+  }
+
+  /** The parent's quick variants section: the common fields inline, each variant's full set of
+   * overrides on its own page (spec §4.4). */
+  private renderVariants(unitLabel: string) {
+    return html`${
+        this.draft.variants.length
+          ? html`<dashboard-variant-table
               .variants=${this.draft.variants}
               unitLabel=${unitLabel}
+              basePrice=${this.draft.unitPrice ?? ""}
               .unitId=${this.draft.unitId}
               .unitOptions=${[
                 { value: null, label: t("editor.unit_each") },
@@ -961,56 +1099,45 @@ export class ProductEditor extends LitElement {
                 event: CustomEvent<{ index: number; available: boolean }>,
               ) => {
                 event.stopPropagation();
-                this.change(
-                  "variants",
-                  this.draft.variants.map((variant, index) =>
-                    index === event.detail.index
-                      ? { ...variant, available: event.detail.available }
-                      : variant,
-                  ),
-                );
+                this.changeVariant(event.detail.index, (variant) => ({
+                  ...variant,
+                  available: event.detail.available,
+                }));
               }}
               @wt-edit=${(event: CustomEvent<{ index: number }>) => {
                 event.stopPropagation();
                 this.variantIndex = event.detail.index;
                 this.variantOpen = true;
               }}
-              @wt-remove=${(event: CustomEvent<{ index: number }>) => {
+              @wt-open=${(event: CustomEvent<{ index: number }>) => {
                 event.stopPropagation();
-                this.setVariants(
-                  this.draft.variants.filter((_, index) => index !== event.detail.index),
+                const id = this.draft.variants[event.detail.index]?.id;
+                if (this.suspended || id === undefined) return;
+                this.dispatchEvent(
+                  new CustomEvent("wt-open-product", {
+                    detail: { productId: id },
+                    bubbles: true,
+                    composed: true,
+                  }),
                 );
               }}
+              @wt-remove=${(event: CustomEvent<{ index: number }>) => {
+                event.stopPropagation();
+                const { index } = event.detail;
+                // Removing makes a saved variant Inactive (spec §15.6); one never saved has no row
+                // to make Inactive, so it simply leaves the draft.
+                if (this.draft.variants[index]?.id === undefined)
+                  this.change(
+                    "variants",
+                    this.draft.variants.filter((_, i) => i !== index),
+                  );
+                else this.changeVariant(index, (variant) => ({ ...variant, active: false }));
+              }}
+              @wt-restore=${(event: CustomEvent<{ index: number }>) => {
+                event.stopPropagation();
+                this.changeVariant(event.detail.index, (variant) => ({ ...variant, active: true }));
+              }}
             ></dashboard-variant-table>`
-      }
-      ${
-        this.draft.variants.length === 0 && this.unitOpen
-          ? html`<label
-                >${t("product.unit")}<select
-                  name="unit"
-                  aria-invalid=${this.error("unit") ? "true" : "false"}
-                  aria-describedby="unit-error"
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    this.change("unitId", (event.target as HTMLSelectElement).value || null);
-                    this.unitPickerOpen = false;
-                  }}
-                >
-                  <option value="" .selected=${this.draft.unitId === null}>
-                    ${t("editor.unit_each")}
-                  </option>
-                  ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
-                </select></label
-              ><span class="error" id="unit-error">${this.error("unit")}</span>
-              <div class="row">
-                <wt-button
-                  variant="secondary"
-                  data-test="add-unit"
-                  ?disabled=${this.suspended}
-                  @click=${(event: Event) => this.related(event, "unit")}
-                  >${t("editor.add_unit")}</wt-button
-                >
-              </div>`
           : nothing
       }
       <div class="row">
@@ -1021,8 +1148,7 @@ export class ProductEditor extends LitElement {
           @click=${this.addVariant}
           >${t("editor.add_variant")}</wt-button
         >
-      </div>
-    </fieldset>`;
+      </div>`;
   }
 
   /** The list's own STAFF name. This surface shows exactly one of a list's three names and it is
@@ -1176,7 +1302,9 @@ export class ProductEditor extends LitElement {
     const fields = this.fields();
     return html`<wt-modal
         .open=${this.open}
-        heading=${t(this.value?.id ? "product.edit" : "product.new")}
+        heading=${t(
+          this.inherited ? "editor.edit_variant" : this.value?.id ? "product.edit" : "product.new",
+        )}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
         @wt-close=${(event: Event) => {
@@ -1218,7 +1346,7 @@ export class ProductEditor extends LitElement {
           ${keyed(this.generation, this.renderKitchen())}
           ${keyed(this.generation, this.renderDescriptors())}
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
-          ${this.renderModifiers()}
+          ${this.inherited ? nothing : this.renderModifiers()}
         </div>
         <wt-form-actions slot="footer"
           ><wt-button
@@ -1257,6 +1385,8 @@ export class ProductEditor extends LitElement {
           this.variantIndex === null ? null : (this.draft.variants[this.variantIndex] ?? null)
         }
         unitLabel=${this.unitShortLabel}
+        basePrice=${this.draft.unitPrice ?? ""}
+        .inheritedImage=${this.draft.image}
         .api=${this.api}
         @wt-submit=${this.submitVariant}
         @wt-cancel=${(event: Event) => {

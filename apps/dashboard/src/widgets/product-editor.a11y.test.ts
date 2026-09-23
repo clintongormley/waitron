@@ -54,6 +54,7 @@ const variants: ProductEditorDraft = {
       image: null,
       unitPrice: "2.00",
       available: true,
+      active: true,
     },
     {
       name: "Large",
@@ -62,8 +63,50 @@ const variants: ProductEditorDraft = {
       image: null,
       unitPrice: "3.50",
       available: false,
+      active: true,
+    },
+    {
+      id: "medium",
+      name: "Medium",
+      customerName: { en: "Medium cup" },
+      kitchenName: "MD",
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: false,
     },
   ],
+};
+// A variant's own page with every inherited field left blank, so each one draws its hint.
+const variantPage: ProductEditorDraft = {
+  ...coffee,
+  id: "glass",
+  parentId: "coffee",
+  inherited: {
+    description: { en: "Roasted in house" },
+    image: "coffee.png",
+    unitPrice: "3.00",
+    vatClass: "reduced",
+    unitId: "each",
+    categoryIds: ["drinks"],
+    primaryCategoryId: "drinks",
+    stationId: "bar",
+    courseId: "starters",
+    allergens: { milk: { presence: "contains" } },
+    dietaryDeclarations: ["vegan"],
+  },
+  name: "Glass",
+  customerName: { en: "A glass" },
+  kitchenName: "GLS",
+  unitId: null,
+  unitPrice: null,
+  vatClass: null,
+  allergens: null,
+  dietaryDeclarations: null,
+  categoryIds: [],
+  primaryCategoryId: null,
+  stationId: null,
+  courseId: null,
 };
 
 describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (theme) => {
@@ -77,6 +120,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "categories",
     "variant-window",
     "inactive",
+    "variant-page",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -94,7 +138,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                 ? withModifiers
                 : state === "inactive"
                   ? { ...coffee, active: false, available: false }
-                  : coffee,
+                  : state === "variant-page"
+                    ? variantPage
+                    : coffee,
         extraLists,
         optionLists,
         categories: [
@@ -130,7 +176,17 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       )!;
       expect(form.open).toBe(true);
     }
-    if (state === "open-sections") {
+    if (state === "variants") {
+      // Every status at once, so the scan covers an Inactive row and a row priced by its hint.
+      const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+      await table.updateComplete;
+      const filter = table.shadowRoot!.querySelector<HTMLSelectElement>("[name=variant-status]")!;
+      filter.value = "all";
+      filter.dispatchEvent(new Event("change"));
+      await table.updateComplete;
+      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
+    }
+    if (state === "open-sections" || state === "variant-page") {
       for (const name of ["kitchen", "descriptors", "nutrition"]) {
         const disclosure = el.shadowRoot!.querySelector<
           HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
@@ -142,6 +198,11 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       }
     }
     await el.updateComplete;
+    if (state === "variant-page") {
+      // Without these the scan could pass on a page that drew none of its hints.
+      for (const name of ["categories-hint", "allergens-hint", "dietary-hint"])
+        expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
+    }
     await expectNoA11yViolations(host);
   });
 });

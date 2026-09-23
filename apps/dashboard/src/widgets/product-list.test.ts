@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenStateName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
+import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList } from "./product-list.js";
 import { t } from "../i18n/t.js";
 
@@ -62,9 +63,17 @@ const bunVariant = {
  * field they exercise (allergens, image, active, name) via a spread so the fixture stays the
  * single source for the rest. The staff name and the customer-facing name deliberately DIFFER, so a
  * test cannot pass by reading whichever one it happened to find.
+ *
+ * A variant given without `effective` reads its product's values there, which is what the server
+ * sends for a variant that sets none of its own.
  */
-function product(overrides: Partial<Product> = {}): Product {
-  return {
+function product(
+  overrides: Omit<Partial<Product>, "variants"> & {
+    variants?: (Omit<ListedVariant, "effective"> & Partial<Pick<ListedVariant, "effective">>)[];
+  } = {},
+): Product {
+  const { variants = [], ...rest } = overrides;
+  const base: Omit<Product, "variants"> = {
     id: "prod-1",
     modifiers: [],
     catalogueId: "cat-1",
@@ -88,8 +97,19 @@ function product(overrides: Partial<Product> = {}): Product {
     dietOverride: null,
     manualAllergens: null,
     image: null,
-    variants: [],
-    ...overrides,
+    ...rest,
+  };
+  return {
+    ...base,
+    variants: variants.map((variant) => ({
+      ...variant,
+      effective: variant.effective ?? {
+        unitPrice: variant.unitPrice ?? base.unitPrice,
+        vatClass: base.vatClass,
+        primaryCategoryId: base.primaryCategoryId,
+        categoryIds: base.categoryIds,
+      },
+    })),
   };
 }
 

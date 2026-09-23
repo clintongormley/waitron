@@ -588,6 +588,7 @@ describe("catalogue-screen", () => {
         image: null,
         unitPrice: "4.50",
         available: true,
+        active: true,
       },
       {
         name: "Entera",
@@ -596,6 +597,7 @@ describe("catalogue-screen", () => {
         image: null,
         unitPrice: "8.50",
         available: true,
+        active: true,
       },
     ];
     // The product's own customer name is complete, so the only value missing English is the second
@@ -721,5 +723,96 @@ describe("catalogue-screen", () => {
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
+  });
+  describe("a variant's own page", () => {
+    // Listed under its parent only: the list read nests variants, and nothing lists one at the top.
+    const withVariant: Product[] = [
+      {
+        ...products[0]!,
+        variants: [
+          {
+            id: "v1",
+            name: "Media ración",
+            customerName: { es: "Media ración de croquetas" },
+            kitchenName: "1/2 CROQ",
+            image: null,
+            unitPrice: null,
+            available: true,
+            active: true,
+            effective: {
+              unitPrice: "8.50",
+              vatClass: "reduced",
+              primaryCategoryId: "c1",
+              categoryIds: ["c1"],
+            },
+          },
+        ],
+      },
+    ];
+    const variantValue: ProductEditorValue = {
+      ...value,
+      id: "v1",
+      parentId: "p1",
+      name: "Media ración",
+      customerName: { es: "Media ración de croquetas" },
+      kitchenName: "1/2 CROQ",
+      description: null,
+      unitId: null,
+      unitPrice: null,
+      vatClass: null,
+      categoryIds: [],
+      primaryCategoryId: null,
+      modifiers: [],
+      allergens: null,
+      dietaryDeclarations: null,
+      inherited: {
+        description: { es: "Cremosas" },
+        image: null,
+        unitPrice: "8.50",
+        vatClass: "reduced",
+        unitId: "u1",
+        categoryIds: ["c1"],
+        primaryCategoryId: "c1",
+        stationId: null,
+        courseId: null,
+        allergens: {},
+        dietaryDeclarations: ["vegetarian"],
+      },
+    };
+    const variantApi = () =>
+      stubApi({
+        listProducts: vi
+          .fn()
+          .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? withVariant : [])),
+        getProductEditor: vi
+          .fn()
+          .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
+      });
+
+    it("opens the variant named in the address", async () => {
+      history.replaceState(null, "", "/manage/catalogue/product/v1");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      expect(api.getProductEditor).toHaveBeenCalledWith("v1");
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).value).toEqual(variantValue);
+    });
+
+    it("opens a variant's page from its parent's variants section, and saves to the variant", async () => {
+      history.replaceState(null, "", "/manage/catalogue");
+      const api = variantApi();
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await flush(el);
+      expect(editor(el).value).toEqual(variantValue);
+      expect(location.pathname).toBe("/manage/catalogue/product/v1");
+      emit(editor(el), "wt-submit", { value: variantValue });
+      await flush(el);
+      expect(api.updateProductEditor).toHaveBeenCalledWith("v1", variantValue);
+    });
   });
 });
