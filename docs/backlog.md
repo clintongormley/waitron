@@ -2615,18 +2615,44 @@ line 190) shows every `content.translation_required` refusal beside the unit's N
 checks the name and the abbreviation separately (`packages/catalogue/src/units.ts`) and raises the same
 code, which carries only a language (`packages/catalogue/src/content-languages.ts`), so a refused
 abbreviation is reported beside the name — the shape CLAUDE.md §3 describes for the product editor.
-Found by reading; no test pins it. **Next action:** have the refusal name the field (or check each
-field separately), then place it test-first.
+The server checks only the venue's default content language, read when the save arrives. Its
+refusal reaches the screen when that default changes while the form is open, or before the live
+refresh reaches the screen (the screen's language list is a live query, `watch("getContentLanguages")`
+in `units-screen.ts`, about line 129): `apps/dashboard/src/widgets/unit-form.ts` rebuilds its draft
+on a language change only when it has no names yet (about lines 59-62), and its check
+`this.abbreviations[defaultLocale]?.trim() === ""` (about line 107) lets a missing abbreviation key
+through. Found by reading; no test pins it. **Next action:** have the
+refusal name the field (or check each field separately), then place it test-first.
 
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #DASH_PR).** Each from
 reading unless marked run:
 - Two dashboard client methods nothing calls: `connectPaymentProvider` and `addReader` in
-  `apps/dashboard/src/api/client.ts` (grep of `apps/dashboard/src` outside tests: no callers; run).
-  Left in place because lane B is changing that file.
-- A closed `wt-dialog` fires its `close` event one step later, so a dialog reopened within that step
-  is shut again; `staff-screen.ts` and `purchases-screen.ts` have no guard, `profile-screen.ts` has
-  one (`#closingModal`). Seen once under coverage load in a test (run); a person cannot reopen that
-  fast.
+  `apps/dashboard/src/api/client.ts`. Run:
+  `grep -rn --include='*.ts' -E '\b(connectPaymentProvider|addReader)\b' apps packages` finds no
+  call to either method in `apps/` or `packages/`, tests included; the other `addReader` hits are a
+  local helper of that name in `apps/server/src/payments-api.test.ts`, the providers' own client
+  methods and the provider panels' calls to them. The comments on the two methods say a provider's
+  connect panel or add-reader panel calls them, which is stale: the provider panels
+  (`packages/payments-stripe/src/dashboard/stripe-connect-form.ts`,
+  `packages/payments-stripe/src/dashboard/stripe-add-reader.ts`,
+  `packages/payments-sumup/src/dashboard/sumup-connect-form.ts`,
+  `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) call their own packages' clients.
+  Deleting the methods removes those comments with them, and makes the block comment above
+  `listPaymentProviders` in that file, which says the connect and add-reader forms are not there,
+  true. Left in place because lane B's variants plan
+  (`docs/superpowers/plans/2026-09-23-variants-as-products.md`) will change that file.
+- `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
+  (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
+  closes — the same mechanism the Task 11 entry "Dismissing a nested form fires TWO cancels, and
+  only two of five forms guard it" measured. So a dialog reopened within that task is shut again:
+  `wt-dialog`'s own close handler (`onClose`, about lines 83-86) sets its `open` to false, which
+  closes the native dialog, and then the screen's handler clears its state. `staff-screen.ts` and
+  `purchases-screen.ts` have no guard; their tests wait out the late close rather than guard it
+  (`staff-screen.test.ts`, `purchases-screen.test.ts`). `profile-screen.ts`'s flag
+  (`#closingModal`) protects the screen's mode but, we believe (by reading, not tested), not the
+  dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting a
+  fresh dialog for each open (`keyed`, about lines 215-222). Seen once under coverage load in a test
+  (run); we believe a person cannot reopen it that fast; not tested.
 - `my-schedule-screen.ts` shows "no swaps" / "no absences" while those lists are still loading.
 - `content-languages.ts` sends `languages-closed` twice on Cancel (counted in a test run), and its
   Enter-to-save cannot fire because the dialog holds no text box.
@@ -2638,17 +2664,19 @@ reading unless marked run:
   and a handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
 
-**What the till shows the NEXT operator when the previous one's request answers late — OPEN
-(found 2026-09-23, till coverage, PR #536).** The till coverage branch fixed the case where a late answer
-reopened a logged-out till (it now stays on the lock screen). The same late answer can also arrive
-after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
+**What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
+change (owner decision 2026-09-23; found 2026-09-23, till coverage, PR #536).** The till coverage branch
+fixed the case where a late answer reopened a logged-out till (it now stays on the lock screen).
+The same late answer can also arrive after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
 `apps/till/src/till-app.ts` then push the previous operator's ticket or table over the new session.
 Reproduced 2026-09-23 in the till coverage branch's review on a till, with the sale and the
 table-open answers held back across a logout and a second operator's login: both appeared over the
-new session. What to show is a product question: the sale may have filed, so hiding it entirely
-loses the one signal that it did. **Next action:** decide
-(for example a per-session counter that drops the navigation but keeps a "the previous sale filed"
-notice), then fix it test-first.
+new session. The owner's answer: the ticket belongs to the TILL, not to the operator who started
+it, so a late result shown on that device after a change of operator is right — on a handheld passed
+from one waiter to another too. The case is unlikely, because whoever takes a payment is usually
+standing there waiting for it. What matters is that no payment is lost, and none is: the payment
+belongs to the table, so the next operator opens the table and sees what is paid and what remains.
+The fix in #536 (a logged-out till stays locked) stands.
 
 **Till code that no test can reach, and small till defects — OPEN (found 2026-09-23, till
 coverage, PR #536).** Left uncovered rather than deleted, each by reading its callers (none was

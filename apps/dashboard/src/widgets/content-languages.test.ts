@@ -107,7 +107,7 @@ describe("content language editor", () => {
     expect(additional.hasAttribute("aria-describedby")).toBe(false);
   });
 
-  it("closes from Cancel and from Escape, announcing languages-closed", async () => {
+  it("closes from Cancel, announcing languages-closed", async () => {
     const { el, host } = await mountWidget<ContentLanguageEditor>("dashboard-content-languages", {
       open: true,
       config: { defaultLanguage: "en", languages: ["en"] },
@@ -119,15 +119,28 @@ describe("content language editor", () => {
     await el.updateComplete;
     expect(el.open).toBe(false);
     expect(closed).toHaveBeenCalled();
+  });
 
-    closed.mockClear();
-    el.open = true;
-    await el.updateComplete;
+  // Mounted on its own: after a Cancel, the closed dialog's own close event arrives a task later
+  // and announces languages-closed again, which would satisfy these assertions with no Escape.
+  it("closes from Escape, announcing languages-closed", async () => {
+    const { el, host } = await mountWidget<ContentLanguageEditor>("dashboard-content-languages", {
+      open: true,
+      config: { defaultLanguage: "en", languages: ["en"] },
+      api: { updateContentLanguages: vi.fn() },
+    });
+    const closed = vi.fn();
+    host.addEventListener("languages-closed", closed);
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.matches(":modal")).toBe(true);
+    expect(closed).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
     await vi.waitFor(() => expect(closed).toHaveBeenCalled());
     expect(el.open).toBe(false);
+    expect(dialog.open).toBe(false);
   });
 
   it("holds the draft open and unchanged while a save is in flight", async () => {

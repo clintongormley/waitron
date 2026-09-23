@@ -128,25 +128,27 @@ describe("staff-list", () => {
 });
 
 describe("staff-list sorting", () => {
-  // Every column sorts on a different value from the raw row order, so each case fails if its
-  // column's sort value is dropped or reads a different field.
+  // Raw row order is Dora, Eva, Carl, and every column's order differs from it and from the
+  // display-name order, so each case fails if its column's sort value stops varying or reads the
+  // display name. Three rows cannot give seven distinct orders: role and status share one, as do
+  // legal name, email and telephone, so a swap between two columns in the same group goes unseen.
   const roster: PersonSummary[] = [
     {
       personId: "a",
-      displayName: "Zoe",
-      firstNames: "Ana",
+      displayName: "Dora",
+      firstNames: "Dorotea",
       lastNames: "Abad",
       telephone: "+34 600",
       role: "manager",
       status: "pending",
       hasPassword: false,
       hasTotp: false,
-      email: "zoe@x.com",
+      email: "dora@x.com",
     },
     {
       personId: "b",
-      displayName: "Bea",
-      firstNames: "Bea",
+      displayName: "Eva",
+      firstNames: "Eva María",
       telephone: null,
       role: "staff",
       status: "suspended",
@@ -179,27 +181,27 @@ describe("staff-list sorting", () => {
   }
 
   it("sorts by display name", async () => {
-    expect(await sortedBy("displayName")).toEqual(["Bea", "Carl", "Zoe"]);
+    expect(await sortedBy("displayName")).toEqual(["Carl", "Dora", "Eva"]);
   });
 
   // A missing surname or given name sorts as empty text, never as the word "undefined".
   it("sorts by legal name, treating a missing surname or given name as empty", async () => {
-    expect(await sortedBy("legalName")).toEqual(["Bea", "Carl", "Zoe"]);
+    expect(await sortedBy("legalName")).toEqual(["Eva", "Carl", "Dora"]);
   });
 
   // The localised role names order differently from the raw tokens (admin, manager, staff).
   it("sorts by the localised role name, not the raw role", async () => {
-    expect(await sortedBy("role")).toEqual(["Carl", "Bea", "Zoe"]);
+    expect(await sortedBy("role")).toEqual(["Carl", "Eva", "Dora"]);
   });
 
   // A person with no email or telephone sorts first as empty text rather than last as a null.
   it.each(["email", "telephone"])("sorts a missing %s first as empty text", async (key) => {
-    expect(await sortedBy(key)).toEqual(["Bea", "Carl", "Zoe"]);
+    expect(await sortedBy(key)).toEqual(["Eva", "Carl", "Dora"]);
   });
 
   // The localised status names order differently from the raw tokens (active, pending, suspended).
   it("sorts by the localised status name, not the raw status", async () => {
-    expect(await sortedBy("status")).toEqual(["Carl", "Bea", "Zoe"]);
+    expect(await sortedBy("status")).toEqual(["Carl", "Eva", "Dora"]);
   });
 
   it("offers Resend invitation only to a pending person and emits it for that person", async () => {
