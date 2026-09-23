@@ -1,5 +1,5 @@
-import { prepareImage, uploadImage } from "@waitron/media";
-import { sampleImage } from "@waitron/media/testing/sample-image.js";
+import { uploadImage } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
@@ -2197,10 +2197,7 @@ describe("startServer, against a migrated venue directory", () => {
     });
 
     try {
-      const prepared = await prepareImage(
-        await sampleImage({ width: 8, height: 6, format: "png" }),
-        { maxUploadBytes: MAX_UPLOAD_BYTES },
-      );
+      const prepared = await samplePreparedImage({ width: 8, format: "png" });
       const imageName = await withTransaction(sharedDb, async (tx) => {
         const result = await uploadImage(
           tx,
@@ -3002,9 +2999,7 @@ describe("startServer — what a trading boot wires behind its management routes
     const current = (await (
       await fetch(`http://127.0.0.1:${port}/api/content-languages`)
     ).json()) as { defaultLanguage: string };
-    const image = await prepareImage(await sampleImage({ width: 9, height: 6, format: "png" }), {
-      maxUploadBytes: MAX_UPLOAD_BYTES,
-    });
+    const image = await samplePreparedImage({ width: 9, format: "png" });
     await withTransaction(db, (tx) =>
       uploadImage(
         tx,

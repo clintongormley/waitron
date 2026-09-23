@@ -4,8 +4,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listImages, uploadImage } from "./images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
-import { prepareImage } from "./prepare.js";
-import { sampleImage } from "./testing/sample-image.js";
+import { samplePreparedImage } from "./testing/sample-image.js";
 
 /**
  * The query grammar `listImages` accepts: quoted phrases, `-` for exclusion, and `or`.
@@ -39,10 +38,7 @@ const suite = useVenueDb({
         await uploadImage(
           tx,
           {
-            image: await prepareImage(
-              await sampleImage({ width: 8 + index, height: 6, format: "jpeg" }),
-              { maxUploadBytes: 64 * 1024 },
-            ),
+            image: await samplePreparedImage({ width: 8 + index }),
             names: { en: name },
             altText: { en: "Photo" },
             labels: [],
@@ -120,10 +116,7 @@ describe("punctuation and degenerate queries", () => {
       const { image } = await uploadImage(
         tx,
         {
-          image: await prepareImage(
-            await sampleImage({ width: 100 + marker, height: 6, format: "jpeg" }),
-            { maxUploadBytes: 64 * 1024 },
-          ),
+          image: await samplePreparedImage({ width: 100 + marker }),
           names: { en: name },
           altText: { en: "Photo" },
           labels: [],

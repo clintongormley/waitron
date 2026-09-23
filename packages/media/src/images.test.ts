@@ -23,8 +23,8 @@ import {
   listImages,
 } from "./images.js";
 import { mediaImageData, mediaImages } from "./schema/images.js";
-import { prepareImage, type PreparedImage } from "./prepare.js";
-import { sampleImage } from "./testing/sample-image.js";
+import type { PreparedImage } from "./prepare.js";
+import { samplePreparedImage } from "./testing/sample-image.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 // One real migrated SQLite venue database, carrying the core, catalogue and media sets. There is no
@@ -35,10 +35,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 /** A photo ready to store. A different width is a different photo (`testing/sample-image.ts`). */
-const prepare = async (width: number): Promise<PreparedImage> =>
-  prepareImage(await sampleImage({ width, height: 6, format: "jpeg" }), {
-    maxUploadBytes: 64 * 1024,
-  });
+const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({ width });
 const photo = await prepare(8);
 
 // WHAT THE STORAGE SWITCH TOOK OUT OF THIS FILE.

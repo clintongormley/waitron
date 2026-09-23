@@ -13,8 +13,8 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { eq, sql } from "drizzle-orm";
-import { prepareImage, uploadImage, readImageBytes } from "@waitron/media";
-import { sampleImage } from "@waitron/media/testing/sample-image.js";
+import { uploadImage, readImageBytes } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -212,9 +212,7 @@ describe("configuration transfer database path", () => {
   });
 
   it("copies declared configuration into a fresh venue while scrubbing staff authenticators", async () => {
-    const photo = await prepareImage(await sampleImage({ width: 8, height: 6, format: "jpeg" }), {
-      maxUploadBytes: 64 * 1024,
-    });
+    const photo = await samplePreparedImage({ width: 8 });
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,

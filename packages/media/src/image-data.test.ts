@@ -7,8 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { uploadImage } from "./images.js";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
-import { prepareImage } from "./prepare.js";
-import { sampleImage } from "./testing/sample-image.js";
+import { samplePreparedImage } from "./testing/sample-image.js";
 
 /**
  * `media_image_data` may only hold bytes for an image that exists, and it loses them when that
@@ -37,9 +36,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 
-const photo = await prepareImage(await sampleImage({ width: 8, height: 6, format: "jpeg" }), {
-  maxUploadBytes: 64 * 1024,
-});
+const photo = await samplePreparedImage({ width: 8 });
 const options = { fallbackLanguage: "en" };
 
 it("refuses image bytes for an absent image and removes the bytes with their image", async () => {

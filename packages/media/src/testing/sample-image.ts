@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, type PreparedImage } from "../prepare.js";
 
 /**
  * A small solid-colour picture that sharp can decode, for tests that upload.
@@ -22,4 +23,18 @@ export async function sampleImage(options: {
     },
   });
   return new Uint8Array(await image.toFormat(options.format).toBuffer());
+}
+
+/** {@link sampleImage} made ready to store by `prepareImage`: 6 pixels high and a JPEG unless named. */
+export async function samplePreparedImage(options: {
+  width: number;
+  height?: number;
+  format?: "jpeg" | "png" | "webp";
+}): Promise<PreparedImage> {
+  const bytes = await sampleImage({
+    width: options.width,
+    height: options.height ?? 6,
+    format: options.format ?? "jpeg",
+  });
+  return prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
 }
