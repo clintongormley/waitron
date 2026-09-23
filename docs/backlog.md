@@ -3846,6 +3846,11 @@ Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's be
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 The `packages/store/src/index.ts` comment about `wal_autocheckpoint = 0` is left for Task 6 Step 10
 on purpose: that step rewrites it to match measurement 2's result.
+**Open for the owner and Task 6 (2026-09-23, from #540's review):** spec §4.5 keeps the same
+backup going after a pause only "if Litestream uploads a fresh full copy on restart". Measurement 1
+saw no new full copy, yet a restore after the restart held every sale, so it recorded
+`RESTART_RESYNCS = true` on restore completeness. Whether the same-backup branch still applies on that
+basis is the decision; spec §4.5 carries a dated note saying so.
 
 **The SQLite slice-1 preparation tasks are all landed.** Column vocabulary (P1 — #390, #393, #394,
 #396–#404, #408, #413, #414, #416); the `useVenueDb` test-helper conversion (P2 — every package

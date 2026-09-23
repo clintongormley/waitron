@@ -5860,7 +5860,7 @@ under different names from the ones this plan's draft used:
 enforces it. That is Task 3a. Any later task that names the reset uses #513's names above, never the
 `resetInFlightClaims` a draft used.
 
-### Task 4: The five measurements Litestream's behaviour decides (spec §8.1)
+### Task 4: The five measurements Litestream's behaviour decides (spec §8.1) — LANDED as #540
 
 **2026-09-24:** the probe code below was corrected after review (the restart probe
 stops its daemon in its cleanup, the shrink check compares each sample with the one before, `report()`
