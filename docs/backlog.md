@@ -2001,8 +2001,8 @@ image constraints under *Detail → Box image*.
 ### B9. CI and test infra
 
 - **Every package to the high coverage bar, `98/98/98/95` — OPEN (owner decision 2026-09-23).**
-  The first promotion is done: every package that already cleared all four metrics on 2026-09-23
-  was promoted in one change, 21 of them. Each package still under the bar gets tests in a pull
+  The first promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every package that
+  already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of them. Each package still under the bar gets tests in a pull
   request of its own and is promoted in the same change; when none is left at the floor, the floor
   is retired from the guard and from every place the tree states it, prose included. Which packages
   are still under it: `HIGH_BAR_PACKAGES` against the workspace; the starting figures
