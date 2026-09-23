@@ -2102,7 +2102,7 @@ export class TillApp extends LitElement {
       if (orderTabKey !== undefined)
         this.#setActiveTab(orderTabKey); // card mount (handheld/tablet)
       else this.#pushDrill({ kind: "table-order" }); // drill mount (till)
-    } else this.#setScreen("table-order");
+    } else if (this.screen !== "lock") this.#setScreen("table-order");
   }
 
   /**
@@ -2411,8 +2411,6 @@ export class TillApp extends LitElement {
    * (which records the nav trail then assigns `this.screen`) and are
    * NOT gated, because their affordances are emitted only by the counter screen
    * (`till-counter-screen`), which a handheld never reaches: unreachable-by-affordance, not gated.
-   * Proven by deletion: drop the guard and a handheld's `back-to-counter` lands it on the counter (the
-   * §6a containment test goes red).
    */
   #goToScreen(target: Screen): void {
     if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
@@ -2472,7 +2470,8 @@ export class TillApp extends LitElement {
     this.ticketWorkingOrderId = workingOrderId;
     this.originalReceiptAvailable = invoiceIssuedNow && this.receiptPrintMode !== "auto";
     if (this.#inShell()) this.#pushDrill({ kind: "ticket" });
-    else this.#setScreen("ticket");
+    // A late answer must not unlock a logged-out till.
+    else if (this.screen !== "lock") this.#setScreen("ticket");
   }
 
   /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)

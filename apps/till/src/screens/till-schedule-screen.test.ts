@@ -235,6 +235,81 @@ describe("till-schedule-screen", () => {
     expect(root(el).textContent).not.toContain("absence.overlaps");
   });
 
+  it("surfaces a codeless rejection as the generic banner", async () => {
+    const api = stubApi({ acceptSwap: vi.fn().mockRejectedValue(new Error("offline")) });
+    const { el } = await mount(api);
+    expect(root(el).querySelector(".notice")).toBeNull();
+    root(el).querySelector<HTMLElement>("wt-button.accept")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector('.notice[role="alert"]')?.textContent).toBe(
+        codeMessage("server.internal"),
+      ),
+    );
+    expect(api.listMySwaps).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer a shift until both the shift and the colleague are chosen", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const submit = root(el).querySelector<HTMLElement>("wt-button.cover-submit")!;
+    setSelect(el, "select.cover-shift", "s1");
+    await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    setSelect(el, "select.cover-shift", "");
+    setSelect(el, "select.cover-colleague", "col1");
+    await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await flush(el);
+    expect(api.requestSwap).not.toHaveBeenCalled();
+  });
+
+  it("does not request time off until both dates are given", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const submit = root(el).querySelector<HTMLElement>("wt-button.abs-submit")!;
+    setInput(el, "wt-input.abs-from", "2026-07-01");
+    await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    setInput(el, "wt-input.abs-from", "");
+    setInput(el, "wt-input.abs-to", "2026-07-05");
+    await el.updateComplete;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await flush(el);
+    expect(api.requestAbsence).not.toHaveBeenCalled();
+  });
+
+  it.each(["wt-input.abs-from", "wt-input.abs-to", "wt-input.abs-note"])(
+    "Enter in %s submits the time-off request",
+    async (field) => {
+      const api = stubApi();
+      const { el } = await mount(api);
+      setInput(el, "wt-input.abs-from", "2026-07-01");
+      setInput(el, "wt-input.abs-to", "2026-07-05");
+      await el.updateComplete;
+      const host = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        field,
+      )!;
+      await host.updateComplete;
+      host
+        .shadowRoot!.querySelector("input")!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+        );
+      await vi.waitFor(() =>
+        expect(api.requestAbsence).toHaveBeenCalledWith({
+          kind: "holiday",
+          startsOn: "2026-07-01",
+          endsOn: "2026-07-05",
+          note: null,
+        }),
+      );
+    },
+  );
+
   it("ignores a re-fired Accept while one is still in flight (the busy guard)", async () => {
     // acceptSwap never resolves, so the first tap leaves the action in flight; a synchronous second tap
     // (before the disabled re-render lands) must be a no-op — the `busy` guard, one request per action.

@@ -531,6 +531,12 @@ describe("till-floor-screen", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("offers no back-to-counter control on a face that cannot return to the counter", async () => {
+    const { el } = await mount({ canExitToCounter: false });
+    expect(el.shadowRoot!.querySelector("header.head")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button.back")).toBeNull();
+  });
+
   // --- Embedded chrome seam (SP-B2.1): mounted inside a card host, the screen drops its own
   // standalone header (title + Back) but KEEPS the view/edit toggles — those are floor BODY function,
   // not shell chrome — so a manager can still edit the plan from inside a card.
@@ -695,6 +701,71 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(seen.detail).toEqual({ tableId: "t1", hasOpenTab: true });
   });
 
+  it("ignores a canvas wt-open-table for a table the read-model does not know", async () => {
+    const el = await mountFloor({ tables: [placed("t1")] });
+    const seen = captureOpenTable(el);
+    const escaped = vi.fn();
+    el.addEventListener("wt-open-table", escaped);
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("wt-open-table", {
+        detail: { tableId: "gone" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(seen.detail).toBeUndefined();
+    expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("leaving edit mode makes the canvas read-only again and keeps the map", async () => {
+    const el = await mountFloor({ role: "manager", editing: true, tables: [table({ id: "t1" })] });
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")!.hasAttribute("editable")).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
+    await el.updateComplete;
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas");
+    expect(canvas).not.toBeNull();
+    expect(canvas!.hasAttribute("editable")).toBe(false);
+  });
+
+  it("without an API, a canvas placement edit writes nothing and asks for no refresh", async () => {
+    const el = await mountFloor({ role: "manager", editing: true, tables: [placed("t1")] });
+    const refreshed = vi.fn();
+    el.addEventListener("floor-refresh", refreshed);
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    canvas.dispatchEvent(
+      new CustomEvent("wt-placement-change", {
+        detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    canvas.dispatchEvent(
+      new CustomEvent("wt-placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(refreshed).not.toHaveBeenCalled();
+  });
+
+  it("without an API, an edit-mode tray tap neither places nor opens the table", async () => {
+    const el = await mountFloor({
+      role: "manager",
+      editing: true,
+      tables: [placed("t1"), table({ id: "t9", label: "9" })],
+    });
+    const seen = captureOpenTable(el);
+    const refreshed = vi.fn();
+    el.addEventListener("floor-refresh", refreshed);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(seen.detail).toBeUndefined();
+    expect(refreshed).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('[data-tray-table="t9"]')).not.toBeNull();
+  });
+
   it("hides Editar plano for a non-manager operator", async () => {
     const el = await mountFloor({ role: "staff", tables: [placed("t1")] });
     expect(el.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
@@ -819,5 +890,26 @@ describe("floor zone URL navigation", () => {
     await back;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-table="t2"]')).not.toBeNull();
+  });
+
+  it("restores and records the no-zone tab as an empty zone segment", async () => {
+    const url = new URL(location.href);
+    url.pathname = "/tabs/floor/zone/~";
+    history.replaceState(null, "", url);
+    const { el } = await mount({
+      zones: [zone()],
+      tables: [table(), table({ id: "t9", label: "9", zoneId: null })],
+    });
+    expect(el.shadowRoot!.querySelector('[data-table="t9"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-zone="none"]')!.getAttribute("variant")).toBe(
+      "primary",
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
+    await el.updateComplete;
+    expect(location.pathname).toBe("/tabs/floor/zone/z1");
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!.click();
+    await el.updateComplete;
+    expect(location.pathname).toBe("/tabs/floor/zone/~");
   });
 });

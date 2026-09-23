@@ -2186,7 +2186,13 @@ image constraints under *Detail → Box image*.
   management and profile API's Google sign-in, password back-off, invitations, staff status, PIN
   and authenticator paths, the till's reader, kitchen-display and PIN back-off refusals, payment
   and backup refusals, print-agent screening and payment slips with nothing to print, and the
-  recovery commands failing part-way; no source file changed; 99.18/99.21/99.29/97.33).
+  recovery commands failing part-way; no source file changed; 99.18/99.21/99.29/97.33);
+  `apps/till` (**PR #TILL_PR**, 2026-09-23 — tests for the till app's table service, boot and
+  counter paths, the server router's start and error statuses, the session's wake lock and idle
+  timer, tender entry by the Enter key, idle choices and weighed dishes, and nine screens; one bug
+  fixed, a sale or a new table answering after the operator had logged out took the till off the
+  lock screen with nobody signed in, and now leaves it locked; no test added to the files lane B's
+  variants work was changing; 98.82/99.08/98.97/96.93 statements/lines/functions/branches).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -2555,6 +2561,37 @@ reach the `seatTableId === ""` side of `#onSeatConfirm` from the screen; that br
 three branches bookings' coverage still leaves uncovered. **Next action:** decide what the picker
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
+
+**What the till shows the NEXT operator when the previous one's request answers late — OPEN
+(found 2026-09-23, till coverage, PR #TILL_PR).** The till coverage branch fixed the case where a late answer
+reopened a logged-out till (it now stays on the lock screen). The same late answer can also arrive
+after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
+`apps/till/src/till-app.ts` would then push the previous operator's ticket or table over the new
+session. That case was reasoned from the code, not run. What to show is a product question: the
+sale may have filed, so hiding it entirely loses the one signal that it did. **Next action:** decide
+(for example a per-session counter that drops the navigation but keeps a "the previous sale filed"
+notice), then fix it test-first.
+
+**Till code that no test can reach, and two small till defects — OPEN (found 2026-09-23, till
+coverage, PR #TILL_PR).** Left uncovered rather than deleted, each by reading its callers (none was
+run without the code):
+- `till-app.ts`: the handlers for `show-station`, `show-expo`, `show-schedule`, `open-allergens`,
+  `close-allergens`, `new-sale`, `back-to-counter`, `back-to-floor` and `show-floor` each keep an
+  arm for when the shell is not active, which after a successful boot only the lock screen is, and
+  nothing on the lock screen emits them; `#goToScreen` is reached only through one of those arms.
+- `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
+  button renders only when a next step exists), `session-activity.ts:67` and `:125`,
+  `screens/till-station-screen.ts:302` and four `?? []` fallbacks in
+  `screens/till-schedule-screen.ts`.
+- `api/server-router.ts:208` stores a server's `nodeId` that nothing reads.
+- `deviceKindLabel` (`apps/till/src/i18n/device-label.ts`) looks a kind up in a plain object, so
+  `deviceKindLabel("constructor")` returns `undefined` rather than the kind (run). The server sends
+  only `till`, `handheld` and `kds_station` today.
+- In `apps/till/src/session-activity.test.ts`, "is a clean no-op when the Wake Lock API is absent"
+  passes `wakeLock: undefined`, which falls back to the real `navigator.wakeLock` — present in the
+  test browser — so it does not test an absent API. The branch added a test that does.
+**Next action:** delete the unreachable arms with a receipt each, key the label lookup on own
+properties, and rename or rewrite that wake-lock test.
 
 **`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
 2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every

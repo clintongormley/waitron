@@ -4,7 +4,7 @@ import { TillCounterScreen } from "./till-counter-screen.js";
 import type { TabDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { ServiceZoneSummary, TillProduct } from "../api/client.js";
+import type { ServiceZoneSummary, TillApi, TillProduct } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
@@ -365,6 +365,38 @@ describe("till-counter-screen", () => {
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
+  });
+
+  it("labels and emits a composed, bubbling show-station event when the station control is tapped", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("wt-button.station")!.textContent).toContain(
+      t("station.open"),
+    );
+    let captured: CustomEvent | undefined;
+    el.addEventListener("show-station", (event) => (captured = event as CustomEvent));
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.station")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.detail).toBeNull();
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
+  it("feeds the header's language chooser from the venue's locale list", async () => {
+    const getLocales = vi.fn().mockResolvedValue({
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+    });
+    const { el } = await mount({ api: { getLocales } as unknown as TillApi });
+    const chooser = el.shadowRoot!.querySelector("till-language-chooser")!;
+    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+    await vi.waitFor(() => {
+      const menu = chooser.shadowRoot!.querySelector('[role="menu"]');
+      expect(menu?.textContent).toContain("English");
+    });
+    expect(getLocales).toHaveBeenCalledTimes(1);
   });
 
   it("labels the Allergens control with the localised action and shows the sale body by default", async () => {

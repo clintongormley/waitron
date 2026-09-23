@@ -315,6 +315,44 @@ describe("till-expo-screen", () => {
     expect(courses).toEqual(["none", "co-1", "co-2"]);
   });
 
+  it("sorts a named course with no display order at position 0, and fires it under the verb alone", async () => {
+    const item = (id: string): ExpoItem => ({
+      ...threeCourseOrder.courses[2]!.items[0]!,
+      id,
+    });
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      courses: [
+        {
+          courseId: "co-late",
+          courseName: "Postres",
+          displayOrder: 1,
+          fired: false,
+          away: false,
+          items: [item("ti-late")],
+        },
+        {
+          courseId: "co-unordered",
+          courseName: null,
+          displayOrder: null,
+          fired: false,
+          away: false,
+          items: [item("ti-unordered")],
+        },
+        threeCourseOrder.courses[0]!,
+      ],
+    };
+    const el = await mount({ api: stubApi([order]), fireControl: "expo" });
+    const courses = [...orderCard(el, 5)!.querySelectorAll("[data-course]")].map((c) =>
+      c.getAttribute("data-course"),
+    );
+    expect(courses).toEqual(["none", "co-unordered", "co-late"]);
+    const unnamed = orderCard(el, 5)!.querySelector('[data-course="co-unordered"]')!;
+    expect(unnamed.querySelector(".course-head")).toBeNull();
+    const fire = unnamed.querySelector<HTMLElement>('[data-fire="co-unordered"]')!;
+    expect(fire.getAttribute("aria-label")!.trim()).toBe(t("expo.fire"));
+  });
+
   it("renders per item its name, quantity, station and state", async () => {
     const el = await mount({ api: stubApi() });
     const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-2"]')!;
