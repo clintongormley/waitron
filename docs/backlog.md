@@ -2021,7 +2021,10 @@ image constraints under *Detail → Box image*.
   connection reset; 100/100/100/100); `print-agent-app` (**PR #508**, 2026-09-23 — tests for
   malformed mDNS packets, out-of-range subnet addresses, non-printer usbmisc entries, a late socket
   event, an IPP reply cut off mid-body, and the setup page's fallbacks and non-text form fields;
-  99.23/99.65/98.4/97.83).
+  99.23/99.65/98.4/97.83); `provisioning` (**PR pending**, 2026-09-23 — tests for the tenant and
+  venue readers the one-taxpayer and one-venue guards consume, and for a same-taxpayer re-run
+  refused when the database already holds two venues or its till, node or series differs from the
+  plan; 100/100/100/99.03).
 
 - **The english-only guard blames the wrong lines when a comment contains a glob path — OPEN
   (found 2026-09-21, task P6).** `scripts/english-only.test.ts` strips block comments with a
@@ -3437,8 +3440,9 @@ and the answer is that **the storage switch did not shrink the workspace**: non-
 `packages/*/src` and `apps/*/src` went 8,323 KB at `320f1dc08`, the commit before the flip, to
 8,359 KB on the tree this change merges into, so a bar that was meaningful in September still is. Four packages shrank by more than a tenth, and
 `packages/provisioning` is the large one — by a third, when `waitron-provision instance` went with
-the per-tenant PostgreSQL cluster. It still clears the floor by 7.7 points on statements, and the
-other three (`recipes`, `purchasing`, `workforce-es`) are at 100% on all four metrics. The numbers, the two traps that were checked rather than assumed, and
+the per-tenant PostgreSQL cluster. It cleared the floor then by 7.7 points on statements (it
+has since been promoted to the high bar), and the other three (`recipes`, `purchasing`,
+`workforce-es`) were at 100% on all four metrics. The numbers, the two traps that were checked rather than assumed, and
 the one source file that turns out to be measured by no coverage table at all are in
 [ci-and-gates.md](developers/ci-and-gates.md) → *What the storage switch did to the bars*.
 

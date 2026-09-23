@@ -372,6 +372,70 @@ describe("applyVenue", () => {
     expect(locations.rows[0]?.n).toBe(1);
   });
 
+  describe("refuses a same-tenant re-run whose venue differs from the stored one", () => {
+    async function provisionThenReapply(plan: VenueAction[]): Promise<void> {
+      await applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+      await expect(applyVenue(plan, { db: suite.db, modules: ALL_MODULES })).rejects.toMatchObject({
+        code: "provisioning.second_venue",
+      });
+    }
+
+    function withNode(change: Partial<Extract<VenueAction, { kind: "create-node" }>>) {
+      return planVenue(request("B13131313"), ALL_MODULES).map((a) =>
+        a.kind === "create-node" ? { ...a, ...change } : a,
+      );
+    }
+
+    it("when the database already holds two venues, even if one matches the plan exactly", async () => {
+      await applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+      await suite.db.execute(sql`
+        insert into locations (id, name, invoice_locales, operation_description)
+        values ('00000000-0000-4000-8000-0000000000ff', 'Terraza', '["es-ES"]', 'venta')`);
+
+      await expect(
+        applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
+          db: suite.db,
+          modules: ALL_MODULES,
+        }),
+      ).rejects.toMatchObject({ code: "provisioning.second_venue" });
+    });
+
+    it("when the till is named differently, and adds no till", async () => {
+      const renamedTill = { ...request("B13131313"), tillName: "Caja 2" };
+      await provisionThenReapply(planVenue(renamedTill, ALL_MODULES));
+
+      const tills = await suite.db.execute<{ name: string }>(sql`select name from tills`);
+      expect(tills.rows).toEqual([{ name: "Caja 1" }]);
+    });
+
+    it.each([
+      ["name", { name: "Otro nodo" }],
+      ["filing module", { filingModule: "none" }],
+      ["tax module", { taxModule: "igic" }],
+    ] as const)("when the node's %s differs, and adds no node", async (_field, change) => {
+      await provisionThenReapply(withNode(change));
+
+      const nodes = await suite.db.execute<{ n: number }>(sql`select count(*) as n from nodes`);
+      expect(nodes.rows[0]?.n).toBe(1);
+    });
+
+    it("when the plan names a series the node does not have, and adds no series", async () => {
+      const otherSeries = { ...request("B13131313"), seriesCode: "B" };
+      await provisionThenReapply(planVenue(otherSeries, ALL_MODULES));
+
+      const series = await suite.db.execute<{ code: string }>(
+        sql`select code from invoice_series order by code`,
+      );
+      expect(series.rows).toEqual([{ code: "A" }, { code: "R" }]);
+    });
+  });
+
   it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
     // The fiscal footgun: es/ES (or a taxId differing only in letter case or leading/trailing
     // whitespace) for the SAME business must never be treated as two different taxpayers (§5).
