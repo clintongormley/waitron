@@ -22,11 +22,11 @@ export default defineConfig({
           include: ["src/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**"],
           // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times
-          // its own beforeAll (packages/db/src/testing/venue-db.ts:174, default 60s), so what this
+          // its own beforeAll (packages/db/src/testing/venue-db.ts, default 60s), so what this
           // bounds is that helper's untimed afterEach/afterAll plus any hook a suite writes itself.
           testTimeout: 120_000,
           hookTimeout: 180_000,
-          // Keep one worker (CLAUDE.md §4): @vitest/coverage-v8 under-merges BRANCH coverage across
+          // Keep one worker: @vitest/coverage-v8 under-merges BRANCH coverage across
           // fork workers, and a package this size has few enough branches that a handful of mis-merged
           // ones sink the ratio under the branch gate.
           maxWorkers: 1,

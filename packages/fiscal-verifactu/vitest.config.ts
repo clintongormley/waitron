@@ -9,7 +9,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times its
-    // own beforeAll (packages/db/src/testing/venue-db.ts:174, default 60s), so what this bounds is
+    // own beforeAll (packages/db/src/testing/venue-db.ts, default 60s), so what this bounds is
     // that helper's untimed afterEach/afterAll plus any hook a suite writes for itself.
     // `testTimeout` covers a database opened inside an `it` body.
     testTimeout: 120_000,

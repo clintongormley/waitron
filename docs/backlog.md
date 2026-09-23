@@ -3664,13 +3664,31 @@ What the preparation tasks left, with F1's own answers where it found them:
   `packages/workforce/src/chain.test.ts` covers exhaustion and a non-collision error but not a
   refusal followed by a successful retry. The fiscal case above is the shape to copy (found by
   #509's review).
-- **Stale `vitest.config.ts` comments with no conversion left to catch them** —
-  `packages/purchasing`, `packages/fiscal-none` and `packages/fiscal` still carry the false claim that
-  a config timeout bounds the PGlite boot; `packages/db/vitest.config.ts:11`'s "every test here boots a
-  WASM PostgreSQL" / "live risk" is too wide and one clause ("nowhere else in the repo") is unchecked;
-  and `packages/identity/vitest.config.ts` carries two (a timeout comment positioned as if it guarded
-  the boot, and a 2026-08-20 single-fork receipt the coverage runs now contradict). Each must be
-  corrected against its own package's suites, read not run.
+- **Stale `vitest.config.ts` comments — DONE (2026-09-23, branch `chore/vitest-config-comments`).**
+  The entry asked for each package to be checked "read not run"; it was the other way round — run,
+  not read — and this supersedes it. Most of the named claims had gone before this branch: "every
+  test here boots a WASM PostgreSQL" in #467, "nowhere else in the repo" and the 2026-08-20
+  single-fork receipt in #489, and `fiscal` and `fiscal-none` mentioned PGlite only as history,
+  which is now cut. What was left was corrected against runs. Each of the five packages' timeout
+  comments now says the value is margin, because each package passed `vitest run --testTimeout=2000
+  --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
+  18-core Mac with one package running at a time. No value changed. The review also dropped the
+  `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
+  a "(CLAUDE.md §4)" pointer that named no rule about worker pins. Follow-up: every other
+  `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`, which
+  carries its own measurement, still says the pin is needed without having measured it; the same
+  one-worker-against-several coverage comparison would settle each.
+  - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
+  - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
+    identical summaries, so its one-worker pin is recorded as a precaution, not a need.
+  - `fiscal`: 186 tests, slowest 2ms, setup 5ms in the one file that opens a database.
+  - `db`: 577 tests, slowest 74ms, slowest setup 83ms; 20.3s at one worker, 6.4s at four, 5.9s at
+    eight; coverage covered and total counts the same per file at one and at four workers; the
+    48-line history of the `english-only.ts` exclusion is cut to a pointer at f8d6097d0.
+  - `identity`: 278 tests, slowest 185ms, slowest setup 49ms; `test:coverage` gave the same covered
+    and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
+    one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
+    and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
 - **Dead code and doc sweeps owed to the rollout's final sweep** — the unused `seedTenantWithSumUpKey`
   was deleted on 2026-09-23 (PR #516). The file's real-SumUp case
   seals no credential and passes, because the seat reads its credential only on first use; that
@@ -4108,7 +4126,8 @@ database and no clone-per-test seam any more — the storage switch deleted that
 it: a worker limit is still a per-package call, and the reason that is left is the
 `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
 package runs under `pnpm -r` oversubscription — `packages/payments` carries the worked reasoning.
-`packages/db` keeps `maxWorkers: 4`, and its own comment says the cap now guards nothing it can name.
+`packages/db` keeps `maxWorkers: 4`, which CI's `test-heavy` shards inherit because they pass no
+worker count of their own; at one and at four workers its coverage counts were the same (2026-09-23).
 Either way a new package that copies one of those configs must either hold `98/98/98/95` and be
 added to `HIGH_BAR_PACKAGES`, or set the `90/90/85/85` floor until it is promoted (CLAUDE.md §2) —
 anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.

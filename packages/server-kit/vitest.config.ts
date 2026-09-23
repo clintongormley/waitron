@@ -8,7 +8,7 @@ export default defineConfig({
     // Keep one worker: @vitest/coverage-v8 under-merges BRANCH coverage across fork
     // workers under a whole-workspace `pnpm -r test:coverage`, and a package this small has a
     // handful of mis-merged branches sink the ratio under threshold. Same finding as the other
-    // small packages (shared, fiscal-none, payments).
+    // small packages (shared, payments).
     maxWorkers: 1,
     coverage: {
       provider: "v8",

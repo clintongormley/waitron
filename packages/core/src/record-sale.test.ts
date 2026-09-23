@@ -45,7 +45,7 @@ let nodeId: NodeId;
 let seriesId: SeriesId;
 
 // `timeoutMs` restates the 60s the helper applies by default and passes to its own `beforeAll`
-// (`packages/db/src/testing/venue-db.ts:12`, used at :196), so dropping it would change no bound.
+// (`packages/db/src/testing/venue-db.ts`), so dropping it would change no bound.
 // An argument to a hook replaces `vitest.config.ts`'s `hookTimeout` rather than narrowing it
 // (`@vitest/runner@4.1.11/dist/chunk-artifact.js:668`), so this line is what governs the boot.
 //

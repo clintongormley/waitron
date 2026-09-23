@@ -34,7 +34,7 @@ import { restoreDatabase } from "./restore.js";
  *
  * THE TRIGGER STATEMENTS IN `setup` BELOW ARE REDUNDANT, stated so nobody reads them as a claim
  * about the product. `useVenueDb` pairs each migration set with `installAppendOnlyTriggers` over the
- * tables that set declared (`packages/db/src/testing/venue-db.ts:116-117`), and
+ * tables that set declared (`packages/db/src/testing/venue-db.ts`), and
  * `migrationOptionsFor` carries the declared list through
  * (`packages/migrations/src/manifest.ts:163`), so this database already refuses what the box
  * refuses before a case runs. Measured 2026-09-23, with the control in the other direction: with the
