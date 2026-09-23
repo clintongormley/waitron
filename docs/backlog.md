@@ -2040,13 +2040,16 @@ image constraints under *Detail → Box image*.
   `grep -ln "export const [A-Z_]*MIGRATIONS" packages/*/src/migrations.ts` and subtract the
   packages holding a `src/schema/schema-conformance.test.ts`. Run on 2026-09-23 that left `bookings`, `credentials`,
   `fiscal-none`, `fiscal-verifactu`, `identity`, `media`, `scheduler` and `venue-service`.
-  `credentials` and `scheduler` have had one since, and neither found drift; re-run the command
-  for the current list. Of the rest, `fiscal-verifactu` and `identity` each carry a
-  `src/schema/index.ts` barrel, their own migration set and a `src/schema-ownership.test.ts` beside
-  it, which is everything a call site needs to be written from, so each is roughly ten lines now
-  that the factory exists. (That is not a comparison with the four that landed: `catalogue` has no
-  `schema-ownership.test.ts` and did not need one — the barrel and the set are what the factory
-  reads.) They were left out deliberately, not overlooked: a set getting its first guard may also
+  `credentials`, `scheduler` and `identity` have had one since, and none found drift; re-run the
+  command for the current list. `identity`'s is blind to one thing that matters there: three
+  `persons` unique indexes are over a folded-key expression, and the factory compares an
+  expression index by name, uniqueness and filter, never by what the expression says — measured by
+  changing `foldedKey`'s `lower` to `upper` in `src/schema/persons.ts`, which left the suite at 13
+  of 13. Of the rest, `fiscal-verifactu` carries a `src/schema/index.ts` barrel, its own migration
+  set and a `src/schema-ownership.test.ts` beside it, which is everything a call site needs to be
+  written from, so it is roughly ten lines now that the factory exists. (That is not a comparison
+  with the four that landed: `catalogue` has no `schema-ownership.test.ts` and did not need one —
+  the barrel and the set are what the factory reads.) They were left out deliberately, not overlooked: a set getting its first guard may also
   turn up real drift, and fixing unrelated schema drift would have turned a guard branch into a
   schema-repair branch. `fiscal-none` needs no suite at all — its `drizzle/` directory holds
   `meta/_journal.json` with an empty `entries` list and no `.sql` file, so its set builds nothing
