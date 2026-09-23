@@ -15,6 +15,15 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "cloud.unavailable": Record<string, never>;
+    "cloud.request_unavailable": Record<string, never>;
+    "cloud.state_invalid": Record<string, never>;
+    "cloud.binding_conflict": Record<string, never>;
+    "cloud.busy": Record<string, never>;
+    "cloud.not_primary": Record<string, never>;
+    "cloud.not_configured": Record<string, never>;
+    "cloud.request_invalid": Record<string, never>;
+
     /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.
      * No free probe slot; retry after a request expires. */
     "printer.probe_busy": Record<string, never>;

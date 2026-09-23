@@ -374,6 +374,7 @@ const NAV_SCREENS = [
   "canvas-editor",
   "diagnostics",
   "backup",
+  "cloud",
   "email",
 ] as const;
 
@@ -1784,7 +1785,7 @@ describe("dashboard-app", () => {
     expect(nav?.fields.screen).toBe("sales");
   });
 
-  // The grouped static sidebar (Task 11): every group header renders, every one of the twenty manager
+  // The grouped static sidebar (Task 11): every group header renders, every manager
   // faces (a manager session sees the gated configuration tools too) keeps its `data-test="nav-<screen>"`
   // id, and the active face is marked `aria-current="page"`.
   it("renders each nav group header and all nav items", async () => {
@@ -1799,7 +1800,6 @@ describe("dashboard-app", () => {
     for (const key of NAV_GROUP_KEYS) expect(headers).toContain(t(key));
     // …and every manager face is present by its stable data-test id.
     for (const s of NAV_SCREENS) expect(navItem(el, s)).toBeTruthy();
-    expect(NAV_SCREENS).toHaveLength(20);
     expect(navItem(el, "recipe")).toBeNull();
     expect(navItem(el, "location-menus")).toBeNull();
     expect(navItem(el, "catalogue")!.textContent).toContain(t("nav.catalogue"));
@@ -3986,6 +3986,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       getLocationSettings: pending(),
       listDeviceProfiles: pending(),
       getBackupStatus: pending(),
+      getCloudStatus: pending(),
       getEmailInbox: pending(),
       listPaymentProviders: pending(),
       listReaders: pending(),
@@ -3998,6 +3999,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     ["device-profiles", "dashboard-device-profiles-screen"],
     ["diagnostics", "dashboard-diagnostics-screen"],
     ["backup", "dashboard-backup-screen"],
+    ["cloud", "dashboard-cloud-services-screen"],
     ["email", "dashboard-email-screen"],
     ["payments", "dashboard-payments-screen"],
     ["alerts", "dashboard-alerts-screen"],

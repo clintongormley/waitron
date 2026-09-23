@@ -12,6 +12,39 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish below is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "cloud.unavailable": {
+    en: "Waitron could not reach Cloud or verify its reply. Try again.",
+    es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",
+  },
+  "cloud.request_unavailable": {
+    en: "This request is unavailable. Start again to get a new code.",
+    es: "Esta solicitud no está disponible. Empieza de nuevo para obtener otro código.",
+  },
+  "cloud.state_invalid": {
+    en: "The saved Cloud connection cannot be read. Check this server’s Cloud configuration.",
+    es: "No se puede leer la conexión Cloud guardada. Revisa la configuración Cloud de este servidor.",
+  },
+  "cloud.binding_conflict": {
+    en: "The connection details changed or the previous request is still active. Check the connection before trying again.",
+    es: "Los datos de conexión han cambiado o la solicitud anterior sigue activa. Comprueba la conexión antes de volver a intentarlo.",
+  },
+  "cloud.busy": {
+    en: "A connection operation is in progress. Wait a moment and try again.",
+    es: "Hay una operación de conexión en curso. Espera un momento y vuelve a intentarlo.",
+  },
+  "cloud.not_primary": {
+    en: "Open this page on your serving primary server to connect the venue.",
+    es: "Abre esta página en el servidor principal activo para conectar el local.",
+  },
+  "cloud.not_configured": {
+    en: "Cloud services are not available on this server yet.",
+    es: "Los servicios Cloud aún no están disponibles en este servidor.",
+  },
+  "cloud.request_invalid": {
+    en: "Check the connection details and try again.",
+    es: "Revisa los datos de conexión y vuelve a intentarlo.",
+  },
+
   "connection.failed": {
     en: "This browser could not connect to Waitron. Check your connection and try again.",
     es: "Este navegador no pudo conectar con Waitron. Comprueba tu conexión e inténtalo de nuevo.",
