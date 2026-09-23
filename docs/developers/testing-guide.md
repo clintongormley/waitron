@@ -708,7 +708,10 @@ CLAUDE.md — same incident, same fix, same regression test.)*
 run by ci.yml's ungated `lint` job and by the hook on every non-docs push — a package-resident guard
 only runs when its package is in scope, and most pushes never reach `packages/db`. Two costs of
 living there: the root project does not typecheck (§2), and a module tested only from there must be
-in the root `coverage.include` and excluded from its package's.
+in the root `coverage.include` and excluded from its package's. That `include` is one file-type glob
+(`scripts/**/*.mjs`) plus the explicit paths added beside it, so root-level source of another type is
+measured only when somebody names it, suite or no suite — `scripts/dev-server-proxy.ts` is the one
+such file today, and [ci-and-gates.md](ci-and-gates.md) records what naming it would cost.
 
 ## Prove a guard by deletion, and confirm a negative control fails for the reason you think.
 

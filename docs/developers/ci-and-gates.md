@@ -98,19 +98,135 @@ unfiltered `main` run, not a wrong hook.
 
 ## Coverage thresholds are split by package
 
-Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` in
-`fiscal-verifactu`, `core`, `db` and `payments` — the fiscal core and the data-layer
-foundations — and the `90/90/85/85` floor in every other package, browser packages included. The
-list is the owner's, not a rule that derives it (`apps/server` holds the AEAT transport and
-sits at the floor). `sync` was on it until that package was deleted on 2026-09-19;
-`scripts/coverage-thresholds.test.ts` is what the list is pinned against.
+Owner decision 2026-09-05: `statements 98 / lines 98 / functions 98 / branches 95` for the fiscal
+core and the data-layer foundations, and the `90/90/85/85` floor in every other package, browser
+packages included. Which packages hold the high bar is the owner's list rather than a rule that
+derives it (`apps/server` holds the AEAT transport and sits at the floor), and one place holds it
+authoritatively: `HIGH_BAR_PACKAGES` in `scripts/coverage-thresholds.test.ts`, which is also the
+guard that pins every config against it. A hardcoded list is safe there only because the root
+project is the one gate never narrowed away. Moving a package is an edit to that list, with the
+reason in the commit. Historical plans and specs under `docs/superpowers/` still say there are six;
+they record what was true when they were written and are left alone.
 
-The root project keeps the high bar: its coverage table is the root `scripts/*.mjs` plus the
-vocabulary module, two of them the classifiers that decide what CI and the hook run.
+Three live places repeated the list and all three were wrong at once. This file and `CLAUDE.md`
+went on naming four packages after the flip (#489) added `@waitron/store` and made it five;
+`packages/bookings/vitest.config.ts` asserted "the owner's six high-bar packages". The enumeration is
+gone from all three rather than guarded — the executable list is one `git grep HIGH_BAR_PACKAGES`
+away, and a guard over prose would fail on rewording that changed nothing. Worth noting how the third
+was found: the sweep used the package names and the two bar strings as its keys, and the key that
+finds bookings is the word "six".
 
-Which package holds which bar is pinned by `scripts/coverage-thresholds.test.ts` — a hardcoded
-list, safe only because the root project is the one gate never narrowed away; moving a package is
-an edit to that list, with the reason in the commit.
+The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
+`packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
+them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
+`.ts` file under `scripts/` but one is a guard SUITE, which Vitest leaves out of its own table
+whatever `coverage.include` says; the exception is `scripts/dev-server-proxy.ts`, and the subsection
+below says what it costs to leave it where it is.
+
+### What the storage switch did to the bars — measured 2026-09-23 (task T3)
+
+**No bar moved, and the reason is that the workspace did not shrink.** Both whole-tree runs were
+taken on `c33a4bc11`, T2's backlog pointer: `pnpm -r test:coverage` green in all 46 members that run
+coverage (1,065 test files, 13,784 tests, no threshold failure), and `pnpm vitest run --coverage`
+green at the root (54 test files, 3,255 tests, over a coverage table of eight files). #493 landed 14
+more packages' worth of change while this was being written, so those 14 were re-measured on top of
+it and not one per-package figure below moved. The root project reads 3,256 there rather than 3,255,
+and the extra test is not a mystery: `scripts/module-seams.test.ts` runs one `it.each` case per
+non-test source file under `packages/*/src` and `apps/*/src`, and #493 added
+`packages/store/src/connections.ts`.
+
+The tree is the same size either side of the flip. Summing the blob sizes of every `.ts` file under
+`packages/*/src` and `apps/*/src` whose name does not end `.test.ts`: 8,323 KB over 1,013 files at
+`320f1dc08`, the commit before the flip, and 8,359 KB over 987 files on the tree this branch merges
+into — the deletions and the new code very nearly cancel. (`c33a4bc11` reads 8,339 over 986; #493
+added one file between them, which is how a sloppier version of this paragraph came to quote a figure
+from one tree and a commit name from another.) Re-run it with
+
+```
+git ls-tree -r -l <ref> | awk -F'\t' '$2 ~ "^(packages|apps)/[^/]+/src/" && $2 ~ "[.]ts$" && $2 !~ "[.]test[.]ts$" { split($1, f, " "); n += f[4]; c++ } END { printf "%.0f KB over %d files\n", n/1024, c }'
+```
+
+and per package by grouping on the first two path segments. Four packages shrank by more than a
+tenth: `packages/provisioning` by 32% (195,783 to 132,840 bytes), `packages/recipes` by 21%,
+`packages/purchasing` by 14% and `packages/workforce-es` by 14%. Provisioning is the large one, and
+it lost `waitron-provision instance` with the per-tenant PostgreSQL cluster; it still clears the
+floor by 7.7 points on statements, and the other three are at 100% on all four metrics. One package
+is new, `packages/store`, at 100% on all four against the high bar.
+
+**The high bar is the one doing the work, and which metric binds differs by package** — worth saying
+because it is easy to assume branches always binds, and it does not. Taking each package's smallest
+margin over its own bar: `fiscal-verifactu` 0.85 on STATEMENTS, `db` 0.86 on branches, `payments`
+1.43 on statements, `core` 1.48 on LINES, `venue-service` 1.93 on branches, `store` 2.00 on
+statements, and the root project 1.07 on branches. Five of the six PACKAGES in that list are the five
+high-bar packages themselves; the sixth is `venue-service`, and at the floor it is the only package
+within two points of any bar it holds. The root project's 1.07 sits outside that ranking — it is a
+project, not a package, and it holds the high bar over a table of eight files.
+
+**Two traps were checked rather than assumed**, both of them the shape where a passing report is
+measuring the wrong files:
+
+- **The `coverage.include` sibling leak** — Vitest 4 calls a file external only when its absolute
+  path does not `startsWith` the package directory, with no trailing slash, so
+  `packages/sync-enrolment`'s files once landed in `packages/sync`'s report. Every one of the 46
+  `coverage-summary.json` files was read and none holds a path outside its own package directory;
+  four package names prefix a sibling's today — `country`, `fiscal`, `payments` and `workforce`,
+  eight pairs between them — and none of them leaked.
+- **Harness-move inflation** — nine configs exclude `src/testing/**` (eight packages and
+  `apps/server`), so code moved there stops being measured while the percentage rises. Across the
+  same range, `src/testing/` shrank in eight of those nine: the switch deleted harness rather than
+  adding it, which is the safe direction. The ninth, `packages/venue-service`, has no `src/testing/`
+  at either ref — its exclude is pre-emptive. One package's `src/testing/` DID grow,
+  `packages/fiscal` by about a kilobyte, and it is not one of the nine, so nothing was hidden there
+  either.
+
+**One source file is measured by no coverage table, and it now says so in the one place that could
+mislead.** `scripts/dev-server-proxy.ts` is real source — the three front-ends' `vite.config.ts`
+import it — and the root project's `coverage.include` names `scripts/**/*.mjs`, not `*.ts`. The
+config's comment justified that by claiming every `.ts` under `scripts/` is a guard suite, which is
+false by that one file. Widening the include to `scripts/**/*.ts` was tried and measured: the root
+project reads 99.71/95.18/100/100 with it — still green, but 0.18 over its branch bar instead of
+1.07. Both branches it adds are easy to EXECUTE and hard to ASSERT, in different ways.
+
+- **`resolve(configured)` makes no observable difference**, because `existsSync` already resolves a
+  relative path against the working directory. Measured 2026-09-23. A case was added to
+  `scripts/dev-proxy-config.test.ts` pointing `WAITRON_STATE_DIR` at the suite's own state directory
+  spelled relative to the repository root, which vitest runs from:
+
+  ```ts
+  // `relative` has to be added to the file's `node:path` import; it has only `join` today.
+  process.env.WAITRON_STATE_DIR = relative(REPO_ROOT, stateDir);
+  expect(devServerProxy()).toEqual({ target: "https://127.0.0.1:8080", secure: false });
+  ```
+
+  Then the control: replacing `isAbsolute(configured) ? configured : resolve(configured)` with plain
+  `configured` left that case green, and the suite's two existing cases with it. The case was never
+  committed — a test whose control does not bite is a false receipt (CLAUDE.md §1). It does execute
+  the ternary's second arm, so it would move the branch count; what it cannot do is fail when the
+  behaviour it names is removed.
+- **The `WAITRON_STATE_DIR` fallback** to `apps/server/src/state` runs whenever the variable is
+  unset, so a test reaches it by doing nothing. Asserting on it is the awkward part: its answer
+  cannot be told apart from any other leafless directory unless a TLS leaf exists at that path,
+  which is the box's real state directory in a developer's checkout. The run-it reviewer showed the
+  third way — copy the module into a temporary directory, give THAT copy's default path a leaf, and
+  the assertion discriminates, because `DEFAULT_STATE_DIR` is derived from
+  `import.meta.url`. That proves the logic; it does not exercise the shipped file's own default.
+
+So the include is unchanged. What naming the file would COST is 0.89 of the root project's branch
+margin — 1.07 down to 0.18 — in exchange for one test that asserts nothing (`resolve`) and one that
+must either write into the box's state directory or exercise a copy of the module. The config
+comment now carries that reason instead of the claim it used to make. The obvious
+alternative nobody has taken: `isAbsolute(configured) ? configured : resolve(configured)` has no
+observable effect at all, so deleting it would remove the unassertable branch outright — a change to
+dev tooling rather than to a coverage bar, which is why T3 did not make it. The alternative worth
+considering, and not taken here because it is a refactor rather than a bar decision, is to move the
+file into a package where its coverage would count.
+
+**Two questions were left for the owner rather than decided here**, because both would change the
+basis of the 2026-09-05 split, which is consequence — the fiscal core, the data layer — and not how
+well a package happens to be covered today. They are in this task's pull request with the
+numbers attached: whether to promote the packages that now clear `98/98/98/95` on all four metrics,
+and whether to raise the floor's functions bar of 85, which no package in the workspace comes within
+six points of.
 
 ## Mutation floors, and where each one actually bites
 
