@@ -257,7 +257,7 @@ export class CatalogueScreen extends LitElement {
     this.deleteErrorKey = null;
     try {
       const value = await this.api.getProductEditor(product.id);
-      await this.api.updateProductEditor(product.id, { ...value, available: false });
+      await this.api.updateProductEditor(product.id, { ...value, active: false });
     } catch (error) {
       this.deleteErrorKey = codeOf(error);
       this.busy = false;

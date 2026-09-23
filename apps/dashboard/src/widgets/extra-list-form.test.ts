@@ -47,6 +47,7 @@ function product(overrides: Partial<Product> = {}): Product {
     unitPrice: "1.50",
     vatClass: "reduced",
     active: true,
+    available: true,
     soldAlone: false,
     allergens: null,
     dietOverride: null,

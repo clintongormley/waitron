@@ -1745,6 +1745,38 @@ describe("ordering extras and options — parent + child lines", () => {
     });
   });
 
+  // Spec §15.6 and the plan's V16: an extra is sold like any product, so one that is Unavailable
+  // or Inactive is refused with the code a pick the list does not offer already gets. Each product
+  // takes one state with the OTHER flag still set, so a read of the wrong column lets it through.
+  it("refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not offer", async () => {
+    const v = await setupModifierVenue();
+    const deps = { db: suite.db, backend, clock };
+    const burgerWith = (productId: string) => ({
+      lines: [
+        {
+          productId: v.burgerId,
+          quantity: "1",
+          extras: extrasPick(v, [{ productId, quantity: 1 }]),
+        },
+      ],
+      tender: { method: "cash" as const, amount: "20.00" },
+    });
+
+    await withTransaction(suite.db, (tx) => updateProduct(tx, v.baconId, { available: false }));
+    await expect(recordTillSale(deps, v.cfg, burgerWith(v.baconId))).rejects.toMatchObject({
+      code: "extras.invalid",
+      params: { field: "productId" },
+    });
+    // The control: the same list still sells the item that is both Active and Available.
+    await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).resolves.toBeDefined();
+
+    await withTransaction(suite.db, (tx) => updateProduct(tx, v.quesoId, { active: false }));
+    await expect(recordTillSale(deps, v.cfg, burgerWith(v.quesoId))).rejects.toMatchObject({
+      code: "extras.invalid",
+      params: { field: "productId" },
+    });
+  });
+
   it("refuses a dish answered with a WITHDRAWN option label, and one left unanswered", async () => {
     const v = await setupModifierVenue();
     const deps = { db: suite.db, backend, clock };

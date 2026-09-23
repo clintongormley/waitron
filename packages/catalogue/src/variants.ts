@@ -303,7 +303,8 @@ export async function resolveMenuVariant(
       name: products.name,
       customerName: products.customerName,
       kitchenName: products.kitchenName,
-      available: products.active,
+      active: products.active,
+      available: products.available,
       offerAvailable: menuItems.active,
       menuAvailable: catalogues.active,
       sectionAvailable: menuSections.active,
@@ -316,6 +317,7 @@ export async function resolveMenuVariant(
     .where(eq(menuItems.id, menuItemId));
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   if (
+    !offer.active ||
     !offer.available ||
     !offer.offerAvailable ||
     !offer.menuAvailable ||

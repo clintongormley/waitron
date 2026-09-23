@@ -25,6 +25,7 @@ const product: ProductEditorDraft = {
   image: null,
   unitId: unit.id,
   unitPrice: "9.00",
+  active: true,
   available: true,
   soldAlone: true,
   vatClass: "reduced",
@@ -1025,6 +1026,7 @@ it("saves station and course with a new product, without a separate routing even
     image: null,
     unitId: null,
     unitPrice: "0.00",
+    active: true,
     available: true,
     soldAlone: true,
     vatClass: "general",
@@ -1078,6 +1080,85 @@ it("saves only once and refuses a second press", async () => {
   save(el);
   expect(submit).toHaveBeenCalledOnce();
   expect(submit.mock.calls[0]![0].detail.value.variants).toEqual([small, large]);
+});
+
+// Spec §15.6: the Available switch is "sold out for now" and writes only `available`; whether the
+// product exists is `active`, which the editor carries through untouched and changes only by Restore.
+it("sends the Available switch as available and leaves active as it was", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, id: "p1" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector("wt-switch[name=available]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  const sent = submit.mock.calls[0]![0].detail.value;
+  expect({ active: sent.active, available: sent.available }).toEqual({
+    active: true,
+    available: false,
+  });
+  expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
+});
+
+it("creates a new product Active", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "name", "Water");
+  await input(el, "unit-price", "1.00");
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.active).toBe(true);
+});
+
+it("offers an Inactive product's Restore, which saves it Active and keeps its availability", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, id: "p1", active: false, available: false },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")!.textContent!.trim()).toBe(
+    t("product.inactive_notice"),
+  );
+  const restore = el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!;
+  expect(restore.textContent!.trim()).toBe(t("product.restore"));
+  restore.click();
+  expect(submit).toHaveBeenCalledOnce();
+  const sent = submit.mock.calls[0]![0].detail.value;
+  expect({ active: sent.active, available: sent.available }).toEqual({
+    active: true,
+    available: false,
+  });
+});
+
+it("saves an Inactive product's other edits without restoring it", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, id: "p1", active: false },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.active).toBe(false);
 });
 
 it("summarises each collapsed section so nothing filled in is invisible", async () => {

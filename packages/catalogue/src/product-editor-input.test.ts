@@ -14,6 +14,8 @@ const input: ProductEditorInput = {
   image: null,
   unitId,
   unitPrice: "9.00",
+  // Active and Available carry DIFFERENT values, so a parser that reads one into the other fails.
+  active: true,
   available: false,
   vatClass: "zero",
   variants: [],
@@ -41,6 +43,21 @@ it("refuses an absent available, the sibling required boolean", () => {
   delete noAvailable.available;
   expect(() => parseProductEditorInput(noAvailable)).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "available" } }),
+  );
+});
+it("carries active through apart from available, and requires it in the body", () => {
+  const parsed = parseProductEditorInput({ ...input, active: false, available: true });
+  expect({ active: parsed.active, available: parsed.available }).toEqual({
+    active: false,
+    available: true,
+  });
+  const noActive: Record<string, unknown> = { ...input };
+  delete noActive.active;
+  expect(() => parseProductEditorInput(noActive)).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "active" } }),
+  );
+  expect(() => parseProductEditorInput({ ...input, active: "yes" })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "active" } }),
   );
 });
 it("rejects a non-boolean soldAlone", () => {

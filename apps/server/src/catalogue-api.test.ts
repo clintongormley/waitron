@@ -814,6 +814,7 @@ describe("mountCatalogueApi — products", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",
@@ -918,6 +919,7 @@ describe("mountCatalogueApi — products", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",
@@ -930,6 +932,44 @@ describe("mountCatalogueApi — products", () => {
       ...extra,
     };
   }
+
+  // Spec §15.6: the editor writes Active and Available as two separate states. Each save sets the
+  // two to DIFFERENT values, so a route that writes one flag into the other column fails.
+  it("writes Active and Available as two states through the editor routes", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Two states");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app, { active: true, available: false }) },
+    );
+    expect(created.status).toBe(201);
+    const saved = (await created.json()) as { id: string };
+    expect(saved).toMatchObject({ active: true, available: false });
+
+    const updated = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: await editorBody(app, { active: false, available: true }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ active: false, available: true });
+    const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
+    expect(await read.json()).toMatchObject({ active: false, available: true });
+    const listed = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+    expect(await listed.json()).toEqual([
+      expect.objectContaining({ id: saved.id, active: false, available: true }),
+    ]);
+
+    const withoutActive = await editorBody(app);
+    delete withoutActive.active;
+    const refused = await send(app, "PUT", `/management-api/products/${saved.id}/editor`, {
+      body: withoutActive,
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "product.invalid", params: { field: "active" } },
+    });
+  });
 
   it("creates a product with its kitchen station and course in one save", async () => {
     const app = mountApp("es-ES");
@@ -2732,6 +2772,7 @@ describe("catalogue routes that already refused a negative price", () => {
       image: null,
       unitId,
       unitPrice: "2.00",
+      active: true,
       available: true,
       soldAlone: true,
       vatClass: "general",

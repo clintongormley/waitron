@@ -278,7 +278,9 @@ container query cannot read a `--wt-*` token. A column exposes text to the searc
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
 column can still sort by it — its direction is restored with that column or not at all, so the
-starting sort stands whole — and every stored filter value that is a non-empty string. A filter
+starting sort stands whole — and every stored filter value that is a non-empty string. A `filter`
+may name an `initial` option, which it starts on until a choice is made or restored; choosing the
+"all" option over it is then stored as a choice of its own (an empty string), so it survives a reload. A filter
 choice, restored or picked, narrows rows only while its column offers it, and its dropdown then
 shows it. Each time the columns change, every choice is checked against its column's current option
 values. One the options no longer include is cleared — the dropdown returns to its "all" option and
@@ -1130,6 +1132,16 @@ messages inside the modal, retain entered values after a failed save, and refres
 success. Use the existing Forms contract for required markers, field errors and keyboard submission.
 Only offer operations your domain supports: department removal deactivates the department; removing
 a product from a menu removes that offer.
+
+### Products: Active and Available are two different words
+
+On the products screens (spec §15.6), **Active / Inactive** says whether a product exists for the
+venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
+Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
+list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,
+while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. Other
+screens' words for "switched off, kept for the record" are still being settled in
+`docs/backlog.md`.
 
 ### Navigation and language controls
 

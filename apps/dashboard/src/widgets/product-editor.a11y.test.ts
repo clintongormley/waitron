@@ -21,6 +21,7 @@ const coffee: ProductEditorDraft = {
   unitId: "each",
   unitPrice: "3.00",
   vatClass: "reduced",
+  active: true,
   available: true,
   soldAlone: true,
   variants: [],
@@ -75,6 +76,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "open-sections",
     "categories",
     "variant-window",
+    "inactive",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -90,7 +92,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
               ? variants
               : state === "modifiers"
                 ? withModifiers
-                : coffee,
+                : state === "inactive"
+                  ? { ...coffee, active: false, available: false }
+                  : coffee,
         extraLists,
         optionLists,
         categories: [
@@ -108,6 +112,11 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       await el.updateComplete;
       // Without this the scan could pass on an editor whose modal never opened.
       expect(el.shadowRoot!.querySelector("dashboard-category-membership-picker")).not.toBeNull();
+    }
+    if (state === "inactive") {
+      // Without this the scan could pass on an editor that never drew the notice and Restore.
+      expect(el.shadowRoot!.querySelector("[data-test=restore]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")).not.toBeNull();
     }
     if (state === "modifiers") {
       // Without this the scan could pass on an editor whose Modifiers table never rendered a row.

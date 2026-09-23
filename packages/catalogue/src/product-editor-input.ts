@@ -164,6 +164,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     image: nullableText(body.image, "image"),
     unitId,
     unitPrice: price(body.unitPrice, "unitPrice"),
+    active: boolean(body.active, "active"),
     available: boolean(body.available, "available"),
     vatClass: body.vatClass as VatClass,
     variants,

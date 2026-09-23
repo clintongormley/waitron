@@ -1612,6 +1612,61 @@ describe("updateHeldOrder", () => {
     ]);
   });
 
+  // The plan's V16 refuses a NEW extras pick of a product that is not both Active and Available.
+  // A quantity-only edit of a line already rung re-checks neither the dish's states nor its extras',
+  // so the stored pick is kept; a fresh order naming the same pick is still refused.
+  it("keeps a quantity-only edit whose extra has since become Unavailable, and refuses a new pick of it", async () => {
+    const { cfg, zoneId, cafeId, catalogueId, premiumCafeOfferId } = await setupVenue();
+    const extra = await withTransaction(db, async (tx) => {
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Leche", {
+        price: "0.10",
+        maxQuantity: 2,
+        maxPicks: 2,
+      });
+      await catalogue.setMenuItemExtraLists(tx, premiumCafeOfferId, [
+        {
+          listId: attached.listId,
+          items: [{ productId: attached.productId, price: "0.75", available: true }],
+        },
+      ]);
+      return attached;
+    });
+    const id = randomUUID();
+    const extras = [{ listId: extra.listId, picks: [{ productId: extra.productId, quantity: 1 }] }];
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCafeOfferId, quantity: "1", extras }],
+    });
+    const before = await db.execute<{ id: string }>(sql`
+      select id from working_order_lines where working_order_id = ${id} order by line_no`);
+    await withTransaction(db, (tx) =>
+      catalogue.updateProduct(tx, extra.productId, { available: false }),
+    );
+
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: before.rows[0]!.id,
+          menuItemId: premiumCafeOfferId,
+          quantity: "2",
+          extras,
+        },
+      ],
+    });
+
+    const after = await db.execute<{ id: string }>(sql`
+      select id from working_order_lines where working_order_id = ${id} order by line_no`);
+    expect(after.rows).toEqual(before.rows);
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [{ menuItemId: premiumCafeOfferId, quantity: "1", extras }],
+      }),
+    ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "productId" } });
+  });
+
   it("keeps a quantity-only offer edit on the original line id and locked price", async () => {
     const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();

@@ -210,7 +210,8 @@ the database.
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
 collapsed. Top to bottom: Name, Categories, Available, ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info,
-Price (and the variants table, if there are variants), Modifiers, then Cancel and Save.
+Price (and the variants table, if there are variants), Modifiers, then Cancel and Save. An Inactive
+product's editor also opens with a line saying so, and offers Restore beside Save.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
@@ -242,7 +243,16 @@ The product write body carries `name` (required, plain text), `customerName` (a 
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `categoryIds`,
 `primaryCategoryId`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
-dietary declarations, and `variants` — each
+dietary declarations, the two required state flags `active` and `available` (below), and
+`variants` — each
 variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice` and `available`, plus
 `id` when it already exists. A customer-facing name whose every entry is blank parses to `null`, so
 "I typed spaces" and "I left it empty" store identically.
+
+A product has two states (spec §15.6). **Active / Inactive** is whether it exists for the venue:
+Delete sends `active: false`, Restore sends `active: true`, and nothing is ever deleted.
+**Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
+and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
+it is both (`listMenuOffers`, `listAvailableProducts` and `readExtraProducts` in
+`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`). Until
+variants become products (plan Task 3), a variant carries only its own `available`.

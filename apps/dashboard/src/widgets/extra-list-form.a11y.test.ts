@@ -32,6 +32,7 @@ function product(id: string, name: string, unitPrice: string): Product {
     unitPrice,
     vatClass: "reduced",
     active: true,
+    available: true,
     soldAlone: false,
     allergens: null,
     dietOverride: null,

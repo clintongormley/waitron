@@ -327,3 +327,11 @@ it("prices the required published variant instead of the base or product variant
     code: "product.unavailable",
   });
 });
+
+it("refuses a variant of a product that is Active but Unavailable", async () => {
+  await run((tx) => updateProduct(tx, productId, { available: false }));
+
+  await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
+    code: "product.unavailable",
+  });
+});

@@ -156,7 +156,8 @@ export type LineExtras = { note?: string; variantId?: string };
  * would put two jsonb columns this path discards on the order path.
  */
 interface BasketModifiers extends AttachedModifiers {
-  /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child. */
+  /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child.
+   * On a new pick only the Active and Available ones (see `sellableOnly` below). */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
 
@@ -167,18 +168,24 @@ interface BasketModifiers extends AttachedModifiers {
  * Only an ACTIVE list's products are read, because only an active list can be answered at all
  * (`validateExtraSelections`, `packages/catalogue/src/extra-contract.ts`), so no other product can
  * reach a child line.
+ *
+ * `sellableOnly` is for a NEW pick: a product that is Inactive or Unavailable (spec §15.6) is then
+ * dropped from every list's items, so `validateExtraSelections` refuses a pick of it exactly as it
+ * refuses one the list never offered (`extras.invalid`, field `productId`) — the till was not
+ * offered it either (`readExtraProducts`, offered-modifiers.ts). The held-order edit that keeps
+ * lines already rung passes `false`: it re-checks neither the dish's states nor its extras'.
  */
 async function resolveBasketModifiers(
   tx: Transaction,
   dishes: readonly { productId: string; menuItemId: string | null }[],
   defaultLanguage: string,
+  sellableOnly: boolean,
 ): Promise<BasketModifiers> {
   const attached = await resolveAttachedModifiers(tx, dishes);
-  const { extrasByHolder } = attached;
 
   const offeredProductIds = [
     ...new Set(
-      [...extrasByHolder.values()].flatMap((lists) =>
+      [...attached.extrasByHolder.values()].flatMap((lists) =>
         lists.flatMap((list) => (list.active ? list.items.map((item) => item.productId) : [])),
       ),
     ),
@@ -196,7 +203,15 @@ async function resolveBasketModifiers(
       })
       .from(products)
       .leftJoin(parentProducts, parentJoin)
-      .where(inArray(products.id, offeredProductIds));
+      .where(
+        sellableOnly
+          ? and(
+              inArray(products.id, offeredProductIds),
+              eq(products.active, true),
+              eq(products.available, true),
+            )
+          : inArray(products.id, offeredProductIds),
+      );
     for (const row of rows) {
       extraProducts.set(row.id, {
         id: row.id,
@@ -219,7 +234,17 @@ async function resolveBasketModifiers(
       });
     }
   }
-  return { ...attached, extraProducts };
+  if (!sellableOnly) return { ...attached, extraProducts };
+  const extrasByHolder = new Map(
+    [...attached.extrasByHolder].map(([holder, lists]) => [
+      holder,
+      lists.map((list) => ({
+        ...list,
+        items: list.items.filter((item) => extraProducts.has(item.productId)),
+      })),
+    ]),
+  );
+  return { ...attached, extrasByHolder, extraProducts };
 }
 
 /**
@@ -338,6 +363,7 @@ async function priceOrderLines(
       menuItemId: line.menuItemId ?? null,
     })),
     contentConfig.defaultLanguage,
+    true,
   );
 
   // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
@@ -3246,6 +3272,7 @@ export async function updateHeldOrder(
           entry === null ? [] : [{ productId: entry.productId, menuItemId: entry.menuItemId }],
         ),
         contentConfig.defaultLanguage,
+        false,
       );
       rebuilt = req.lines.map((line, index) => {
         const entry = sameLines[index];
