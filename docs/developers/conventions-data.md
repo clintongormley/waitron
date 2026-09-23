@@ -1179,13 +1179,13 @@ and verify by RUNNING `scripts/append-only-triggers.test.ts`,
 Paid for on #165.
 
 The justification this used to carry — "works because the snapshot chain deliberately lags the DB,
-custom migrations being snapshot-less" — is not something this tree bears out, and it has not been
-re-taken since the storage switch: the three hand-written `--custom` migrations in the tree
-(`packages/db/drizzle/0001_behavioural_triggers.sql`, `packages/db/drizzle/0004_variant_one_level.sql`
-and `packages/media/drizzle/0001_image_references.sql`) each carry their own `meta/000N_snapshot.json`,
-and on 2026-09-23 each equalled the one before it once `id` and `prevId` were removed and keys
-sorted. Treat the procedure as the receipt rather than the
-explanation.
+custom migrations being snapshot-less" — is half right. The three hand-written `--custom` migrations
+in the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
+`packages/db/drizzle/0004_variant_one_level.sql` and `packages/media/drizzle/0001_image_references.sql`)
+each carry their own `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-23 each
+of those files equalled the one before it once `id` and `prevId` were removed and keys sorted, so the
+snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
+does not reproduce it.
 
 ## Drizzle picks what to apply from `max(created_at)` alone
 

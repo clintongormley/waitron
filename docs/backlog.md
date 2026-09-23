@@ -3858,7 +3858,7 @@ What the preparation tasks left, with F1's own answers where it found them:
     generated is now caught; it compares the TypeScript with the snapshot only, so a key added by
     hand-written SQL is still seen by nothing. The migration-set readers two root guards each
     carried a copy of now live once in `packages/sync-enrolment/src/testing/migration-sets.ts`,
-    beside `tablesCreatedBy` but outside what the package's `index.ts` exports, and
+    in the same package as `tablesCreatedBy` but outside what its `index.ts` exports, and
     `classification-complete` reads its SQL through them. `two-file-foreign-keys` builds its
     table-to-class map once. Left, found while doing it: `no-tenant-column`'s SQL check still
     passed with one set's SQL dropped, because it checks for an absence and the remaining files
