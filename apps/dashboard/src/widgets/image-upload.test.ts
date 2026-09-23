@@ -112,4 +112,42 @@ describe("image-upload", () => {
     expect(changed).not.toHaveBeenCalled();
     expect(el.image).toBe("seed.webp");
   });
+  it("closes the library from its Cancel button without changing the image", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: "seed.webp",
+    });
+    const pending = vi.fn();
+    const changed = vi.fn();
+    el.addEventListener("image-picker-state", pending);
+    el.addEventListener("image-changed", changed);
+    await open(el);
+    el.shadowRoot!.querySelector<HTMLElement>('wt-form-actions wt-button[slot="cancel"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    expect(pending.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { open: true },
+      { open: false },
+    ]);
+    expect(changed).not.toHaveBeenCalled();
+    expect(el.image).toBe("seed.webp");
+  });
+  // The picker sits inside a host form whose own keydown handling (Enter submits, Escape closes)
+  // must not act on keys typed into the library.
+  it("keeps keys pressed inside the library from reaching the host form", async () => {
+    const { el, host } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+    });
+    const keys = vi.fn();
+    host.addEventListener("keydown", keys);
+    const picker = await open(el);
+    picker.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(keys).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector("[data-test=choose-image]")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(keys).toHaveBeenCalledOnce();
+  });
 });

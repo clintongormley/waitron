@@ -268,3 +268,51 @@ it("refreshes displayed invoices when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
 });
+
+describe("purchases-screen — single-flight and dismissal", () => {
+  it("updates at most once when update-purchase fires twice", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    await flush(el);
+    const patch = { header: { note: "corregido" }, lines: createDetail().lines };
+    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
+    emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
+    await flush(el);
+    expect(api.updatePurchaseInvoice).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes at most once when delete-purchase fires twice", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    await flush(el);
+    emitFromChild(list(el)!, "delete-purchase", { id: "pi-1" });
+    emitFromChild(list(el)!, "delete-purchase", { id: "pi-1" });
+    await flush(el);
+    expect(api.deletePurchaseInvoice).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the form when it is dismissed, and Add opens it again", async () => {
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const add = el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!;
+    add.click();
+    await el.updateComplete;
+    expect(form(el).open).toBe(true);
+    // Closing the form closes its native dialog, whose own close lands a task later; reopening
+    // before it would let that stale close shut the reopened form.
+    const nativeClose = new Promise((resolve) =>
+      form(el).shadowRoot!.querySelector("wt-dialog")!.addEventListener("wt-close", resolve, {
+        once: true,
+      }),
+    );
+    form(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(form(el).open).toBe(false);
+    await nativeClose;
+    add.click();
+    await el.updateComplete;
+    expect(form(el).open).toBe(true);
+  });
+});

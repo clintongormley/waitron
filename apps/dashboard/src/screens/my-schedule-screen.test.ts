@@ -313,3 +313,52 @@ it("refreshes displayed shifts when their data changes elsewhere", async () => {
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listMyShifts).toHaveBeenCalledTimes(2);
 });
+
+describe("my-schedule-screen — keyboard submit and partial loads", () => {
+  it.each(["abs-from", "abs-to", "abs-note"])(
+    "requests time off on Enter in the %s field",
+    async (dataTest) => {
+      const api = stubApi();
+      const { el } = await mount(api);
+      await flush(el);
+      setInput(el, "abs-from", "2026-07-01");
+      setInput(el, "abs-to", "2026-07-05");
+      setInput(el, "abs-note", "boda");
+      await flush(el);
+      const field = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >(`[data-test=${dataTest}]`)!;
+      await field.updateComplete;
+      field.shadowRoot!.querySelector("input")!.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+      expect(api.requestAbsence).toHaveBeenCalledExactlyOnceWith({
+        kind: "holiday",
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-05",
+        note: "boda",
+      });
+    },
+  );
+
+  it("shows my shifts as soon as they arrive, while swaps and absences are still loading", async () => {
+    const api = stubApi({
+      listMySwaps: vi.fn().mockReturnValue(new Promise(() => {})),
+      listMyAbsences: vi.fn().mockReturnValue(new Promise(() => {})),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#swaps-h")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("#absences-h")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelectorAll("[data-test^=swap-], [data-test^=absence-]"),
+    ).toHaveLength(0);
+  });
+});

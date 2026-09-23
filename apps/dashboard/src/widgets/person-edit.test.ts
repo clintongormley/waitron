@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import { PersonEdit } from "./person-edit.js";
 
 afterEach(cleanupWidgets);
@@ -201,5 +202,76 @@ describe("person-edit", () => {
         "[data-test=edit-display-name]",
       )!.value,
     ).toBe("Ada");
+  });
+});
+
+describe("person-edit validation and keyboard submit", () => {
+  it("names every blank required field under its own message and does not save", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-first-names", " ");
+    change(el, "edit-last-names", "");
+    change(el, "edit-display-name", "");
+    change(el, "edit-email", "  ");
+    await el.updateComplete;
+    let saved = false;
+    el.addEventListener("save-person", () => {
+      saved = true;
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await el.updateComplete;
+    expect(saved).toBe(false);
+    const error = (testId: string) =>
+      el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+    expect(error("edit-first-names")).toBe(t("form.first_names_required"));
+    expect(error("edit-last-names")).toBe(t("form.last_names_required"));
+    expect(error("edit-display-name")).toBe(t("form.display_name_required"));
+    expect(error("edit-email")).toBe(t("form.email_required"));
+  });
+
+  it("rejects a malformed email beside the field and does not save", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-email", "ada at example.com");
+    await el.updateComplete;
+    let saved = false;
+    el.addEventListener("save-person", () => {
+      saved = true;
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await el.updateComplete;
+    expect(saved).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-test=edit-email]")!.getAttribute("error")).toBe(
+      codeMessage("person.email_invalid"),
+    );
+  });
+
+  it("saves on Enter in a field", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-telephone", "+34 600 000 000");
+    await el.updateComplete;
+    const events: CustomEvent[] = [];
+    el.addEventListener("save-person", (event) => events.push(event as CustomEvent));
+    const field = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-test=edit-email]",
+    )!;
+    await field.updateComplete;
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    expect(events.map((event) => event.detail)).toEqual([
+      {
+        displayName: "Ada",
+        firstNames: "Ada Augusta",
+        lastNames: "Lovelace",
+        telephone: "+34 600 000 000",
+        email: "ada@example.com",
+        role: "manager",
+        status: "active",
+      },
+    ]);
   });
 });

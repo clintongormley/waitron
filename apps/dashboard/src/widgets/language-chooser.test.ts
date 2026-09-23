@@ -186,4 +186,13 @@ describe("dashboard-language-chooser", () => {
       window.removeEventListener("unhandledrejection", onRejection);
     }
   });
+
+  it("names a language nobody has labelled by its code", async () => {
+    setLocale("fr-FR");
+    const { el } = await mountWidget<LanguageChooser>("dashboard-language-chooser", {
+      loadLocales: vi.fn(twoLocales),
+    });
+    const trigger = el.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    expect(trigger.textContent!.trim()).toBe("fr-FR");
+  });
 });

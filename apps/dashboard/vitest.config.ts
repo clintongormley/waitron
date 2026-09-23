@@ -122,7 +122,7 @@ export default defineConfig({
       // src/widgets/test-helpers.ts is test-only mount/cleanup/axe support, mirroring
       // packages/ui's exclusion of its src/test-helpers.ts and a11y-helpers.ts.
       exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
-      thresholds: { statements: 90, lines: 90, functions: 85, branches: 85 },
+      thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
 });

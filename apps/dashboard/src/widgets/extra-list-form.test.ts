@@ -565,3 +565,130 @@ it("shows a whole price, not a truncated one, at phone width", async () => {
     await page.viewport(width, height);
   }
 });
+
+it("puts each list-level refusal beside the input it names, and a switch's in the summary", async () => {
+  const { el } = await mount({
+    value: addons,
+    fieldErrors: {
+      customerName: "Needs a customer-facing name.",
+      minPicks: "Too many required.",
+      maxPicks: "Too many allowed.",
+      active: "Cannot be switched off.",
+    },
+  });
+
+  // A refusal naming the whole translated map is shown against the first language on screen.
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-en").error).toBe(
+    "Needs a customer-facing name.",
+  );
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-es").error).toBe("");
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "min-picks").error).toBe(
+    "Too many required.",
+  );
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "max-picks").error).toBe("Too many allowed.");
+  expect(summary(el).sort()).toEqual([
+    "Cannot be switched off.",
+    "Needs a customer-facing name.",
+    "Too many allowed.",
+    "Too many required.",
+  ]);
+});
+
+it("puts an item's price refusal beside that item's price, and its preselection's in the summary", async () => {
+  const { el } = await mount({
+    value: addons,
+    fieldErrors: { "items.1.price": "Too cheap.", "items.0.preselected": "Not allowed here." },
+  });
+
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").error).toBe("Too cheap.");
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").error).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+  expect(summary(el).sort()).toEqual(["Not allowed here.", "Too cheap."]);
+});
+
+it.each([
+  ["an item as a whole", "items.0"],
+  ["an item field with no cell", "items.0.id"],
+  ["an item the form does not hold", "items.7.price"],
+  ["a list field with no input", "items"],
+])("shows a refusal naming %s under the items table", async (_what, path) => {
+  const { el } = await mount({ value: addons, fieldErrors: { [path]: "Something is wrong." } });
+
+  expect(text(el, "items-error")).toBe("Something is wrong.");
+  expect(summary(el)).toEqual(["Something is wrong."]);
+});
+
+it("moves a rejected item's message under the items table once that item is removed", async () => {
+  const { el } = await mount({ value: addons, fieldErrors: { "items.1.price": "Too cheap." } });
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+
+  await click(el, "remove-item-1");
+
+  expect(text(el, "items-error")).toBe("Too cheap.");
+  expect(summary(el)).toEqual(["Too cheap."]);
+});
+
+it("submits a blank minimum as 0, the contract's own default", async () => {
+  const { el, host } = await mount({ value: addons });
+  const submitted = record(host);
+
+  await type(el, "min-picks", "  ");
+  await click(el, "save");
+
+  expect(submitted).toHaveLength(1);
+  expect(submitted[0]!.minPicks).toBe(0);
+});
+
+it("holds the dialog open against Escape only while it is saving", async () => {
+  const { el } = await mount({ value: addons });
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  const press = (key: string) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    modal.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  expect(press("Escape")).toBe(false);
+  el.busy = true;
+  await el.updateComplete;
+  expect(press("Escape")).toBe(true);
+  expect(press("Enter")).toBe(false);
+});
+
+it("ignores a drag whose row was removed mid-gesture, leaving the save's messages in place", async () => {
+  const third = { id: "44444444-4444-4444-8444-444444444444", name: "Cheese", unitPrice: "1.00" };
+  const { el, host } = await mount({
+    value: {
+      ...addons,
+      items: [
+        ...addons.items,
+        { id: third.id, productId: third.id, maxQuantity: 1, preselected: false, price: null },
+      ],
+    },
+    products: [...products, product(third)],
+  });
+  const submitted = record(host);
+  const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${BACON_ITEM}"]`)!;
+  handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1 }));
+
+  await click(el, "remove-item-0");
+  await type(el, "name", "");
+  await click(el, "save");
+  expect(summary(el)).toEqual([t("extras.name_required")]);
+
+  const firstRow = el.shadowRoot!.querySelector("tbody tr")!.getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      clientY: firstRow.top + firstRow.height / 2,
+    }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+  await el.updateComplete;
+
+  expect(summary(el)).toEqual([t("extras.name_required")]);
+  await type(el, "name", "Add-ons");
+  await click(el, "save");
+  expect(submitted[0]!.items.map((item) => item.id)).toEqual([EGG_ITEM, third.id]);
+});

@@ -1137,3 +1137,367 @@ it("refreshes displayed canvases when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listCanvases).toHaveBeenCalledTimes(2);
 });
+
+describe("canvas editor edge paths", () => {
+  type Preview = HTMLElement & { tab: unknown; updateComplete: Promise<unknown> };
+  const $ = (el: CanvasEditorScreen, selector: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(selector);
+  const preview = (el: CanvasEditorScreen) => $(el, "canvas-grid-preview") as Preview;
+  function intent(el: CanvasEditorScreen, name: string, detail: object) {
+    preview(el).dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+  function tileCount(el: CanvasEditorScreen): number {
+    return preview(el).shadowRoot!.querySelectorAll("[data-test^=tile-]").length;
+  }
+  async function openOn(definition: unknown, overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      getCanvas: vi.fn().mockResolvedValue({ id: "c1", name: "Counter till", definition }),
+      ...overrides,
+    });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    $(el, "[data-test=edit-c1]")!.click();
+    await flush(el);
+    return { el, api };
+  }
+  async function typeAndEnter(el: CanvasEditorScreen, testId: string, value: string) {
+    const field = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
+      `[data-test=${testId}]`,
+    )!;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+  }
+  const card = { type: "basket", colSpan: 4, rowSpan: 4, config: {} };
+
+  it("counts only tabs that carry a card list, and previews a canvas with no tabs as blank", async () => {
+    const api = stubApi({
+      listCanvases: vi.fn().mockResolvedValue([
+        {
+          id: "partial",
+          name: "Partial",
+          definition: {
+            formFactor: "till",
+            tabs: [
+              { key: "a", title: "A", columns: 12, cards: [card] },
+              { key: "b", title: "B", columns: 12 },
+            ],
+          },
+        },
+        { id: "bare", name: "Bare", definition: { formFactor: "kds", tabs: [] } },
+        { id: "odd", name: "Odd", definition: { formFactor: "kds", tabs: "counter" } },
+      ]),
+    });
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    expect($(el, "[data-test=canvas-tab-count-partial]")!.textContent).toMatch(/^2 /);
+    expect($(el, "[data-test=canvas-card-count-partial]")!.textContent).toMatch(/^1 /);
+    const bare = $(el, "[data-test=canvas-thumb-bare] canvas-grid-preview") as Preview;
+    expect(bare.tab).toBeNull();
+    expect($(el, "[data-test=canvas-card-count-bare]")!.textContent).toMatch(/^0 /);
+    expect($(el, "[data-test=canvas-thumb-odd] [data-test=no-preview]")).not.toBeNull();
+    expect($(el, "[data-test=canvas-tab-count-odd]")).toBeNull();
+  });
+
+  it("reopens the Crear dialog after Escape closed it", async () => {
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const dialog = () => $(el, "wt-dialog") as HTMLElement & { open: boolean };
+    $(el, "[data-test=create]")!.click();
+    await el.updateComplete;
+    expect(dialog().open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(dialog().open).toBe(false));
+    await el.updateComplete;
+    $(el, "[data-test=create]")!.click();
+    await el.updateComplete;
+    expect(dialog().open).toBe(true);
+  });
+
+  it("Enter in the Crear name enters the editor under that name", async () => {
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    $(el, "[data-test=create]")!.click();
+    await el.updateComplete;
+    await typeAndEnter(el, "create-name", "Barra");
+    expect($(el, "[data-test=editor-name]")!.textContent).toBe("Barra");
+    expect($(el, "[data-test=editor-placeholder]")!.getAttribute("data-form-factor")).toBe("till");
+  });
+
+  it("Enter in the Duplicar name creates the copy", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", { api });
+    await flush(el);
+    $(el, "[data-test=duplicate-c1]")!.click();
+    await el.updateComplete;
+    await typeAndEnter(el, "duplicate-name", "Barra 2");
+    expect(api.createCanvas).toHaveBeenCalledExactlyOnceWith("Barra 2", canvases[0]!.definition);
+  });
+
+  it.each([
+    { action: "duplicate", confirm: "confirm-duplicate", method: "createCanvas" },
+    { action: "delete", confirm: "confirm-delete", method: "deleteCanvas" },
+  ] as const)(
+    "a second $action confirmation before the dialog closes writes nothing more",
+    async ({ action, confirm, method }) => {
+      const api = stubApi();
+      const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+        api,
+      });
+      await flush(el);
+      $(el, `[data-test=${action}-c1]`)!.click();
+      await el.updateComplete;
+      $(el, `[data-test=${confirm}]`)!.click();
+      $(el, `[data-test=${confirm}]`)!.click();
+      await flush(el);
+      expect(api[method]).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("shows no banner when a superseded canvas open fails", async () => {
+    let reject!: (reason: unknown) => void;
+    const getCanvas = vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+      )
+      .mockResolvedValue(canvases[0]);
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi({ getCanvas }),
+    });
+    await flush(el);
+    $(el, "[data-test=edit-c1]")!.click();
+    $(el, "[data-test=edit-c1]")!.click();
+    await flush(el);
+    expect($(el, "[data-test=editor-name]")!.textContent).toBe("Counter till");
+    reject({ code: "server.internal" });
+    await flush(el);
+    expect($(el, "[role=alert]")).toBeNull();
+    expect($(el, "[data-test=editor-name]")!.textContent).toBe("Counter till");
+  });
+
+  it("Back from an opened canvas returns to the list", async () => {
+    history.replaceState(null, "", "/manage/canvas-editor");
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    $(el, "[data-test=edit-c1]")!.click();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/canvas-editor/canvas/c1/tab/counter");
+    const back = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    history.back();
+    await back;
+    await flush(el);
+    expect(location.pathname).toBe("/manage/canvas-editor");
+    expect($(el, "[data-test=editor-placeholder]")).toBeNull();
+    expect($(el, "[data-test=canvas-row-c1]")).not.toBeNull();
+  });
+
+  it("switching tabs of an unsaved new canvas writes no address", async () => {
+    history.replaceState(null, "", "/manage/canvas-editor");
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    $(el, "[data-test=create]")!.click();
+    await el.updateComplete;
+    $(el, "[data-test=confirm-create]")!.click();
+    await el.updateComplete;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    try {
+      $(el, "[data-test=tab-btn-floor]")!.click();
+      await el.updateComplete;
+      expect($(el, "[data-test=tab-btn-floor]")!.getAttribute("variant")).toBe("primary");
+      expect(push).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+    } finally {
+      push.mockRestore();
+      replace.mockRestore();
+    }
+  });
+
+  it("adding a card to a second tab leaves the first tab's cards alone", async () => {
+    const { el } = await openOn(validTillDefinition);
+    $(el, "[data-test=add-tab]")!.click();
+    await el.updateComplete;
+    $(el, "[data-test=palette-basket]")!.click();
+    await el.updateComplete;
+    await preview(el).updateComplete;
+    expect(tileCount(el)).toBe(1);
+    $(el, "[data-test=tab-btn-counter]")!.click();
+    await el.updateComplete;
+    await preview(el).updateComplete;
+    expect(tileCount(el)).toBe(validTillDefinition.tabs[0]!.cards.length);
+  });
+
+  it("a resize intent rewrites only the resized card", async () => {
+    const { el, api } = await openOn(validTillDefinition);
+    intent(el, "resize-card", { index: 0, colSpan: 6, rowSpan: 5 });
+    await el.updateComplete;
+    $(el, "[data-test=save]")!.click();
+    await flush(el);
+    const expected = structuredClone(validTillDefinition);
+    expected.tabs[0]!.cards[0] = { ...expected.tabs[0]!.cards[0]!, colSpan: 6, rowSpan: 5 };
+    expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith("c1", "Counter till", expected);
+  });
+
+  it("ignores move and resize intents naming a card the tab does not have", async () => {
+    const { el, api } = await openOn(validTillDefinition);
+    intent(el, "resize-card", { index: 9, colSpan: 2, rowSpan: 2 });
+    intent(el, "move-card", { from: 9, to: 0 });
+    await el.updateComplete;
+    expect($(el, "[data-test=card-panel]")).toBeNull();
+    $(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
+      "c1",
+      "Counter till",
+      validTillDefinition,
+    );
+  });
+
+  it("keeps the last tab when its delete is clicked anyway", async () => {
+    const { el, api } = await openOn(validTillDefinition);
+    $(el, "[data-test=tab-settings]")!.click();
+    await el.updateComplete;
+    $(el, "[data-test=tab-delete]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=tab-btn-]")).toHaveLength(1);
+    $(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
+      "c1",
+      "Counter till",
+      validTillDefinition,
+    );
+  });
+
+  it("edits nothing on a canvas that has no tabs", async () => {
+    const { el } = await openOn({ formFactor: "till", tabs: [] });
+    expect(preview(el).tab).toBeNull();
+    $(el, "[data-test=palette-basket]")!.click();
+    intent(el, "move-card", { from: 0, to: 1 });
+    intent(el, "resize-card", { index: 0, colSpan: 2, rowSpan: 2 });
+    await el.updateComplete;
+    expect(preview(el).tab).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=tab-btn-]")).toHaveLength(0);
+    expect($(el, "[data-test=card-panel]")).toBeNull();
+    $(el, "[data-test=tab-settings]")!.click();
+    await el.updateComplete;
+    expect($(el, "[data-test=tab-settings-panel]")).toBeNull();
+  });
+
+  it("a create finishing after history opened another canvas leaves the address alone", async () => {
+    let created!: (value: { id: string }) => void;
+    let opened!: (value: Canvas) => void;
+    const createCanvas = vi.fn(
+      () =>
+        new Promise<{ id: string }>((done) => {
+          created = done;
+        }),
+    );
+    const getCanvas = vi.fn(
+      () =>
+        new Promise<Canvas>((done) => {
+          opened = done;
+        }),
+    );
+    history.replaceState(null, "", "/manage/canvas-editor");
+    const { el } = await mountWidget<CanvasEditorScreen>("dashboard-canvas-editor-screen", {
+      api: stubApi({ createCanvas, getCanvas }),
+    });
+    await flush(el);
+    $(el, "[data-test=create]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("[data-test=create-name]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "New counter" }, bubbles: true }),
+    );
+    $(el, "[data-test=confirm-create]")!.click();
+    await el.updateComplete;
+    $(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(createCanvas).toHaveBeenCalledTimes(1);
+    history.pushState(null, "", "/manage/canvas-editor/canvas/c2");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    expect(getCanvas).toHaveBeenCalledWith("c2");
+    created({ id: "c9" });
+    await flush(el);
+    expect(location.pathname).toBe("/manage/canvas-editor/canvas/c2");
+    opened({ id: "c2", name: "Other", definition: validTillDefinition });
+    await flush(el);
+    expect($(el, "[data-test=editor-name]")!.textContent).toBe("Other");
+    expect(location.pathname).toMatch(/^\/manage\/canvas-editor\/canvas\/c2(?:\/|$)/);
+  });
+
+  type Def = typeof validTillDefinition;
+  it.each<{ field: string; open: string; value: string; name?: string; edit: (d: Def) => void }>([
+    {
+      field: "config-columns",
+      open: "card",
+      value: "3",
+      edit: (d) => {
+        d.tabs[0]!.cards[0]!.config = { columns: 3 } as never;
+      },
+    },
+    {
+      field: "card-colspan",
+      open: "card",
+      value: "6",
+      edit: (d) => {
+        d.tabs[0]!.cards[0]!.colSpan = 6;
+      },
+    },
+    {
+      field: "card-rowspan",
+      open: "card",
+      value: "5",
+      edit: (d) => {
+        d.tabs[0]!.cards[0]!.rowSpan = 5;
+      },
+    },
+    {
+      field: "tab-columns",
+      open: "tab-settings",
+      value: "10",
+      edit: (d) => {
+        d.tabs[0]!.columns = 10;
+      },
+    },
+    {
+      field: "canvas-name",
+      open: "canvas-settings",
+      value: "Barra",
+      name: "Barra",
+      edit: () => {},
+    },
+  ])("Enter in $field saves the edited draft", async ({ field, open, value, name, edit }) => {
+    const { el, api } = await openOn(validTillDefinition);
+    if (open === "card") intent(el, "select-card", { index: 0 });
+    else $(el, `[data-test=${open}]`)!.click();
+    await el.updateComplete;
+    await typeAndEnter(el, field, value);
+    const expected = structuredClone(validTillDefinition);
+    edit(expected);
+    expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith(
+      "c1",
+      name ?? "Counter till",
+      expected,
+    );
+  });
+});

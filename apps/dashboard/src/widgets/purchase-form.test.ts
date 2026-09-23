@@ -456,3 +456,29 @@ describe("purchase-form", () => {
     expect(el.open).toBe(false);
   });
 });
+
+describe("purchase-form keyboard submit", () => {
+  it("confirms on Enter in a field", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    const events: CustomEvent[] = [];
+    el.addEventListener("create-purchase", (event) => events.push(event as CustomEvent));
+    const field = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-test=supplier-name]",
+    )!;
+    await field.updateComplete;
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]!.detail.header.supplierName).toBe("Distribuciones García SL");
+    expect(events[0]!.detail.lines).toEqual([
+      { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
+    ]);
+  });
+});

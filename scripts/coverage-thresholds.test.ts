@@ -52,6 +52,7 @@ const HIGH_BAR_PACKAGES = [
   "@waitron/country-gb",
   "@waitron/country-packs",
   "@waitron/credentials",
+  "@waitron/dashboard",
   "@waitron/dashboard-kit",
   "@waitron/dashboard-modules",
   "@waitron/diagnostics",

@@ -769,3 +769,76 @@ it("refreshes displayed tables when their data changes elsewhere", async () => {
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listTables).toHaveBeenCalledTimes(2);
 });
+
+it("restores the Sin zona sub-tab from history", async () => {
+  const url = new URL(location.href);
+  url.pathname = "/manage/floor/view/plano/zone/z1";
+  history.replaceState(null, "", url);
+  const zoneless: DashboardTable = { ...TABLES[0]!, posX: 100, posY: 100, shape: "square" };
+  const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", {
+    api: stubApi({}, ZONES, [zoneless]),
+  });
+  await flush(el);
+  q(el, '[data-zone="none"]')!.click();
+  await el.updateComplete;
+  q(el, '[data-zone="z1"]')!.click();
+  await el.updateComplete;
+  expect(q(el, '[data-zone="none"]')!.getAttribute("variant")).not.toBe("primary");
+  const back = new Promise<void>((resolve) =>
+    window.addEventListener("popstate", () => resolve(), { once: true }),
+  );
+  history.back();
+  await back;
+  await el.updateComplete;
+  expect(q(el, '[data-zone="none"]')!.getAttribute("variant")).toBe("primary");
+  expect(q(el, '[data-zone="z1"]')!.getAttribute("variant")).not.toBe("primary");
+});
+
+it.each([
+  {
+    method: "updateZone",
+    field: "[data-test=zone-order-z1]",
+    value: "7",
+    call: ["z1", { name: "Comedor", displayOrder: 7 }],
+  },
+  {
+    method: "updateTable",
+    field: "[data-test=table-capacity-t1]",
+    value: "6",
+    call: ["t1", { label: "4", capacity: 6 }],
+  },
+])(
+  "Enter in a number field saves its row through $method",
+  async ({ method, field, value, call }) => {
+    const api = stubApi();
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(field)!;
+    await control.updateComplete;
+    const input = control.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    input.focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(api[method as "updateZone" | "updateTable"]).toHaveBeenCalledExactlyOnceWith(...call);
+  },
+);
+
+it.each([
+  { method: "updateZone", rows: "zones", button: "[data-test=zone-save-z1]" },
+  { method: "updateTable", rows: "tables", button: "[data-test=table-save-t1]" },
+])(
+  "a save landing before the re-render of a refresh that removed its row sends nothing ($method)",
+  async ({ method, rows, button }) => {
+    const api = stubApi();
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    (el as unknown as Record<string, unknown[]>)[rows] = [];
+    q(el, button)!.click();
+    await flush(el);
+    expect(api[method as "updateZone" | "updateTable"]).not.toHaveBeenCalled();
+    expect(errorKey(el)).toBeNull();
+  },
+);

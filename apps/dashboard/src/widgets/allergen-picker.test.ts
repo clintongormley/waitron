@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
@@ -205,5 +205,107 @@ describe("allergen-picker", () => {
       "lupin",
       "molluscs",
     ]);
+  });
+});
+
+/** Records every value the picker announces from the moment it is called. */
+function trackChanges(el: AllergenPicker): unknown[] {
+  const values: unknown[] = [];
+  el.addEventListener("wt-allergens-change", (event) => {
+    values.push((event as CustomEvent).detail.value);
+  });
+  return values;
+}
+
+async function openPicker(el: AllergenPicker): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-allergen]")!.click();
+  await el.updateComplete;
+}
+
+describe("allergen-picker guards", () => {
+  it("ignores presence changes and removals while Revisado is off, and keeps the entry", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { milk: { presence: "contains" } },
+    });
+    await setReviewed(el, false);
+    const changes = trackChanges(el);
+    await setPresence(el, "milk", "may_contain");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-milk]")!.click();
+    await el.updateComplete;
+    expect(changes).toEqual([]);
+    await setReviewed(el, true);
+    expect(el.value).toEqual({ milk: { presence: "contains" } });
+  });
+
+  it("does not open the picker while Revisado is off", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
+    const state = vi.fn();
+    el.addEventListener("wt-picker-state", state);
+    await openPicker(el);
+    expect(state).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=allergen-search]")).toBeNull();
+  });
+
+  it("adds an allergen once when its choice is clicked twice before the picker closes", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    await openPicker(el);
+    const changes = trackChanges(el);
+    const milk = el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-milk]")!;
+    milk.click();
+    milk.click();
+    await el.updateComplete;
+    expect(changes).toEqual([{ milk: { presence: "contains" } }]);
+  });
+
+  it("ignores a choice made after Revisado was switched off with the picker open", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    await openPicker(el);
+    await setReviewed(el, false);
+    const changes = trackChanges(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-milk]")!.click();
+    await el.updateComplete;
+    expect(changes).toEqual([]);
+    await setReviewed(el, true);
+    expect(el.value).toEqual({});
+  });
+
+  it("says no allergen matches a search that finds none", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    await openPicker(el);
+    const choices = el.shadowRoot!.querySelector(".choices")!;
+    expect(choices.textContent).not.toContain(t("allergen.no_matches"));
+    el.shadowRoot!.querySelector("[data-test=allergen-search]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "zzz" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-test^=choose-]")).toHaveLength(0);
+    expect(el.shadowRoot!.querySelector(".choices")!.textContent).toContain(
+      t("allergen.no_matches"),
+    );
+  });
+
+  // The picker opens inside the product editor, whose own keydown handling must not act on keys
+  // typed into the allergen search.
+  it("keeps keys pressed inside the picker from reaching the host", async () => {
+    const { el, host } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    const keys = vi.fn();
+    host.addEventListener("keydown", keys);
+    await openPicker(el);
+    el.shadowRoot!.querySelector("[data-test=allergen-search]")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(keys).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector("[data-test=reviewed]")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    expect(keys).toHaveBeenCalledOnce();
   });
 });

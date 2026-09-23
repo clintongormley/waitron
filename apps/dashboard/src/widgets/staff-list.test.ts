@@ -126,3 +126,95 @@ describe("staff-list", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("staff-list sorting", () => {
+  // Raw row order is Dora, Eva, Carl, and every column's order differs from it and from the
+  // display-name order, so each case fails if its column's sort value stops varying or reads the
+  // display name. Three rows cannot give seven distinct orders: role and status share one, as do
+  // legal name, email and telephone, so a swap between two columns in the same group goes unseen.
+  const roster: PersonSummary[] = [
+    {
+      personId: "a",
+      displayName: "Dora",
+      firstNames: "Dorotea",
+      lastNames: "Abad",
+      telephone: "+34 600",
+      role: "manager",
+      status: "pending",
+      hasPassword: false,
+      hasTotp: false,
+      email: "dora@x.com",
+    },
+    {
+      personId: "b",
+      displayName: "Eva",
+      firstNames: "Eva María",
+      telephone: null,
+      role: "staff",
+      status: "suspended",
+      hasPassword: false,
+      hasTotp: false,
+      email: null,
+    },
+    {
+      personId: "c",
+      displayName: "Carl",
+      lastNames: "Abad",
+      telephone: "+34 500",
+      role: "admin",
+      status: "active",
+      hasPassword: true,
+      hasTotp: false,
+      email: "carl@x.com",
+    },
+  ];
+
+  async function sortedBy(key: string): Promise<string[]> {
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: roster });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-sort=${key}]`)!.click();
+    await table.updateComplete;
+    return [...table.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
+      row.querySelector("td, th")!.textContent!.trim(),
+    );
+  }
+
+  it("sorts by display name", async () => {
+    expect(await sortedBy("displayName")).toEqual(["Carl", "Dora", "Eva"]);
+  });
+
+  // A missing surname or given name sorts as empty text, never as the word "undefined".
+  it("sorts by legal name, treating a missing surname or given name as empty", async () => {
+    expect(await sortedBy("legalName")).toEqual(["Eva", "Carl", "Dora"]);
+  });
+
+  // The localised role names order differently from the raw tokens (admin, manager, staff).
+  it("sorts by the localised role name, not the raw role", async () => {
+    expect(await sortedBy("role")).toEqual(["Carl", "Eva", "Dora"]);
+  });
+
+  // A person with no email or telephone sorts first as empty text rather than last as a null.
+  it.each(["email", "telephone"])("sorts a missing %s first as empty text", async (key) => {
+    expect(await sortedBy(key)).toEqual(["Eva", "Carl", "Dora"]);
+  });
+
+  // The localised status names order differently from the raw tokens (active, pending, suspended).
+  it("sorts by the localised status name, not the raw status", async () => {
+    expect(await sortedBy("status")).toEqual(["Carl", "Eva", "Dora"]);
+  });
+
+  it("offers Resend invitation only to a pending person and emits it for that person", async () => {
+    const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people: roster });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector("[data-test=resend-invitation-b]")).toBeNull();
+    expect(table.shadowRoot!.querySelector("[data-test=resend-invitation-c]")).toBeNull();
+    const events: CustomEvent[] = [];
+    el.addEventListener("person-action", (event) => events.push(event as CustomEvent));
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=resend-invitation-a]")!.click();
+    expect(events.map((event) => event.detail)).toEqual([
+      { personId: "a", action: "resend-invitation" },
+    ]);
+  });
+});

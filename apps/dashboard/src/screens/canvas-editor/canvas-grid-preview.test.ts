@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../../widgets/test-helpers.js";
 import { t } from "../../i18n/t.js";
 import "./canvas-grid-preview.js";
 import type { CanvasGridPreview } from "./canvas-grid-preview.js";
-import type { TabDef } from "./card-contracts.js";
+import { EDITOR_ROW_HEIGHT, type TabDef } from "./card-contracts.js";
 
 afterEach(cleanupWidgets);
 const tab: TabDef = {
@@ -532,5 +533,179 @@ describe("canvas-grid-preview card silhouettes", () => {
     pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
     pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
     expect(detail).toEqual({ from: 0, to: 1 });
+  });
+});
+
+describe("canvas-grid-preview gestures at the edges", () => {
+  async function mountInteractive(target: TabDef = tab, selectedIndex = -1) {
+    const { el } = await mountWidget<CanvasGridPreview>("canvas-grid-preview", {
+      tab: target,
+      interactive: true,
+      selectedIndex,
+    });
+    await el.updateComplete;
+    return el;
+  }
+  function tileEl(el: CanvasGridPreview, index: number): HTMLElement {
+    return el.shadowRoot!.querySelector<HTMLElement>(`[data-test=tile-${index}]`)!;
+  }
+  function handleOf(el: CanvasGridPreview): HTMLElement {
+    return el.shadowRoot!.querySelector<HTMLElement>("[data-test=resize-handle]")!;
+  }
+  function record(el: CanvasGridPreview, name: string): unknown[] {
+    const seen: unknown[] = [];
+    el.addEventListener(name, (e) => seen.push((e as CustomEvent).detail));
+    return seen;
+  }
+
+  it("drags a lone card with no insertion marker, emits no move-card and swallows its click", async () => {
+    const el = await mountInteractive({ ...tab, cards: [tab.cards[0]!] });
+    const moves = record(el, "move-card");
+    const selects = record(el, "select-card");
+    const t0 = tileEl(el, 0);
+    const [x, y] = centre(t0);
+    pointer(t0, "pointerdown", x, y);
+    pointer(t0, "pointermove", x + 40, y);
+    await el.updateComplete;
+    expect(t0.classList.contains("dragging")).toBe(true);
+    expect(el.shadowRoot!.querySelector(".drop-before, .drop-after")).toBeNull();
+    pointer(t0, "pointerup", x + 40, y);
+    t0.click();
+    expect(moves).toEqual([]);
+    expect(selects).toEqual([]);
+  });
+
+  it("follows the pointer across successive moves and drops a card back where it started", async () => {
+    const el = await mountInteractive();
+    const moves = record(el, "move-card");
+    const t0 = tileEl(el, 0);
+    const [x0, y0] = centre(t0);
+    const r1 = tileEl(el, 1).getBoundingClientRect();
+    pointer(t0, "pointerdown", x0, y0);
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    expect(tileEl(el, 1).classList.contains("drop-after")).toBe(true);
+    pointer(t0, "pointermove", x0, y0);
+    await el.updateComplete;
+    expect(tileEl(el, 1).classList.contains("drop-after")).toBe(false);
+    expect(tileEl(el, 1).classList.contains("drop-before")).toBe(true);
+    pointer(t0, "pointerup", x0, y0);
+    expect(moves).toEqual([]);
+  });
+
+  it("releases the pointer capture a real click took", async () => {
+    const el = await mountInteractive();
+    const selects = record(el, "select-card");
+    const t1 = tileEl(el, 1);
+    const release = vi.spyOn(t1, "releasePointerCapture");
+    await userEvent.click(t1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(t1.hasPointerCapture(release.mock.calls[0]![0])).toBe(false);
+    expect(selects).toEqual([{ index: 1 }]);
+  });
+
+  it("does not select the tile when its resize handle is clicked", async () => {
+    const el = await mountInteractive(tab, 0);
+    const selects = record(el, "select-card");
+    handleOf(el).click();
+    expect(selects).toEqual([]);
+  });
+
+  it("starts no drag from a secondary button press on a tile", async () => {
+    const el = await mountInteractive();
+    const moves = record(el, "move-card");
+    const t0 = tileEl(el, 0);
+    const [x0, y0] = centre(t0);
+    const r1 = tileEl(el, 1).getBoundingClientRect();
+    t0.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        clientX: x0,
+        clientY: y0,
+        pointerId: 1,
+        button: 2,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    pointer(t0, "pointermove", r1.right - 4, r1.top + r1.height / 2);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".dragging")).toBeNull();
+    pointer(t0, "pointerup", r1.right - 4, r1.top + r1.height / 2);
+    expect(moves).toEqual([]);
+  });
+
+  it("starts no resize from a secondary button press on the handle", async () => {
+    const el = await mountInteractive(tab, 0);
+    const resizes = record(el, "resize-card");
+    const handle = handleOf(el);
+    const [hx, hy] = centre(handle);
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        clientX: hx,
+        clientY: hy,
+        pointerId: 1,
+        button: 2,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    pointer(handle, "pointermove", hx + 400, hy);
+    expect(resizes).toEqual([]);
+  });
+
+  it.each([
+    { name: "the tab was cleared", next: null },
+    { name: "its card was removed", next: { ...tab, cards: [tab.cards[0]!] } },
+  ])(
+    "starts no resize from a handle pressed before the re-render after $name",
+    async ({ next }) => {
+      const el = await mountInteractive(tab, 1);
+      const resizes = record(el, "resize-card");
+      const handle = handleOf(el);
+      const [hx, hy] = centre(handle);
+      el.tab = next;
+      pointer(handle, "pointerdown", hx, hy);
+      pointer(handle, "pointermove", hx + 400, hy + 400);
+      expect(resizes).toEqual([]);
+    },
+  );
+
+  it("ignores another pointer lifting or cancelling during a resize", async () => {
+    const el = await mountInteractive(tab, 0);
+    const resizes = record(el, "resize-card");
+    const handle = handleOf(el);
+    const [hx, hy] = centre(handle);
+    pointer(handle, "pointerdown", hx, hy, 1);
+    pointer(handle, "pointerup", hx, hy, 2);
+    pointer(handle, "pointercancel", hx, hy, 2);
+    pointer(handle, "pointermove", hx, hy + 400, 1);
+    expect(resizes).toEqual([{ index: 0, colSpan: 8, rowSpan: expect.any(Number) }]);
+    expect((resizes[0] as { rowSpan: number }).rowSpan).toBeGreaterThan(6);
+    pointer(handle, "pointerup", hx, hy + 400, 1);
+  });
+
+  it("resizes in whole cells when the grid's gap does not resolve to a length", async () => {
+    // No design tokens: the grid's `gap: var(--wt-space-2)` computes to `normal`.
+    const el = document.createElement("canvas-grid-preview");
+    el.tab = tab;
+    el.interactive = true;
+    el.selectedIndex = 0;
+    document.body.appendChild(el);
+    try {
+      await el.updateComplete;
+      const grid = el.shadowRoot!.querySelector<HTMLElement>("[data-test=grid]")!;
+      expect(getComputedStyle(grid).columnGap).toBe("normal");
+      expect(getComputedStyle(grid).rowGap).toBe("normal");
+      const resizes = record(el, "resize-card");
+      const handle = handleOf(el);
+      const [hx, hy] = centre(handle);
+      const column = grid.getBoundingClientRect().width / tab.columns;
+      pointer(handle, "pointerdown", hx, hy);
+      pointer(handle, "pointermove", hx + column * 2, hy + EDITOR_ROW_HEIGHT);
+      pointer(handle, "pointerup", hx + column * 2, hy + EDITOR_ROW_HEIGHT);
+      expect(resizes).toEqual([{ index: 0, colSpan: 10, rowSpan: 7 }]);
+    } finally {
+      el.remove();
+    }
   });
 });

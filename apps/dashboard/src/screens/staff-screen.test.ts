@@ -2,6 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
@@ -770,4 +771,238 @@ it("refreshes displayed people when their data changes elsewhere", async () => {
   liveData.invalidate([{ type: "persons", id: "changed-elsewhere" }]);
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listStaff).toHaveBeenCalledTimes(2);
+});
+
+describe("staff-screen — row actions, filters and edit races", () => {
+  function rowAction(el: StaffScreen, personId: string, action: string): void {
+    list(el).dispatchEvent(
+      new CustomEvent("person-action", {
+        detail: { personId, action },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  const rowDialog = (el: StaffScreen) => el.shadowRoot!.querySelector("wt-dialog")!;
+  const confirmRow = (el: StaffScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-row-action]")!.click();
+
+  it("ignores another row's action while a confirmed one is still in flight", async () => {
+    let finish!: () => void;
+    const api = stubApi({
+      resetPin: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    rowAction(el, "p1", "reset-pin");
+    await flush(el);
+    confirmRow(el);
+    rowAction(el, "p2", "reset-login");
+    await flush(el);
+    expect(rowDialog(el).heading).toBe("Ada");
+    finish();
+    await flush(el);
+    expect(api.resetLogin).not.toHaveBeenCalled();
+    expect(rowDialog(el).open).toBe(false);
+  });
+
+  it("refuses to disable a person who has become the signed-in one after the dialog opened", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api,
+      currentPersonId: "p1",
+    });
+    await flush(el);
+    rowAction(el, "p2", "disable");
+    await flush(el);
+    expect(rowDialog(el).open).toBe(true);
+    el.currentPersonId = "p2";
+    await flush(el);
+    confirmRow(el);
+    await flush(el);
+    expect(api.deactivatePerson).not.toHaveBeenCalled();
+    expect(rowDialog(el).open).toBe(true);
+  });
+
+  it("confirms reactivation, then reports that the invitation email could not be sent", async () => {
+    const api = stubApi({
+      reactivatePerson: vi.fn().mockResolvedValue({ invitationSent: false }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    rowAction(el, "p2", "reactivate");
+    await flush(el);
+    expect(rowDialog(el).querySelector("p")!.textContent!.trim()).toBe(
+      t("person.confirm_reactivate"),
+    );
+    confirmRow(el);
+    await flush(el);
+    expect(api.reactivatePerson).toHaveBeenCalledExactlyOnceWith("p2");
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
+      t("staff.invitation_not_sent"),
+    );
+  });
+
+  it("confirms a row's resend-invitation and reports delivery", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    rowAction(el, "p1", "resend-invitation");
+    await flush(el);
+    expect(rowDialog(el).querySelector("p")!.textContent!.trim()).toBe(
+      t("person.resend_invitation"),
+    );
+    confirmRow(el);
+    await flush(el);
+    expect(api.resendInvitation).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
+      t("staff.invitation_sent"),
+    );
+  });
+
+  it("cancels a row confirmation without calling the API", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    rowAction(el, "p1", "reset-login");
+    await flush(el);
+    rowDialog(el).querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+    await flush(el);
+    expect(rowDialog(el).open).toBe(false);
+    expect(api.resetLogin).not.toHaveBeenCalled();
+  });
+
+  it("filters by each status, and hides disabled people until asked", async () => {
+    const pending: PersonSummary = {
+      ...people[0]!,
+      personId: "p3",
+      displayName: "Cruz",
+      status: "pending",
+    };
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([...people, pending]) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    const shown = () => list(el).people.map((person) => person.personId);
+    expect(shown()).toEqual(["p1", "p3"]);
+    const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=status-filter]")!;
+    for (const [value, expected] of [
+      ["active", ["p1"]],
+      ["pending", ["p3"]],
+      ["suspended", ["p2"]],
+      ["all", ["p1", "p2", "p3"]],
+      ["current", ["p1", "p3"]],
+    ] as const) {
+      status.value = value;
+      status.dispatchEvent(new Event("change"));
+      await flush(el);
+      expect(shown()).toEqual(expected);
+    }
+  });
+
+  it("drops a resend-invitation from a closed edit dialog and a second one while the first runs", async () => {
+    let finish!: (value: { invitationSent: boolean }) => void;
+    const api = stubApi({
+      resendInvitation: vi.fn().mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    const resend = () =>
+      editForm(el).dispatchEvent(
+        new CustomEvent("resend-invitation", { bubbles: true, composed: true }),
+      );
+    resend();
+    await flush(el);
+    expect(api.resendInvitation).not.toHaveBeenCalled();
+    await openEdit(el, "p1");
+    resend();
+    resend();
+    finish({ invitationSent: false });
+    await flush(el);
+    expect(api.resendInvitation).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
+      t("staff.invitation_not_sent"),
+    );
+  });
+
+  it("keeps the edit dialog open with the refusal when a resend-invitation is rejected", async () => {
+    const api = stubApi({
+      resendInvitation: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+    editForm(el).dispatchEvent(
+      new CustomEvent("resend-invitation", { bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(editForm(el).open).toBe(true);
+    expect(editForm(el).error).toBe("authorization.not_permitted");
+    expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")).toBeNull();
+  });
+
+  describe("an edit dialog opened while the post-save reload is in flight", () => {
+    const saveDetail = {
+      displayName: "Ada",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      telephone: null,
+      email: "ada@x.com",
+      role: "manager",
+      status: "active",
+    };
+
+    async function openDuringReload(reloaded: PersonSummary[]): Promise<StaffScreen> {
+      let finishReload!: (value: PersonSummary[]) => void;
+      const api = stubApi({
+        listStaff: vi
+          .fn()
+          .mockResolvedValueOnce(people)
+          .mockReturnValueOnce(
+            new Promise((resolve) => {
+              finishReload = resolve;
+            }),
+          ),
+      });
+      const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+      await flush(el);
+      await openEdit(el, "p1");
+      // The saved dialog's native close lands a task later; opening the next one before it would
+      // let that stale close shut the new dialog.
+      const closed = new Promise((resolve) =>
+        editForm(el).addEventListener("wt-close", resolve, { once: true }),
+      );
+      editForm(el).dispatchEvent(
+        new CustomEvent("save-person", { detail: saveDetail, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      await closed;
+      expect(api.listStaff).toHaveBeenCalledTimes(2);
+      expect(editForm(el).open).toBe(false);
+      await openEdit(el, "p2");
+      finishReload(reloaded);
+      await flush(el);
+      return el;
+    }
+
+    it("shows the reloaded copy of its person", async () => {
+      const renamed = { ...people[1]!, displayName: "Beatriz" };
+      const el = await openDuringReload([people[0]!, renamed]);
+      expect(editForm(el).open).toBe(true);
+      expect(editForm(el).person).toEqual(renamed);
+    });
+
+    it("keeps the person it opened with when the reload no longer lists them", async () => {
+      const el = await openDuringReload([people[0]!]);
+      expect(editForm(el).open).toBe(true);
+      expect(editForm(el).person).toEqual(people[1]);
+    });
+  });
 });

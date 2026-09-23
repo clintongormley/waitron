@@ -510,3 +510,133 @@ it("refreshes displayed stations when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listStations).toHaveBeenCalledTimes(2);
 });
+
+describe("kitchen-screen remaining edges", () => {
+  function pressEnter(el: KitchenScreen, sel: string): void {
+    q(el, sel)!
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+  }
+
+  async function mountLoaded(api: DashboardApi): Promise<KitchenScreen> {
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=station-row-s1]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=course-row-c1]")).not.toBeNull());
+    return el;
+  }
+
+  it.each(["order", "warm", "overdue", "forgotten"])(
+    "saves the station when Enter is pressed in its %s field",
+    async (field) => {
+      const api = stubApi({}, TWO_STATIONS);
+      const el = await mountLoaded(api);
+
+      pressEnter(el, `[data-test=station-${field}-s2]`);
+
+      expect(api.updateStation).toHaveBeenCalledWith("s2", {
+        name: "Plancha",
+        displayOrder: 1,
+        warmAfterMinutes: 4,
+        overdueAfterMinutes: 9,
+        forgottenAfterMinutes: 14,
+      });
+    },
+  );
+
+  it("saves the course when Enter is pressed in its order field", async () => {
+    const api = stubApi();
+    const el = await mountLoaded(api);
+    type(el, "[data-test=course-order-c1]", "3");
+    await el.updateComplete;
+
+    pressEnter(el, "[data-test=course-order-c1]");
+
+    expect(api.updateCourse).toHaveBeenCalledWith("c1", { name: "Entrantes", displayOrder: 3 });
+  });
+
+  it.each(["overdue", "forgotten"])(
+    "reads a non-numeric %s threshold as zero, and refuses to save it",
+    async (field) => {
+      const api = stubApi({}, TWO_STATIONS);
+      const el = await mountLoaded(api);
+
+      type(el, `[data-test=station-${field}-s2]`, "soon");
+      await el.updateComplete;
+
+      expect(
+        (q(el, `[data-test=station-${field}-s2]`) as HTMLElement & { value: string }).value,
+      ).toBe("0");
+      q(el, "[data-test=station-save-s2]")!.click();
+      await el.updateComplete;
+      expect(api.updateStation).not.toHaveBeenCalled();
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("management.request_invalid"));
+    },
+  );
+
+  it("shows a localized alert when deactivating a station is rejected", async () => {
+    const api = stubApi({
+      deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+    });
+    const el = await mountLoaded(api);
+
+    q(el, "[data-test=station-deactivate-s1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("station.not_found")),
+    );
+    expect(api.listStations).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a localized alert when deactivating a course is rejected", async () => {
+    const api = stubApi({
+      deactivateCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await mountLoaded(api);
+
+    q(el, "[data-test=course-deactivate-c1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+    );
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when Save is pressed on a station that has since disappeared", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({}, TWO_STATIONS), { liveData });
+    const el = await mountLoaded(api);
+    const staleSave = q(el, "[data-test=station-save-s2]")!;
+    vi.mocked(api.listStations).mockResolvedValue(STATIONS.map((s) => ({ ...s })));
+    liveData.invalidate([{ type: "kitchen_stations", id: "s2" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=station-row-s2]")).toBeNull());
+
+    staleSave.click();
+    await el.updateComplete;
+
+    expect(api.updateStation).not.toHaveBeenCalled();
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("does nothing when Save is pressed on a course that has since disappeared", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({}, STATIONS, TWO_COURSES), { liveData });
+    const el = await mountLoaded(api);
+    const staleSave = q(el, "[data-test=course-save-c2]")!;
+    vi.mocked(api.listCourses).mockResolvedValue(COURSES.map((c) => ({ ...c })));
+    liveData.invalidate([{ type: "kitchen_courses", id: "c2" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=course-row-c2]")).toBeNull());
+
+    staleSave.click();
+    await el.updateComplete;
+
+    expect(api.updateCourse).not.toHaveBeenCalled();
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+});

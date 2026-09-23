@@ -253,3 +253,66 @@ it("shows category names in the reader's language, not the default content langu
   }
   expect(el.shadowRoot!.querySelector("wt-lozenge")!.textContent!.trim()).toBe("Drinks");
 });
+
+it("clears the reporting category when every category is removed", async () => {
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food, drink],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food"], primaryCategoryId: "food" },
+    },
+  );
+  pick(el.shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-test="member-categories"]')!, {
+    values: [],
+  });
+  await el.updateComplete;
+  const reporting = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[data-test="reporting-category"]',
+  )!;
+  expect(reporting.disabled).toBe(true);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  expect(submit.mock.calls[0]![0].detail.value).toEqual({
+    categoryIds: [],
+    primaryCategoryId: null,
+  });
+});
+
+it("emits a bubbling, composed wt-cancel with an empty detail from Cancel", async () => {
+  const { el, host } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food"], primaryCategoryId: "food" },
+    },
+  );
+  const cancel = vi.fn();
+  const submit = vi.fn();
+  host.addEventListener("wt-cancel", cancel);
+  host.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(cancel.mock.calls[0]![0].detail).toEqual({});
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("emits neither save nor cancel while busy", async () => {
+  const { el, host } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food"], primaryCategoryId: "food" },
+      busy: true,
+    },
+  );
+  const seen = vi.fn();
+  host.addEventListener("wt-submit", seen);
+  host.addEventListener("wt-cancel", seen);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  expect(seen).not.toHaveBeenCalled();
+});

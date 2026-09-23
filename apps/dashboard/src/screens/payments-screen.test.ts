@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type {
   DashboardApi,
   PaymentProviderRow,
@@ -609,5 +609,260 @@ describe("reader dialog request lifetime", () => {
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Unknown");
     expect(qCell(el, "[data-test=reader-status-r-2]")!.textContent).toBe("Offline");
     expect(q(el, "[role=alert]")).toBeNull();
+  });
+});
+
+describe("payments-screen remaining edges", () => {
+  function pressEnter(field: HTMLElement): void {
+    field.shadowRoot!.querySelector("input")!.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+  }
+
+  const bodyRowNames = (el: PaymentsScreen): string[] =>
+    Array.from(
+      el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tbody tr"),
+    ).map((row) => row.querySelector("td")!.textContent!.trim());
+
+  it("says so when no payment provider is available", async () => {
+    const { el } = await mount(stubApi({ listPaymentProviders: vi.fn().mockResolvedValue([]) }));
+
+    expect(el.shadowRoot!.textContent).toContain("No payment providers are available.");
+    expect(q(el, ".providers")).toBeNull();
+  });
+
+  it("closes the connect form when Connect is pressed a second time", async () => {
+    const { el } = await mount();
+    q(el, "[data-test=connect-zeta]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=connect-form-zeta]")).not.toBeNull();
+
+    q(el, "[data-test=connect-zeta]")!.click();
+    await el.updateComplete;
+
+    expect(q(el, "[data-test=connect-form-zeta]")).toBeNull();
+  });
+
+  it("shows a reader that is still pairing as Pairing", async () => {
+    const { el } = await mount(
+      stubApi({
+        readerStatus: vi.fn().mockResolvedValue({ online: false, pairingStatus: "processing" }),
+      }),
+    );
+
+    expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Pairing…");
+  });
+
+  it("sorts the readers by name, by provider display name and by default count", async () => {
+    const panels = [fakePanel("zz", "test.acme.name"), fakePanel("aa", "test.zeta.name")];
+    const readers: ReaderRow[] = [
+      {
+        id: "r-c",
+        provider: "zz",
+        name: "Counter",
+        active: true,
+        canEnable: true,
+        deviceCount: 10,
+      },
+      { id: "r-b", provider: "aa", name: "Bar", active: true, canEnable: true, deviceCount: 9 },
+    ];
+    const { el } = await mount(
+      stubApi({
+        listPaymentProviders: vi.fn().mockResolvedValue([]),
+        listReaders: vi.fn().mockResolvedValue(readers),
+      }),
+      { panels },
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const sortBy = async (key: string) => {
+      table.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-sort=${key}]`)!.click();
+      await (table as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    };
+
+    await sortBy("name");
+    expect(bodyRowNames(el)).toEqual(["Bar", "Counter"]);
+    // "zz" displays as Acme Pay and "aa" as Zeta Pay, so the display name and the raw token disagree.
+    await sortBy("provider");
+    expect(bodyRowNames(el)).toEqual(["Counter", "Bar"]);
+    await sortBy("deviceCount");
+    expect(bodyRowNames(el)).toEqual(["Bar", "Counter"]);
+  });
+
+  it("disables a reader once when its Disable is pressed twice before the first answer", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { el, api } = await mount(
+      stubApi({ disableReader: vi.fn().mockReturnValueOnce(pending) }),
+    );
+    const disable = qCell(el, "[data-test=disable-r-1]")!;
+
+    disable.click();
+    disable.click();
+    release();
+    await flush(el);
+
+    expect(api.disableReader).toHaveBeenCalledTimes(1);
+  });
+
+  it("renames once when Save is pressed twice before the first answer", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { el, api } = await mount(
+      stubApi({ renameReader: vi.fn().mockReturnValueOnce(pending) }),
+    );
+    qCell(el, "[data-test=edit-r-1]")!.click();
+    await el.updateComplete;
+    changeName(el, "[data-test=edit-reader-name]", "Garden");
+    await el.updateComplete;
+    const save = q(el, "[data-test=save-reader]")!;
+
+    save.click();
+    save.click();
+    release();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
+    expect(api.renameReader).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a rename when Enter is pressed in the name field", async () => {
+    const { el, api } = await mount();
+    qCell(el, "[data-test=edit-r-1]")!.click();
+    await el.updateComplete;
+    changeName(el, "[data-test=edit-reader-name]", "Garden");
+    await el.updateComplete;
+    const field = q(el, "[data-test=edit-reader-name]")!;
+    await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+
+    pressEnter(field);
+
+    await vi.waitFor(() => expect(api.renameReader).toHaveBeenCalledWith("r-1", "Garden"));
+  });
+
+  it("adopts a listed reader when Enter is pressed in its name field", async () => {
+    const { el, api } = await mount(
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
+    );
+    await openAdd(el);
+    const field = q(el, "[data-test=name-v-1]")!;
+    await (field as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+
+    pressEnter(field);
+
+    await vi.waitFor(() =>
+      expect(api.adoptReader).toHaveBeenCalledWith({
+        providerId: "acme",
+        providerRef: "v-1",
+        name: "My Reader",
+      }),
+    );
+  });
+
+  it("adds a disabled reader again under its existing provider reference", async () => {
+    const { el, api } = await mount(
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
+    );
+    await openAdd(el);
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add again");
+
+    q(el, "[data-test=adopt-v-2]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.adoptReader).toHaveBeenCalledWith({
+        providerId: "acme",
+        providerRef: "v-2",
+        name: "Terrace",
+      }),
+    );
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-discovery]")).toBeNull());
+  });
+
+  it("closes discovery when its dialog is dismissed", async () => {
+    const { el } = await mount();
+    await openAdd(el);
+    const dialog = q(el, "[data-test=reader-discovery]")!;
+
+    dialog.shadowRoot!.querySelector("dialog")!.close();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-discovery]")).toBeNull());
+  });
+
+  it("closes the reader editor when its dialog is dismissed", async () => {
+    const { el, api } = await mount();
+    qCell(el, "[data-test=edit-r-1]")!.click();
+    await el.updateComplete;
+    const dialog = q(el, "[data-test=reader-editor]")!;
+
+    dialog.shadowRoot!.querySelector("dialog")!.close();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
+    expect(api.renameReader).not.toHaveBeenCalled();
+  });
+
+  it("shows the no-details copy when the reader's status could not be read", async () => {
+    const { el } = await mount(
+      stubApi({ readerStatus: vi.fn().mockRejectedValue(new Error("offline API")) }),
+    );
+    qCell(el, "[data-test=details-r-1]")!.click();
+    await el.updateComplete;
+
+    const dialog = q(el, "[data-test=reader-editor]")!;
+    expect(dialog.querySelector(".reader-details")).toBeNull();
+    expect(dialog.textContent).toContain(t("payments.details_empty"));
+    expect(dialog.textContent).toContain("Unknown");
+  });
+
+  it("ignores a superseded discovery list's late failure", async () => {
+    let failOld!: () => void;
+    const old = new Promise<never>((_, reject) => {
+      failOld = () => reject(new Error("old outage"));
+    });
+    const { el } = await mount(
+      stubApi({
+        availableReaders: vi.fn().mockReturnValueOnce(old).mockResolvedValue(VENDOR_READERS),
+      }),
+    );
+    await openAdd(el);
+    q(el, "[data-test=cancel-discovery]")!.click();
+    await flush(el);
+    await openAdd(el);
+    expect(q(el, "[data-test=name-v-1]")).not.toBeNull();
+
+    failOld();
+    await flush(el);
+
+    expect(q(el, "[data-test=name-v-1]")).not.toBeNull();
+    expect(q(el, "[data-test=reader-discovery]")!.textContent).not.toContain("Could not check");
+  });
+
+  it("refreshes no statuses when Refresh is pressed before the readers have loaded", async () => {
+    let release!: (readers: ReaderRow[]) => void;
+    const readers = new Promise<ReaderRow[]>((resolve) => {
+      release = resolve;
+    });
+    const api = stubApi({ listReaders: vi.fn().mockReturnValue(readers) });
+    const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+      api,
+      request: vi.fn() as unknown as PaymentsScreen["request"],
+      panels: PANELS,
+    });
+
+    q(el, "[data-test=refresh-readers]")!.click();
+    await el.updateComplete;
+    expect(api.readerStatus).not.toHaveBeenCalled();
+
+    release(READERS);
+    await vi.waitFor(() =>
+      expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
+    );
+    expect(api.readerStatus).toHaveBeenCalledTimes(1);
   });
 });

@@ -147,4 +147,34 @@ describe("login preference", () => {
     expect(consumeGoogleLoginPreference(true)).toBeUndefined();
     storage.mockRestore();
   });
+
+  it.each([
+    ["an address that is not an email", { email: "owner", method: "password" }],
+    ["a sign-in method this screen does not offer", { email: "owner@example.com", method: "sms" }],
+    ["no email at all", { method: "passkey" }],
+  ])("ignores a saved shortcut holding %s", (_what, saved) => {
+    localStorage.setItem("waitron-login-preference", JSON.stringify(saved));
+    expect(readLoginPreference()).toBeNull();
+  });
+
+  it("reads no shortcut when the browser refuses to read storage", () => {
+    localStorage.setItem(
+      "waitron-login-preference",
+      JSON.stringify({ email: "owner@example.com", method: "password" }),
+    );
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Denied", "SecurityError");
+    });
+    try {
+      expect(readLoginPreference()).toBeNull();
+    } finally {
+      getItem.mockRestore();
+    }
+  });
+
+  it("saves nothing for an opted-in sign-in whose email is malformed", () => {
+    rememberSuccessfulLogin("not-an-email", "password", true);
+    expect(localStorage.length).toBe(0);
+    expect(readLoginPreference()).toBeNull();
+  });
 });

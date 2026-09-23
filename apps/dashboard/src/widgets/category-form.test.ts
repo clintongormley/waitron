@@ -1,8 +1,8 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { CategoryForm } from "./category-form.js";
-import { setLocale } from "../i18n/t.js";
+import { CategoryForm, categoryPath } from "./category-form.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
@@ -315,4 +315,132 @@ it("keeps the editor open when Escape is pressed during a save", async () => {
   await modal.updateComplete;
   await userEvent.keyboard("{Escape}");
   expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+});
+
+it("names a category in a path by its id when it has no name in any enabled language", () => {
+  const unnamed: CategorySummary = {
+    id: "untitled",
+    name: {},
+    parentId: "food",
+    image: null,
+    color: null,
+  };
+  expect(categoryPath(unnamed, [food, unnamed], "en")).toBe("Food / untitled");
+});
+
+it("submits the chosen parent and returns to no parent when None is chosen", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: child,
+    categories: [food, child],
+  });
+  const submitted: CategoryInput[] = [];
+  el.addEventListener("wt-submit", (event) => {
+    submitted.push((event as CustomEvent<{ value: CategoryInput }>).detail.value);
+  });
+  const parent = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+  const save = el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+  expect(parent.value).toBe("food");
+  parent.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  save.click();
+  parent.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "food" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  save.click();
+  expect(submitted.map((value) => value.parentId)).toEqual([null, "food"]);
+});
+
+it("emits a bubbling, composed wt-cancel with an empty detail from Cancel", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  const cancel = vi.fn();
+  host.addEventListener("wt-cancel", cancel);
+  el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(cancel.mock.calls[0]![0].detail).toEqual({});
+});
+
+it("neither saves nor cancels while the image library is open over it", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  const seen = vi.fn();
+  host.addEventListener("wt-submit", seen);
+  host.addEventListener("wt-cancel", seen);
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  upload.dispatchEvent(
+    new CustomEvent("image-picker-state", {
+      detail: { open: true },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const save = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    '[data-test="save"]',
+  )!;
+  expect(save.disabled).toBe(true);
+  save.click();
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  expect(seen).not.toHaveBeenCalled();
+
+  upload.dispatchEvent(
+    new CustomEvent("image-picker-state", {
+      detail: { open: false },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(save.disabled).toBe(false);
+  save.click();
+  expect(seen).toHaveBeenCalledOnce();
+  expect(seen.mock.calls[0]![0].type).toBe("wt-submit");
+});
+
+it("neither saves nor cancels while a save is in flight", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    busy: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  const seen = vi.fn();
+  host.addEventListener("wt-submit", seen);
+  host.addEventListener("wt-cancel", seen);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+    new CustomEvent("wt-close", { bubbles: true, composed: true }),
+  );
+  expect(seen).not.toHaveBeenCalled();
+});
+
+it("refuses to save with the name-required message when no content language is configured", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: [] },
+  });
+  const submit = vi.fn();
+  host.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
+      "wt-form-error-summary",
+    )!.errors,
+  ).toEqual([t("categories.name_required")]);
 });

@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -3056,4 +3056,986 @@ it("keeps a reopened test dialog independent of a pending earlier print", async 
   expect(q(el, '[data-test="printer-test-dialog"]')!.textContent).not.toContain(
     codeMessage("printer.not_found"),
   );
+});
+
+describe("printers-screen agent joining edges", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  async function openAgentModal(api: DashboardApi): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  async function openJoinDialog(api: DashboardApi): Promise<PrintersScreen> {
+    const el = await openAgentModal(api);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+    return el;
+  }
+
+  const bodyRowTexts = (table: HTMLElement): string[] =>
+    Array.from(table.shadowRoot!.querySelectorAll("tbody tr")).map((row) =>
+      row.querySelector("td")!.textContent!.trim(),
+    );
+
+  it("closes the accept dialog when the dialog itself is dismissed", async () => {
+    const el = await openJoinDialog(stubApi());
+
+    q(el, "[data-test=join-dialog]")!.shadowRoot!.querySelector("dialog")!.close();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+  });
+
+  it("closes the open accept dialog when that same request is denied", async () => {
+    const api = stubApi();
+    const el = await openJoinDialog(api);
+
+    q(el, "[data-test=join-deny-j1]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=join-deny-j1]")!.click();
+
+    await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledWith("j1"));
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+  });
+
+  it("shows a localized alert and keeps the request when a deny is rejected", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const el = await openAgentModal(api);
+    const calls = vi.mocked(api.joinRequests).mock.calls.length;
+
+    q(el, "[data-test=join-deny-j1]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=join-deny-j1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+        codeMessage("join_request.not_found"),
+      ),
+    );
+    expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+    expect(api.joinRequests).toHaveBeenCalledTimes(calls);
+  });
+
+  it("sends one accept when a number is tapped twice before the first answer", async () => {
+    let release!: () => void;
+    const answer = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const api = stubApi({ acceptPrintAgentJoinRequest: vi.fn().mockReturnValueOnce(answer) });
+    const el = await openJoinDialog(api);
+    const number = q(el, `[data-choice="${REAL_NUMBER}"]`)!;
+
+    number.click();
+    number.click();
+    release();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    expect(api.acceptPrintAgentJoinRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the queue reload's own failure after a mismatch closes the dialog", async () => {
+    const api = stubApi({
+      acceptPrintAgentJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
+    });
+    const el = await openJoinDialog(api);
+    vi.mocked(api.joinRequests).mockRejectedValue({ code: "connection.failed" });
+
+    q(el, '[data-choice="12"]')!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+  });
+
+  it("opens pairing once when Add agent is pressed twice", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const add = q(el, "[data-test=open-add-agent]")!;
+
+    add.click();
+    add.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pairing-until]")).not.toBeNull());
+    expect(api.openPairingMode).toHaveBeenCalledOnce();
+  });
+
+  it("ignores Scan while an agent scan is still listening, and rescans once it has finished", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      expect(api.openPairingMode).toHaveBeenCalledOnce();
+
+      q(el, "[data-test=scan-agents]")!.click();
+      await flush(el);
+      expect(api.openPairingMode).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      q(el, "[data-test=scan-agents]")!.click();
+      await flush(el);
+      expect(api.openPairingMode).toHaveBeenCalledTimes(2);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a failed agent-queue read inside the modal and stops the busy scan", async () => {
+    const api = stubApi({
+      joinRequests: vi
+        .fn()
+        .mockResolvedValueOnce(pending)
+        .mockRejectedValue({ code: "management_session.expired" }),
+    });
+    const el = await openAgentModal(api);
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=new-agent-modal] [data-test=printer-refresh-error]")).toContain(
+        codeMessage("management_session.expired"),
+      ),
+    );
+    expect(
+      q(el, "[data-test=scan-agents]")!
+        .shadowRoot!.querySelector("button")!
+        .getAttribute("aria-busy"),
+    ).not.toBe("true");
+  });
+
+  it("ignores an old agent-queue failure after the modal was closed and reopened", async () => {
+    let failOld!: (reason: unknown) => void;
+    const oldRead = new Promise<JoinRequestRow[]>((_, reject) => {
+      failOld = reject;
+    });
+    const api = stubApi({
+      joinRequests: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockReturnValueOnce(oldRead)
+        .mockResolvedValue([]),
+    });
+    const el = await openAgentModal(api);
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+
+    failOld({ code: "management_session.expired" });
+    await flush(el);
+
+    expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+  });
+
+  it("opens the window before the first pairing read arrives, and a close before the open finishes leaves no deadline", async () => {
+    let finishOpen!: (value: { openUntil: string | null }) => void;
+    const api = stubApi({
+      pairingMode: vi.fn().mockReturnValue(new Promise(() => {})),
+      openPairingMode: vi
+        .fn()
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            finishOpen = resolve;
+          }),
+        )
+        .mockResolvedValue({ openUntil: OPEN.openUntil }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=pairing-until]")).toBeNull();
+    expect(q(el, "[data-test=pairing-refused]")).toBeNull();
+    q(el, "[data-test=cancel-new-agent]")!.click();
+    await flush(el);
+    finishOpen({ openUntil: OPEN.openUntil });
+    await flush(el);
+    await vi.waitFor(() => expect(api.closePairingMode).toHaveBeenCalledOnce());
+
+    q(el, "[data-test=open-add-agent]")!.click();
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
+      ),
+    );
+    expect(q(el, "[data-test=pairing-refused]")).toBeNull();
+  });
+
+  it("saves a renamed agent when Enter is pressed in its name field", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen Pi");
+    await flush(el);
+
+    q(el, "[data-test=edit-agent-name]")!
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+
+    await vi.waitFor(() =>
+      expect(api.updateAgent).toHaveBeenCalledWith("a1", { name: "Kitchen Pi" }),
+    );
+  });
+
+  it("does nothing when a Save from a closed agent editor is pressed", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    const staleSave = q(el, "[data-test=save-agent]")!;
+    q(el, "[data-test=cancel-edit-agent]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
+
+    staleSave.click();
+    await flush(el);
+
+    expect(api.updateAgent).not.toHaveBeenCalled();
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("sorts the agents by name and by last seen", async () => {
+    const rows: PrintAgentRow[] = [
+      { ...agents[0]!, id: "a-z", name: "Zeta", lastSeenAt: "2026-08-01T00:00:00.000Z" },
+      { ...agents[0]!, id: "a-a", name: "Alpha", lastSeenAt: "2026-08-30T00:00:00.000Z" },
+      { ...agents[0]!, id: "a-m", name: "Mid", lastSeenAt: "2026-08-15T00:00:00.000Z" },
+    ];
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ listAgents: vi.fn().mockResolvedValue(rows) }),
+    });
+    await flush(el);
+    const table = q(el, "[data-test=agents-table]")!;
+    const sortBy = async (key: string) => {
+      table.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-sort=${key}]`)!.click();
+      await flush(el);
+    };
+
+    await sortBy("name");
+    expect(bodyRowTexts(table)).toEqual(["Alpha", "Mid", "Zeta"]);
+    await sortBy("lastSeen");
+    expect(bodyRowTexts(table)).toEqual(["Zeta", "Mid", "Alpha"]);
+  });
+});
+
+describe("printers-screen tabs, tables and refresh edges", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  const selectedTab = (el: PrintersScreen) =>
+    q(el, "wt-tabs")!.shadowRoot!.querySelector("[aria-selected=true]")?.getAttribute("data-key");
+
+  const bodyRowTexts = (table: HTMLElement): string[] =>
+    Array.from(table.shadowRoot!.querySelectorAll("tbody tr")).map((row) =>
+      row.querySelector("td")!.textContent!.trim(),
+    );
+
+  async function sortBy(el: PrintersScreen, table: HTMLElement, key: string): Promise<void> {
+    table.shadowRoot!.querySelector<HTMLButtonElement>(`button[data-sort=${key}]`)!.click();
+    await flush(el);
+  }
+
+  it("records the chosen first tab in the address when the printers page opened without one", async () => {
+    history.replaceState(null, "", "/manage/printers");
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+
+    expect(selectedTab(el)).toBe("queue");
+    expect(location.pathname).toBe("/manage/printers/view/queue");
+  });
+
+  it("replaces an unknown tab in the address with the useful first tab, before and after loading", async () => {
+    history.replaceState(null, "", "/manage/printers/view/bogus");
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(el);
+    expect(selectedTab(el)).toBe("printers");
+    expect(location.pathname).toBe("/manage/printers/view/printers");
+
+    await selectTab(el, "agents");
+    history.pushState(null, "", "/manage/printers/view/other-bogus");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+
+    expect(selectedTab(el)).toBe("printers");
+    expect(location.pathname).toBe("/manage/printers/view/printers");
+  });
+
+  it("does not switch tabs for a change event raised by a control inside a tab", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    const path = location.pathname;
+
+    q(el, "[data-test=printers-table]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "agents" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(selectedTab(el)).toBe("printers");
+    expect(location.pathname).toBe(path);
+  });
+
+  it("retries a failed list load from the refresh button", async () => {
+    const api = stubApi({
+      listPrinters: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(printers),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+      codeMessage("connection.failed"),
+    );
+
+    q(el, "[data-test=refresh-printer-lists]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
+    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
+  });
+
+  it("shows a network printer with no port by its host alone", async () => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({
+        listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, port: null }]),
+      }),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+
+    const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
+    const cells = Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent!.trim());
+    expect(cells).toContain("10.0.0.9");
+    expect(cells.some((cell) => cell.startsWith("10.0.0.9:"))).toBe(false);
+  });
+
+  it("sorts the printers by name, pending jobs and last print", async () => {
+    const rows: Printer[] = [
+      {
+        ...printers[0]!,
+        id: "p-b",
+        name: "Bravo",
+        pendingJobs: 3,
+        lastPrintAt: "2026-08-01T00:00:00.000Z",
+      },
+      {
+        ...printers[0]!,
+        id: "p-c",
+        name: "Charlie",
+        pendingJobs: 1,
+        lastPrintAt: "2026-08-20T00:00:00.000Z",
+      },
+      {
+        ...printers[0]!,
+        id: "p-a",
+        name: "Alpha",
+        pendingJobs: 2,
+        lastPrintAt: "2026-08-10T00:00:00.000Z",
+      },
+    ];
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ listPrinters: vi.fn().mockResolvedValue(rows) }),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    const table = q(el, "[data-test=printers-table]")!;
+
+    await sortBy(el, table, "name");
+    expect(bodyRowTexts(table)).toEqual(["Alpha", "Bravo", "Charlie"]);
+    await sortBy(el, table, "pending");
+    expect(bodyRowTexts(table)).toEqual(["Charlie", "Alpha", "Bravo"]);
+    await sortBy(el, table, "lastPrint");
+    expect(bodyRowTexts(table)).toEqual(["Bravo", "Alpha", "Charlie"]);
+  });
+
+  it("sorts the recent jobs by attempts, queued time and delivered time", async () => {
+    const rows: PrintJobRow[] = [
+      {
+        ...jobs[1]!,
+        id: "jb",
+        printerId: "p1",
+        attempts: 3,
+        createdAt: "2026-08-25T12:00:00.000Z",
+        deliveredAt: "2026-08-25T12:30:00.000Z",
+      },
+      {
+        ...jobs[1]!,
+        id: "jc",
+        printerId: "p2",
+        attempts: 1,
+        createdAt: "2026-08-25T14:00:00.000Z",
+        deliveredAt: "2026-08-25T14:01:00.000Z",
+      },
+      {
+        ...jobs[1]!,
+        id: "ja",
+        printerId: "p3",
+        attempts: 2,
+        createdAt: "2026-08-25T13:00:00.000Z",
+        deliveredAt: "2026-08-25T15:00:00.000Z",
+      },
+    ];
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue(rows) }),
+    });
+    await flush(el);
+    const table = q(el, "[data-test=jobs-table]")!;
+
+    await sortBy(el, table, "attempts");
+    expect(bodyRowTexts(table)).toEqual(["Nube", "Barra USB", "Cocina"]);
+    await sortBy(el, table, "queued");
+    expect(bodyRowTexts(table)).toEqual(["Cocina", "Barra USB", "Nube"]);
+    await sortBy(el, table, "delivered");
+    expect(bodyRowTexts(table)).toEqual(["Cocina", "Nube", "Barra USB"]);
+  });
+});
+
+describe("printers-screen discovery and add edges", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  async function mountWithDiscovered(
+    devices: DiscoveredPrinter[],
+    overrides: Partial<DashboardApi> = {},
+  ) {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
+      ...overrides,
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    return { el, api };
+  }
+
+  it("maps a refused port to the port field", async () => {
+    const probe = vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "port" } });
+    const { el } = await mountWithDiscovered([], { probePrinterAddress: probe });
+    typeField(el, "[data-test=probe-host]", "printer.local");
+    typeField(el, "[data-test=probe-port]", "9100");
+
+    q(el, "[data-test=probe-printer]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=probe-port]") as unknown as { error: string }).error).toBe(
+        t("printers.port_invalid"),
+      ),
+    );
+    expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe("");
+    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
+      t("printers.port_invalid"),
+    ]);
+    expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+  });
+
+  it("ignores a listen re-read that fails after Add printer was closed", async () => {
+    let failRead!: (reason: unknown) => void;
+    const passive = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failRead = reject;
+        }),
+    );
+    const api = stubApi({ background: stubApi({ listDiscoveredPrinters: passive }) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledOnce();
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await flush(el);
+
+      failRead({ code: "management_session.expired" });
+      await flush(el);
+
+      expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("offers and registers a network printer that reported no port on the default port", async () => {
+    const device: DiscoveredPrinter = { ...discoveredNetwork[0]!, port: null };
+    const { el, api } = await mountWithDiscovered([device]);
+    const key = "10.0.0.77:9100";
+    expect(text(el, `[data-test='discovered-row-${key}']`)).toContain("10.0.0.77:9100");
+
+    q(el, `[data-test='register-${key}']`)!.click();
+    await flush(el);
+    expect(text(el, "[data-test=name-printer-modal] .hint")).toBe("Kitchen IP · 10.0.0.77:9100");
+    q(el, "[data-test=confirm-add-printer]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.createPrinter).toHaveBeenCalledWith({
+        name: "Kitchen IP",
+        transport: "network_tcp",
+        host: "10.0.0.77",
+        port: 9100,
+      }),
+    );
+  });
+
+  it("adds a disabled registration again under its existing id, sending a changed name", async () => {
+    const device: DiscoveredPrinter = { ...discovered[1]! };
+    const { el, api } = await mountWithDiscovered([device]);
+    expect(text(el, "[data-test=register-SN-2]")).toBe(t("printers.add_again"));
+    q(el, "[data-test=register-SN-2]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=discovered-name-SN-2]") as unknown as { value: string }).value).toBe(
+      "Barra USB",
+    );
+
+    typeField(el, "[data-test=discovered-name-SN-2]", "Barra nueva");
+    q(el, "[data-test=confirm-add-printer]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", {
+        active: true,
+        name: "Barra nueva",
+      }),
+    );
+    expect(api.createPrinter).not.toHaveBeenCalled();
+  });
+
+  it("omits the seen-on line for a discovered device no agent name is known for", async () => {
+    const { el } = await mountWithDiscovered([{ ...discovered[0]!, agentName: null }]);
+
+    const row = text(el, "[data-test=discovered-row-SN-1]")!;
+    expect(row).toContain("EPSON TM-T20");
+    expect(row).not.toContain(t("printers.discovered_seen_on").replace("{agent}", "").trim());
+  });
+
+  it("adds the named printer when Enter is pressed in the name field", async () => {
+    const { el, api } = await mountWithDiscovered(discovered);
+    q(el, "[data-test=register-SN-1]")!.click();
+    await flush(el);
+
+    q(el, "[data-test=discovered-name-SN-1]")!
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+
+    await vi.waitFor(() =>
+      expect(api.createPrinter).toHaveBeenCalledWith({
+        name: "EPSON TM-T20",
+        transport: "usb",
+        localKey: "SN-1",
+      }),
+    );
+  });
+
+  it("ignores another device's Add while a registration is in flight", async () => {
+    let release!: () => void;
+    const create = vi.fn().mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = () => resolve({ id: "p9" });
+      }),
+    );
+    const { el, api } = await mountWithDiscovered([...discovered, ...discoveredNetwork], {
+      createPrinter: create,
+    });
+    q(el, "[data-test=register-SN-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-add-printer]")!.click();
+    await el.updateComplete;
+
+    q(el, "[data-test='register-10.0.0.77:9100']")!.click();
+    await el.updateComplete;
+
+    expect(q(el, "[data-test=discovered-name-SN-1]")).not.toBeNull();
+    expect(q(el, "[data-test='discovered-name-10.0.0.77:9100']")).toBeNull();
+    release();
+    await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
+    expect(api.createPrinter).toHaveBeenCalledOnce();
+  });
+
+  it("still reloads without an error when the name dialog was cancelled while its add was in flight", async () => {
+    let release!: () => void;
+    const create = vi.fn().mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = () => resolve({ id: "p9" });
+      }),
+    );
+    const { el, api } = await mountWithDiscovered(discovered, { createPrinter: create });
+    q(el, "[data-test=register-SN-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-add-printer]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
+
+    release();
+
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(text(el, "[data-test=printer-added]")).toBe(
+      t("printers.added").replace("{name}", "EPSON TM-T20"),
+    );
+    expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+  });
+});
+
+describe("printers-screen printer editor edges", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  async function mountEditing(id = "p1", overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi(overrides);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, id);
+    return { el, api };
+  }
+
+  const summaryErrors = (el: PrintersScreen): string[] =>
+    (
+      q(el, "[data-test=edit-printer-modal] wt-form-error-summary") as unknown as {
+        errors: string[];
+      }
+    ).errors;
+
+  it("keeps a late change from a closed editor out of the next printer's draft", async () => {
+    const { el, api } = await mountEditing("p1");
+    const staleName = q(el, "[data-test=printer-name-p1]")!;
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    await openPrinter(el, "p3");
+
+    staleName.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Leaked" }, bubbles: true, composed: true }),
+    );
+    q(el, "[data-test=save-printer-p3]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "Barra USB", active: false }),
+    );
+  });
+
+  it("does nothing when a Save from a closed printer editor is pressed", async () => {
+    const { el, api } = await mountEditing("p1");
+    const staleSave = q(el, "[data-test=save-printer-p1]")!;
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+
+    staleSave.click();
+    await flush(el);
+
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("refuses a port outside 1 to 65535", async () => {
+    const { el, api } = await mountEditing("p1");
+    typeField(el, "[data-test=printer-port-p1]", "70000");
+    await el.updateComplete;
+
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=printer-port-p1]") as unknown as { error: string }).error).toBe(
+      t("printers.port_invalid"),
+    );
+  });
+
+  it.each([
+    ["usb", { ...printers[2]!, localKey: null }, "printers.device_required"],
+    [
+      "bluetooth",
+      { ...printers[2]!, transport: "bluetooth", localKey: "  " },
+      "printers.device_required",
+    ],
+    ["cloud_poll", { ...printers[1]!, pollId: null }, "printers.poll_required"],
+  ] as const)(
+    "refuses to save a %s printer with no device identity",
+    async (_transport, row, message) => {
+      const { el, api } = await mountEditing(row.id, {
+        listPrinters: vi.fn().mockResolvedValue([row as Printer]),
+      });
+
+      q(el, `[data-test=save-printer-${row.id}]`)!.click();
+      await flush(el);
+
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(summaryErrors(el)).toEqual([t(message)]);
+    },
+  );
+
+  it("refuses a sample receipt while the printer has no name", async () => {
+    const { el, api } = await mountEditing("p1");
+    typeField(el, "[data-test=printer-name-p1]", "  ");
+    await el.updateComplete;
+
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+
+    expect(api.sampleReceipt).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=printer-name-p1]") as unknown as { error: string }).error).toBe(
+      t("form.name_required"),
+    );
+  });
+
+  it("prints one sample receipt when the button is pressed twice", async () => {
+    let release!: () => void;
+    const { el, api } = await mountEditing("p1", {
+      sampleReceipt: vi.fn().mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve({ jobId: "j10" });
+        }),
+      ),
+    });
+    const sample = q(el, "[data-test=print-sample-receipt-p1]")!;
+
+    sample.click();
+    sample.click();
+    release();
+
+    await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
+    expect(api.sampleReceipt).toHaveBeenCalledOnce();
+  });
+
+  it("shows a localized alert in the editor when a sample receipt is rejected", async () => {
+    const { el } = await mountEditing("p1", {
+      sampleReceipt: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+        codeMessage("printer.not_found"),
+      ),
+    );
+  });
+
+  it("prints one character-table page when the button is pressed twice", async () => {
+    let release!: () => void;
+    const { el, api } = await mountEditing("p1", {
+      testCharacterTables: vi.fn().mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve({ jobId: "j11", calibrationLocale: "es-ES" });
+        }),
+      ),
+    });
+    const tables = q(el, "[data-test=print-character-tables-p1]")!;
+
+    tables.click();
+    tables.click();
+    release();
+
+    await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
+    expect(api.testCharacterTables).toHaveBeenCalledOnce();
+  });
+
+  it("shows a localized alert in the editor when the character-table page is rejected", async () => {
+    const { el } = await mountEditing("p1", {
+      testCharacterTables: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+
+    q(el, "[data-test=print-character-tables-p1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+        codeMessage("printer.not_found"),
+      ),
+    );
+    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+  });
+
+  it("does not adopt a character-table page's result after the table range changed", async () => {
+    let release!: () => void;
+    const { el, api } = await mountEditing("p1", {
+      testCharacterTables: vi.fn().mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve({ jobId: "j11", calibrationLocale: "es-ES" });
+        }),
+      ),
+    });
+    q(el, "[data-test=print-character-tables-p1]")!.click();
+    await el.updateComplete;
+    await chooseOption(el, "printer-table-block", "16");
+
+    release();
+
+    await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="T168"]')).toBeNull();
+  });
+
+  it("does not adopt a test page's result after its dialog was cancelled", async () => {
+    let release!: () => void;
+    const { el, api } = await mountEditing("p1", {
+      testPrint: vi.fn().mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve({ jobId: "j9", calibrationLocale: "es-ES" });
+        }),
+      ),
+    });
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-printer-test]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=printer-test-dialog]")).toBeNull());
+
+    release();
+    await flush(el);
+
+    expect(api.listRecentJobs).toHaveBeenCalledOnce();
+  });
+
+  it("applies only the answered test question, leaving paper width and resolution as they were", async () => {
+    const { el, api } = await mountEditing("p1");
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    q(el, 'input[name="printer-test-line-reads"][value="4"]')!.click();
+    await flush(el);
+
+    q(el, '[data-test="apply-printer-test"]')!.click();
+    await flush(el);
+    q(el, "[data-test=save-printer-p1]")!.click();
+
+    await vi.waitFor(() =>
+      expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
+        name: "Cocina",
+        host: "10.0.0.9",
+        port: 9100,
+        active: true,
+        characterSet: "plain",
+        characterTable: 0,
+      }),
+    );
+  });
+
+  it("clears the matching-code choice once the character set no longer matches plain letters", async () => {
+    const { el } = await mountEditing("p1");
+    await chooseOption(el, "printer-matching-code", "plain");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
+      "plain",
+    );
+
+    await chooseOption(el, "printer-character-set", "pc858");
+
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
+  });
+
+  it("leaves the character settings alone when the matching code is set back to Choose", async () => {
+    const { el, api } = await mountEditing("p1");
+    q(el, "[data-test=print-character-tables-p1]")!.click();
+    await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
+    await chooseOption(el, "printer-matching-code", "T68");
+
+    await chooseOption(el, "printer-matching-code", "");
+
+    expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
+      "pc858",
+    );
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await vi.waitFor(() =>
+      expect(api.updatePrinter).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({ characterSet: "pc858", characterTable: 6 }),
+      ),
+    );
+  });
+});
+
+describe("printers-screen pairing renewal and stale scan edges", () => {
+  beforeEach(() => {
+    history.replaceState(null, "", "/");
+  });
+
+  it("renews pairing through the screen's own client when it has no background client", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers();
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await vi.advanceTimersByTimeAsync(60_000 + SCAN_POLL_MS);
+      await el.updateComplete;
+
+      expect(api.renewPairingMode).toHaveBeenCalled();
+      expect(q(el, "[data-test=new-agent-modal] [role=alert]")).toBeNull();
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens the window and shows its lapse time before the first pairing read has arrived", async () => {
+    const api = stubApi({ pairingMode: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    q(el, "[data-test=open-add-agent]")!.click();
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
+      ),
+    );
+    expect(q(el, "[data-test=pairing-refused]")).toBeNull();
+  });
+
+  it("does not start listening when Scan is pressed on an Add printer dialog that has closed", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    const staleScan = q(el, "[data-test=scan-printers]")!;
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    const reads = vi.mocked(api.listDiscoveredPrinters).mock.calls.length;
+
+    staleScan.click();
+    await vi.waitFor(() => expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(2));
+    await flush(el);
+
+    expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(reads);
+  });
 });

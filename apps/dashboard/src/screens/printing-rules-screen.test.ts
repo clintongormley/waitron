@@ -553,3 +553,27 @@ it("refreshes displayed printers when their data changes elsewhere", async () =>
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listPrinters).toHaveBeenCalledTimes(2);
 });
+
+it("ignores a second change while a save is still in flight", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const api = stubApi({ setTillReceiptPrinter: vi.fn().mockReturnValueOnce(pending) });
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=till-receipt-printer-t2]")).not.toBeNull());
+
+  pickSelect(el, "[data-test=till-receipt-printer-t2]", "p1");
+  pickSelect(el, "[data-test=till-receipt-printer-t1]", "");
+
+  expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
+  expect(api.setTillReceiptPrinter).toHaveBeenCalledWith("t2", "p1");
+  release();
+  await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=till-receipt-printer-t1]") as HTMLSelectElement).disabled).toBe(
+      false,
+    ),
+  );
+  expect(api.setTillReceiptPrinter).toHaveBeenCalledTimes(1);
+});

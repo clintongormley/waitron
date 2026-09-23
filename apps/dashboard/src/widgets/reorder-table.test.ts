@@ -134,3 +134,127 @@ it("reorders by pointer drag and ends the gesture on pointerup", async () => {
   await el.updateComplete;
   expect(order(el)).toEqual(["b", "a", "c"]);
 });
+
+function rowCentre(el: LitElement, id: string): number {
+  const box = el
+    .shadowRoot!.querySelector<HTMLElement>(`tr[data-choice="${id}"]`)!
+    .getBoundingClientRect();
+  return box.top + box.height / 2;
+}
+function pointer(target: EventTarget, type: string, pointerId: number, clientY = 0): void {
+  target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId, clientY }));
+}
+
+it("lets only the pointer that started a drag move or end it", async () => {
+  const el = await mount();
+  const handle = (id: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!;
+  pointer(handle("a"), "pointerdown", 1);
+  pointer(handle("c"), "pointerdown", 2);
+  pointer(document, "pointermove", 2, rowCentre(el, "b"));
+  pointer(document, "pointerup", 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("moves nothing while the pointer is over the dragged row itself or outside every row", async () => {
+  const el = await mount();
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "a"));
+  const last = el.shadowRoot!.querySelector('tr[data-choice="c"]')!.getBoundingClientRect();
+  pointer(document, "pointermove", 1, last.bottom + 500);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  // The gesture is still live: crossing a real row moves.
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "c", "a"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("starts no drag from a busy handle", async () => {
+  const el = await mount(three(), true);
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+});
+
+/** A host whose table disappears when it has no rows, and whose `move` can discard the moved row —
+ * the two ways a live refresh can pull the ground from under a gesture. */
+@customElement("test-reorder-volatile-host")
+class VolatileReorderHost extends LitElement {
+  @property({ attribute: false }) items: { id: string; name: string }[] = [];
+  @property({ type: Boolean }) dropOnMove = false;
+  readonly moves: [string, number][] = [];
+  readonly #reorder = new ReorderController(this, {
+    order: () => this.items.map((item) => item.id),
+    move: (id, to) => {
+      this.moves.push([id, to]);
+      this.items = this.dropOnMove
+        ? this.items.filter((item) => item.id !== id)
+        : reorder(
+            this.items,
+            this.items.findIndex((item) => item.id === id),
+            to,
+          );
+    },
+    label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
+    busy: () => false,
+    reorderLabel: "Reorder",
+  } satisfies ReorderModel);
+  override render() {
+    return html`${
+      this.items.length === 0
+        ? html`<p>empty</p>`
+        : html`<table>
+            <tbody>
+              ${repeat(
+                this.items,
+                (item) => item.id,
+                (item) =>
+                  html`<tr data-choice=${item.id}>
+                    <td>${this.#reorder.handle(item.id)}</td>
+                  </tr>`,
+              )}
+            </tbody>
+          </table>`
+    }${this.#reorder.liveRegion()}`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-reorder-volatile-host": VolatileReorderHost;
+  }
+}
+
+it("announces nothing when the host's move discards the row", async () => {
+  const { el } = await mountWidget<VolatileReorderHost>("test-reorder-volatile-host", {
+    items: three(),
+    dropOnMove: true,
+  });
+  el.shadowRoot!.querySelector('[data-test="drag-a"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+  );
+  await el.updateComplete;
+  expect(el.moves).toEqual([["a", 1]]);
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("");
+});
+
+it("moves nothing when the table body vanishes mid-drag", async () => {
+  const { el } = await mountWidget<VolatileReorderHost>("test-reorder-volatile-host", {
+    items: three(),
+  });
+  const y = rowCentre(el, "b");
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);
+  el.items = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("tbody")).toBeNull();
+  pointer(document, "pointermove", 1, y);
+  expect(el.moves).toEqual([]);
+  pointer(document, "pointerup", 1);
+});

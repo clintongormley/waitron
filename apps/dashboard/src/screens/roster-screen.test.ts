@@ -2,6 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.js";
 import { RosterScreen } from "./roster-screen.js";
 
@@ -438,4 +439,221 @@ it("restores the selected roster subscription when reattached", async () => {
   expect(liveData.interests).toEqual([]);
   host.appendChild(el);
   await vi.waitFor(() => expect(api.getRoster).toHaveBeenCalledTimes(2));
+});
+
+describe("roster-screen — refusals, single-flight and refreshes", () => {
+  const shiftS1 = {
+    id: "s1",
+    personId: "p1",
+    locationId: "loc-1",
+    startsAt: "2026-03-02T09:00:00Z",
+    startsOffsetMinutes: 0,
+    endsAt: "2026-03-02T13:00:00Z",
+    endsOffsetMinutes: 0,
+    role: "bar",
+    rosterVersionId: "v1",
+  };
+  const errorText = (el: RosterScreen) =>
+    el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim();
+  const twoLocations = [
+    { id: "loc-1", name: "Main" },
+    { id: "loc-2", name: "Annex" },
+  ];
+
+  it("shows the refusal when the roster for a newly selected location cannot load", async () => {
+    const api = stubApi({
+      getLocations: vi.fn().mockResolvedValue(twoLocations),
+      getRoster: vi
+        .fn()
+        .mockResolvedValueOnce(emptySnapshot)
+        .mockRejectedValueOnce({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const select = locationSelect(el);
+    select.value = "loc-2";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(errorText(el)).toBe(codeMessage("authorization.not_permitted"));
+  });
+
+  it("shows the refusal when the roster for a newly selected week cannot load", async () => {
+    const api = stubApi({
+      getRoster: vi
+        .fn()
+        .mockResolvedValueOnce(emptySnapshot)
+        .mockRejectedValueOnce({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    week.value = "2026-04-08";
+    week.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(errorText(el)).toBe(codeMessage("authorization.not_permitted"));
+  });
+
+  it("will not open the shift dialog on a published week, even when asked directly", async () => {
+    const published: RosterSnapshot = {
+      version: { ...draftSnapshot().version!, status: "published" },
+      shifts: [shiftS1],
+    };
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(published) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    el.openCell("p1", "2026-03-02", null);
+    await el.updateComplete;
+    expect((dialog(el) as unknown as { open: boolean }).open).toBe(false);
+  });
+
+  it("shows a published week's shifts as plain text in their cell", async () => {
+    const published: RosterSnapshot = {
+      version: { ...draftSnapshot().version!, status: "published" },
+      shifts: [shiftS1],
+    };
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(published) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    week.value = "2026-03-02";
+    week.dispatchEvent(new Event("change"));
+    await flush(el);
+    const cell = el.shadowRoot!.querySelector("[data-test=cell-p1-2026-03-02]")!;
+    expect(cell.tagName).toBe("TD");
+    expect([...cell.querySelectorAll("span")].map((span) => span.textContent)).toEqual([
+      "09:00–13:00",
+    ]);
+    expect(cell.querySelector("button")).toBeNull();
+  });
+
+  it.each([
+    ["update-shift", "updateShift", { shiftId: "s1", patch: { role: "kitchen" } }],
+    ["remove-shift", "removeShift", { shiftId: "s1" }],
+  ] as const)("files at most one %s when it fires twice", async (type, method, detail) => {
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(draftSnapshot()) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    emit(dialog(el), type, detail);
+    emit(dialog(el), type, detail);
+    await flush(el);
+    expect(api[method]).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["update-shift", "updateShift", { shiftId: "s1", patch: { role: "kitchen" } }],
+    ["remove-shift", "removeShift", { shiftId: "s1" }],
+  ] as const)(
+    "keeps the dialog open and shows the refusal when %s is rejected",
+    async (type, method, detail) => {
+      const api = stubApi({
+        getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
+        [method]: vi.fn().mockRejectedValue({ code: "shift.not_found" }),
+      });
+      const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+      await flush(el);
+      el.openCell("p1", "2026-03-02", shiftS1);
+      await el.updateComplete;
+      emit(dialog(el), type, detail);
+      await flush(el);
+      expect(errorText(el)).toBe(codeMessage("shift.not_found"));
+      expect((dialog(el) as unknown as { open: boolean }).open).toBe(true);
+      expect((dialog(el) as unknown as { busy: boolean }).busy).toBe(false);
+    },
+  );
+
+  it("adds a shift to the week's existing draft without creating another", async () => {
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(draftSnapshot()) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    el.openCell("p1", "2026-03-02", null);
+    await el.updateComplete;
+    emit(dialog(el), "add-shift", {
+      personId: "p1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
+    });
+    await flush(el);
+    expect(api.createRosterVersion).not.toHaveBeenCalled();
+    expect(api.addShift).toHaveBeenCalledExactlyOnceWith("v1", {
+      personId: "p1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
+      locationId: "loc-1",
+    });
+    expect((dialog(el) as unknown as { open: boolean }).open).toBe(false);
+  });
+
+  it("publishes at most once when Publish is clicked twice", async () => {
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(draftSnapshot()) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const publish = el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!;
+    publish.click();
+    publish.click();
+    await flush(el);
+    expect(api.publishRoster).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the refusal when publishing is rejected and leaves the draft publishable", async () => {
+    const api = stubApi({
+      getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
+      publishRoster: vi.fn().mockRejectedValue({ code: "roster.already_published" }),
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
+    await flush(el);
+    expect(errorText(el)).toBe(codeMessage("roster.already_published"));
+    expect(el.shadowRoot!.querySelector("[data-test=publish]")!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("moves to a remaining location when a refresh removes the selected one", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
+      liveData,
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const select = locationSelect(el);
+    select.value = "loc-2";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", expect.any(String));
+    vi.mocked(api.getLocations).mockResolvedValue([
+      { id: "loc-1", name: "Main" },
+      { id: "loc-3", name: "Terrace" },
+    ]);
+    liveData.invalidate([{ type: "locations", id: "loc-2" }]);
+    await vi.waitFor(() =>
+      expect(api.getRoster).toHaveBeenLastCalledWith("loc-1", expect.any(String)),
+    );
+    expect(locationSelect(el).value).toBe("loc-1");
+  });
+
+  it("keeps the selected location's roster when a refresh still lists it", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
+      liveData,
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const rosterLoads = vi.mocked(api.getRoster).mock.calls.length;
+    vi.mocked(api.getLocations).mockResolvedValue([
+      ...twoLocations,
+      { id: "loc-3", name: "Terrace" },
+    ]);
+    liveData.invalidate([{ type: "locations", id: "loc-3" }]);
+    await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(vi.mocked(api.getRoster).mock.calls.length).toBe(rosterLoads);
+    expect(locationSelect(el).value).toBe("loc-1");
+  });
 });

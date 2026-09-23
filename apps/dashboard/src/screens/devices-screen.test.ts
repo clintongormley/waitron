@@ -918,3 +918,183 @@ it("refreshes displayed devices when their data changes elsewhere", async () => 
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.listDevices).toHaveBeenCalledTimes(2);
 });
+
+describe("devices-screen remaining edges", () => {
+  async function openKdsDialog(api: DashboardApi) {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=join-review-j1]")).not.toBeNull());
+    q(el, "[data-test=join-review-j1]")!.click();
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+    pickSelect(el, "join-profile", "dp3");
+    await el.updateComplete;
+    pickSelect(el, "join-station", "s1");
+    await el.updateComplete;
+    return el;
+  }
+
+  it("shows a localized alert when closing the window is rejected", async () => {
+    const api = stubApi({
+      pairingMode: vi.fn().mockResolvedValue(OPEN),
+      closePairingMode: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=pairing-close]")).not.toBeNull());
+
+    q(el, "[data-test=pairing-close]")!.click();
+
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("authorization.not_permitted")),
+    );
+    expect(q(el, "[data-test=pairing-until]")).not.toBeNull();
+  });
+
+  it("shows an open window with no lapse time without a raw placeholder", async () => {
+    const api = stubApi({
+      pairingMode: vi.fn().mockResolvedValue({ open: true, openUntil: null, refusedRecently: 0 }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=pairing-until]")).not.toBeNull());
+
+    expect(text(el, "[data-test=pairing-until]")).toBe(
+      t("devices.pairing_open_until").replace("{time}", "").trim(),
+    );
+    expect(text(el, "[data-test=pairing-until]")).not.toContain("{");
+  });
+
+  it("names a device whose profile is not in the loaded set with the no-profile placeholder", async () => {
+    const orphan: DeviceRow = { ...devices[0]!, id: "d9", deviceProfileId: "dp-gone" };
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([orphan]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=device-profile-d9]")).not.toBeNull());
+
+    expect(text(el, "[data-test=device-profile-d9]")).toBe(t("devices.device_profile_none"));
+  });
+
+  it("snaps the reassign picker to no profile when a refresh clears the device's profile", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    const select = () => q(el, "[data-test=reassign-d1]") as HTMLSelectElement;
+    await vi.waitFor(() => expect(select()?.value).toBe("dp1"));
+
+    vi.mocked(api.listDevices).mockResolvedValue([{ ...devices[0]!, deviceProfileId: null }]);
+    liveData.invalidate([{ type: "devices", id: "d1" }]);
+
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=device-profile-d1]")).toBe(t("devices.device_profile_none")),
+    );
+    expect(select().selectedIndex).toBe(0);
+    expect(select().value).toBe("");
+  });
+
+  it("closes the accept dialog when the dialog itself is dismissed", async () => {
+    const el = await openKdsDialog(stubApi());
+    const dialog = q(el, "[data-test=join-dialog]")!;
+
+    dialog.shadowRoot!.querySelector("dialog")!.close();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+  });
+
+  it("closes the open accept dialog when that same request is denied", async () => {
+    const api = stubApi();
+    const el = await openKdsDialog(api);
+
+    q(el, "[data-test=join-deny-j1]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=join-deny-j1]")!.click();
+
+    await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledWith("j1"));
+    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+    await el.updateComplete;
+    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+  });
+
+  it("keeps the dialog open when a DIFFERENT request is denied", async () => {
+    const second: JoinRequestRow = {
+      id: "j2",
+      kind: "device",
+      label: "Otra pantalla",
+      createdAt: "2026-09-08T10:05:00.000Z",
+    };
+    const api = stubApi({ joinRequests: vi.fn().mockResolvedValue([...pending, second]) });
+    const el = await openKdsDialog(api);
+
+    q(el, "[data-test=join-deny-j2]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=join-deny-j2]")!.click();
+
+    await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledWith("j2"));
+    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+    await el.updateComplete;
+    expect(q(el, "[data-test=join-dialog]")).not.toBeNull();
+  });
+
+  it("sends one accept when a number is tapped twice before the first answer", async () => {
+    let release!: () => void;
+    const answer = new Promise((resolve) => {
+      release = () => resolve({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" });
+    });
+    const api = stubApi({ acceptDeviceJoinRequest: vi.fn().mockReturnValueOnce(answer) });
+    const el = await openKdsDialog(api);
+    const number = q(el, `[data-choice="${REAL_NUMBER}"]`)!;
+
+    number.click();
+    number.click();
+    release();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a number tap while no profile is chosen", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await vi.waitFor(() => expect(q(el, "[data-test=join-review-j1]")).not.toBeNull());
+    q(el, "[data-test=join-review-j1]")!.click();
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await el.updateComplete;
+
+    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=join-dialog]")).not.toBeNull();
+  });
+
+  it("reports the queue reload's own failure after a mismatch closes the dialog", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
+      joinRequests: vi
+        .fn()
+        .mockResolvedValueOnce(pending)
+        .mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openKdsDialog(api);
+
+    q(el, '[data-choice="12"]')!.click();
+
+    await vi.waitFor(() =>
+      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+    );
+    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+  });
+});
+
+it("shows a localized alert and keeps the row when a deny is rejected", async () => {
+  const api = stubApi({
+    denyJoinRequest: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+  });
+  const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+  await vi.waitFor(() => expect(q(el, "[data-test=join-deny-j1]")).not.toBeNull());
+
+  q(el, "[data-test=join-deny-j1]")!.click();
+  await el.updateComplete;
+  q(el, "[data-test=join-deny-j1]")!.click();
+
+  await vi.waitFor(() =>
+    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("authorization.not_permitted")),
+  );
+  expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+  expect(api.joinRequests).toHaveBeenCalledTimes(1);
+});

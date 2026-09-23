@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
@@ -102,5 +102,35 @@ describe("category-manager", () => {
     const event = await seen;
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
+  });
+
+  it("sorts the rows by the displayed name when the name header is clicked", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", {
+      categories: [categories[1]!, categories[0]!],
+    });
+    const root = await tableRoot(el);
+    const names = () =>
+      [...root.querySelectorAll("tbody tr")].map((row) => row.textContent!.trim());
+    expect(names()).toEqual(["Postres", "Entrantes"]);
+    root.querySelector<HTMLElement>('[data-sort="name"]')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(names()).toEqual(["Entrantes", "Postres"]);
+  });
+
+  it("creates the category when Enter is pressed in the name field", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", { categories });
+    const created = vi.fn();
+    el.addEventListener("create-category", created);
+    type(el, "Bebidas");
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=category-name]",
+    )!;
+    await field.updateComplete;
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    expect(created).toHaveBeenCalledOnce();
+    expect(created.mock.calls[0]![0].detail).toEqual({ name: "Bebidas" });
   });
 });

@@ -615,4 +615,243 @@ describe("units-screen", () => {
     // Each maps to a null target — assert the null, not the sentinel string.
     expect(reassignProductsUnit).toHaveBeenCalledWith(clickedUnitId, ["p1"], null);
   });
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((settle) => {
+      resolve = settle;
+    });
+    return { promise, resolve };
+  }
+
+  function unitsTable(el: UnitsScreen): HTMLElementTagNameMap["wt-data-table"] {
+    return el.shadowRoot!.querySelector("wt-data-table")!;
+  }
+
+  function inUseDialog(el: UnitsScreen): HTMLElement & { open: boolean } {
+    return el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "[data-test=in-use-dialog]",
+    )!;
+  }
+
+  async function sortBy(table: HTMLElementTagNameMap["wt-data-table"], key: string) {
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>(`[data-sort="${key}"]`)!.click();
+    await table.updateComplete;
+  }
+
+  function keysOf(table: Element): string[] {
+    return [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key")!,
+    );
+  }
+
+  it("says the units could not be loaded when the first load fails without a code", async () => {
+    const el = await mount(stubApi({ listUnits: vi.fn().mockRejectedValue(new Error("offline")) }));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        t("units.load_error"),
+      ),
+    );
+  });
+
+  it("shows a failed live refresh's own message and keeps the listed units", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    vi.mocked(api.background.listUnits).mockRejectedValue({ code: "server.internal" });
+    api.liveData.invalidate([{ type: "units", id: "u1" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("server.internal"),
+      ),
+    );
+    expect(listedKeys(el).sort()).toEqual(["u1", "u2"]);
+  });
+
+  it("edits a unit from its row action and replaces only that row with the saved unit", async () => {
+    setLocale("es-ES");
+    const saved: Unit = { ...units[0]!, name: { es: "pieza", en: "piece" } };
+    const refresh = deferred<Unit[]>();
+    const api = stubApi({ updateUnit: vi.fn().mockResolvedValue(saved) });
+    vi.mocked(api.background.listUnits).mockReturnValue(refresh.promise);
+    const el = await mount(api);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-u1]")!.click();
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    expect(form.open).toBe(true);
+    expect(form.value).toEqual(units[0]);
+    const value = {
+      name: { es: "pieza", en: "piece" },
+      abbreviation: units[0]!.abbreviation,
+      precision: 0,
+    };
+    form.dispatchEvent(
+      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(api.updateUnit).toHaveBeenCalledWith("u1", value);
+    expect(api.createUnit).not.toHaveBeenCalled();
+    expect(table.rows).toEqual([saved, units[1]]);
+    refresh.resolve(units);
+  });
+
+  it("opens the in-use dialog with its empty state when a refusal lists no products", async () => {
+    const el = await mount(
+      stubApi({ deleteUnit: vi.fn().mockRejectedValue({ code: "unit.in_use" }) }),
+    );
+    const dialog = await openInUseModal(el);
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain(t("units.in_use_empty"));
+    expect(dialog.querySelector("wt-data-table")).toBeNull();
+  });
+
+  it("closes the in-use dialog and shows the refusal when a retried delete fails otherwise", async () => {
+    const deleteUnit = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "unit.in_use", params: { products: inUseProducts } })
+      .mockRejectedValueOnce({ code: "unit.not_found" });
+    const el = await mount(stubApi({ deleteUnit }));
+    const dialog = await openInUseModal(el);
+    dialog.querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
+    await vi.waitFor(() => expect(dialog.open).toBe(false));
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent!.trim()).toBe(
+      codeMessage("unit.not_found"),
+    );
+    expect(listedKeys(el).sort()).toEqual(["u1", "u2"]);
+  });
+
+  it("sends one delete when Delete is pressed again before the first settles", async () => {
+    const removal = deferred<void>();
+    const deleteUnit = vi.fn().mockReturnValue(removal.promise);
+    const el = await mount(stubApi({ deleteUnit }));
+    const table = unitsTable(el);
+    await table.updateComplete;
+    const remove = table.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!;
+    remove.click();
+    remove.click();
+    removal.resolve();
+    await vi.waitFor(() => expect(listedKeys(el)).toEqual(["u2"]));
+    expect(deleteUnit).toHaveBeenCalledOnce();
+  });
+
+  it("deletes nothing from the in-use dialog's Delete while no unit is open in it", async () => {
+    const deleteUnit = vi.fn().mockResolvedValue(undefined);
+    const el = await mount(stubApi({ deleteUnit }));
+    expect(inUseDialog(el).open).toBe(false);
+    inUseDialog(el).querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
+    await el.updateComplete;
+    expect(deleteUnit).not.toHaveBeenCalled();
+  });
+
+  it("fetches a clicked unit's products once when its row is clicked twice", async () => {
+    const products = deferred<ProductUsingUnit[]>();
+    const listUnitProducts = vi.fn().mockReturnValue(products.promise);
+    const el = await mount(stubApi({ listUnitProducts }));
+    const table = unitsTable(el);
+    await table.updateComplete;
+    const row = table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
+    row.click();
+    row.click();
+    products.resolve(inUseProducts);
+    await vi.waitFor(() => expect(inUseDialog(el).open).toBe(true));
+    expect(listUnitProducts).toHaveBeenCalledOnce();
+  });
+
+  it("shows why a clicked unit's products could not be listed, without opening the dialog", async () => {
+    const listUnitProducts = vi.fn().mockRejectedValue({ code: "unit.not_found" });
+    const el = await mount(stubApi({ listUnitProducts }));
+    const table = unitsTable(el);
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        codeMessage("unit.not_found"),
+      ),
+    );
+    expect(inUseDialog(el).open).toBe(false);
+  });
+
+  it("moves products once when Change unit is pressed again before the first settles", async () => {
+    const moved = deferred<ProductUsingUnit[]>();
+    const reassignProductsUnit = vi.fn().mockReturnValue(moved.promise);
+    const el = await mount(
+      stubApi({
+        deleteUnit: vi
+          .fn()
+          .mockRejectedValue({ code: "unit.in_use", params: { products: inUseProducts } }),
+        reassignProductsUnit,
+      }),
+    );
+    const dialog = await openInUseModal(el);
+    const change = dialog.querySelector<HTMLElement>("[data-test=change-unit]")!;
+    change.click();
+    await el.updateComplete;
+    expect(reassignProductsUnit).not.toHaveBeenCalled();
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    select.value = "u2";
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    change.click();
+    change.click();
+    moved.resolve([inUseProducts[1]!]);
+    await vi.waitFor(() =>
+      expect(
+        (dialog.querySelector("wt-data-table")!.rows as ProductUsingUnit[]).map((p) => p.id),
+      ).toEqual(["p2"]),
+    );
+    expect(reassignProductsUnit).toHaveBeenCalledOnce();
+  });
+
+  it("sorts the in-use products by name and by availability", async () => {
+    const el = await mount(
+      inUseApi([
+        { id: "p1", name: "Té", available: true },
+        { id: "p2", name: "Café", available: false },
+      ]),
+    );
+    const dialog = await openInUseModal(el);
+    const products = dialog.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!;
+    await products.updateComplete;
+    expect(keysOf(products)).toEqual(["p1", "p2"]);
+    await sortBy(products, "name");
+    expect(keysOf(products)).toEqual(["p2", "p1"]);
+    await sortBy(products, "availability");
+    expect(keysOf(products)).toEqual(["p2", "p1"]);
+    await sortBy(products, "availability");
+    expect(keysOf(products)).toEqual(["p1", "p2"]);
+  });
+
+  it("sorts the units by abbreviation", async () => {
+    setLocale("es-ES");
+    const el = await mountWith([
+      { id: "a", name: { es: "alfa" }, abbreviation: { es: "zz" }, precision: 0 },
+      { id: "b", name: { es: "beta" }, abbreviation: { es: "aa" }, precision: 0 },
+    ]);
+    const table = unitsTable(el);
+    await table.updateComplete;
+    expect(keysOf(table)).toEqual(["a", "b"]);
+    await sortBy(table, "abbreviation");
+    expect(keysOf(table)).toEqual(["b", "a"]);
+  });
+
+  it("writes precision with a full stop when the locale reports no decimal separator", async () => {
+    const parts = vi
+      .spyOn(Intl.NumberFormat.prototype, "formatToParts")
+      .mockReturnValue([{ type: "integer", value: "1" }]);
+    try {
+      setLocale("de-CH");
+      const el = await mount();
+      await unitsTable(el).updateComplete;
+      expect(precisionCellText(el, "u2")).toBe(".000");
+    } finally {
+      parts.mockRestore();
+    }
+  });
 });
