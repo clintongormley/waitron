@@ -923,18 +923,15 @@ describe("parkOrder", () => {
     await abandonHeldOrder({ db }, cfg, id);
 
     // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
-    // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Read
-    // through `isUniqueViolation` (not `.rejects.toMatchObject({ code })`) because drizzle wraps the
-    // driver error in a `DrizzleQueryError` whose own `code` is undefined, and the predicate walks
-    // the cause chain — the same normalisation `record-void.test.ts` makes for this identical
-    // assertion shape.
+    // held order, so the ORIGINAL driver refusal is re-thrown rather than a result fabricated. Not
+    // `.rejects.toMatchObject({ code })`: `code` is the same string for every failure (below);
+    // `isUniqueViolation` reads `errcode` wherever it sits in the cause chain.
     //
-    // This asserted the SQLSTATE `23505` through `pgErrorCode` until the storage swap. `node:sqlite`
-    // puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the discriminating value on
-    // `errcode`, so no string code separates a duplicate key from anything else here; and SQLite
-    // splits what PostgreSQL folded into `23505` — 1555 for a primary key, 2067 for any other
-    // unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the claim is
-    // the one this case always made: the collision surfaced as a duplicate key.
+    // `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code` for every failure alike and the
+    // discriminating value on `errcode`, so no string code separates a duplicate key from anything
+    // else here; and SQLite reports a duplicate key two ways — 1555 for a primary key, 2067 for any
+    // other unique index (packages/db/src/sql-state.ts). `UNIQUE_VIOLATION` holds both, so the
+    // claim is that the collision surfaced as a duplicate key.
     const error = await captureError(() => parkOrder({ db }, cfg, { id, lines }));
     expect(isUniqueViolation(error)).toBe(true);
 

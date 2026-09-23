@@ -205,10 +205,7 @@ describe("appendToChain", () => {
     const b = await seedSale(pg.db, till, 2);
     await pg.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till.tillId, a, 1, 1)));
     // Bypasses appendToChain entirely: this is the backstop, and it must hold against a writer
-    // that never took the lock. captureError + pgErrorCode, not `.rejects.toMatchObject({ code:
-    // "23505" })` — drizzle wraps every failed query in a DrizzleQueryError whose own `.code` is
-    // undefined; the real SQLSTATE lives on `.cause.code`, so a bare `.rejects.toMatchObject`
-    // assertion never sees it and fails even against a correctly-enforced constraint.
+    // that never took the lock.
     const error = await captureError(() =>
       pg.db.insert(registrosFacturacion).values({
         tillId: till.tillId,
@@ -229,9 +226,8 @@ describe("appendToChain", () => {
         huella: "0".repeat(64),
       }),
     );
-    // The class, and then WHICH key — stronger than the SQLSTATE this used to assert, which said
-    // only that something unique was violated. This engine names the table and the columns for a
-    // unique index over plain columns (`packages/db/src/constraint-target.ts`).
+    // The class, and then WHICH key. This engine names the table and the columns for a unique
+    // index over plain columns (`packages/db/src/constraint-target.ts`).
     expect(isUniqueViolation(error)).toBe(true);
     expect(constraintTarget(error)).toEqual({
       table: "registros_facturacion",

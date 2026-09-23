@@ -165,20 +165,13 @@ describe("appendToChain from many callers started together", () => {
   });
 
   it("holds a second appender on the same chain until the first commits", async () => {
-    // THE DISCRIMINATING CASE, replacing `blocks a second appender on the same chain`. That one
-    // held the `cadenas` row lock open on one backend and proved a second backend waited until
-    // `lock_timeout` fired (`55P03`). There is no row lock, no second backend and no
-    // `lock_timeout` here, so the thing to observe moved: not "the second one is BLOCKED", but
-    // "the second one has not STARTED". `withTransaction` (`packages/db/src/tenancy.ts`) runs its
+    // THE DISCRIMINATING CASE. What it observes is that the second append has not STARTED while
+    // the first is open. `withTransaction` (`packages/db/src/tenancy.ts`) runs its
     // body inside `db.withWriteLock`, and `packages/store/src/write-queue.ts` issues
     // `begin immediate` … `commit`, so the next caller's `begin` does not run until that `commit`
     // has returned. Same observation, and the same reasoning, as `racePair` in
     // `packages/catalogue/test/fixtures.ts`; written out here rather than imported because that
     // helper lives in another package's test directory.
-    //
-    // NOT a translation of the old assertion: `pgErrorCode` answers the same string for every
-    // failure on this engine (`packages/db/src/testing/errors.ts`), so a `.toBe("55P03")` kept as
-    // `.toBe(<something>)` would have been a check that passes for the wrong reason.
     //
     // CONTROL RUN, 2026-09-22: with both bodies calling `appendToChain(suite.db, …)` directly
     // instead of through `withTransaction` — no queue — this case reported

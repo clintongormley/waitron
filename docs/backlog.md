@@ -2596,7 +2596,7 @@ action:** export the names from `@waitron/store` and read them.
 predicate — OPEN (found 2026-09-23, task F1's review wave).** Both are `[1811]`, because SQLite
 gives a foreign key's `ON DELETE RESTRICT` and every hand-written `RAISE(ABORT)` the same result
 code. `triggerRaised` exists for the trigger direction and matches the exact words. The restrict
-direction has no equivalent, so `isPgError(err, RESTRICT_VIOLATION)` is true for EVERY trigger
+direction has no equivalent, so `isRefusal(err, RESTRICT_VIOLATION)` is true for EVERY trigger
 refusal as well — including the append-only ones. Two callers take it:
 `packages/layouts/src/canvas-store.ts` and `packages/layouts/src/device-profile-store.ts`. Both give
 the right answer TODAY, and only because exactly one trigger sits on each path — the device-profile
@@ -3611,9 +3611,30 @@ it; and a correction must not decrement a count where it should drop it.
 - **Stale PGlite prose — DONE by T2**, and it was roughly a hundred files rather than the dozen this
   line guessed at. `scripts/schema-equivalence.{sh,md}` went with it: deleted, not swept, because the
   script's whole subject was dumping and diffing a PostgreSQL schema.
-- **`isPgError`, `pgErrorCode`, `pgErrorMessage` and `storeF3AsAppUser` still carry the old engine's
-  name.** `packages/db/src/unique-violation.ts` records that renaming them touches every caller.
-  Nobody owns this yet; it is a rename-only change and wants its own item.
+- **The four helpers named after PostgreSQL — DONE (2026-09-23, PR #524).**
+  Renamed, with no behaviour change: `isPgError` is `isRefusal`, `pgErrorCode` is
+  `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and `storeF3AsAppUser` in
+  `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
+  under `docs/superpowers/` keep the old names, as written.
+- **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce**
+  (found 2026-09-23 on `chore/rename-pg-helpers`). Several say drizzle wraps every failed query in
+  a `DrizzleQueryError` whose own `.code` is undefined. On `node:sqlite` only `db.run` wraps (as
+  `DrizzleError`, message `Failed to run the query '<sql>'`), while `db.all`, `db.get`,
+  `db.execute` and an awaited query builder reject with the engine's own error
+  (`packages/db/src/testing/errors.ts` records both shapes). Each site needs checking against the
+  path it actually takes, then rewording. The candidates are what
+  `git grep -n -i -E "DrizzleQueryError|drizzle wraps|Failed query" -- ':!docs'` prints, which
+  also includes test fixtures that build a wrapped error by hand; among the comments are
+  `packages/core/src/record-sale.test.ts`, `packages/db/src/schema/series.test.ts`,
+  `packages/db/src/deployment.test.ts` and `packages/db/src/unique-violation.test.ts`.
+  `packages/shared/src/cause-chain.ts` and `packages/shared/src/engine-failure.ts` carry the
+  sentence this branch corrected in `packages/db/src/unique-violation.ts`.
+  `packages/provisioning/src/bin.ts` and `packages/provisioning/src/errors.ts` only say the wrapper
+  puts the failing SQL in its message, which `DrizzleError` also does, so there the class name may
+  be all that is wrong. `packages/credentials/src/bin.ts` also says the message carries the bind
+  parameters, which `DrizzleError`'s `Failed to run the query '<sql>'` does not. The thrown text
+  in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
+  and is pinned verbatim by its test.
 - **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
   `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
   `apps/server/src/management-api.ts` no longer take one. Every route still calls

@@ -8,7 +8,7 @@ import {
   captureError,
   deviceProfiles,
   devices,
-  isPgError,
+  isRefusal,
   locations,
   tenants,
   tills,
@@ -118,10 +118,9 @@ describe("device_card_readers", () => {
         await tx.insert(deviceCardReaders).values({ deviceId, readerId: reader2!.id });
       }),
     );
-    // Was `pgErrorCode(dup) === "23505"`. SQLite splits PostgreSQL's one `23505` into a unique
-    // index (2067) and a primary key (1555); `UNIQUE_VIOLATION` holds both, which is what keeps
-    // this answer the same as it was (`packages/db/src/sql-state.ts`).
-    expect(isPgError(dup, UNIQUE_VIOLATION)).toBe(true);
+    // SQLite reports a duplicate key two ways — a unique index (2067) and a primary key (1555);
+    // `UNIQUE_VIOLATION` holds both (`packages/db/src/sql-state.ts`).
+    expect(isRefusal(dup, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("refuses a device or a reader that does not exist", async () => {
@@ -138,12 +137,12 @@ describe("device_card_readers", () => {
         await tx.insert(deviceCardReaders).values({ deviceId: randomUUID(), readerId });
       }),
     );
-    expect(isPgError(noDevice, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(noDevice, FOREIGN_KEY_VIOLATION)).toBe(true);
     const noReader = await captureError(() =>
       withTransaction(db, async (tx) => {
         await tx.insert(deviceCardReaders).values({ deviceId, readerId: randomUUID() });
       }),
     );
-    expect(isPgError(noReader, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(noReader, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

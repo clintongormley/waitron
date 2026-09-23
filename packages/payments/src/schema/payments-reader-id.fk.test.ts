@@ -5,7 +5,7 @@ import {
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -78,13 +78,12 @@ describe("payments.reader_id", () => {
         });
       }),
     );
-    // Was `pgErrorCode(error) === "23503"` plus `pgErrorMessage(error)` matching
-    // `/payments_reader_fk/`. LOSS: the second half has no replacement. SQLite reports every
+    // This case cannot match `/payments_reader_fk/` in the message. SQLite reports every
     // foreign-key refusal as the six words `FOREIGN KEY constraint failed` and names neither the
     // constraint nor the column (`packages/db/src/constraint-target.ts`), so this case can no
     // longer tell `payments_reader_fk` from the row's OTHER foreign key onto `working_orders`.
     // What keeps it honest is the statement: `workingOrderId` is a real seeded row and
     // `readerId` is the one unknown id in it, so only the reader key can be what fired.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

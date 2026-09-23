@@ -2,7 +2,7 @@ import {
   CORE_MIGRATIONS,
   CHECK_VIOLATION,
   captureError,
-  isPgError,
+  isRefusal,
   newId,
   runMigrations,
 } from "@waitron/db";
@@ -162,7 +162,7 @@ describe("envio_flujo migration", () => {
         values (2, '2026-07-21T00:00:00Z', 60)
       `),
     );
-    expect(isPgError(second, CHECK_VIOLATION)).toBe(true); // envio_flujo_singleton_ck
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // envio_flujo_singleton_ck
     await db.execute(sql`delete from envio_flujo`);
   });
 });
@@ -210,6 +210,6 @@ describe("registros_facturacion.entorno migration", () => {
           '2026-07-20T17:20:31.000Z')
       `),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true); // registros_entorno_ck
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true); // registros_entorno_ck
   });
 });

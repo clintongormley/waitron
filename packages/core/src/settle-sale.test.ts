@@ -4,8 +4,8 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   captureError,
-  isPgError,
-  pgErrorCode,
+  isRefusal,
+  driverErrorCode,
   POST_SETTLEMENT_REFUSAL,
   sales,
   saleSettlements,
@@ -124,13 +124,11 @@ describe("settleSale — the happy path", () => {
     const mutation = await captureError(async () =>
       suite.db.execute(sql`update tenders set cash_tendered = 20000 where sale_id = ${saleId}`),
     );
-    // Was `pgErrorCode(mutation)).toBe("WT001")`, the append-only trigger's PostgreSQL SQLSTATE.
-    // That cannot be kept in any form: `pgErrorCode` answers `ERR_SQLITE_ERROR` for EVERY failure
-    // on this engine (`packages/db/src/testing/errors.ts`), so a translated `.toBe(...)` would
-    // pass for a NOT NULL, a foreign key or a typo just as readily. `triggerRaised` asks the two
-    // questions that together identify one of OUR triggers — the result class AND the exact words
-    // it raised (`packages/db/src/constraint-target.ts`) — which is strictly more than the
-    // SQLSTATE established. The words come from `installAppendOnlyTriggers`
+    // Not `driverErrorCode`: it answers `ERR_SQLITE_ERROR` for EVERY failure on this engine
+    // (`packages/db/src/testing/errors.ts`), so a `.toBe(...)` on it would pass for a NOT NULL, a
+    // foreign key or a typo just as readily. `triggerRaised` asks the two questions that together
+    // identify one of OUR triggers — the result class AND the exact words it raised
+    // (`packages/db/src/constraint-target.ts`). The words come from `installAppendOnlyTriggers`
     // (`packages/store/src/append-only.ts`: `<table> is append-only`).
     expect(triggerRaised(mutation, "tenders is append-only")).toBe(true);
   });
@@ -147,11 +145,9 @@ describe("settleSale — the happy path", () => {
         tenders: [{ ...cash, amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
       }),
     );
-    // Was `.toBe("23514")`, PostgreSQL's CHECK SQLSTATE. `isPgError(error, CHECK_VIOLATION)` is
-    // the same question on this engine's own numbering (275), and the idiom the already-converted
-    // `packages/workforce/src/migrations.test.ts` uses throughout. NOT `pgErrorCode`, which
-    // answers the same string for every failure here.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    // `isRefusal(error, CHECK_VIOLATION)` asks for the CHECK class (275 on this engine's own
+    // numbering); `driverErrorCode` would answer the same string for every failure here.
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId))).toEqual([]);
     expect(
       await suite.db.select().from(saleSettlements).where(eq(saleSettlements.saleId, saleId)),
@@ -407,7 +403,7 @@ describe("settleSale — error propagation", () => {
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("53100");
+    expect(driverErrorCode(error)).toBe("53100");
   });
 
   it("translates the tenders post-settlement guard to sale.already_settled", async () => {

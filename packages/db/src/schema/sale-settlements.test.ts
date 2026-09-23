@@ -5,9 +5,9 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { COVERAGE_REFUSAL, POST_SETTLEMENT_REFUSAL } from "../trigger-refusals.js";
 import { TRIGGER_ABORT } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, saleSettlements, sales, tenders } from "./sales.js";
@@ -207,8 +207,8 @@ describe("sale settlements — coverage on the settlement INSERT", () => {
     // The class AND the words, so a CHECK failure or a foreign-key refusal cannot pass as a
     // coverage refusal: `RAISE(ABORT, …)` shares its result code with `ON DELETE RESTRICT`
     // (`packages/db/src/sql-state.ts`), and only the text separates the two.
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe(COVERAGE_REFUSAL);
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(COVERAGE_REFUSAL);
   });
 });
 
@@ -234,16 +234,16 @@ describe("sale settlements — append-only", () => {
         .set({ settledAt: "2026-07-21T19:20:30+00:00" })
         .where(eq(saleSettlements.id, settlementId)),
     );
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("sale_settlements is append-only");
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("sale_settlements is append-only");
   });
 
   it("refuses to DELETE a settlement, via the trigger backstop", async () => {
     const error = await captureError(() =>
       suite.db.delete(saleSettlements).where(eq(saleSettlements.id, settlementId)),
     );
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("sale_settlements is append-only");
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("sale_settlements is append-only");
   });
 });
 
@@ -263,7 +263,7 @@ describe("sale settlements — no tender after settlement", () => {
         tx.insert(tenders).values({ saleId, method: "cash", amount: 500, settledAt: AT }),
       ),
     );
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe(POST_SETTLEMENT_REFUSAL);
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe(POST_SETTLEMENT_REFUSAL);
   });
 });

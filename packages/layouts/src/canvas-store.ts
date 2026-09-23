@@ -3,7 +3,7 @@ import {
   RESTRICT_VIOLATION,
   canvases,
   constraintTarget,
-  isPgError,
+  isRefusal,
   isUniqueViolation,
   nowIso,
   sameTarget,
@@ -88,7 +88,7 @@ export function translateWriteError(err: unknown): never {
       throw new AppError("canvas.name_taken", {});
     }
   }
-  if (isPgError(err, RESTRICT_VIOLATION)) {
+  if (isRefusal(err, RESTRICT_VIOLATION)) {
     throw new AppError("canvas.in_use", {});
   }
   throw err;

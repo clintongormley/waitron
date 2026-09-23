@@ -137,9 +137,10 @@ declare module "@waitron/shared" {
      * produces when something outside the ordinary write path tries to reuse a
      * number that already reached a committed sale. Still not thrown anywhere in this package:
      * Task 17's own "burned number" test (`record-void.test.ts`) proves the constraint fires by
-     * reading the raw SQLSTATE off the rejected INSERT directly (`captureError`/`pgErrorCode`),
-     * the same way `record-sale.test.ts`'s "never reissues a number" test already does — neither
-     * `recordSale` nor `recordVoid` catches and translates that violation into this code. */
+     * reading the refusal off the rejected INSERT directly (`captureError`, then
+     * `isUniqueViolation` and `constraintTarget`), the same way `record-sale.test.ts`'s "never
+     * reissues a number" test already does — neither `recordSale` nor `recordVoid` catches and
+     * translates that violation into this code. */
     "sale.number_reused": { seriesId: string; invoiceNumber: number };
     /**
      * Thrown by `recordVoid` (`./record-void.ts`) when `saleId` names no row in `sales`. An

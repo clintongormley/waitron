@@ -3,8 +3,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { TRIGGER_ABORT } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -122,8 +122,8 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
           .where(eq(dailyCloses.businessDay, "2026-08-04")),
       ),
     );
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("daily_closes is append-only");
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("daily_closes is append-only");
   });
 
   it("rejects a DELETE of daily_closes, via the append-only trigger", async () => {
@@ -133,7 +133,7 @@ describe("frozen daily close schema (append-only triggers, columns, FK)", () => 
         tx.delete(dailyCloses).where(eq(dailyCloses.businessDay, "2026-08-05")),
       ),
     );
-    expect(isPgError(error, TRIGGER_ABORT)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("daily_closes is append-only");
+    expect(isRefusal(error, TRIGGER_ABORT)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("daily_closes is append-only");
   });
 });

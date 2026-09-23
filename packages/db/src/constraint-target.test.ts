@@ -27,7 +27,7 @@
 import { describe, expect, it } from "vitest";
 import { constraintTarget, refusalOn, sameTarget } from "./constraint-target.js";
 import { UNIQUE_VIOLATION } from "./sql-state.js";
-import { isPgError } from "./unique-violation.js";
+import { isRefusal } from "./unique-violation.js";
 
 describe("constraintTarget's cause walk", () => {
   /** One layer shaped the way `node:sqlite` shapes a real unique-index refusal. */
@@ -91,7 +91,7 @@ describe("constraintTarget's cause walk", () => {
     // predicate that reads it. Without this line that branch is the one statement in
     // `constraint-target.ts` neither this file nor the SQLite suite reaches (measured 2026-09-22).
     expect(
-      isPgError(new Error("not a refusal", { cause: new Error("nor this") }), UNIQUE_VIOLATION),
+      isRefusal(new Error("not a refusal", { cause: new Error("nor this") }), UNIQUE_VIOLATION),
     ).toBe(false);
   });
 

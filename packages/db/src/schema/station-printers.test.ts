@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -89,6 +89,6 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
     const printer = await seedPrinter("Impresora Barra", "poll-dup");
     await seedMapping(station, printer);
     const e = await captureError(() => seedMapping(station, printer));
-    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 });

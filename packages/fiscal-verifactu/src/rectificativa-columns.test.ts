@@ -1,9 +1,9 @@
 import {
   CHECK_VIOLATION,
   captureError,
-  isPgError,
+  engineErrorMessage,
+  isRefusal,
   newId,
-  pgErrorMessage,
   triggerRaised,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -119,8 +119,8 @@ describe("registros_tipo_rectificativa_ck — the value domain", () => {
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "R5", tipoRectificativa: "X" }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/registros_tipo_rectificativa_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/registros_tipo_rectificativa_ck/);
   });
 });
 
@@ -130,8 +130,8 @@ describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () =
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: "F2", tipoRectificativa: "I" }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
   });
 
   it("accepts a tipo_rectificativa on an R1 invoice too", async () => {
@@ -153,8 +153,8 @@ describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () =
     const error = await captureError(() =>
       insertRegistro(pg.db, { tipoFactura: null, tipoRectificativa: "I" }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
   });
 });
 

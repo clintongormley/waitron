@@ -21,8 +21,8 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CHECK_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { catalogues } from "./catalogue.js";
@@ -89,16 +89,18 @@ describe("catalogue — menu, taxonomy and priced items", () => {
 
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() => db.execute(insertProduct("bogus", "general")));
-    expect(isPgError(pricingError, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(pricingError, CHECK_VIOLATION)).toBe(true);
     // A CHECK refusal reports the constraint's NAME and no key (`../constraint-target.ts`), so the
     // name is what says WHICH of the two fired — the half of this case the class alone cannot
     // carry. Measured here: errcode 275, `CHECK constraint failed: products_pricing_unit_ck`.
-    expect(pgErrorMessage(pricingError)).toBe("CHECK constraint failed: products_pricing_unit_ck");
+    expect(engineErrorMessage(pricingError)).toBe(
+      "CHECK constraint failed: products_pricing_unit_ck",
+    );
 
     // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
     const vatError = await captureError(() => db.execute(insertProduct("each", "bogus")));
-    expect(isPgError(vatError, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");
+    expect(isRefusal(vatError, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(vatError)).toBe("CHECK constraint failed: products_vat_class_ck");
 
     // The control in the other direction: the same statement with both values valid is accepted, so
     // the two refusals above are the CHECKs biting and not the insert being malformed.

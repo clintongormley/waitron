@@ -8,7 +8,7 @@ import {
   NOT_NULL_VIOLATION,
   UNIQUE_VIOLATION,
 } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -131,7 +131,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
           .values({ locationId: GHOST_LOCATION, name: "Ghost location", tokenHash: TOKEN_HASH }),
       ),
     );
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("print_agent_pairing_codes no longer exists (join-and-accept replaced the pairing code)", () => {
@@ -175,7 +175,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         }),
       ),
     );
-    expect(isPgError(err, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(err, UNIQUE_VIOLATION)).toBe(true);
   });
 
   // ---- printers -----------------------------------------------------------------------------
@@ -218,7 +218,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         }),
       ),
     );
-    expect(isPgError(err, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(err, CHECK_VIOLATION)).toBe(true);
   });
 
   it("printers: the transport-fields CHECK admits a well-formed cloud_poll printer", async () => {
@@ -289,14 +289,14 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
         ),
       ),
     );
-    expect(isPgError(error, refusal)).toBe(true);
+    expect(isRefusal(error, refusal)).toBe(true);
   });
 
   // ---- central-printer-provisioning: local_key / bluetooth / claimed_by ---------------------
 
   it("printers: rejects a usb printer with no local_key (the transport-fields CHECK)", async () => {
     const e = await captureError(() => insertPrinter({ transport: "usb", localKey: null }));
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
   });
 
   it("printers: accepts usb keyed on a serial and bluetooth keyed on a MAC", async () => {
@@ -311,13 +311,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
   it("printers: rejects a network_tcp printer with no host (the transport-fields CHECK)", async () => {
     const e = await captureError(() => insertPrinter({ transport: "network_tcp", host: null }));
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
   });
 
   it("printers: rejects a second registration of the same (location, local_key)", async () => {
     await insertPrinter({ transport: "usb", localKey: "SN-DUP" });
     const e = await captureError(() => insertPrinter({ transport: "usb", localKey: "SN-DUP" }));
-    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("printers: allows two NULL-local_key printers in one location (partial index)", async () => {

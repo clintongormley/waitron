@@ -15,7 +15,7 @@ import {
   isUniqueViolation,
   incidents,
   invoiceSeries,
-  pgErrorCode,
+  driverErrorCode,
   saleVoids,
   sales,
   withTransaction,
@@ -280,12 +280,9 @@ describe("recordVoid — numbering", () => {
     // Enforced locally because the alternative is discovering it as a rejected record and a
     // halted chain, hours later and in production.
     //
-    // **Deviation from the brief.** The brief asserted `.rejects.toMatchObject({ code: "23505" })`
-    // directly on the raw insert. `.rejects.toMatchObject` does not see through Drizzle's own
-    // `DrizzleQueryError` wrapper (its `.code` is undefined; the real SQLSTATE lives on
-    // `.cause.code`) — record-sale.test.ts's own "never reissues a number" test already makes this
-    // exact correction for the identical shape of assertion, per this task's own governing
-    // context. The brief's raw INSERT also omitted `issuedOffsetMinutes`, a NOT NULL column.
+    // Not `.rejects.toMatchObject({ code })`: `node:sqlite` puts `"ERR_SQLITE_ERROR"` on `code`
+    // for every failure alike; `isUniqueViolation` reads the numeric `errcode` wherever it sits in
+    // the cause chain, and `constraintTarget` then names WHICH key refused.
     const backend = new FakeFiscalBackend(suite.db);
     const first = await sell(backend);
     await voidSale(backend, first.saleId);
@@ -306,8 +303,8 @@ describe("recordVoid — numbering", () => {
           // A money column holds whole cents: 100 is 1.00.
           total: 100,
           // The filed per-rate breakdown; `[]` — supplied so the insert reaches the
-          // duplicate-invoice-number unique violation (23505) under test rather than tripping the
-          // column's own NOT NULL (23502) first.
+          // duplicate-invoice-number unique violation (2067) under test rather than tripping the
+          // column's own NOT NULL (1299) first.
           vatBreakdown: [],
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
@@ -316,8 +313,7 @@ describe("recordVoid — numbering", () => {
         });
       }),
     );
-    // WHICH key, not a code that means only "something unique" — see record-sale.test.ts's
-    // identical backstop for why this engine cannot be asserted on a code.
+    // WHICH key, not only a class that means "something unique".
     expect(isUniqueViolation(error)).toBe(true);
     expect(constraintTarget(error)).toEqual({
       table: "sales",
@@ -478,7 +474,7 @@ describe("recordVoid — error propagation", () => {
       }),
     );
     expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("53100");
+    expect(driverErrorCode(error)).toBe("53100");
   });
 });
 

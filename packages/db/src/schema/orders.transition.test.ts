@@ -4,7 +4,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { OPEN_PARENT_REFUSAL, TRANSITION_REFUSAL } from "../trigger-refusals.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -187,7 +187,7 @@ describe("working_orders state machine (enforce_transition)", () => {
           .where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
 
     // Even a non-status column change on an abandoned row is rejected — the trigger keys on the OLD
     // status, not on whether status itself moved.
@@ -198,7 +198,7 @@ describe("working_orders state machine (enforce_transition)", () => {
     const e2 = await captureError(() =>
       inTx((tx) => tx.update(workingOrders).set({ label: "x" }).where(eq(workingOrders.id, id2))),
     );
-    expect(pgErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
   });
 
   it("permits a collected_at NULL→non-null stamp on a settled order (the Mode-P handover marker, 0056)", async () => {
@@ -246,7 +246,7 @@ describe("working_orders state machine (enforce_transition)", () => {
           .where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(eLabel)).toBe(TRANSITION_REFUSAL);
     // A settled → settled UPDATE that is NOT a collected_at stamp (a bare settled_at edit) is
     // rejected — the relaxation requires collected_at itself to go NULL→non-null.
     const eSettledAt = await captureError(() =>
@@ -254,7 +254,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         tx.update(workingOrders).set({ settledAt: now() }).where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(eSettledAt)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(eSettledAt)).toBe(TRANSITION_REFUSAL);
 
     // Now legitimately stamp the handover marker (NULL→non-null) — allowed.
     await inTx((tx) =>
@@ -268,7 +268,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         tx.update(workingOrders).set({ collectedAt: now() }).where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(eRecollect)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(eRecollect)).toBe(TRANSITION_REFUSAL);
   });
 
   it("rejects placed → open and a non-status update of a placed row (the row-level freeze)", async () => {
@@ -282,7 +282,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
     // A label edit on a placed row is rejected too — this IS the composition freeze at the row
     // level, since placed → placed is not an allowed edge.
     const e2 = await captureError(() =>
@@ -290,7 +290,7 @@ describe("working_orders state machine (enforce_transition)", () => {
         tx.update(workingOrders).set({ label: "late label" }).where(eq(workingOrders.id, id)),
       ),
     );
-    expect(pgErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
+    expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
   });
 
   it("rejects a line write on a placed order (composition freeze via require_open_parent)", async () => {
@@ -300,7 +300,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
     const eIns = await captureError(() => insertLine(id, 2));
-    expect(pgErrorMessage(eIns)).toBe(OPEN_PARENT_REFUSAL);
+    expect(engineErrorMessage(eIns)).toBe(OPEN_PARENT_REFUSAL);
     const eDel = await captureError(() =>
       inTx((tx) =>
         tx
@@ -308,6 +308,6 @@ describe("working_orders state machine (enforce_transition)", () => {
           .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 1))),
       ),
     );
-    expect(pgErrorMessage(eDel)).toBe(OPEN_PARENT_REFUSAL);
+    expect(engineErrorMessage(eDel)).toBe(OPEN_PARENT_REFUSAL);
   });
 });

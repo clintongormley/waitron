@@ -10,7 +10,7 @@ import {
   CORE_MIGRATIONS,
   captureError,
   constraintTarget,
-  isPgError,
+  isRefusal,
   isUniqueViolation,
   incidents,
   invoiceSeries,
@@ -295,7 +295,7 @@ describe("recordSubstitution — error propagation", () => {
       );
       expect(error).not.toBeInstanceOf(AppError);
       expect(isUniqueViolation(error)).toBe(false);
-      expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
+      expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
     } finally {
       await suite.db.execute(sql`drop trigger tmp_refuse_everything`);
     }

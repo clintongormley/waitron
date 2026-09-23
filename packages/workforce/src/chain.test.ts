@@ -4,10 +4,10 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  isPgError,
+  engineErrorMessage,
+  isRefusal,
   newId,
   nowIso,
-  pgErrorMessage,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -221,8 +221,8 @@ describe("appendToChain", () => {
     // constraint's NAME off the message — a check's message is `CHECK constraint failed: <name>`.
     // Both are needed: the class alone is also satisfied by any of the six other checks this row
     // passes through.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toContain("time_entries_event_at_second_ck");
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("time_entries_event_at_second_ck");
   });
 
   it("rejects a raw insert whose recorded_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
@@ -236,8 +236,8 @@ describe("appendToChain", () => {
           '2026-01-05T09:00:00.000Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
   });
 
   /**

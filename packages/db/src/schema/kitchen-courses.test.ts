@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -120,7 +120,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
         tx.run(sql`update locations set fire_control = 'nope' where id = ${LOCATION_A2}`);
       }),
     );
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
     // Restore, since this suite shares its rows across cases.
     await inTx((tx) =>
       tx.update(locations).set({ fireControl: "waiter" }).where(eq(locations.id, LOCATION_A2)),
@@ -142,7 +142,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
         tx.update(products).set({ courseId: RANDOM_UUID }).where(eq(products.id, productA)),
       ),
     );
-    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("wires all three course columns with a foreign key to kitchen_courses", async () => {

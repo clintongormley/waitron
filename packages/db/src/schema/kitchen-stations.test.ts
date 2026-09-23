@@ -3,8 +3,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
@@ -86,9 +86,9 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
         tx.update(kitchenStations).set({ warmAfterMinutes: 20 }).where(eq(kitchenStations.id, id)),
       ),
     );
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
     // SQLite names the constraint in the message when it has one, the way PostgreSQL did.
-    expect(pgErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
+    expect(engineErrorMessage(e)).toMatch(/kitchen_stations_thresholds_ordered/);
   });
 
   it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {
@@ -100,7 +100,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await seedStation(LOCATION_A, "Non-default sibling", false);
     await seedStation(LOCATION_A2, "Default elsewhere", true);
     const e = await captureError(() => seedStation(LOCATION_A, "Default two", true));
-    expect(isPgError(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {

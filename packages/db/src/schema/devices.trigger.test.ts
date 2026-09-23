@@ -15,7 +15,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { deviceProfiles } from "./device-profiles.js";
@@ -94,21 +94,21 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     const error = await captureError(() =>
       insertDevice({ profileId: kdsProfileId, stationId: null, tillId: null, label: "KDS bad" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/kds device binds a station/);
+    expect(engineErrorMessage(error)).toMatch(/kds device binds a station/);
   });
 
   it("rejects a till-profile device with a NULL register", async () => {
     const error = await captureError(() =>
       insertDevice({ profileId: tillProfileId, stationId: null, tillId: null, label: "Till bad" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/binds a register and no station/);
+    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
   });
 
   it("rejects a kds-profile device that also names a register", async () => {
     const error = await captureError(() =>
       insertDevice({ profileId: kdsProfileId, stationId, tillId, label: "KDS with till" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/kds device binds a station/);
+    expect(engineErrorMessage(error)).toMatch(/kds device binds a station/);
   });
 
   it("rejects a register (non-kds) device that also names a station", async () => {
@@ -118,7 +118,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     const error = await captureError(() =>
       insertDevice({ profileId: tillProfileId, stationId, tillId, label: "Till with station" }),
     );
-    expect(pgErrorMessage(error)).toMatch(/binds a register and no station/);
+    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
   });
 
   it("a binding-changing UPDATE is still enforced (the WHEN did not disable it)", async () => {
@@ -134,7 +134,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     const error = await captureError(() =>
       db.update(devices).set({ stationId }).where(eq(devices.label, "Till to break")),
     );
-    expect(pgErrorMessage(error)).toMatch(/binds a register and no station/);
+    expect(engineErrorMessage(error)).toMatch(/binds a register and no station/);
   });
 
   it("reactivation re-validates the binding: the WHEN watches active false→true (BUG D)", async () => {
@@ -165,7 +165,7 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
     const error = await captureError(() =>
       db.update(devices).set({ active: true }).where(eq(devices.label, "Reactivate me")),
     );
-    expect(pgErrorMessage(error)).toMatch(/kds device binds a station/);
+    expect(engineErrorMessage(error)).toMatch(/kds device binds a station/);
   });
 
   it("a non-binding UPDATE (last_seen_at touch) does not fire the trigger", async () => {

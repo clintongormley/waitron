@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -75,7 +75,7 @@ describe("table_service_statuses schema (the dining_tables.status_id FK)", () =>
           .where(eq(diningTables.id, tableId)),
       ),
     );
-    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
 
     // A deleted status is refused the same way: the reference must name a row that exists.
     const goneStatusId = await seedStatus("Deleted status");
@@ -85,6 +85,6 @@ describe("table_service_statuses schema (the dining_tables.status_id FK)", () =>
         tx.update(diningTables).set({ statusId: goneStatusId }).where(eq(diningTables.id, tableId)),
       ),
     );
-    expect(isPgError(eGone, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(eGone, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

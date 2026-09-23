@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "../testing/venue-db.js";
@@ -81,7 +81,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
         tx.update(diningTables).set({ zoneId: ABSENT_ZONE }).where(eq(diningTables.id, tableId)),
       ),
     );
-    expect(isPgError(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("working_order_lines.served_at is readable and writable", async () => {

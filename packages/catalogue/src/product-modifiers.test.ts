@@ -4,10 +4,10 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
+  engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
-  isPgError,
+  isRefusal,
   newId,
-  pgErrorMessage,
   refusalOn,
   UNIQUE_VIOLATION,
   withTransaction,
@@ -96,9 +96,9 @@ describe("what the attachment table refuses", () => {
       ),
     );
 
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     // A CHECK is the one refusal class SQLite names, so this half is unchanged.
-    expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
+    expect(engineErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
   });
 
   it("refuses a row naming neither list", async () => {
@@ -110,8 +110,8 @@ describe("what the attachment table refuses", () => {
       ),
     );
 
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
   });
 
   it("refuses an attachment naming a product, extras list or options list that does not exist", async () => {
@@ -122,7 +122,7 @@ describe("what the attachment table refuses", () => {
     // exactly one unknown id, so the class plus the statement say which key fired.
     const missing = async (statement: ReturnType<typeof sql>, key: string) => {
       const error = await captureError(() => Promise.resolve(fx.db.execute(statement)));
-      expect(isPgError(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
     };
 
     await missing(

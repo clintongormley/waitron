@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -128,7 +128,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
         ),
       ),
     );
-    expect(isPgError(e, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(e, CHECK_VIOLATION)).toBe(true);
   });
 
   it("the sale binding is enforced (FK to sales)", async () => {
@@ -137,7 +137,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     // case) is proven to skip it by the positive control above.
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() => seedOpen("cash_sale", missingSale));
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("tills.receipt_printer_id is writable and its FK accepts a real printer", async () => {

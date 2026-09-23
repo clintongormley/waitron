@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type VenueDatabase } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { runMigrations } from "./migrate.js";
-import { captureError, pgErrorMessage } from "./testing/errors.js";
+import { captureError, engineErrorMessage } from "./testing/errors.js";
 
 /**
  * `openVenueDatabase` — the whole of this module's public surface now that the two PostgreSQL
@@ -82,7 +82,7 @@ describe("openVenueDatabase", () => {
 
     expect(await store.venue.query.tenants.findMany()).toEqual([]);
     const refusal = await captureError(() => store.node.query.tenants.findMany());
-    expect(pgErrorMessage(refusal)).toBe("no such table: tenants");
+    expect(engineErrorMessage(refusal)).toBe("no such table: tenants");
   });
 
   it("closes both files", async () => {
@@ -91,10 +91,10 @@ describe("openVenueDatabase", () => {
     opened.pop();
 
     // The message is the engine's own, read off `node:sqlite` rather than chosen here.
-    expect(pgErrorMessage(await captureError(async () => store.venue.all(sql`select 1`)))).toBe(
+    expect(engineErrorMessage(await captureError(async () => store.venue.all(sql`select 1`)))).toBe(
       "database is not open",
     );
-    expect(pgErrorMessage(await captureError(async () => store.node.all(sql`select 1`)))).toBe(
+    expect(engineErrorMessage(await captureError(async () => store.node.all(sql`select 1`)))).toBe(
       "database is not open",
     );
   });

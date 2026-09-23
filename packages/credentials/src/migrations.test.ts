@@ -4,9 +4,9 @@ import {
   CHECK_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  isPgError,
+  engineErrorMessage,
+  isRefusal,
   nowIso,
-  pgErrorMessage,
 } from "@waitron/db";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -66,7 +66,7 @@ describe("the credentials migration set", () => {
     // literal (`packages/db/src/sql-state.ts`). Measured on node v26.7.0: a second insert of the
     // same `purpose` into a table with `constraint tenant_credentials_pk primary key (purpose)`
     // arrives as errcode 1555, `UNIQUE constraint failed: tenant_credentials.purpose`.
-    expect(isPgError(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("rejects a key_version below 1", async () => {
@@ -79,8 +79,8 @@ describe("the credentials migration set", () => {
     // code 275, which `CHECK_VIOLATION` names (`packages/db/src/sql-state.ts`). The constraint NAME
     // is unchanged in the message — measured on node v26.7.0, the refusal reads
     // `CHECK constraint failed: tenant_credentials_key_version_ck` — so the line below stands.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenant_credentials_key_version_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenant_credentials_key_version_ck/);
   });
 
   it("rejects an iv that is not 12 bytes", async () => {
@@ -89,8 +89,8 @@ describe("the credentials migration set", () => {
         insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version, updated_at)
         values ('bad.iv', ${OK.ciphertext}, ${Buffer.alloc(8, 1)}, ${OK.authTag}, 1, ${stamp()})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenant_credentials_iv_len_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenant_credentials_iv_len_ck/);
   });
 
   it("rejects a truncated auth tag", async () => {
@@ -99,8 +99,8 @@ describe("the credentials migration set", () => {
         insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version, updated_at)
         values ('bad.tag', ${OK.ciphertext}, ${OK.iv}, ${Buffer.alloc(12, 2)}, 1, ${stamp()})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenant_credentials_auth_tag_len_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenant_credentials_auth_tag_len_ck/);
   });
 
   it("rejects an empty purpose", async () => {
@@ -109,8 +109,8 @@ describe("the credentials migration set", () => {
         insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version, updated_at)
         values ('', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1, ${stamp()})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/tenant_credentials_purpose_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/tenant_credentials_purpose_ck/);
   });
 
   it("carries no tenant column and keys each row by purpose alone", async () => {

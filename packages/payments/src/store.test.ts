@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   captureError,
+  engineErrorMessage,
   nodes,
-  pgErrorMessage,
   tills,
   workingOrders,
 } from "@waitron/db";
@@ -861,20 +861,19 @@ describe("Mode 3 initiated lifecycle", () => {
   it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
     const seeded = await seedTenant();
     await initiate(seeded, HOSTED, "pay-1");
-    // `db.transaction`/`tx.insert` wrap the driver error in a `DrizzleQueryError` whose own
-    // `.message` is the generic "Failed query: ..." — the actual constraint-violation text lives on
-    // `.cause` (see `@waitron/db`'s `pgErrorMessage`, used the same way throughout
-    // packages/db/src/schema/*.test.ts for a unique/check-constraint assertion).
+    // Whether the engine's text is the error's own `.message` or sits on `.cause` depends on the
+    // path; `@waitron/db`'s `engineErrorMessage` returns the engine's words either way (its header
+    // in `packages/db/src/testing/errors.ts` records both shapes).
     //
-    // This engine names the COLUMNS, never the index: the PostgreSQL text this replaced carried
-    // `payments_provider_external_ref_key`, so what an assertion can still see is the column PAIR.
+    // For an index over plain columns this engine names the COLUMNS, not the index
+    // (`packages/db/src/constraint-target.ts`), so what an assertion can see is the column PAIR.
     // That is enough to tell this index's refusal from the other unique on the same table —
     // `payments_provider_ref_key` on (provider, payment_ref) prints `payments.provider,
     // payments.payment_ref` — which is the discrimination the case needs, and the reason this is
     // `toBe` on the whole string rather than a loose match. Measured 2026-09-22 on Node v26.7.0
     // against a two-row probe over this exact partial index: errcode 2067, `ERR_SQLITE_ERROR`.
     const error = await captureError(() => initiate(seeded, HOSTED, "pay-2"));
-    expect(pgErrorMessage(error)).toBe(
+    expect(engineErrorMessage(error)).toBe(
       "UNIQUE constraint failed: payments.provider, payments.external_ref",
     );
   });

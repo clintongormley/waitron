@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
-import { isPgError } from "../unique-violation.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -111,13 +111,13 @@ describe("devices schema (columns, FKs, unique)", () => {
     // malformed: a station that EXISTS is accepted.
     await seedDevice(STATION_B, "Real station");
     const e = await captureError(() => seedDevice(GHOST_STATION, "Ghost station"));
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("devices: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
     // A valid station (STATION_A) is supplied so the location FK is the only constraint that can
     // fire.
     const e = await captureError(() => seedDevice(STATION_A, "Ghost location", GHOST_LOCATION));
-    expect(isPgError(e, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });

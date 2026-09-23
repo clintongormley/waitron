@@ -18,9 +18,9 @@ import {
 } from "./deployment.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { CHECK_VIOLATION } from "./sql-state.js";
-import { isPgError } from "./unique-violation.js";
+import { isRefusal } from "./unique-violation.js";
 import { withTransaction } from "./tenancy.js";
-import { captureError, pgErrorMessage } from "./testing/errors.js";
+import { captureError, engineErrorMessage } from "./testing/errors.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 // A database with NO migration set applied, so `deployment` does not exist — the state of a
@@ -105,8 +105,8 @@ describe("the deployment stamp", () => {
         ),
       ),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/deployment_singleton_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/deployment_singleton_ck/);
   });
 
   it("readDeploymentMode returns 'primary' by default and 'mirror' after setDeploymentMode", async () => {
@@ -140,8 +140,8 @@ describe("the deployment stamp", () => {
     const error = await captureError(() =>
       Promise.resolve(db.run(sql`update deployment set mode = 'bogus' where id = 1`)),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/deployment_mode_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/deployment_mode_ck/);
   });
 
   it("reads singleton_role as 'primary' on a freshly stamped database", async () => {
@@ -189,8 +189,8 @@ describe("the deployment stamp", () => {
     await stampDeployment(db, "preproduction");
     await setDeploymentMode(db, "mirror");
     const error = await captureError(() => setSingletonRole(db, "primary"));
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/deployment_role_valid_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/deployment_role_valid_ck/);
   });
 
   it("setSingletonRole fails loudly on an unstamped database", async () => {

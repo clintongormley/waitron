@@ -4,9 +4,9 @@ import {
   captureError,
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
-  isPgError,
+  engineErrorMessage,
+  isRefusal,
   newId,
-  pgErrorMessage,
   refusalOn,
   RESTRICT_VIOLATION,
   UNIQUE_VIOLATION,
@@ -564,7 +564,7 @@ describe("what the database refuses under an extras list", () => {
     // message here is `FOREIGN KEY constraint failed`, naming neither the key nor the column
     // (`packages/db/src/constraint-target.ts`). The class is what is left, and it still separates
     // a RESTRICT key from a NO ACTION one, which is what this case is about.
-    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
   });
 
   it("refuses an item priced below zero", async () => {
@@ -585,9 +585,9 @@ describe("what the database refuses under an extras list", () => {
       ),
     );
 
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     // A CHECK is the one class SQLite names, so this half is unchanged.
-    expect(pgErrorMessage(error)).toContain("extra_list_items_price_ck");
+    expect(engineErrorMessage(error)).toContain("extra_list_items_price_ck");
   });
 
   it("refuses a second item naming the same product in one list", async () => {

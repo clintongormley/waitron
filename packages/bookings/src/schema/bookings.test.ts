@@ -5,9 +5,9 @@ import {
   captureError,
   CHECK_VIOLATION,
   diningTables,
+  engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   locations,
-  pgErrorMessage,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -51,10 +51,8 @@ describe("the bookings Drizzle table config", () => {
         ["table_id", "status", "booking_date", "booking_time"],
       ],
     ]);
-    // Two, where this list held one: `status` was a PostgreSQL ENUM TYPE the engine enforced (main's
-    // baseline opens `CREATE TYPE "public"."booking_status" AS ENUM(...)`), and `enumType` enforces
-    // the same five values with a CHECK here. A name is not a vocabulary, so the case below drives
-    // a real refusal through the constraint that replaced the type.
+    // `bookings_status_ck` holds `status` to its five values. A name is not a vocabulary, so the
+    // case below drives a real refusal through it.
     expect(config.checks.map((c) => c.name)).toEqual([
       "bookings_party_size_ck",
       "bookings_status_ck",
@@ -62,17 +60,16 @@ describe("the bookings Drizzle table config", () => {
   });
 });
 
-// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here is a claim about a
-// privilege; what it still shows is the CHECK and the three foreign keys.
+// WHAT THIS SUITE SHOWS: a row read back through the Drizzle export, the status default, the two
+// CHECKs and the three foreign keys. This engine has no roles, so nothing here is a claim about a
+// privilege.
 //
-// The refusals themselves also carry less than they did. `pgErrorCode` answers
-// `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the refusal CLASS comes off
-// `errcode` instead (`packages/db/src/sql-state.ts`: 275 for a CHECK where this was `23514`, 787
-// for a foreign key where it was `23503`). And the foreign-key MESSAGE is the engine's own —
-// `FOREIGN KEY constraint failed`, the same three words whichever key was broken — where
-// PostgreSQL named the constraint. So the three key cases below can no longer tell each other
-// apart by their message, and each is separated only by which parent row it made absent. The
-// constraint NAMES are asserted where the engine still keeps them: on the drizzle object above.
+// `driverErrorCode` answers `"ERR_SQLITE_ERROR"` for every failure alike on this engine, so the
+// refusal CLASS comes off `errcode` (`packages/db/src/sql-state.ts`: 275 for a CHECK, 787 for a
+// foreign key). The foreign-key MESSAGE is `FOREIGN KEY constraint failed`, the same words
+// whichever key was broken, so the three key cases below cannot tell each other apart by their
+// message; each is separated only by which parent row it made absent. The constraint NAMES are
+// asserted where the engine keeps them: on the drizzle object above.
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 // A dining_tables row — the target of bookings.table_id.
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
@@ -167,20 +164,19 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("22:00", { party_size: 0 }));
-    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275, was 23514
+    expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] }); // 275
     // The CHECK's message DOES carry its name here, unlike the foreign keys' — so this one case
     // can still say which constraint refused it.
-    expect(pgErrorMessage(e)).toMatch(/bookings_party_size_ck/);
+    expect(engineErrorMessage(e)).toMatch(/bookings_party_size_ck/);
   });
 
-  // The refusal that changed HANDS at the flip: `status` was a PostgreSQL ENUM TYPE, so the engine
-  // itself refused a value outside the five; here it is an ordinary CHECK that `enumType` builds
-  // from the same list. Nothing asserted the replacement refuses anything, so this drives one.
+  // `status` is held to the five values by an ordinary CHECK that `enumCheck` builds from the
+  // `enumType` list (`./bookings.ts`); this drives a real refusal through it.
   it("rejects a status outside the five (CHECK bookings_status_ck)", async () => {
     await seedParents();
     const e = await captureError(() => seedBooking("21:00", { status: "pencilled_in" }));
     expect(e).toMatchObject({ errcode: CHECK_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toMatch(/bookings_status_ck/);
+    expect(engineErrorMessage(e)).toMatch(/bookings_status_ck/);
   });
 
   it("refuses a table_id with no dining_tables row (bookings_table_fk)", async () => {
@@ -188,8 +184,8 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     const e = await captureError(() =>
       seedBooking("19:00", { table_id: "bbbbbbbb-0000-4000-8000-000000000009" }),
     );
-    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787, was 23503
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] }); // 787
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a tab_id with no working_orders row (bookings_tab_fk)", async () => {
@@ -198,7 +194,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       seedBooking("18:00", { tab_id: "dddddddd-0000-4000-8000-000000000001" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 
   it("refuses a location_id with no locations row (bookings_location_fk)", async () => {
@@ -207,6 +203,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       seedBooking("17:00", { location_id: "eeeeeeee-0000-4000-8000-000000000001" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
-    expect(pgErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
+    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
   });
 });

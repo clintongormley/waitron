@@ -11,8 +11,8 @@ import {
   UNIQUE_VIOLATION,
 } from "../sql-state.js";
 import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
-import { isPgError } from "../unique-violation.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -179,8 +179,8 @@ describe("working_orders", () => {
              values (${randomUUID()}, ${TILL_A1}, ${++orderNumberSeq}, 'paid', ${AT})`,
       ),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/working_orders_status_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/working_orders_status_ck/);
 
     // The control in the other direction. A CHECK that refused everything would satisfy the
     // assertion above just as well; `placed` is a listed status and no other case in this file
@@ -239,7 +239,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ status: "settled" }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
+    expect(engineErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
   });
 
   it("rejects a settled_at on an order that is not settled", async () => {
@@ -247,7 +247,7 @@ describe("working_orders", () => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ settledAt: AT }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
+    expect(engineErrorMessage(error)).toMatch(/working_orders_settled_at_ck/);
   });
 
   // WHAT THE SIX TRANSITION CASES BELOW LOST. The PostgreSQL guard interpolated both states into
@@ -382,7 +382,7 @@ describe("working_orders", () => {
     // nor the column, so the CLASS is all there is to assert (measured on this case: errcode 787,
     // `constraintTarget` undefined). That is what the PostgreSQL regex pinned too: it matched
     // `violates foreign key constraint` and read no name out of it either.
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -430,7 +430,7 @@ describe("working_order_lines", () => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
-    expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
+    expect(engineErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
 
   it("rejects a line added to an abandoned order", async () => {
@@ -439,7 +439,7 @@ describe("working_order_lines", () => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
-    expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
+    expect(engineErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
 
   it("rejects deleting a line from a settled order", async () => {
@@ -454,7 +454,7 @@ describe("working_order_lines", () => {
     const error = await captureError(() =>
       db.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
+    expect(engineErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
 
   it("rejects descriptions missing a configured locale", async () => {
@@ -467,7 +467,7 @@ describe("working_order_lines", () => {
         descriptions: { es: "Café solo" },
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/descriptions must carry exactly the venue locales/);
+    expect(engineErrorMessage(error)).toMatch(/descriptions must carry exactly the venue locales/);
   });
 
   it("rejects descriptions carrying an unconfigured locale", async () => {
@@ -480,7 +480,7 @@ describe("working_order_lines", () => {
         descriptions: { es: "Café solo", ca: "Cafè sol", en: "Black coffee" },
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/descriptions must carry exactly the venue locales/);
+    expect(engineErrorMessage(error)).toMatch(/descriptions must carry exactly the venue locales/);
   });
 
   it("keeps a line's descriptions when the venue's locales change afterwards", async () => {
@@ -675,8 +675,8 @@ describe("working_order_lines — the draft line's links", () => {
     //  - the message, which excludes a trigger's own `RAISE(ABORT)`: those share code 1811 and
     //    report their own words instead (../sql-state.ts's `TRIGGER_ABORT`).
     // The last step of this case closes the gap behaviourally.
-    expect(isPgError(error, RESTRICT_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+    expect(isRefusal(error, RESTRICT_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
 
     // The control, in the other direction: an unnamed product deletes, so the refusal above is the
     // reference and not the delete itself failing.
@@ -720,6 +720,6 @@ describe("working_order_lines — the draft line's links", () => {
     const error = await captureError(() =>
       db.execute(sql`update working_order_lines set option_snapshots = null where id = ${line.id}`),
     );
-    expect(pgErrorMessage(error)).toContain("option_snapshots");
+    expect(engineErrorMessage(error)).toContain("option_snapshots");
   });
 });

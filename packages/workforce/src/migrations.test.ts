@@ -6,10 +6,10 @@ import {
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
-  isPgError,
+  engineErrorMessage,
+  isRefusal,
   newId,
   nowIso,
-  pgErrorMessage,
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
@@ -85,8 +85,8 @@ describe("persons, from the identity migration set layered under workforce", () 
     // a plain text column (`enumCheck`, packages/db/src/schema/columns.ts), so the class is a check
     // violation rather than the old `22P02`. The constraint NAME is asserted too: the class alone
     // is also satisfied by any of the eleven other checks on this table.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/persons_role_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/persons_role_ck/);
   });
 
   it("rejects a status outside the enum", async () => {
@@ -95,8 +95,8 @@ describe("persons, from the identity migration set layered under workforce", () 
         insert into persons (id, created_at, display_name, pin_hash, status)
         values (${rowIdentity()}, 'Bad status', ${PIN}, 'fired')`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/persons_status_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/persons_status_ck/);
   });
 
   it("rejects an empty display_name", async () => {
@@ -105,8 +105,8 @@ describe("persons, from the identity migration set layered under workforce", () 
         insert into persons (id, created_at, display_name, pin_hash)
         values (${rowIdentity()}, '', ${PIN})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/persons_display_name_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/persons_display_name_ck/);
   });
 
   it("rejects an empty pin_hash", async () => {
@@ -115,8 +115,8 @@ describe("persons, from the identity migration set layered under workforce", () 
         insert into persons (id, created_at, display_name, pin_hash)
         values (${rowIdentity()}, 'No pin', '')`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/persons_pin_hash_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/persons_pin_hash_ck/);
   });
 });
 
@@ -147,8 +147,8 @@ describe("the D1a time & attendance tables", () => {
           '2026-01-05T09:00:00.000Z', 0, ${personId}, '2026-01-05T09:00:00.000Z',
           ${"A".repeat(64)}, 1, true)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/time_entries_entry_kind_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/time_entries_entry_kind_ck/);
   });
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
@@ -164,8 +164,8 @@ describe("the D1a time & attendance tables", () => {
         ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 900,
           ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/time_entries_event_offset_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/time_entries_event_offset_ck/);
   });
 
   it("rejects a negative contracted_minutes_per_week", async () => {
@@ -176,8 +176,8 @@ describe("the D1a time & attendance tables", () => {
           id, created_at, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
         ) values (${rowIdentity()}, ${personId}, -1, 'full_time', '2026-01-01', 1500)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
   });
 
   it("rejects an employment whose end_date precedes its start_date", async () => {
@@ -189,8 +189,8 @@ describe("the D1a time & attendance tables", () => {
           start_date, end_date, pay_rate
         ) values (${rowIdentity()}, ${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', 1500)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/employments_dates_ck/);
   });
 });
 
@@ -254,8 +254,8 @@ describe("the D1b correction columns", () => {
         ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
           ${personId}, '2026-01-05T18:00:00.000Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
   });
 
   it("rejects a base event carrying a stray correction column", async () => {
@@ -273,8 +273,8 @@ describe("the D1b correction columns", () => {
         ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
           ${personId}, '2026-01-05T09:00:00.000Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
   });
 
   it("rejects a correction whose corrects_entry_id references no entry", async () => {
@@ -291,7 +291,7 @@ describe("the D1b correction columns", () => {
           ${personId}, '2026-01-05T18:00:00.000Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -317,8 +317,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         insert into roster_versions (id, created_at, location_id, period_start, period_end)
         values (${rowIdentity()}, ${locationId}, '2026-03-08', '2026-03-02')`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/roster_versions_period_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/roster_versions_period_ck/);
   });
 
   it("rejects a published status carrying a null published_at (the publish-shape invariant)", async () => {
@@ -331,8 +331,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         insert into roster_versions (id, created_at, location_id, period_start, period_end, status)
         values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', 'published')`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
   it("rejects a draft status carrying a non-null published_at (the other direction)", async () => {
@@ -342,8 +342,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         insert into roster_versions (id, created_at, location_id, period_start, period_end, published_at)
         values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', ${nowIso()})`),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
   it("rejects a second published version for the same (location, period) via the partial unique index", async () => {
@@ -360,13 +360,13 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
         values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`),
     );
-    expect(isPgError(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
     // SQLite names the index's COLUMNS, never the index: the message is
     // `UNIQUE constraint failed: roster_versions.location_id, roster_versions.period_start,
     // roster_versions.period_end`. That is what discriminates here, so it is what is asserted —
     // `roster_versions_published_period_uq` is the only unique index on this table, and it is the
     // only one over those three columns.
-    expect(pgErrorMessage(error)).toMatch(
+    expect(engineErrorMessage(error)).toMatch(
       /UNIQUE constraint failed: roster_versions\.location_id, roster_versions\.period_start, roster_versions\.period_end/,
     );
   });
@@ -411,8 +411,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         endsAt: "2026-03-03T09:00:00Z",
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/shifts_interval_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/shifts_interval_ck/);
   });
 
   it("rejects a shift whose starts_offset_minutes is outside the ±840 range", async () => {
@@ -424,8 +424,8 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
         startsOffsetMinutes: 900,
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/shifts_starts_offset_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/shifts_starts_offset_ck/);
   });
 });
 
@@ -453,8 +453,8 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         endsOn: "2026-03-05",
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/absences_range_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/absences_range_ck/);
   });
 
   it("rejects an absence_kind outside the enum", async () => {
@@ -464,15 +464,15 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     );
     // The enum TYPE's refusal is a named CHECK constraint here (`enumCheck`); see the persons-role
     // case above for the class change.
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/absences_absence_kind_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/absences_absence_kind_ck/);
   });
 
   it("rejects an availability weekday outside 0–6", async () => {
     const { personId } = await seedPersonAndLocation();
     const error = await captureError(() => insertAvailability(suite.db, { personId, weekday: 7 }));
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/availability_weekday_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/availability_weekday_ck/);
   });
 
   it("rejects an availability window whose end is not after its start", async () => {
@@ -484,8 +484,8 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         availableToMinute: 600,
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/availability_window_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/availability_window_ck/);
   });
 
   it("rejects an availability effective_to before its effective_from", async () => {
@@ -497,8 +497,8 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         effectiveTo: "2026-01-01",
       }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/availability_effective_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/availability_effective_ck/);
   });
 
   it("rejects a shift_template with an empty label", async () => {
@@ -506,8 +506,8 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertShiftTemplate(suite.db, { locationId, label: "" }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/shift_templates_label_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/shift_templates_label_ck/);
   });
 
   it("rejects a shift_template weekday outside 0–6", async () => {
@@ -515,8 +515,8 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     const error = await captureError(() =>
       insertShiftTemplate(suite.db, { locationId, weekday: -1 }),
     );
-    expect(isPgError(error, CHECK_VIOLATION)).toBe(true);
-    expect(pgErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toMatch(/shift_templates_weekday_ck/);
   });
 
   it("stores a shift_swap defaulting status to requested, and cascades it away when its from_shift is deleted", async () => {
@@ -553,7 +553,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
         toPersonId: toPerson,
       }),
     );
-    expect(isPgError(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
