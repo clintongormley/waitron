@@ -3818,10 +3818,29 @@ What the preparation tasks left, with F1's own answers where it found them:
   pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
   claim, the slice-1 spec's four unannotated "211" mentions, and what became of
   `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
-- **Deferred cleanups, each with its reason in its PR** — P5's three declined review suggestions;
-  and P7's three (assert `drizzle-kit generate` is a no-op; unify the three root-project schema
-  readers into `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class
-  map).
+- **Deferred cleanups, each with its reason in its PR** — P7's three (assert `drizzle-kit generate`
+  is a no-op; unify the three root-project schema readers into
+  `packages/sync-enrolment/src/migration-tables.ts`; the twice-built table-to-class map).
+  - P5's three (#475) — **one DONE, one moot, one declined with its reason re-measured**
+    (2026-09-23, branch `chore/slice1-deferred-p5`). **Done:** the two-call write conversion
+    `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
+    other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
+    them since #475), at all 57 sites outside `packages/shared` — the converters' own tests keep
+    the two calls, because they test the converter. #475 declined it because a helper taking a plain string "would hide that
+    validation and invite passing something unchecked"; that does not hold — a helper calling
+    `decimal()` inside refused all six malformed strings tried (`abc`, `1e3`, `+1.00`, `01.00`,
+    the empty string and a leading space) with `shared.invalid_decimal`, the same as the two
+    calls. **Moot:** renaming the new container test to drop its `.pg.` marker — that file,
+    `packages/core/src/list-outstanding-sales.pg.test.ts`, became
+    `list-outstanding-sales.wide-amount.test.ts` in #489, and no `.pg.` file is left in the tree
+    (`git ls-files | grep -c '\.pg\.'` prints 0). **Declined, reason stands:** writing
+    `moneyNum` in `packages/workforce-es/src/convenio.ts` as `cents / 100`. The value is the same —
+    measured over 6,000,007 counts (every one from −2,000,000 to 2,000,000, two million random
+    ones across the whole twelve-digit range, and the extremes), `cents / 100` equalled
+    `Number(centsToDecimal(cents))` every time, while a control, `cents * 0.01`, differed on 129
+    of the counts 0 to 999. What it would change is where the money scale lives: the conversion
+    from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
+    and a `/ 100` puts a second copy of the scale in a module nothing checks.
   - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
     PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
     pattern instead of copies; its raw reader keeps the number type's bound rather than the money
