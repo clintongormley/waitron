@@ -270,7 +270,7 @@ What that leaves open:
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
-**Photos are shrunk on upload (slice 2, Task 0, 2026-09-23; branch `feat/sqlite-slice2-image-shrink`,
+**Photos are shrunk on upload (slice 2, Task 0, 2026-09-23; PR #543,
 not yet landed).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
 stripped of its metadata (GPS position included) and stored as WebP at quality 80 by `prepareImage`
 (`packages/media/src/prepare.ts`), which the upload route calls before it opens the write
